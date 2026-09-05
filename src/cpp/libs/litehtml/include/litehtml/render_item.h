@@ -1,0 +1,661 @@
+#ifndef LH_RENDER_ITEM_H
+#define LH_RENDER_ITEM_H
+
+#include <memory>
+#include <list>
+#include <tuple>
+#include "html.h"
+#include "types.h"
+#include "line_box.h"
+#include "table.h"
+#include "formatting_context.h"
+#include "element.h"
+#include "scroll_view.h"
+#include "../../../core/logical_geometry.h"
+
+namespace litehtml
+{
+    class element;
+
+    class render_item : public std::enable_shared_from_this<render_item>
+    {
+    public:
+        struct logical_accessor
+        {
+            const render_item* item;
+            satoru::WritingModeContext wm;
+
+            pixel_t inline_size() const;
+            pixel_t block_size() const;
+
+            pixel_t inline_start_pos() const;
+            pixel_t inline_end_pos() const;
+            pixel_t block_start_pos() const;
+            pixel_t block_end_pos() const;
+
+            pixel_t margin_inline_start() const { return wm.inline_start(item->m_margins); }
+            pixel_t margin_inline_end() const { return wm.inline_end(item->m_margins); }
+            pixel_t margin_block_start() const { return wm.block_start(item->m_margins); }
+            pixel_t margin_block_end() const { return wm.block_end(item->m_margins); }
+
+            pixel_t padding_inline_start() const { return wm.inline_start(item->m_padding); }
+            pixel_t padding_inline_end() const { return wm.inline_end(item->m_padding); }
+            pixel_t padding_block_start() const { return wm.block_start(item->m_padding); }
+            pixel_t padding_block_end() const { return wm.block_end(item->m_padding); }
+
+            pixel_t border_inline_start() const { return wm.inline_start(item->m_borders); }
+            pixel_t border_inline_end() const { return wm.inline_end(item->m_borders); }
+            pixel_t border_block_start() const { return wm.block_start(item->m_borders); }
+            pixel_t border_block_end() const { return wm.block_end(item->m_borders); }
+
+            pixel_t content_inline_start() const { return margin_inline_start() + padding_inline_start() + border_inline_start(); }
+            pixel_t content_inline_end() const { return margin_inline_end() + padding_inline_end() + border_inline_end(); }
+            pixel_t content_block_start() const { return margin_block_start() + padding_block_start() + border_block_start(); }
+            pixel_t content_block_end() const { return margin_block_end() + padding_block_end() + border_block_end(); }
+            
+            pixel_t content_inline_offset() const { return content_inline_start() + content_inline_end(); }
+            pixel_t content_block_offset() const { return content_block_start() + content_block_end(); }
+        };
+
+        logical_accessor logical() const { return { this, get_wm_context() }; }
+        logical_accessor logical(const satoru::WritingModeContext& wm) const { return { this, wm }; }
+
+    protected:
+        std::shared_ptr<element>                    m_element;
+        std::weak_ptr<render_item>                  m_parent;
+        std::list<std::shared_ptr<render_item>>     m_children;
+        margins                                                         m_margins;
+        margins                                                         m_padding;
+        margins                                                         m_borders;
+        position                                                        m_pos;
+        bool                                        m_skip;
+        bool                                        m_force_ellipsis;
+        std::vector<std::shared_ptr<render_item>>   m_positioned;
+        std::shared_ptr<scroll_view>                            m_scroll_view;
+
+        containing_block_context m_cached_cb_context;
+        containing_block_context m_self_size;
+        pixel_t m_cached_parent_width = -1;
+        bool m_is_measured = false;
+        int m_cached_bidi_base_level = -1;
+        int m_cached_bidi_level = 0;
+
+                containing_block_context calculate_containing_block_context(const containing_block_context& cb_context);
+                void calc_cb_length(const css_length& len, pixel_t percent_base, containing_block_context::typed_pixel& out_value) const;
+                pixel_t get_predefined_width(pixel_t parent_width) const;
+                pixel_t get_predefined_height(pixel_t parent_height) const;
+                
+                virtual pixel_t _measure(const containing_block_context& /*containing_block_size*/, formatting_context* /*fmt_ctx*/)
+                {
+                        return 0;
+                }
+                virtual void _place(pixel_t /*x*/, pixel_t /*y*/, const containing_block_context& /*containing_block_size*/, formatting_context* /*fmt_ctx*/)
+                {
+                }
+
+    public:
+        explicit render_item(std::shared_ptr<element>  src_el);
+
+        virtual ~render_item() = default;
+
+        pixel_t get_scroll_left() const
+                {
+                        return m_scroll_view ? m_scroll_view->get_left() : 0;
+                }
+
+        pixel_t get_scroll_top() const
+        {
+                return m_scroll_view ? m_scroll_view->get_top() : 0;
+        }
+
+                void scroll_box(position& box) const
+        {
+                if (m_scroll_view)
+                {
+                        box.x -= m_scroll_view->get_left();
+                        box.y -= m_scroll_view->get_top();
+                }
+        }
+
+        pixel_t h_scroll(pixel_t dx)
+        {
+                return m_scroll_view ? m_scroll_view->h_scroll(dx) : 0;
+        }
+
+        pixel_t v_scroll(pixel_t dy)
+        {
+                return m_scroll_view ? m_scroll_view->v_scroll(dy) : 0;
+        }
+
+                bool is_h_scrollable(const pixel_t dx) const
+                {
+                        return m_scroll_view ? m_scroll_view->is_h_scrollable(dx) : false;
+                }
+
+                bool is_v_scrollable(const pixel_t dy) const
+                {
+                        return m_scroll_view ? m_scroll_view->is_v_scrollable(dy) : false;
+                }
+
+        std::list<std::shared_ptr<render_item>>& children()
+        {
+            return m_children;
+        }
+
+        // Access to the m_pos
+        position& pos()
+        {
+            return m_pos;
+        }
+
+        // Calculates the position of the element in the document
+        // This position is relative to the x and y arguments
+        // Scroll shifts are applied to the position
+        position calc_placement(int x = 0, int y = 0) const
+        {
+                position pos = m_pos;
+                pos.x += x - get_scroll_left();
+                pos.y += y - get_scroll_top();
+                return pos;
+        }
+
+        bool skip() const
+        {
+            return m_skip;
+        }
+
+        void skip(bool val)
+        {
+            m_skip = val;
+        }
+
+        bool force_ellipsis() const
+        {
+            return m_force_ellipsis;
+        }
+
+        void force_ellipsis(bool val)
+        {
+            m_force_ellipsis = val;
+        }
+
+        pixel_t right() const
+        {
+            return left() + width();
+        }
+
+        pixel_t left() const
+        {
+            return m_pos.left() - m_margins.left - m_padding.left - m_borders.left;
+        }
+
+        pixel_t top() const
+        {
+            return m_pos.top() - m_margins.top - m_padding.top - m_borders.top;
+        }
+
+        pixel_t bottom() const
+        {
+            return top() + height();
+        }
+
+        pixel_t height() const
+        {
+            return m_pos.height + m_margins.height() + m_padding.height() + m_borders.height();
+        }
+
+        pixel_t width() const
+        {
+            return m_pos.width + m_margins.width() + m_padding.width() + m_borders.width();
+        }
+
+        pixel_t inline_size() const;
+        pixel_t block_size() const;
+        pixel_t inline_size(const satoru::WritingModeContext& wm) const;
+        pixel_t block_size(const satoru::WritingModeContext& wm) const;
+
+        satoru::WritingModeContext get_wm_context() const;
+
+        pixel_t margin_inline_start() const;
+        pixel_t margin_inline_end() const;
+        pixel_t margin_block_start() const;
+        pixel_t margin_block_end() const;
+
+        pixel_t padding_inline_start() const;
+        pixel_t padding_inline_end() const;
+        pixel_t padding_block_start() const;
+        pixel_t padding_block_end() const;
+
+        pixel_t border_inline_start() const;
+        pixel_t border_inline_end() const;
+        pixel_t border_block_start() const;
+        pixel_t border_block_end() const;
+
+        void margin_inline_start(pixel_t val);
+        void margin_inline_end(pixel_t val);
+        void margin_block_start(pixel_t val);
+        void margin_block_end(pixel_t val);
+
+        void padding_inline_start(pixel_t val);
+        void padding_inline_end(pixel_t val);
+        void padding_block_start(pixel_t val);
+        void padding_block_end(pixel_t val);
+
+        void border_inline_start(pixel_t val);
+        void border_inline_end(pixel_t val);
+        void border_block_start(pixel_t val);
+        void border_block_end(pixel_t val);
+
+        pixel_t content_inline_start() const
+        {
+            return margin_inline_start() + padding_inline_start() + border_inline_start();
+        }
+
+        pixel_t content_inline_end() const
+        {
+            return margin_inline_end() + padding_inline_end() + border_inline_end();
+        }
+
+        pixel_t content_block_start() const
+        {
+            return margin_block_start() + padding_block_start() + border_block_start();
+        }
+
+        pixel_t content_block_end() const
+        {
+            return margin_block_end() + padding_block_end() + border_block_end();
+        }
+
+        pixel_t content_inline_offset_size() const
+        {
+            return content_inline_start() + content_inline_end();
+        }
+
+        pixel_t content_block_offset_size() const
+        {
+            return content_block_start() + content_block_end();
+        }
+
+        pixel_t content_offset_inline(const satoru::WritingModeContext& wm) const
+        {
+            return wm.is_vertical() ? content_offset_height() : content_offset_width();
+        }
+
+        pixel_t content_offset_block(const satoru::WritingModeContext& wm) const
+        {
+            return wm.is_vertical() ? content_offset_width() : content_offset_height();
+        }
+
+        pixel_t box_sizing_inline(const satoru::WritingModeContext& wm) const
+        {
+            return wm.is_vertical() ? box_sizing_height() : box_sizing_width();
+        }
+
+        pixel_t box_sizing_block(const satoru::WritingModeContext& wm) const
+        {
+            return wm.is_vertical() ? box_sizing_width() : box_sizing_height();
+        }
+
+        pixel_t padding_top() const
+        {
+            return m_padding.top;
+        }
+
+        pixel_t padding_bottom() const
+        {
+            return m_padding.bottom;
+        }
+
+        pixel_t padding_left() const
+        {
+            return m_padding.left;
+        }
+
+        pixel_t padding_right() const
+        {
+            return m_padding.right;
+        }
+
+        pixel_t border_top() const
+        {
+            return m_borders.top;
+        }
+
+        pixel_t border_bottom() const
+        {
+            return m_borders.bottom;
+        }
+
+        pixel_t border_left() const
+        {
+            return m_borders.left;
+        }
+
+        pixel_t border_right() const
+        {
+            return m_borders.right;
+        }
+
+        pixel_t margin_top() const
+        {
+            return m_margins.top;
+        }
+
+        pixel_t margin_bottom() const
+        {
+            return m_margins.bottom;
+        }
+
+        pixel_t margin_left() const
+        {
+            return m_margins.left;
+        }
+
+        pixel_t margin_right() const
+        {
+            return m_margins.right;
+        }
+
+        std::shared_ptr<render_item> parent() const
+        {
+            return m_parent.lock();
+        }
+
+        margins& get_margins()
+        {
+            return m_margins;
+        }
+
+        margins& get_paddings()
+        {
+            return m_padding;
+        }
+
+                void set_paddings(const margins& val)
+                {
+                        m_padding = val;
+                }
+
+        margins& get_borders()
+        {
+            return m_borders;
+        }
+
+                /**
+                 * Top offset to the element content. Includes paddings, margins and borders.
+                 */
+        pixel_t content_offset_top() const
+        {
+            return m_margins.top + m_padding.top + m_borders.top;
+        }
+
+                /**
+                 * Bottom offset to the element content. Includes paddings, margins and borders.
+                 */
+        pixel_t content_offset_bottom() const
+        {
+            return m_margins.bottom + m_padding.bottom + m_borders.bottom;
+        }
+
+                /**
+                 * Left offset to the element content. Includes paddings, margins and borders.
+                 */
+        pixel_t content_offset_left() const
+        {
+            return m_margins.left + m_padding.left + m_borders.left;
+        }
+
+                /**
+                 * Right offset to the element content. Includes paddings, margins and borders.
+                 */
+        pixel_t content_offset_right() const
+        {
+            return m_margins.right + m_padding.right + m_borders.right;
+        }
+
+                /**
+                 * Sum of left and right offsets to the element content. Includes paddings, margins and borders.
+                 */
+        pixel_t content_offset_width() const
+        {
+            return content_offset_left() + content_offset_right();
+        }
+
+                /**
+                 * Sum of top and bottom offsets to the element content. Includes paddings, margins and borders.
+                 */
+        pixel_t content_offset_height() const
+        {
+            return content_offset_top() + content_offset_bottom();
+        }
+
+                pixel_t render_offset_left() const
+                {
+                        return m_margins.left + m_borders.left + m_padding.left;
+                }
+
+                pixel_t render_offset_right() const
+                {
+                        return m_margins.right + m_borders.right + m_padding.right;
+                }
+
+                pixel_t render_offset_width() const
+                {
+                        return render_offset_left() + render_offset_right();
+                }
+
+                pixel_t render_offset_top() const
+                {
+                        return m_margins.top + m_borders.top + m_padding.top;
+                }
+
+                pixel_t render_offset_bottom() const
+                {
+                        return m_margins.bottom + m_borders.bottom + m_padding.bottom;
+                }
+
+                pixel_t render_offset_height() const
+                {
+                        return render_offset_top() + render_offset_bottom();
+                }
+
+                pixel_t box_sizing_left() const
+                {
+                        if(css().get_box_sizing() == box_sizing_border_box)
+                        {
+                                return m_padding.left + m_borders.left;
+                        }
+                        return 0;
+                }
+
+                pixel_t box_sizing_right() const
+                {
+                        if(css().get_box_sizing() == box_sizing_border_box)
+                        {
+                                return m_padding.right + m_borders.right;
+                        }
+                        return 0;
+                }
+
+                pixel_t box_sizing_width() const
+                {
+                        return box_sizing_left() + box_sizing_right();
+                }
+
+                pixel_t box_sizing_top() const
+                {
+                        if(css().get_box_sizing() == box_sizing_border_box)
+                        {
+                                return m_padding.top + m_borders.top;
+                        }
+                        return 0;
+                }
+
+                pixel_t box_sizing_bottom() const
+                {
+                        if(css().get_box_sizing() == box_sizing_border_box)
+                        {
+                                return m_padding.bottom + m_borders.bottom;
+                        }
+                        return 0;
+                }
+
+                pixel_t box_sizing_height() const
+                {
+                        return box_sizing_top() + box_sizing_bottom();
+                }
+
+        void parent(const std::shared_ptr<render_item>& par)
+        {
+            m_parent = par;
+        }
+
+        const std::shared_ptr<element>& src_el() const
+        {
+            return m_element;
+        }
+
+                const css_properties& css() const
+                {
+                        return m_element->css();
+                }
+
+        void add_child(const std::shared_ptr<render_item>& ri)
+        {
+            m_children.push_back(ri);
+            ri->parent(shared_from_this());
+        }
+
+                bool is_root() const
+                {
+                        return m_parent.expired();
+                }
+
+        bool collapse_top_margin() const
+        {
+            auto wm = get_wm_context();
+            return wm.block_start(m_borders) == 0 &&
+                   wm.block_start(m_padding) == 0 &&
+                   m_element->in_normal_flow() &&
+                   m_element->css().get_float() == float_none &&
+                   !is_flex_item() &&
+                   !is_root() &&
+                   !src_el()->is_block_formatting_context();
+        }
+
+        bool collapse_bottom_margin() const
+        {
+            auto wm = get_wm_context();
+            return wm.block_end(m_borders) == 0 &&
+                   wm.block_end(m_padding) == 0 &&
+                   m_element->in_normal_flow() &&
+                   m_element->css().get_float() == float_none &&
+                   !is_root() &&
+                   !src_el()->is_block_formatting_context();
+        }
+
+        bool is_visible() const
+        {
+            return !(m_skip || src_el()->css().get_display() == display_none || src_el()->css().get_visibility() != visibility_visible);
+        }
+
+                bool is_flex_item() const
+                {
+                        auto par = parent();
+                        if(par && (par->css().get_display() == display_inline_flex || par->css().get_display() == display_flex ||
+                                   par->css().get_display() == display_inline_grid || par->css().get_display() == display_grid))
+                        {
+                                return true;
+                        }
+                        return false;
+                }
+
+                pixel_t render(pixel_t x, pixel_t y, const containing_block_context& containing_block_size, formatting_context* fmt_ctx, bool second_pass = false);
+                pixel_t measure(const containing_block_context& containing_block_size, formatting_context* fmt_ctx);
+                void place(pixel_t x, pixel_t y, const containing_block_context& containing_block_size, formatting_context* fmt_ctx);
+                void place_logical(pixel_t inline_pos, pixel_t block_pos, const containing_block_context& cb_context, formatting_context* fmt_ctx);
+        void apply_relative_shift(const containing_block_context &containing_block_size);
+        void calc_outlines( pixel_t parent_width );
+        pixel_t calc_auto_margins(pixel_t parent_width);        // returns left margin
+
+        virtual std::shared_ptr<render_item> init();
+        virtual void apply_vertical_align() {}
+        bool get_cached_bidi_level(int base_level, int& out_level) const
+        {
+            if (m_cached_bidi_base_level != base_level) return false;
+            out_level = m_cached_bidi_level;
+            return true;
+        }
+        void set_cached_bidi_level(int base_level, int level)
+        {
+            m_cached_bidi_base_level = base_level;
+            m_cached_bidi_level = level;
+        }
+                /**
+                 * Get first baseline position. Default position is element bottom without bottom margin.
+                 * @returns offset of the first baseline from element top
+                 */
+                virtual pixel_t get_first_baseline() { return height() - margin_bottom(); }
+                /**
+                 * Get the last baseline position.  The default position is element bottom without bottom margin.
+                 * @returns offset of the last baseline from element top
+                 */
+                virtual pixel_t get_last_baseline() { return height() - margin_bottom(); }
+
+        virtual std::shared_ptr<render_item> clone()
+        {
+            return std::make_shared<render_item>(src_el());
+        }
+        std::tuple<
+                std::shared_ptr<litehtml::render_item>,
+                std::shared_ptr<litehtml::render_item>,
+                std::shared_ptr<litehtml::render_item>
+                > split_inlines();
+        bool fetch_positioned();
+        void sort_positioned();
+        void render_positioned(render_type rt = render_all);
+                // returns element offset related to the containing block
+                std::tuple<pixel_t, pixel_t> element_static_offset(const std::shared_ptr<litehtml::render_item> &el);
+        void add_positioned(const std::shared_ptr<litehtml::render_item> &el);
+        void get_redraw_box(litehtml::position& pos, pixel_t x = 0, pixel_t y = 0);
+        void calc_document_size( litehtml::size& sz, pixel_t x = 0, pixel_t y = 0 );
+                virtual void get_inline_boxes( position::vector& /*boxes*/ ) const {};
+                virtual void set_inline_boxes( position::vector& /*boxes*/ ) {};
+                virtual void add_inline_box( const position& /*box*/ ) {};
+                virtual void clear_inline_boxes() {};
+        void draw_stacking_context( uint_ptr hdc, pixel_t x, pixel_t y, const position* clip, bool with_positioned );
+        virtual void draw_children( uint_ptr hdc, pixel_t x, pixel_t y, const position* clip, draw_flag flag, int zindex );
+        virtual pixel_t get_draw_vertical_offset() { return 0; }
+        virtual std::shared_ptr<element> get_child_by_point(pixel_t x, pixel_t y, pixel_t client_x, pixel_t client_y, draw_flag flag, int zindex,
+                const std::function<bool(const std::shared_ptr<render_item>&)>& check);
+        std::shared_ptr<element> get_element_by_point(pixel_t x, pixel_t y, pixel_t client_x, pixel_t client_y,
+                const std::function<bool(const std::shared_ptr<render_item>&)>& check);
+        bool is_point_inside( pixel_t x, pixel_t y ) const;
+        void dump(litehtml::dumper& cout);
+                position get_placement() const;
+        virtual void block_shift(pixel_t shift);
+        virtual void inline_shift(pixel_t shift);
+        virtual void x_shift(pixel_t shift) { m_pos.x += shift; }
+        virtual void y_shift(pixel_t shift) { m_pos.y += shift; }
+
+        pixel_t inline_start_pos(const satoru::WritingModeContext& wm) const;
+        pixel_t inline_end_pos(const satoru::WritingModeContext& wm) const;
+        pixel_t block_start_pos(const satoru::WritingModeContext& wm) const;
+        pixel_t block_end_pos(const satoru::WritingModeContext& wm) const;
+
+        pixel_t inline_start_pos() const;
+        pixel_t inline_end_pos() const;
+        pixel_t block_start_pos() const;
+        pixel_t block_end_pos() const;
+
+        /**
+         * Returns the boxes of rendering element. All coordinates are absolute
+         *
+         * @param redraw_boxes [out] resulting rendering boxes
+         * @return
+         */
+        void get_rendering_boxes( position::vector& redraw_boxes) const;
+        };
+}
+
+#endif //LH_RENDER_ITEM_H

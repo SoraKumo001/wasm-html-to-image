@@ -1,0 +1,60 @@
+#ifndef RESOURCE_MANAGER_H
+#define RESOURCE_MANAGER_H
+
+#include <cstdint>
+#include <set>
+#include <string>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
+
+class SatoruContext;
+
+enum class ResourceType : int { Raw = 0, Font = 1, Image = 2, Css = 3 };
+
+struct ResourceRequest {
+    std::string url;
+    std::string name;  // Font family name, or other identifier
+    std::string characters;
+    ResourceType type;
+    bool redraw_on_ready;
+
+    // For std::set to work
+    bool operator<(const ResourceRequest& other) const {
+        if (url != other.url) return url < other.url;
+        if (name != other.name) return name < other.name;
+        if (characters != other.characters) return characters < other.characters;
+        if (type != other.type) return type < other.type;
+        return redraw_on_ready < other.redraw_on_ready;
+    }
+};
+
+class ResourceManager {
+   public:
+    ResourceManager(SatoruContext& context);
+
+    // Register a needed resource
+    void request(const std::string& url, const std::string& name, ResourceType type,
+                 bool redraw_on_ready = false, const std::string& characters = "");
+
+    // Get list of pending requests to send to JS
+    std::vector<ResourceRequest> getPendingRequests();
+
+    // Receive data from JS
+    void add(const std::string& url, const uint8_t* data, size_t size, ResourceType type);
+
+    bool has(const std::string& url) const;
+
+    void clear();
+    void clear(ResourceType type);
+
+   private:
+    SatoruContext& m_context;
+    std::set<ResourceRequest> m_requests;
+    std::unordered_set<std::string> m_requestedUrls;
+    std::unordered_map<std::string, ResourceType> m_resolvedUrls;
+    std::unordered_map<std::string, std::set<std::string>>
+        m_urlToNames;  // Map URL to requested names (e.g. Font Families)
+};
+
+#endif  // RESOURCE_MANAGER_H

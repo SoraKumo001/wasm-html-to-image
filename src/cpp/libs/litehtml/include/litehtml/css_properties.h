@@ -1,0 +1,1338 @@
+#ifndef LITEHTML_CSS_PROPERTIES_H
+#define LITEHTML_CSS_PROPERTIES_H
+
+#include "string_id.h"
+#include "types.h"
+#include "css_margins.h"
+#include "borders.h"
+#include "css_offsets.h"
+#include "background.h"
+#include "border_image.h"
+
+namespace litehtml
+{
+  class element;
+  class document;
+
+  template <class CssT, class CompT>
+  class css_property
+  {
+  public:
+    CssT css_value;
+    CompT computed_value;
+
+    css_property(const CssT &css_val, const CompT &computed_val) : css_value(css_val), computed_value(computed_val) {}
+  };
+
+  // CSS Properties types
+  using css_line_height_t = css_property<css_length, pixel_t>;
+
+  class css_properties
+  {
+  private:
+    element_position m_el_position;
+    direction m_direction;
+    writing_mode m_writing_mode;
+    text_orientation m_text_orientation;
+    text_combine_upright m_text_combine_upright;
+    text_align m_text_align;
+    overflow m_overflow;
+    overflow m_overflow_x;
+    overflow m_overflow_y;
+    text_overflow m_text_overflow;
+    white_space m_white_space;
+    text_wrap m_text_wrap;
+    style_display m_display;
+    visibility m_visibility;
+    appearance m_appearance;
+    box_sizing m_box_sizing;
+    css_length m_z_index;
+    vertical_align m_vertical_align;
+    element_float m_float;
+    element_clear m_clear;
+    css_margins m_css_margins;
+    css_margins m_css_padding;
+    css_borders m_css_borders;
+    css_length m_css_width;
+    css_length m_css_height;
+    css_length m_css_min_width;
+    css_length m_css_min_height;
+    css_length m_css_max_width;
+    css_length m_css_max_height;
+    css_offsets m_css_offsets;
+    css_length m_css_text_indent;
+    css_length m_css_line_height;
+    css_line_height_t m_line_height{{}, 0};
+    list_style_type m_list_style_type;
+    list_style_position m_list_style_position;
+    string m_list_style_image;
+    string m_list_style_image_baseurl;
+    background m_bg;
+    border_image m_border_image;
+    uint_ptr m_font;
+    css_length m_font_size;
+    string m_font_family;
+    css_length m_font_weight;
+    font_style m_font_style;
+    int m_text_decoration_line = text_decoration_line_none;
+    text_decoration_style m_text_decoration_style = text_decoration_style_solid;
+    css_length m_text_decoration_thickness;
+    css_length m_text_underline_offset;
+    web_color m_text_decoration_color;
+    string m_text_emphasis_style;
+    web_color m_text_emphasis_color;
+    int m_text_emphasis_position;
+    font_metrics m_font_metrics;
+    text_transform m_text_transform;
+    web_color m_color;
+    web_color m_text_fill_color; // -webkit-text-fill-color, sentinel: alpha=1 means not set
+    string m_cursor;
+    string m_content;
+    border_collapse m_border_collapse;
+    table_layout m_table_layout;
+    css_length m_css_border_spacing_x;
+    css_length m_css_border_spacing_y;
+
+    css_borders m_outline;
+    css_length m_outline_offset;
+
+    float m_flex_grow;
+    float m_flex_shrink;
+    css_length m_flex_basis;
+    int m_column_count;
+    flex_direction m_flex_direction;
+    flex_wrap m_flex_wrap;
+    flex_justify_content m_flex_justify_content;
+    flex_align_items m_flex_align_items;
+    flex_align_items m_flex_align_self;
+    flex_align_content m_flex_align_content;
+
+    flex_justify_content m_justify_self;
+    flex_align_items m_align_self;
+
+    length_vector m_grid_template_columns;
+    length_vector m_grid_template_rows;
+
+    css_token_vector m_grid_column_start;
+    css_token_vector m_grid_column_end;
+    css_token_vector m_grid_row_start;
+    css_token_vector m_grid_row_end;
+
+    css_length m_row_gap;
+    css_length m_column_gap;
+
+    css_length m_letter_spacing;
+    css_length m_word_spacing;
+
+    css_border m_column_rule;
+
+    caption_side m_caption_side;
+    object_fit m_object_fit;
+    css_token_vector m_object_position;
+    shadow_vector m_box_shadow;
+    shadow_vector m_text_shadow;
+
+    int m_order;
+    int m_line_clamp;
+    box_orient m_webkit_box_orient;
+    float m_opacity;
+    aspect_ratio m_aspect_ratio;
+    css_token_vector m_transform;
+    css_token_vector m_rotate;
+    css_token_vector m_scale;
+    css_token_vector m_translate;
+    css_token_vector m_transform_origin;
+    css_token_vector m_filter;
+    css_token_vector m_backdrop_filter;
+    css_token_vector m_mask;
+    word_break m_word_break;
+    overflow_wrap m_overflow_wrap;
+    blend_mode m_mix_blend_mode;
+    blend_mode m_background_blend_mode;
+
+    isolation m_isolation;
+    container_type m_container_type;
+    string m_container_name;
+    css_token_vector m_clip;
+
+  private:
+    void compute_font(const element *el, const std::shared_ptr<document> &doc);
+    void compute_background(const element *el, const std::shared_ptr<document> &doc);
+    void compute_border_image(const element *el, const std::shared_ptr<document> &doc);
+    void compute_flex(const element *el, const std::shared_ptr<document> &doc);
+    void compute_grid(const element *el, const std::shared_ptr<document> &doc);
+    web_color get_color_property(const element *el, string_id name, bool inherited, web_color default_value, uint_ptr member_offset) const;
+    template <class T>
+    T get_logical_property(const element *el, string_id logical_side, string_id physical_side, string_id logical_all, T default_value, bool inherited, uint_ptr member_offset) const;
+    void snap_border_width(css_length &width, const std::shared_ptr<document> &doc);
+
+  public:
+    css_properties() : m_el_position(element_position_static),
+                       m_direction(direction_ltr),
+                       m_writing_mode(writing_mode_horizontal_tb),
+                       m_text_orientation(text_orientation_mixed),
+                       m_text_combine_upright(text_combine_upright_none),
+                       m_text_align(text_align_start),
+                       m_overflow(overflow_visible),
+                       m_overflow_x(overflow_visible),
+                       m_overflow_y(overflow_visible),
+                       m_text_overflow(text_overflow_clip),
+                       m_white_space(white_space_normal),
+                       m_text_wrap(text_wrap_wrap),
+                       m_display(display_inline),
+                       m_visibility(visibility_visible),
+                       m_appearance(appearance_none),
+                       m_box_sizing(box_sizing_content_box),
+                       m_z_index(0),
+                       m_vertical_align(va_baseline),
+                       m_float(float_none),
+                       m_clear(clear_none),
+                       m_css_margins(),
+                       m_css_padding(),
+                       m_css_borders(),
+                       m_css_width(),
+                       m_css_height(),
+                       m_css_min_width(),
+                       m_css_min_height(),
+                       m_css_max_width(),
+                       m_css_max_height(),
+                       m_css_offsets(),
+                       m_css_text_indent(),
+                       m_css_line_height(0),
+                       m_list_style_type(list_style_type_none),
+                       m_list_style_position(list_style_position_outside),
+                       m_bg(),
+                       m_font(0),
+                       m_font_size(0),
+                       m_font_metrics(),
+                       m_text_transform(text_transform_none),
+                       m_border_collapse(border_collapse_separate),
+                       m_table_layout(table_layout_auto),
+                       m_css_border_spacing_x(),
+                       m_css_border_spacing_y(),
+                       m_flex_grow(0),
+                       m_flex_shrink(1),
+                       m_column_count(0),
+                       m_flex_direction(flex_direction_row),
+                       m_flex_wrap(flex_wrap_nowrap),
+                       m_flex_justify_content(flex_justify_content_flex_start),
+                       m_flex_align_items(flex_align_items_stretch),
+                       m_flex_align_self(flex_align_items_auto),
+                       m_flex_align_content(flex_align_content_stretch),
+                       m_justify_self(flex_justify_content_auto),
+                       m_align_self(flex_align_items_auto),
+                       m_grid_column_start(),
+                       m_grid_column_end(),
+                       m_grid_row_start(),
+                       m_grid_row_end(),
+                       m_row_gap(0),
+                       m_column_gap(0),
+                       m_letter_spacing(0),
+                       m_word_spacing(0),
+                       m_column_rule(),
+                       m_order(0),
+                       m_line_clamp(0),
+                       m_webkit_box_orient(box_orient_horizontal),
+                       m_opacity(1.0f),
+                       m_aspect_ratio(),
+                       m_transform(),
+                       m_transform_origin(),
+                       m_filter(),
+                       m_backdrop_filter(),
+                       m_mask(),
+                       m_clip(),
+                       m_word_break(word_break_normal),
+                       m_overflow_wrap(overflow_wrap_normal),
+                       m_mix_blend_mode(blend_mode_normal),
+                       m_background_blend_mode(blend_mode_normal),
+                       m_isolation(isolation_auto),
+                       m_container_type(container_type_none)
+    {
+    }
+
+    void compute(const element *el, const std::shared_ptr<document> &doc);
+    std::vector<std::tuple<string, string>> dump_get_attrs() const;
+
+    element_position get_position() const;
+    void set_position(element_position mElPosition);
+
+    direction get_direction() const;
+    void set_direction(direction mDirection);
+
+    writing_mode get_writing_mode() const;
+    void set_writing_mode(writing_mode mWritingMode);
+
+    text_orientation get_text_orientation() const;
+    void set_text_orientation(text_orientation mTextOrientation);
+
+    text_combine_upright get_text_combine_upright() const;
+    void set_text_combine_upright(text_combine_upright val);
+
+    text_align get_text_align() const;
+    void set_text_align(text_align mTextAlign);
+
+    overflow get_overflow() const;
+    void set_overflow(overflow mOverflow);
+
+    overflow get_overflow_x() const;
+    void set_overflow_x(overflow val);
+
+    overflow get_overflow_y() const;
+    void set_overflow_y(overflow val);
+
+    text_overflow get_text_overflow() const;
+    void set_text_overflow(text_overflow mTextOverflow);
+
+    white_space get_white_space() const;
+    void set_white_space(white_space mWhiteSpace);
+    text_wrap get_text_wrap() const;
+    void set_text_wrap(text_wrap mTextWrap);
+
+    word_break get_word_break() const;
+    void set_word_break(word_break mWordBreak);
+
+    overflow_wrap get_overflow_wrap() const;
+    void set_overflow_wrap(overflow_wrap mOverflowWrap);
+
+    style_display get_display() const;
+    void set_display(style_display mDisplay);
+
+    visibility get_visibility() const;
+    void set_visibility(visibility mVisibility);
+
+    appearance get_appearance() const;
+    void set_appearance(appearance mAppearance);
+
+    box_sizing get_box_sizing() const;
+    void set_box_sizing(box_sizing mBoxSizing);
+
+    int get_z_index() const;
+    void set_z_index(int mZIndex);
+    const css_length& get_z_index_length() const { return m_z_index; }
+
+    vertical_align get_vertical_align() const;
+    void set_vertical_align(vertical_align mVerticalAlign);
+
+    element_float get_float() const;
+    void set_float(element_float mFloat);
+
+    element_clear get_clear() const;
+    void set_clear(element_clear mClear);
+
+    const css_margins &get_margins() const;
+    void set_margins(const css_margins &mCssMargins);
+
+    const css_margins &get_padding() const;
+    void set_padding(const css_margins &mCssPadding);
+
+    const css_borders &get_borders() const;
+    css_borders &get_borders_w();
+    void set_borders(const css_borders &mCssBorders);
+
+    const css_borders &get_outline() const;
+    void set_outline(const css_borders &val);
+
+    const css_length &get_outline_offset() const;
+    void set_outline_offset(const css_length &val);
+
+    const css_length &get_width() const;
+    void set_width(const css_length &mCssWidth);
+
+    const css_length &get_height() const;
+    void set_height(const css_length &mCssHeight);
+
+    const css_length &get_min_width() const;
+    void set_min_width(const css_length &mCssMinWidth);
+
+    const css_length &get_min_height() const;
+    void set_min_height(const css_length &mCssMinHeight);
+
+    const css_length &get_max_width() const;
+    void set_max_width(const css_length &mCssMaxWidth);
+
+    const css_length &get_max_height() const;
+    void set_max_height(const css_length &mCssMaxHeight);
+
+    const css_offsets &get_offsets() const;
+    void set_offsets(const css_offsets &mCssOffsets);
+
+    const css_length &get_text_indent() const;
+    void set_text_indent(const css_length &mCssTextIndent);
+
+    const css_line_height_t &line_height() const;
+    css_line_height_t &line_height_w();
+
+    list_style_type get_list_style_type() const;
+    void set_list_style_type(list_style_type mListStyleType);
+
+    list_style_position get_list_style_position() const;
+    void set_list_style_position(list_style_position mListStylePosition);
+
+    const string &get_list_style_image() const;
+    void set_list_style_image(const string &url);
+
+    const string &get_list_style_image_baseurl() const;
+    void set_list_style_image_baseurl(const string &url);
+
+    const background &get_bg() const;
+    void set_bg(const background &mBg);
+
+    const border_image &get_border_image() const;
+    void set_border_image(const border_image &val);
+
+    pixel_t get_font_size() const;
+    void set_font_size(pixel_t mFontSize);
+
+    uint_ptr get_font() const;
+    void set_font(uint_ptr mFont);
+
+    const font_metrics &get_font_metrics() const;
+    void set_font_metrics(const font_metrics &mFontMetrics);
+
+    text_transform get_text_transform() const;
+    void set_text_transform(text_transform mTextTransform);
+
+    web_color get_color() const;
+    void set_color(web_color color);
+
+    bool has_text_fill_color() const;
+    web_color get_text_fill_color() const;
+    void set_text_fill_color(web_color color);
+
+    const string &get_cursor() const;
+    void set_cursor(const string &cursor);
+
+    const string &get_content() const;
+    void set_content(const string &content);
+
+    border_collapse get_border_collapse() const;
+    void set_border_collapse(border_collapse mBorderCollapse);
+
+    table_layout get_table_layout() const;
+    void set_table_layout(table_layout mTableLayout);
+
+    const css_length &get_border_spacing_x() const;
+    void set_border_spacing_x(const css_length &mBorderSpacingX);
+
+    const css_length &get_border_spacing_y() const;
+    void set_border_spacing_y(const css_length &mBorderSpacingY);
+
+    caption_side get_caption_side() const;
+    void set_caption_side(caption_side side);
+
+    object_fit get_object_fit() const;
+    void set_object_fit(object_fit fit);
+
+    float get_flex_grow() const;
+    float get_flex_shrink() const;
+    const css_length &get_flex_basis() const;
+    int get_column_count() const;
+    void set_column_count(int count);
+    flex_direction get_flex_direction() const;
+    flex_wrap get_flex_wrap() const;
+    flex_justify_content get_flex_justify_content() const;
+    flex_align_items get_flex_align_items() const;
+    flex_align_items get_flex_align_self() const;
+    flex_align_content get_flex_align_content() const;
+
+    flex_justify_content get_justify_self() const;
+    flex_align_items get_align_self() const;
+
+    const length_vector &get_grid_template_columns() const;
+    const length_vector &get_grid_template_rows() const;
+
+    const css_token_vector &get_grid_column_start() const;
+    void set_grid_column_start(const char* val);
+    const css_token_vector &get_grid_column_end() const;
+    void set_grid_column_end(const char* val);
+    const css_token_vector &get_grid_row_start() const;
+    void set_grid_row_start(const char* val);
+    const css_token_vector &get_grid_row_end() const;
+    void set_grid_row_end(const char* val);
+
+    const css_length &get_row_gap() const;
+    const css_length &get_column_gap() const;
+
+    const css_length &get_letter_spacing() const;
+    const css_length &get_word_spacing() const;
+
+    const css_border &get_column_rule() const;
+
+    int get_order() const;
+    void set_order(int order);
+
+    int get_line_clamp() const;
+    void set_line_clamp(int line_clamp);
+
+    box_orient get_webkit_box_orient() const;
+    void set_webkit_box_orient(box_orient orient);
+
+    float get_opacity() const;
+    void set_opacity(float opacity);
+
+    aspect_ratio get_aspect_ratio() const;
+
+    isolation get_isolation() const;
+    void set_isolation(isolation m_iso);
+
+    container_type get_container_type() const;
+    void set_container_type(container_type type);
+
+    const string& get_container_name() const;
+    void set_container_name(const string& name);
+
+    int get_text_decoration_line() const;
+    text_decoration_style get_text_decoration_style() const;
+    const css_length &get_text_decoration_thickness() const;
+    const css_length &get_text_underline_offset() const;
+    const web_color &get_text_decoration_color() const;
+
+    string get_text_emphasis_style() const;
+    web_color get_text_emphasis_color() const;
+    int get_text_emphasis_position() const;
+
+    const shadow_vector &get_box_shadow() const;
+    const css_token_vector &get_transform() const;
+    const css_token_vector &get_rotate() const;
+    const css_token_vector &get_scale() const;
+    const css_token_vector &get_translate() const;
+    const css_token_vector &get_transform_origin() const;
+    const css_token_vector &get_filter() const;
+    const css_token_vector &get_backdrop_filter() const;
+    const css_token_vector &get_object_position() const;
+    const css_token_vector &get_mask() const;
+    const css_token_vector &get_clip() const;
+    blend_mode get_mix_blend_mode() const;
+    void set_mix_blend_mode(blend_mode mBlendMode);
+    blend_mode get_background_blend_mode() const;
+    void set_background_blend_mode(blend_mode mBlendMode);
+
+    struct {
+        pixel_t width = -1;
+        pixel_t height = -1;
+    } m_last_container_size;
+  };
+
+  inline element_position css_properties::get_position() const
+  {
+    return m_el_position;
+  }
+
+  inline void css_properties::set_position(element_position mElPosition)
+  {
+    m_el_position = mElPosition;
+  }
+
+  inline direction css_properties::get_direction() const
+  {
+    return m_direction;
+  }
+
+  inline void css_properties::set_direction(direction mDirection)
+  {
+    m_direction = mDirection;
+  }
+
+  inline writing_mode css_properties::get_writing_mode() const
+  {
+    return m_writing_mode;
+  }
+
+  inline void css_properties::set_writing_mode(writing_mode mWritingMode)
+  {
+    m_writing_mode = mWritingMode;
+  }
+
+  inline text_orientation css_properties::get_text_orientation() const
+  {
+    return m_text_orientation;
+  }
+
+  inline void css_properties::set_text_orientation(text_orientation mTextOrientation)
+  {
+    m_text_orientation = mTextOrientation;
+  }
+
+  inline text_combine_upright css_properties::get_text_combine_upright() const
+  {
+    return m_text_combine_upright;
+  }
+
+  inline void css_properties::set_text_combine_upright(text_combine_upright val)
+  {
+    m_text_combine_upright = val;
+  }
+
+  inline text_align css_properties::get_text_align() const
+  {
+    return m_text_align;
+  }
+
+  inline void css_properties::set_text_align(text_align mTextAlign)
+  {
+    m_text_align = mTextAlign;
+  }
+
+  inline overflow css_properties::get_overflow() const
+  {
+    return m_overflow;
+  }
+
+  inline void css_properties::set_overflow(overflow mOverflow)
+  {
+    m_overflow = mOverflow;
+    m_overflow_x = mOverflow;
+    m_overflow_y = mOverflow;
+  }
+
+  inline overflow css_properties::get_overflow_x() const
+  {
+    return m_overflow_x;
+  }
+
+  inline void css_properties::set_overflow_x(overflow val)
+  {
+    m_overflow_x = val;
+  }
+
+  inline overflow css_properties::get_overflow_y() const
+  {
+    return m_overflow_y;
+  }
+
+  inline void css_properties::set_overflow_y(overflow val)
+  {
+    m_overflow_y = val;
+  }
+
+  inline text_overflow css_properties::get_text_overflow() const
+  {
+    return m_text_overflow;
+  }
+
+  inline void css_properties::set_text_overflow(text_overflow mTextOverflow)
+  {
+    m_text_overflow = mTextOverflow;
+  }
+
+  inline white_space css_properties::get_white_space() const
+  {
+    return m_white_space;
+  }
+
+  inline void css_properties::set_white_space(white_space mWhiteSpace)
+  {
+    m_white_space = mWhiteSpace;
+  }
+
+  inline text_wrap css_properties::get_text_wrap() const
+  {
+    return m_text_wrap;
+  }
+
+  inline void css_properties::set_text_wrap(text_wrap mTextWrap)
+  {
+    m_text_wrap = mTextWrap;
+  }
+
+  inline word_break css_properties::get_word_break() const
+  {
+    return m_word_break;
+  }
+
+  inline void css_properties::set_word_break(word_break mWordBreak)
+  {
+    m_word_break = mWordBreak;
+  }
+
+  inline overflow_wrap css_properties::get_overflow_wrap() const
+  {
+    return m_overflow_wrap;
+  }
+
+  inline void css_properties::set_overflow_wrap(overflow_wrap mOverflowWrap)
+  {
+    m_overflow_wrap = mOverflowWrap;
+  }
+
+  inline style_display css_properties::get_display() const
+  {
+    return m_display;
+  }
+
+  inline void css_properties::set_display(style_display mDisplay)
+  {
+    m_display = mDisplay;
+  }
+
+  inline visibility css_properties::get_visibility() const
+  {
+    return m_visibility;
+  }
+
+  inline void css_properties::set_visibility(visibility mVisibility)
+  {
+    m_visibility = mVisibility;
+  }
+
+  inline appearance css_properties::get_appearance() const
+  {
+    return m_appearance;
+  }
+
+  inline void css_properties::set_appearance(appearance mAppearance)
+  {
+    m_appearance = mAppearance;
+  }
+
+  inline box_sizing css_properties::get_box_sizing() const
+  {
+    return m_box_sizing;
+  }
+
+  inline void css_properties::set_box_sizing(box_sizing mBoxSizing)
+  {
+    m_box_sizing = mBoxSizing;
+  }
+
+  inline int css_properties::get_z_index() const
+  {    return (int)m_z_index.val();
+  }
+
+  inline void css_properties::set_z_index(int mZIndex)
+  {
+    m_z_index.set_value((float)mZIndex, css_units_none);
+  }
+
+  inline vertical_align css_properties::get_vertical_align() const
+  {
+    return m_vertical_align;
+  }
+
+  inline void css_properties::set_vertical_align(vertical_align mVerticalAlign)
+  {
+    m_vertical_align = mVerticalAlign;
+  }
+
+  inline element_float css_properties::get_float() const
+  {
+    return m_float;
+  }
+
+  inline void css_properties::set_float(element_float mFloat)
+  {
+    m_float = mFloat;
+  }
+
+  inline element_clear css_properties::get_clear() const
+  {
+    return m_clear;
+  }
+
+  inline void css_properties::set_clear(element_clear mClear)
+  {
+    m_clear = mClear;
+  }
+
+  inline const css_margins &css_properties::get_margins() const
+  {
+    return m_css_margins;
+  }
+
+  inline void css_properties::set_margins(const css_margins &mCssMargins)
+  {
+    m_css_margins = mCssMargins;
+  }
+
+  inline const css_margins &css_properties::get_padding() const
+  {
+    return m_css_padding;
+  }
+
+  inline void css_properties::set_padding(const css_margins &mCssPadding)
+  {
+    m_css_padding = mCssPadding;
+  }
+
+  inline const css_borders &css_properties::get_borders() const
+  {
+    return m_css_borders;
+  }
+
+  inline css_borders &css_properties::get_borders_w()
+  {
+    return m_css_borders;
+  }
+
+  inline void css_properties::set_borders(const css_borders &mCssBorders)
+  {
+    m_css_borders = mCssBorders;
+  }
+
+  inline const css_borders &css_properties::get_outline() const
+  {
+    return m_outline;
+  }
+
+  inline void css_properties::set_outline(const css_borders &val)
+  {
+    m_outline = val;
+  }
+
+  inline const css_length &css_properties::get_outline_offset() const
+  {
+    return m_outline_offset;
+  }
+
+  inline void css_properties::set_outline_offset(const css_length &val)
+  {
+    m_outline_offset = val;
+  }
+
+  inline const css_length &css_properties::get_width() const
+  {
+    return m_css_width;
+  }
+
+  inline void css_properties::set_width(const css_length &mCssWidth)
+  {
+    m_css_width = mCssWidth;
+  }
+
+  inline const css_length &css_properties::get_height() const
+  {
+    return m_css_height;
+  }
+
+  inline void css_properties::set_height(const css_length &mCssHeight)
+  {
+    m_css_height = mCssHeight;
+  }
+
+  inline const css_length &css_properties::get_min_width() const
+  {
+    return m_css_min_width;
+  }
+
+  inline void css_properties::set_min_width(const css_length &mCssMinWidth)
+  {
+    m_css_min_width = mCssMinWidth;
+  }
+
+  inline const css_length &css_properties::get_min_height() const
+  {
+    return m_css_min_height;
+  }
+
+  inline void css_properties::set_min_height(const css_length &mCssMinHeight)
+  {
+    m_css_min_height = mCssMinHeight;
+  }
+
+  inline const css_length &css_properties::get_max_width() const
+  {
+    return m_css_max_width;
+  }
+
+  inline void css_properties::set_max_width(const css_length &mCssMaxWidth)
+  {
+    m_css_max_width = mCssMaxWidth;
+  }
+
+  inline const css_length &css_properties::get_max_height() const
+  {
+    return m_css_max_height;
+  }
+
+  inline void css_properties::set_max_height(const css_length &mCssMaxHeight)
+  {
+    m_css_max_height = mCssMaxHeight;
+  }
+
+  inline const css_offsets &css_properties::get_offsets() const
+  {
+    return m_css_offsets;
+  }
+
+  inline void css_properties::set_offsets(const css_offsets &mCssOffsets)
+  {
+    m_css_offsets = mCssOffsets;
+  }
+
+  inline const css_length &css_properties::get_text_indent() const
+  {
+    return m_css_text_indent;
+  }
+
+  inline void css_properties::set_text_indent(const css_length &mCssTextIndent)
+  {
+    m_css_text_indent = mCssTextIndent;
+  }
+
+  inline const css_line_height_t &css_properties::line_height() const
+  {
+    return m_line_height;
+  }
+
+  inline css_line_height_t &css_properties::line_height_w()
+  {
+    return m_line_height;
+  }
+
+  inline list_style_type css_properties::get_list_style_type() const
+  {
+    return m_list_style_type;
+  }
+
+  inline void css_properties::set_list_style_type(list_style_type mListStyleType)
+  {
+    m_list_style_type = mListStyleType;
+  }
+
+  inline list_style_position css_properties::get_list_style_position() const
+  {
+    return m_list_style_position;
+  }
+
+  inline void css_properties::set_list_style_position(list_style_position mListStylePosition)
+  {
+    m_list_style_position = mListStylePosition;
+  }
+
+  inline const string &css_properties::get_list_style_image() const { return m_list_style_image; }
+  inline void css_properties::set_list_style_image(const string &url) { m_list_style_image = url; }
+
+  inline const string &css_properties::get_list_style_image_baseurl() const { return m_list_style_image_baseurl; }
+  inline void css_properties::set_list_style_image_baseurl(const string &url) { m_list_style_image_baseurl = url; }
+
+  inline const background &css_properties::get_bg() const
+  {
+    return m_bg;
+  }
+
+  inline void css_properties::set_bg(const background &mBg)
+  {
+    m_bg = mBg;
+  }
+
+  inline const border_image &css_properties::get_border_image() const
+  {
+    return m_border_image;
+  }
+
+  inline void css_properties::set_border_image(const border_image &val)
+  {
+    m_border_image = val;
+  }
+
+  inline pixel_t css_properties::get_font_size() const
+  {
+    return (pixel_t)m_font_size.val();
+  }
+
+  inline void css_properties::set_font_size(pixel_t mFontSize)
+  {
+    m_font_size = (float)mFontSize;
+  }
+
+  inline uint_ptr css_properties::get_font() const
+  {
+    return m_font;
+  }
+
+  inline void css_properties::set_font(uint_ptr mFont)
+  {
+    m_font = mFont;
+  }
+
+  inline const font_metrics &css_properties::get_font_metrics() const
+  {    return m_font_metrics;
+  }
+
+  inline void css_properties::set_font_metrics(const font_metrics &mFontMetrics)
+  {
+    m_font_metrics = mFontMetrics;
+  }
+
+  inline text_transform css_properties::get_text_transform() const
+  {
+    return m_text_transform;
+  }
+
+  inline void css_properties::set_text_transform(text_transform mTextTransform)
+  {
+    m_text_transform = mTextTransform;
+  }
+
+  inline web_color css_properties::get_color() const { return m_color; }
+  inline void css_properties::set_color(web_color color) { m_color = color; }
+  inline bool css_properties::has_text_fill_color() const { return m_text_fill_color.alpha != 1 || m_text_fill_color.red != 0 || m_text_fill_color.green != 0 || m_text_fill_color.blue != 0; }
+  inline web_color css_properties::get_text_fill_color() const { return m_text_fill_color; }
+  inline void css_properties::set_text_fill_color(web_color color) { m_text_fill_color = color; }
+
+  inline const string &css_properties::get_cursor() const { return m_cursor; }
+  inline void css_properties::set_cursor(const string &cursor) { m_cursor = cursor; }
+
+  inline const string &css_properties::get_content() const { return m_content; }
+  inline void css_properties::set_content(const string &content) { m_content = content; }
+
+  inline border_collapse css_properties::get_border_collapse() const
+  {    return m_border_collapse;
+  }
+
+  inline void css_properties::set_border_collapse(border_collapse mBorderCollapse)
+  {
+    m_border_collapse = mBorderCollapse;
+  }
+
+  inline table_layout css_properties::get_table_layout() const
+  {
+    return m_table_layout;
+  }
+
+  inline void css_properties::set_table_layout(table_layout mTableLayout)
+  {
+    m_table_layout = mTableLayout;
+  }
+
+  inline const css_length &css_properties::get_border_spacing_x() const
+  {
+    return m_css_border_spacing_x;
+  }
+
+  inline void css_properties::set_border_spacing_x(const css_length &mBorderSpacingX)
+  {
+    m_css_border_spacing_x = mBorderSpacingX;
+  }
+
+  inline const css_length &css_properties::get_border_spacing_y() const
+  {
+    return m_css_border_spacing_y;
+  }
+
+  inline void css_properties::set_border_spacing_y(const css_length &mBorderSpacingY)
+  {
+    m_css_border_spacing_y = mBorderSpacingY;
+  }
+
+  inline float css_properties::get_flex_grow() const
+  {
+    return m_flex_grow;
+  }
+
+  inline float css_properties::get_flex_shrink() const
+  {
+    return m_flex_shrink;
+  }
+
+  inline const css_length &css_properties::get_flex_basis() const
+  {
+    return m_flex_basis;
+  }
+
+  inline int css_properties::get_column_count() const
+  {
+    return m_column_count;
+  }
+
+  inline void css_properties::set_column_count(int count)
+  {
+    m_column_count = count;
+  }
+
+  inline flex_direction css_properties::get_flex_direction() const
+  {
+    return m_flex_direction;
+  }
+
+  inline flex_wrap css_properties::get_flex_wrap() const
+  {
+    return m_flex_wrap;
+  }
+
+  inline flex_justify_content css_properties::get_flex_justify_content() const
+  {
+    return m_flex_justify_content;
+  }
+
+  inline flex_align_items css_properties::get_flex_align_items() const
+  {
+    return m_flex_align_items;
+  }
+
+  inline flex_align_items css_properties::get_flex_align_self() const
+  {
+    return m_flex_align_self;
+  }
+
+  inline flex_align_content css_properties::get_flex_align_content() const
+  {
+    return m_flex_align_content;
+  }
+
+  inline flex_justify_content css_properties::get_justify_self() const
+  {
+    return m_justify_self;
+  }
+
+  inline flex_align_items css_properties::get_align_self() const
+  {
+    return m_align_self;
+  }
+
+  inline const length_vector &css_properties::get_grid_template_columns() const
+  {
+    return m_grid_template_columns;
+  }
+
+  inline const length_vector &css_properties::get_grid_template_rows() const
+  {
+    return m_grid_template_rows;
+  }
+
+  inline const css_token_vector &css_properties::get_grid_column_start() const
+  {
+    return m_grid_column_start;
+  }
+
+  inline const css_token_vector &css_properties::get_grid_column_end() const
+  {
+    return m_grid_column_end;
+  }
+
+  inline const css_token_vector &css_properties::get_grid_row_start() const
+  {
+    return m_grid_row_start;
+  }
+
+  inline const css_token_vector &css_properties::get_grid_row_end() const
+  {
+    return m_grid_row_end;
+  }
+
+  inline const css_length &css_properties::get_row_gap() const
+  {
+    return m_row_gap;
+  }
+
+  inline const css_length &css_properties::get_column_gap() const
+  {
+    return m_column_gap;
+  }
+
+  inline const css_length &css_properties::get_letter_spacing() const
+  {
+    return m_letter_spacing;
+  }
+
+  inline const css_length &css_properties::get_word_spacing() const
+  {
+    return m_word_spacing;
+  }
+
+  inline const css_border &css_properties::get_column_rule() const
+  {
+    return m_column_rule;
+  }
+
+  inline caption_side css_properties::get_caption_side() const
+  {
+    return m_caption_side;
+  }
+  inline void css_properties::set_caption_side(caption_side side)
+  {
+    m_caption_side = side;
+  }
+
+  inline object_fit css_properties::get_object_fit() const
+  {
+    return m_object_fit;
+  }
+
+  inline void css_properties::set_object_fit(object_fit fit)
+  {
+    m_object_fit = fit;
+  }
+
+  inline int css_properties::get_order() const
+  {
+    return m_order;
+  }
+
+  inline void css_properties::set_order(int order)
+  {
+    m_order = order;
+  }
+
+  inline int css_properties::get_line_clamp() const
+  {
+    return m_line_clamp;
+  }
+
+  inline void css_properties::set_line_clamp(int line_clamp)
+  {
+    m_line_clamp = line_clamp;
+  }
+
+  inline box_orient css_properties::get_webkit_box_orient() const
+  {
+    return m_webkit_box_orient;
+  }
+
+  inline void css_properties::set_webkit_box_orient(box_orient orient)
+  {
+    m_webkit_box_orient = orient;
+  }
+
+  inline float css_properties::get_opacity() const
+  {
+    return m_opacity;
+  }
+
+  inline void css_properties::set_opacity(float opacity)
+  {
+    m_opacity = opacity;
+  }
+
+  inline aspect_ratio css_properties::get_aspect_ratio() const
+  {
+    return m_aspect_ratio;
+  }
+
+  inline isolation css_properties::get_isolation() const
+  {
+    return m_isolation;
+  }
+
+  inline void css_properties::set_isolation(isolation m_iso)
+  {
+    m_isolation = m_iso;
+  }
+
+  inline container_type css_properties::get_container_type() const
+  {
+    return m_container_type;
+  }
+
+  inline void css_properties::set_container_type(container_type type)
+  {
+    m_container_type = type;
+  }
+
+  inline const string& css_properties::get_container_name() const
+  {
+    return m_container_name;
+  }
+
+  inline void css_properties::set_container_name(const string& name)
+  {
+    m_container_name = name;
+  }
+
+  inline int css_properties::get_text_decoration_line() const
+  {
+    return m_text_decoration_line;
+  }
+
+  inline text_decoration_style css_properties::get_text_decoration_style() const
+  {
+    return m_text_decoration_style;
+  }
+
+  inline const css_length &css_properties::get_text_decoration_thickness() const { return m_text_decoration_thickness; }
+  inline const css_length &css_properties::get_text_underline_offset() const { return m_text_underline_offset; }
+
+  inline const web_color &css_properties::get_text_decoration_color() const
+  {
+    return m_text_decoration_color;
+  }
+
+  inline string css_properties::get_text_emphasis_style() const
+  {
+    return m_text_emphasis_style;
+  }
+
+  inline web_color css_properties::get_text_emphasis_color() const
+  {
+    return m_text_emphasis_color;
+  }
+
+  inline int css_properties::get_text_emphasis_position() const
+  {
+    return m_text_emphasis_position;
+  }
+
+  inline const shadow_vector &css_properties::get_box_shadow() const { return m_box_shadow; }
+
+  inline const css_token_vector &css_properties::get_transform() const
+  {
+    return m_transform;
+  }
+
+  inline const css_token_vector &css_properties::get_rotate() const
+  {
+    return m_rotate;
+  }
+
+  inline const css_token_vector &css_properties::get_scale() const
+  {
+    return m_scale;
+  }
+
+  inline const css_token_vector &css_properties::get_translate() const
+  {
+    return m_translate;
+  }
+
+  inline const css_token_vector &css_properties::get_transform_origin() const
+  {
+    return m_transform_origin;
+  }
+
+  inline const css_token_vector &css_properties::get_filter() const
+  {
+    return m_filter;
+  }
+
+  inline const css_token_vector &css_properties::get_backdrop_filter() const
+  {
+    return m_backdrop_filter;
+  }
+
+  inline const css_token_vector &css_properties::get_object_position() const
+  {
+    return m_object_position;
+  }
+
+  inline const css_token_vector &css_properties::get_mask() const
+  {
+    return m_mask;
+  }
+
+  inline const css_token_vector &css_properties::get_clip() const
+  {
+    return m_clip;
+  }
+
+  inline blend_mode css_properties::get_mix_blend_mode() const
+  {
+    return m_mix_blend_mode;
+  }
+
+  inline void css_properties::set_mix_blend_mode(blend_mode mBlendMode)
+  {
+    m_mix_blend_mode = mBlendMode;
+  }
+
+  inline blend_mode css_properties::get_background_blend_mode() const
+  {
+    return m_background_blend_mode;
+  }
+
+  inline void css_properties::set_background_blend_mode(blend_mode mBlendMode)
+  {
+    m_background_blend_mode = mBlendMode;
+  }
+}
+
+#endif // LITEHTML_CSS_PROPERTIES_H

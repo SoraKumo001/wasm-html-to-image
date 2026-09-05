@@ -1,0 +1,51 @@
+{
+  "name": "wasm-html-to-image",
+  "version": "0.1.0",
+  "description": "HTML to image converter on a single unified WASM module (satoru + converter); legacy satoru-render + wasm-image-optimization orchestration kept as fallback",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "wasm-html-to-image": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "example:cli": "tsx src/cli.ts --help"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./index": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./single": {
+      "types": "./dist/single.d.ts",
+      "import": "./dist/single.js",
+      "default": "./dist/single.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "commander": "15.0.0",
+    "wasm-html-to-image-wasm": "workspace:*"
+  },
+  "optionalDependencies": {
+    "satoru-render": "1.0.15",
+    "wasm-image-optimization": "2.0.10"
+  },
+  "devDependencies": {
+    "@types/node": "26.1.1",
+    "tsx": "^4.23.1",
+    "typescript": "^5.9.2"
+  }
+}

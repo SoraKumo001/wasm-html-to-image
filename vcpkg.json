@@ -1,0 +1,29 @@
+{
+  "name": "wasm-html-to-image-wasm",
+  "version-string": "1.0.0",
+  "description": "Merged manifest: satoru baseline + ports/gumbo, image-opt subset already covered (libavif/dav1d via FetchContent+vcpkg dav1d, aom is CMake FetchContent OPT-IN, not vcpkg).",
+  "builtin-baseline": "610f8a9b9f554730cf86d9b6324fff92a630548b",
+  "dependencies": [
+    {
+      "name": "freetype",
+      "features": ["png", "brotli", "zlib"]
+    },
+    "libpng",
+    "libjpeg-turbo",
+    "libwebp",
+    "dav1d",
+    "zlib",
+    "gumbo",
+    "bzip2",
+    "brotli",
+    "expat",
+    "ctre",
+    "utf8proc",
+    "libunibreak",
+    "qpdf",
+    {
+      "name": "harfbuzz",
+      "features": ["freetype"]
+    }
+  ]
+}

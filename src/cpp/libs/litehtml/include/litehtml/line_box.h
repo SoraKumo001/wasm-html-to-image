@@ -1,0 +1,229 @@
+﻿#ifndef LH_LINE_BOX_H
+#define LH_LINE_BOX_H
+
+#include <memory>
+#include "css_properties.h"
+#include "types.h"
+
+namespace satoru
+{
+    class WritingModeContext;
+}
+
+namespace litehtml
+{
+    class render_item;
+
+    struct line_context
+    {
+        pixel_t calculatedTop;
+        pixel_t top;
+        pixel_t left;
+        pixel_t right;
+
+        pixel_t width() const
+        {
+            return right - left;
+        }
+        void fix_top()
+        {
+            calculatedTop = top;
+        }
+		line_context() : calculatedTop(0), top(0), left(0), right(0) {}
+    };
+
+	class line_box_item
+	{
+	public:
+		enum element_type
+		{
+			type_text_part,
+			type_inline_start,
+			type_inline_continue,
+			type_inline_end
+		};
+	protected:
+		std::shared_ptr<render_item> m_element;
+		pixel_t m_rendered_min_width = 0;
+		pixel_t m_items_top = 0;
+		pixel_t m_items_bottom = 0;
+		int m_bidi_level = 0;
+	public:
+		explicit line_box_item(const std::shared_ptr<render_item>& element) : m_element(element) {}
+		line_box_item(const line_box_item& el) = default;
+		line_box_item(line_box_item&&) = default;
+		virtual ~line_box_item();
+
+		void set_bidi_level(int level) { m_bidi_level = level; }
+		int get_bidi_level() const { return m_bidi_level; }
+
+		virtual pixel_t height() const;
+		const std::shared_ptr<render_item>& get_el() const { return m_element; }
+		virtual position& pos();
+		virtual void place_to(pixel_t x, pixel_t y);
+		virtual pixel_t width() const;
+		virtual pixel_t top() const;
+		virtual pixel_t bottom() const;
+		virtual pixel_t right() const;
+		virtual pixel_t left() const;
+
+        virtual pixel_t inline_size(const satoru::WritingModeContext& wm) const;
+        virtual pixel_t block_size(const satoru::WritingModeContext& wm) const;
+        virtual pixel_t inline_pos(const satoru::WritingModeContext& wm) const;
+        virtual pixel_t block_pos(const satoru::WritingModeContext& wm) const;
+
+		virtual element_type get_type() const	{ return type_text_part; }
+		virtual pixel_t get_rendered_min_width() const	{ return m_rendered_min_width; }
+		virtual void set_rendered_min_width(pixel_t min_width) { m_rendered_min_width = min_width; }
+		virtual void y_shift(pixel_t shift);
+		virtual void x_shift(pixel_t shift);
+
+		void reset_items_height() { m_items_top = m_items_bottom = 0; }
+		void add_item_height(pixel_t item_top, pixel_t item_bottom)
+		{
+			m_items_top = std::min(m_items_top, item_top);
+			m_items_bottom = std::max(m_items_bottom, item_bottom);
+		}
+		pixel_t get_items_top() const { return m_items_top; }
+		pixel_t get_items_bottom() const { return m_items_bottom; }
+	};
+
+	class lbi_start : public line_box_item
+	{
+	protected:
+		position m_pos;
+	public:
+		explicit lbi_start(const std::shared_ptr<render_item>& element);
+		~lbi_start() override;
+
+		void place_to(pixel_t x, pixel_t y) override;
+		pixel_t height() const override;
+		pixel_t width() const override;
+		position& pos() override { return m_pos; }
+		pixel_t top() const override;
+		pixel_t bottom() const override;
+		pixel_t right() const override;
+		pixel_t left() const override;
+		element_type get_type() const override	{ return type_inline_start; }
+		pixel_t get_rendered_min_width() const override { return width(); }
+	};
+
+	class lbi_end : public lbi_start
+	{
+	public:
+		explicit lbi_end(const std::shared_ptr<render_item>& element);
+		virtual ~lbi_end() override;
+
+		void place_to(pixel_t x, pixel_t y) override;
+		pixel_t right() const override;
+		pixel_t left() const override;
+		element_type get_type() const override	{ return type_inline_end; }
+		void y_shift(pixel_t) override {}
+	};
+
+	class lbi_continue : public lbi_start
+	{
+	public:
+		explicit lbi_continue(const std::shared_ptr<render_item>& element);
+		virtual ~lbi_continue() override;
+
+		void place_to(pixel_t x, pixel_t y) override;
+		pixel_t right() const override;
+		pixel_t left() const override;
+		pixel_t width() const override;
+		element_type get_type() const override	{ return type_inline_continue; }
+	};
+
+	class line_box
+    {
+		struct va_context
+		{
+			pixel_t			line_height = 0;
+			pixel_t			baseline = 0;
+			font_metrics 	fm;
+			line_box_item*	start_lbi = nullptr;
+		};
+
+        pixel_t					m_block_pos;
+        pixel_t					m_inline_pos;
+        pixel_t					m_inline_end;
+        pixel_t					m_block_size;
+        pixel_t					m_inline_size;
+		css_line_height_t		m_default_line_height;
+        font_metrics			m_font_metrics;
+        pixel_t					m_baseline;
+        text_align				m_text_align;
+        direction				m_direction;
+        text_overflow			m_text_overflow;
+        overflow				m_overflow;
+		pixel_t m_min_width;
+		writing_mode m_writing_mode;
+		std::list< std::unique_ptr<line_box_item> > m_items;
+    public:
+        line_box(pixel_t block_pos, pixel_t inline_pos, pixel_t inline_end, const css_line_height_t& line_height, const font_metrics& fm, text_align align, direction dir, text_overflow text_overflow, overflow overflow, writing_mode mode) :
+				m_block_pos(block_pos),
+				m_inline_pos(inline_pos),
+				m_inline_end(inline_end),
+				m_block_size(0),
+				m_inline_size(0),
+				m_default_line_height(line_height),
+				m_font_metrics(fm),
+				m_baseline(0),
+				m_text_align(align),
+				m_direction(dir),
+				m_text_overflow(text_overflow),
+				m_overflow(overflow),
+				m_min_width(0),
+				m_writing_mode(mode)
+		{
+        }
+
+        pixel_t block_pos() const { return m_block_pos; }
+        pixel_t inline_pos() const { return m_inline_pos; }
+        pixel_t block_size() const { return m_block_size; }
+        pixel_t inline_size() const { return m_inline_size; }
+
+        pixel_t bottom() const { if(m_writing_mode == writing_mode_horizontal_tb) return m_block_pos + block_size(); return m_block_pos + inline_size(); }
+        pixel_t top() const { return m_block_pos; }
+        pixel_t right() const {
+            if(m_writing_mode == writing_mode_horizontal_tb) return m_inline_pos + inline_size();
+            if(m_writing_mode == writing_mode_vertical_rl || m_writing_mode == writing_mode_sideways_rl) return m_inline_pos;
+            return m_inline_pos + block_size();
+        }
+        pixel_t left() const {
+            if(m_writing_mode == writing_mode_horizontal_tb) return m_inline_pos;
+            if(m_writing_mode == writing_mode_vertical_rl || m_writing_mode == writing_mode_sideways_rl) return m_inline_pos - block_size();
+            return m_inline_pos;
+        }
+        pixel_t		height() const  { return m_block_size;				}
+        pixel_t	 	width() const	{ return m_inline_size;				}
+		pixel_t	 	line_right() const	{ return m_inline_end;			}
+		pixel_t	 	min_width() const	{ return m_min_width;		}
+
+        void				set_text_overflow(text_overflow overflow) { m_text_overflow = overflow; }
+        void				add_item(std::unique_ptr<line_box_item> item);
+        bool				can_hold(const std::unique_ptr<line_box_item>& item, white_space ws) const;
+        bool				is_empty() const;
+        pixel_t				baseline() const;
+        pixel_t				top_margin() const;
+        pixel_t				bottom_margin() const;
+        void				y_shift(pixel_t shift);
+        void				x_shift(pixel_t shift);
+		std::list< std::unique_ptr<line_box_item> >	finish(bool last_box, const containing_block_context &containing_block_size);
+		std::list< std::unique_ptr<line_box_item> > new_inline_size(pixel_t left, pixel_t right);
+		std::list< std::unique_ptr<line_box_item> > new_width(pixel_t left, pixel_t right) { return new_inline_size(left, right); }
+		std::shared_ptr<render_item> 		get_last_text_part() const;
+		std::shared_ptr<render_item> 		get_first_text_part() const;
+		std::list< std::unique_ptr<line_box_item> >& 	items() { return m_items; }
+	private:
+        bool				have_last_space() const;
+        bool				is_break_only() const;
+		static pixel_t		calc_va_baseline(const va_context& current, vertical_align va, const font_metrics& new_font, pixel_t top, pixel_t bottom);
+    };
+}
+
+#endif //LH_LINE_BOX_H
+
+
+
+

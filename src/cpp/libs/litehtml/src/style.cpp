@@ -1,0 +1,2434 @@
+#include "html.h"
+#include "style.h"
+#include "css_parser.h"
+#include "internal.h"
+#include <set>
+#include <cstdio>
+#include "html_tag.h"
+#include "document.h"
+#include "document_container.h"
+
+namespace litehtml
+{
+  bool evaluate_calc(css_token_vector &tokens, const html_tag *el);
+  bool evaluate_light_dark(css_token_vector &tokens, document_container *container);
+
+  bool parse_bg_image(const css_token &token, image &bg_image, document_container *container);
+  bool parse_bg_position_size(const css_token_vector &tokens, int &index, css_length &x, css_length &y, css_size &size);
+  bool parse_bg_size(const css_token_vector &tokens, int &index, css_size &size);
+  bool parse_two_lengths(const css_token_vector &tokens, css_length len[2], int options);
+  template <class T, class... Args>
+  int parse_1234_values(const css_token_vector &tokens, T result[4], bool (*func)(const css_token &, T &, Args...), Args... args);
+  int parse_1234_lengths(const css_token_vector &tokens, css_length len[4], int options, string keywords = "");
+  bool parse_border_width(const css_token &tok, css_length &width);
+  bool parse_font_family(const css_token_vector &tokens, string &font_family);
+  bool parse_font_weight(const css_token &tok, css_length &weight);
+
+  std::map<string_id, string> style::m_valid_values =
+      {
+          {_display_, style_display_strings},
+          {_direction_, direction_strings},
+          {_writing_mode_, writing_mode_strings},
+          {_text_orientation_, text_orientation_strings},
+          {_visibility_, visibility_strings},
+          {_position_, element_position_strings},
+          {_float_, element_float_strings},
+          {_clear_, element_clear_strings},
+          {_overflow_, overflow_strings},
+          {_appearance_, appearance_strings},
+          {_box_sizing_, box_sizing_strings},
+
+          {_overflow_x_, overflow_strings},
+          {_overflow_y_, overflow_strings},
+
+          {_text_align_, text_align_strings},
+          {_vertical_align_, vertical_align_strings},
+          {_text_transform_, text_transform_strings},
+          {_white_space_, white_space_strings},
+          {_text_wrap_, text_wrap_strings},
+          {_word_break_, word_break_strings},
+          {_overflow_wrap_, overflow_wrap_strings},
+          {_word_wrap_, overflow_wrap_strings},
+
+          {_font_style_, font_style_strings},
+          {_font_variant_, font_variant_strings},
+          {_font_weight_, font_weight_strings},
+
+          {_list_style_type_, list_style_type_strings},
+          {_list_style_position_, list_style_position_strings},
+
+          {_border_left_style_, border_style_strings},
+          {_border_right_style_, border_style_strings},
+          {_border_top_style_, border_style_strings},
+          {_border_bottom_style_, border_style_strings},
+          {_border_inline_start_style_, border_style_strings},
+          {_border_inline_end_style_, border_style_strings},
+          {_border_block_start_style_, border_style_strings},
+          {_border_block_end_style_, border_style_strings},
+          {_column_rule_style_, border_style_strings},
+          {_outline_style_, border_style_strings},
+          {_border_collapse_, border_collapse_strings},
+          {_table_layout_, table_layout_strings},
+
+          {_background_attachment_, background_attachment_strings},
+          {_background_repeat_, background_repeat_strings},
+          {_background_clip_, background_box_strings},
+          {_background_origin_, background_box_strings},
+
+          {_flex_direction_, flex_direction_strings},
+          {_flex_wrap_, flex_wrap_strings},
+          {_justify_content_, flex_justify_content_strings},
+          {_justify_self_, flex_justify_content_strings},
+          {_justify_items_, flex_justify_content_strings},
+          {_align_content_, flex_align_content_strings},
+          {_align_items_, flex_align_items_strings},
+          {_align_self_, flex_align_items_strings},
+
+          {_caption_side_, caption_side_strings},
+          {_object_fit_, object_fit_strings},
+
+          {__webkit_box_orient_, box_orient_strings},
+          {_text_decoration_style_, style_text_decoration_style_strings},
+          {_text_emphasis_position_, style_text_emphasis_position_strings},
+          {_text_overflow_, text_overflow_strings},
+          {_text_combine_upright_, text_combine_upright_strings},
+          {_container_type_, container_type_strings},
+          {_mix_blend_mode_, blend_mode_strings},
+          {_background_blend_mode_, blend_mode_strings},
+          {_isolation_, isolation_strings},
+  };
+  std::map<string_id, vector<string_id>> shorthands =
+      {
+          {_font_, {_font_style_, _font_variant_, _font_weight_, _font_size_, _line_height_, _font_family_}},
+
+          {_background_, {_background_color_, _background_position_x_, _background_position_y_, _background_repeat_, _background_attachment_, _background_image_, _background_image_baseurl_, _background_size_, _background_origin_, _background_clip_}},
+
+          {_list_style_, {_list_style_image_, _list_style_image_baseurl_, _list_style_position_, _list_style_type_}},
+
+          {_margin_, {_margin_top_, _margin_right_, _margin_bottom_, _margin_left_}},
+          {_padding_, {_padding_top_, _padding_right_, _padding_bottom_, _padding_left_}},
+
+          {_border_width_, {_border_top_width_, _border_right_width_, _border_bottom_width_, _border_left_width_}},
+          {_border_style_, {_border_top_style_, _border_right_style_, _border_bottom_style_, _border_left_style_}},
+          {_border_color_, {_border_top_color_, _border_right_color_, _border_bottom_color_, _border_left_color_}},
+          {_border_top_, {_border_top_width_, _border_top_style_, _border_top_color_}},
+          {_border_right_, {_border_right_width_, _border_right_style_, _border_right_color_}},
+          {_border_bottom_, {_border_bottom_width_, _border_bottom_style_, _border_bottom_color_}},
+          {_border_left_, {_border_left_width_, _border_left_style_, _border_left_color_}},
+          {_border_, {_border_top_width_, _border_right_width_, _border_bottom_width_, _border_left_width_, _border_top_style_, _border_right_style_, _border_bottom_style_, _border_left_style_, _border_top_color_, _border_right_color_, _border_bottom_color_, _border_left_color_}},
+
+          {_flex_, {_flex_grow_, _flex_shrink_, _flex_basis_}},
+          {_flex_flow_, {_flex_direction_, _flex_wrap_}},
+          {_gap_, {_row_gap_, _column_gap_}},
+          {_grid_column_, {_grid_column_start_, _grid_column_end_}},
+          {_grid_row_, {_grid_row_start_, _grid_row_end_}},
+          {_grid_gap_, {_row_gap_, _column_gap_}},
+          {_grid_row_gap_, {_row_gap_}},
+          {_grid_column_gap_, {_column_gap_}},
+          {_outline_, {_outline_width_, _outline_style_, _outline_color_}},
+          {_column_rule_, {_column_rule_width_, _column_rule_style_, _column_rule_color_}},
+
+          {_text_decoration_, {_text_decoration_color_, _text_decoration_line_, _text_decoration_style_, _text_decoration_thickness_}},
+          {_text_emphasis_, {_text_emphasis_style_, _text_emphasis_color_}},
+          {_container_, {_container_name_, _container_type_}},
+          {_border_image_, {_border_image_source_, _border_image_slice_, _border_image_width_, _border_image_outset_, _border_image_repeat_}},
+  };
+
+  void style::add(const string &txt, const string &baseurl, document_container *container, int layer, selector_specificity specificity)
+  {
+    auto tokens = normalize(txt, f_componentize);
+    add(tokens, baseurl, container, layer, specificity);
+  }
+
+  void style::add(const css_token_vector &tokens, const string &baseurl, document_container *container, int layer, selector_specificity specificity)
+  {
+    m_layer = layer;
+    m_specificity = specificity;
+    raw_declaration::vector decls;
+    raw_rule::vector rules;
+    css_parser(tokens).consume_style_block_contents(decls, rules);
+    if (!rules.empty())
+      css_parse_error("rule inside a style block");
+    if (decls.empty())
+      return;
+
+    for (auto &decl : decls)
+    {
+      remove_whitespace(decl.value);
+      string name = decl.name.substr(0, 2) == "--" ? decl.name : lowcase(decl.name);
+      add_property(_id(name), decl.value, baseurl, decl.important, container, m_layer, m_specificity);
+    }
+  }
+
+  bool has_var(const css_token_vector &tokens)
+  {
+    for (auto &tok : tokens)
+    {
+      if (tok.type == CV_FUNCTION && lowcase(tok.name) == "var")
+        return true;
+      if (tok.is_component_value() && has_var(tok.value))
+        return true;
+    }
+    return false;
+  }
+
+  void style::inherit_property(string_id name, bool important)
+  {
+    auto atomic_properties = at(shorthands, name);
+    if (!atomic_properties.empty())
+    {
+      for (auto atomic : atomic_properties)
+        add_parsed_property(atomic, property_value(inherit(), important, false, m_layer, m_specificity));
+    }
+    else
+      add_parsed_property(name, property_value(inherit(), important, false, m_layer, m_specificity));
+  }
+
+  void style::add_length_property(string_id name, css_token val, string keywords, int options, bool important)
+  {
+    css_length length;
+    if (length.from_token(val, options, keywords))
+      add_parsed_property(name, property_value(length, important, false, m_layer, m_specificity));
+  }
+
+  void style::add_property(string_id name, const css_token_vector &value, const string &baseurl, bool important, document_container *container, int layer, selector_specificity specificity)
+  {
+    m_layer = layer;
+    m_specificity = specificity;
+    if (value.empty() && _s(name).substr(0, 2) != "--")
+      return;
+
+    css_token_vector evaluated_value = value;
+    evaluate_calc(evaluated_value, nullptr);
+    evaluate_light_dark(evaluated_value, container);
+
+    if (has_var(evaluated_value))
+      return add_parsed_property(name, property_value(evaluated_value, important, true, m_layer, m_specificity));
+
+    css_token val = evaluated_value.size() == 1 ? evaluated_value[0] : css_token();
+    string ident = val.ident();
+
+    if (ident == "inherit")
+      return inherit_property(name, important);
+
+    int idx[4];
+    web_color clr[4];
+    css_length len[4];
+    string str;
+
+    switch (name)
+    {
+    case _transform_:
+    case _transform_origin_:
+    case _translate_:
+    case _rotate_:
+    case _scale_:
+    case _filter_:
+    case _backdrop_filter_:
+    case __webkit_backdrop_filter_:
+    case _clip_path_:
+    case _object_position_:
+    case _mask_:
+    case __webkit_mask_:
+    case _pointer_events_:
+    case _user_select_:
+    case __webkit_user_select_:
+    case _scroll_behavior_:
+    case _transform_style_:
+    case _perspective_:
+    case _backface_visibility_:
+      add_parsed_property(name, property_value(value, important, false, m_layer, m_specificity));
+      break;
+
+    case _place_items_:
+    case _place_content_:
+    case _place_self_:
+      parse_place_shorthand(name, value, important);
+      break;
+
+    case _display_:
+    case _direction_:
+    case _writing_mode_:
+    case _text_orientation_:
+    case _visibility_:
+    case _position_:
+    case _float_:
+    case _clear_:
+    case _appearance_:
+    case _box_sizing_:
+    case _overflow_:
+    case _overflow_x_:
+    case _overflow_y_:
+    case _text_overflow_:
+    case _text_align_:
+    case _vertical_align_:
+    case _text_transform_:
+    case _white_space_:
+    case _text_wrap_:
+    case _word_break_:
+    case _text_combine_upright_:
+    case _overflow_wrap_:
+    case _word_wrap_:
+    case _font_style_:
+    case _font_variant_:
+    case _text_decoration_style_:
+    case _list_style_type_:
+    case _list_style_position_:
+    case _border_top_style_:
+    case _border_bottom_style_:
+    case _border_left_style_:
+    case _border_right_style_:
+    case _border_inline_start_style_:
+    case _border_inline_end_style_:
+    case _border_block_start_style_:
+    case _border_block_end_style_:
+    case _border_collapse_:
+    case _table_layout_:
+    case _flex_direction_:
+    case _flex_wrap_:
+    case _justify_content_:
+    case _justify_self_:
+    case _justify_items_:
+    case _align_content_:
+    case _caption_side_:
+    case _object_fit_:
+    case __webkit_box_orient_:
+    case _container_type_:
+    case _mix_blend_mode_:
+    case _background_blend_mode_:
+    case _isolation_:
+      if (int index = value_index(ident, m_valid_values[name]); index >= 0)
+
+
+
+        add_parsed_property(name, property_value(index, important, false, m_layer, m_specificity));
+      break;
+
+    case _z_index_:
+      return add_length_property(name, val, "auto", f_integer, important);
+
+    case _text_indent_:
+      return add_length_property(name, val, "", f_length_percentage, important);
+
+    case _padding_left_:
+    case _padding_right_:
+    case _padding_top_:
+    case _padding_bottom_:
+      return add_length_property(name, val, "", f_length_percentage | f_positive, important);
+
+    case _left_:
+    case _right_:
+    case _top_:
+    case _bottom_:
+    case _margin_left_:
+    case _margin_right_:
+    case _margin_top_:
+    case _margin_bottom_:
+      return add_length_property(name, val, "auto", f_length_percentage, important);
+
+    case _width_:
+    case _height_:
+    case _min_width_:
+    case _min_height_:
+      return add_length_property(name, val, "auto", f_length_percentage | f_positive, important);
+
+    case _max_width_:
+    case _max_height_:
+      return add_length_property(name, val, "none", f_length_percentage | f_positive, important);
+
+    case _letter_spacing_:
+    case _word_spacing_:
+      return add_length_property(name, val, "normal", f_length, important);
+
+    case _line_height_:
+      return add_length_property(name, val, "normal", f_number | f_length_percentage | f_positive, important);
+
+    case _font_size_:
+      return add_length_property(name, val, font_size_strings, f_length_percentage | f_positive, important);
+
+    case _margin_inline_:
+      if (int n = parse_1234_lengths(value, len, f_length_percentage, "auto"))
+        add_two_properties(_margin_inline_start_, len, n, important);
+      break;
+    case _margin_block_:
+      if (int n = parse_1234_lengths(value, len, f_length_percentage, "auto"))
+        add_two_properties(_margin_block_start_, len, n, important);
+      break;
+    case _padding_inline_:
+      if (int n = parse_1234_lengths(value, len, f_length_percentage | f_positive))
+        add_two_properties(_padding_inline_start_, len, n, important);
+      break;
+    case _padding_block_:
+      if (int n = parse_1234_lengths(value, len, f_length_percentage | f_positive))
+        add_two_properties(_padding_block_start_, len, n, important);
+      break;
+    case _inset_inline_:
+      if (int n = parse_1234_lengths(value, len, f_length_percentage, "auto"))
+        add_two_properties(_inset_inline_start_, len, n, important);
+      break;
+    case _inset_block_:
+      if (int n = parse_1234_lengths(value, len, f_length_percentage, "auto"))
+        add_two_properties(_inset_block_start_, len, n, important);
+      break;
+
+    case _margin_inline_start_:
+    case _margin_inline_end_:
+    case _margin_block_start_:
+    case _margin_block_end_:
+    case _padding_inline_start_:
+    case _padding_inline_end_:
+    case _padding_block_start_:
+    case _padding_block_end_:
+    case _inset_inline_start_:
+    case _inset_inline_end_:
+    case _inset_block_start_:
+    case _inset_block_end_:
+      return add_length_property(name, val, "auto", f_length_percentage, important);
+
+    case _border_inline_:
+      parse_border_side(_border_inline_start_, value, important, container);
+      parse_border_side(_border_inline_end_, value, important, container);
+      break;
+    case _border_block_:
+      parse_border_side(_border_block_start_, value, important, container);
+      parse_border_side(_border_block_end_, value, important, container);
+      break;
+
+    case _border_inline_width_:
+    case _border_inline_style_:
+    case _border_inline_color_:
+    case _border_block_width_:
+    case _border_block_style_:
+    case _border_block_color_:
+      add_parsed_property(name, property_value(value, important, false, m_layer, m_specificity));
+      break;
+
+    case _border_start_start_radius_:
+      add_property(_border_top_left_radius_, value, baseurl, important, container, layer, specificity);
+      return;
+    case _border_start_end_radius_:
+      add_property(_border_top_right_radius_, value, baseurl, important, container, layer, specificity);
+      return;
+    case _border_end_start_radius_:
+      add_property(_border_bottom_left_radius_, value, baseurl, important, container, layer, specificity);
+      return;
+    case _border_end_end_radius_:
+      add_property(_border_bottom_right_radius_, value, baseurl, important, container, layer, specificity);
+      return;
+
+    case _inset_:
+      if (int n = parse_1234_lengths(value, len, f_length_percentage, "auto"))
+        add_four_properties(_top_, len, n, important);
+      return;
+
+    case _margin_:
+      if (int n = parse_1234_lengths(value, len, f_length_percentage, "auto"))
+        add_four_properties(_margin_top_, len, n, important);
+      break;
+
+    case _padding_:
+      if (int n = parse_1234_lengths(value, len, f_length_percentage | f_positive))
+        add_four_properties(_padding_top_, len, n, important);
+      break;
+
+    case _color_:
+      if (ident == "currentcolor")
+        return inherit_property(name, important);
+    case _background_color_:
+    case _border_top_color_:
+    case _border_bottom_color_:
+    case _border_left_color_:
+    case _border_right_color_:
+    case _border_inline_start_color_:
+    case _border_inline_end_color_:
+    case _border_block_start_color_:
+    case _border_block_end_color_:
+    case __webkit_text_fill_color_:
+      if (ident == "transparent")
+      {
+        web_color transparent_color(0, 0, 0, 0);
+        add_parsed_property(name, property_value(transparent_color, important, false, m_layer, m_specificity));
+      }
+      else if (parse_color(val, *clr, container))
+        add_parsed_property(name, property_value(*clr, important, false, m_layer, m_specificity));
+      break;
+
+    case _background_:
+      parse_background(value, baseurl, important, container);
+      break;
+
+    case _background_image_:
+      parse_background_image(value, baseurl, important, container);
+      break;
+
+    case _background_position_:
+      parse_background_position(value, important);
+      break;
+
+    case _background_size_:
+      parse_background_size(value, important);
+      break;
+
+    case _background_repeat_:
+    case _background_attachment_:
+    case _background_origin_:
+    case _background_clip_:
+      parse_keyword_comma_list(name, value, important);
+      break;
+
+    case __webkit_background_clip_:
+      parse_keyword_comma_list(_background_clip_, value, important);
+      break;
+
+    case _border_:
+      parse_border(value, important, container);
+      break;
+
+    case _border_left_:
+    case _border_right_:
+    case _border_top_:
+    case _border_bottom_:
+    case _border_inline_start_:
+    case _border_inline_end_:
+    case _border_block_start_:
+    case _border_block_end_:
+      parse_border_side(name, value, important, container);
+      break;
+
+    case _border_width_:
+      if (int n = parse_1234_values(value, len, parse_border_width))
+        add_four_properties(_border_top_width_, len, n, important);
+      break;
+    case _border_style_:
+      if (int n = parse_1234_values(value, idx, parse_keyword, (string)border_style_strings, 0))
+        add_four_properties(_border_top_style_, idx, n, important);
+      break;
+    case _border_color_:
+      if (int n = parse_1234_values(value, clr, parse_color, container))
+        add_four_properties(_border_top_color_, clr, n, important);
+      break;
+
+    case _border_top_width_:
+    case _border_bottom_width_:
+    case _border_left_width_:
+    case _border_right_width_:
+    case _border_inline_start_width_:
+    case _border_inline_end_width_:
+    case _border_block_start_width_:
+    case _border_block_end_width_:
+      if (parse_border_width(val, *len))
+        add_parsed_property(name, property_value(*len, important, false, m_layer, m_specificity));
+      break;
+
+    case _border_bottom_left_radius_:
+    case _border_bottom_right_radius_:
+    case _border_top_right_radius_:
+    case _border_top_left_radius_:
+      if (parse_two_lengths(value, len, f_length_percentage | f_positive))
+      {
+        add_parsed_property(_id(_s(name) + "-x"), property_value(len[0], important, false, m_layer, m_specificity));
+        add_parsed_property(_id(_s(name) + "-y"), property_value(len[1], important, false, m_layer, m_specificity));
+      }
+      break;
+
+    case _border_radius_x_:
+    case _border_radius_y_:
+    {
+      string_id top_left = name == _border_radius_x_ ? _border_top_left_radius_x_ : _border_top_left_radius_y_;
+
+      if (int n = parse_1234_lengths(value, len, f_length_percentage | f_positive))
+        add_four_properties(top_left, len, n, important);
+      break;
+    }
+
+    case _border_radius_:
+      parse_border_radius(value, important);
+      break;
+
+    case _border_image_:
+      parse_border_image(value, baseurl, important, container);
+      break;
+
+    case _border_image_source_:
+    {
+      image img;
+      if (parse_bg_image(val, img, container))
+      {
+        add_parsed_property(name, property_value(img, important, false, m_layer, m_specificity));
+        add_parsed_property(_id(_s(name) + "-baseurl"), property_value(baseurl, important, false, m_layer, m_specificity));
+      }
+      break;
+    }
+
+    case _border_image_slice_:
+    {
+      css_length slices[4];
+      bool fill = false;
+      css_token_vector slice_tokens;
+      for (const auto& t : value)
+      {
+        if (t.ident() == "fill") fill = true;
+        else slice_tokens.push_back(t);
+      }
+      if (int n = parse_1234_lengths(slice_tokens, slices, f_length_percentage | f_positive))
+      {
+        add_four_properties(_border_image_slice_top_, slices, n, important);
+        add_parsed_property(_id("border-image-slice-fill"), property_value(fill ? 1 : 0, important, false, m_layer, m_specificity));
+      }
+      break;
+    }
+
+    case _border_image_width_:
+      if (int n = parse_1234_lengths(value, len, f_length_percentage | f_number | f_positive, "auto"))
+        add_four_properties(_border_image_width_top_, len, n, important);
+      break;
+
+    case _border_image_outset_:
+      if (int n = parse_1234_lengths(value, len, f_length | f_number | f_positive))
+        add_four_properties(_border_image_outset_top_, len, n, important);
+      break;
+
+    case _border_image_repeat_:
+      parse_border_image_repeat(value, important);
+      break;
+
+    case _border_spacing_:
+      if (parse_two_lengths(value, len, f_length | f_positive))
+      {
+        add_parsed_property(__litehtml_border_spacing_x_, property_value(len[0], important, false, m_layer, m_specificity));
+        add_parsed_property(__litehtml_border_spacing_y_, property_value(len[1], important, false, m_layer, m_specificity));
+      }
+      break;
+
+    case _list_style_image_:
+      if (string url; parse_list_style_image(val, url))
+      {
+        add_parsed_property(_list_style_image_, property_value(url, important, false, m_layer, m_specificity));
+        add_parsed_property(_list_style_image_baseurl_, property_value(baseurl, important, false, m_layer, m_specificity));
+      }
+      break;
+
+    case _outline_:
+    case _column_rule_:
+      parse_border_side(name, value, important, container);
+      break;
+
+    case _outline_offset_:
+      return add_length_property(name, val, "0", f_length, important);
+
+    case _list_style_:
+      parse_list_style(value, baseurl, important);
+      break;
+
+    case _font_:
+      parse_font(value, important);
+      break;
+
+    case _font_family_:
+      if (parse_font_family(value, str))
+        add_parsed_property(name, property_value(str, important, false, m_layer, m_specificity));
+      break;
+
+    case _font_weight_:
+      if (parse_font_weight(val, *len))
+        add_parsed_property(name, property_value(*len, important, false, m_layer, m_specificity));
+      break;
+
+    case _text_decoration_:
+      parse_text_decoration(value, important, container);
+      break;
+
+    case _text_underline_offset_:
+      add_length_property(name, val, "auto", f_length_percentage, important);
+      break;
+
+    case _text_decoration_thickness_:
+      add_length_property(name, val, style_text_decoration_thickness_strings, f_length_percentage | f_positive, important);
+      break;
+
+    case _text_decoration_color_:
+      parse_text_decoration_color(val, important, container);
+      break;
+
+    case _text_decoration_line_:
+      parse_text_decoration_line(value, important);
+      break;
+
+    case _text_emphasis_:
+      parse_text_emphasis(value, important, container);
+      break;
+
+    case _text_emphasis_style_:
+      str = get_repr(value, 0, -1, true);
+      add_parsed_property(name, property_value(str, important, false, m_layer, m_specificity));
+      break;
+
+    case _text_emphasis_color_:
+      parse_text_emphasis_color(val, important, container);
+      break;
+
+    case _text_emphasis_position_:
+      parse_text_emphasis_position(value, important);
+      break;
+
+    case _flex_:
+      parse_flex(value, important);
+      break;
+
+    case _opacity_:
+    {
+      css_length length;
+      if (length.from_token(val, f_number | f_percentage))
+      {
+        float opacity = 1.0f;
+        if (length.units() == css_units_percentage)
+          opacity = length.val() / 100.0f;
+        else
+          opacity = length.val();
+        if (opacity < 0)
+          opacity = 0;
+        if (opacity > 1)
+          opacity = 1;
+        add_parsed_property(name, property_value(opacity, important, false, m_layer, m_specificity));
+      }
+      break;
+    }
+
+    case _flex_grow_:
+    case _flex_shrink_:
+      if (val.type == NUMBER && val.n.number >= 0)
+        add_parsed_property(name, property_value(val.n.number, important, false, m_layer, m_specificity));
+      break;
+
+    case _flex_basis_:
+      add_length_property(name, val, flex_basis_strings, f_length_percentage | f_positive, important);
+      break;
+
+    case _flex_flow_:
+      parse_flex_flow(value, important);
+      break;
+
+    case _align_items_:
+    case _align_self_:
+      parse_align_self(name, value, important);
+      break;
+
+    case _grid_template_columns_:
+    case _grid_template_rows_:
+      parse_grid_template(name, value, important);
+      break;
+
+    case _grid_column_start_:
+    case _grid_column_end_:
+    case _grid_row_start_:
+    case _grid_row_end_:
+      add_parsed_property(name, property_value(value, important, false, m_layer, m_specificity));
+      break;
+
+    case _column_rule_width_:
+    case _outline_width_:
+      if (parse_border_width(val, *len))
+        add_parsed_property(name, property_value(*len, important, false, m_layer, m_specificity));
+      break;
+
+    case _column_rule_style_:
+    case _outline_style_:
+      if (int index = value_index(ident, m_valid_values[name]); index >= 0)
+        add_parsed_property(name, property_value(index, important, false, m_layer, m_specificity));
+      break;
+
+    case _column_rule_color_:
+    case _outline_color_:
+      if (parse_color(val, *clr, container))
+        add_parsed_property(name, property_value(*clr, important, false, m_layer, m_specificity));
+      break;
+
+    case _grid_column_:
+    case _grid_row_:
+    {
+      std::vector<css_token_vector> tokens_list;
+      css_token_vector current;
+      for (const auto& tok : value)
+      {
+        if (tok.ch == '/')
+        {
+          tokens_list.push_back(current);
+          current.clear();
+        }
+        else
+        {
+          current.push_back(tok);
+        }
+      }
+      tokens_list.push_back(current);
+
+      if (tokens_list.size() >= 1)
+      {
+        string_id start_id = (name == _grid_column_ ? _grid_column_start_ : _grid_row_start_);
+        string_id end_id = (name == _grid_column_ ? _grid_column_end_ : _grid_row_end_);
+        
+        add_property(start_id, tokens_list[0], baseurl, important, container, layer, specificity);
+        if (tokens_list.size() >= 2)
+          add_property(end_id, tokens_list[1], baseurl, important, container, layer, specificity);
+      }
+      return;
+    }
+
+    case _column_gap_:
+    case _row_gap_:
+    case _grid_column_gap_:
+    case _grid_row_gap_:
+      return add_length_property(name, val, "normal", f_length_percentage | f_positive, important);
+
+    case _gap_:
+    case _grid_gap_:
+      if (parse_two_lengths(value, len, f_length_percentage | f_positive))
+      {
+        add_parsed_property(_row_gap_, property_value(len[0], important, false, m_layer, m_specificity));
+        add_parsed_property(_column_gap_, property_value(len[1], important, false, m_layer, m_specificity));
+      }
+      break;
+
+    case _text_shadow_:
+    case _box_shadow_:
+      parse_shadow(name, value, important, container);
+      break;
+
+    case _order_:
+    case _line_clamp_:
+    case __webkit_line_clamp_:
+      if (val.type == NUMBER && val.n.number_type == css_number_integer)
+        add_parsed_property(name, property_value((int)val.n.number, important, false, m_layer, m_specificity));
+      else if (ident == "none")
+        add_parsed_property(name, property_value(0, important, false, m_layer, m_specificity));
+      break;
+
+    case _column_count_:
+      if (val.type == NUMBER && val.n.number_type == css_number_integer)
+        add_parsed_property(name, property_value((int)val.n.number, important, false, m_layer, m_specificity));
+      else if (ident == "auto")
+        add_parsed_property(name, property_value(0, important, false, m_layer, m_specificity));
+      break;
+
+    case _counter_increment_:
+    case _counter_reset_:
+    {
+      string_vector strings;
+      for (const auto &tok : value)
+        strings.push_back(tok.get_repr(true));
+      add_parsed_property(name, property_value(strings, important, false, m_layer, m_specificity));
+      break;
+    }
+
+    case _content_:
+      str = get_repr(value, 0, -1, true);
+      add_parsed_property(name, property_value(str, important, false, m_layer, m_specificity));
+      break;
+
+    case _cursor_:
+      str = get_repr(value, 0, -1, true);
+      add_parsed_property(name, property_value(str, important, false, m_layer, m_specificity));
+      break;
+
+    case _aspect_ratio_:
+      parse_aspect_ratio(value, important);
+      break;
+
+    case _container_name_:
+      if (val.type == IDENT || val.type == STRING)
+        add_parsed_property(name, property_value(val.str, important, false, m_layer, m_specificity));
+      break;
+
+    case _container_:
+    {
+      css_token_vector name_tokens, type_tokens;
+      bool slash_found = false;
+      for (const auto &tok : value)
+      {
+        if (tok.ch == '/')
+          slash_found = true;
+        else if (slash_found)
+          type_tokens.push_back(tok);
+        else
+          name_tokens.push_back(tok);
+      }
+      if (!name_tokens.empty())
+        add_property(_container_name_, name_tokens, baseurl, important, container, layer, specificity);
+      if (!type_tokens.empty())
+        add_property(_container_type_, type_tokens, baseurl, important, container, layer, specificity);
+      break;
+    }
+
+    case _fill_:
+    case _stroke_:
+    case _clip_:
+    case _margin_trim_:
+    case __webkit_hyphens_:
+    case __moz_orient_:
+    case __webkit_appearance_:
+    case _contain_intrinsic_size_:
+      add_parsed_property(name, property_value(get_repr(value), important, false, m_layer, m_specificity));
+      break;
+
+    default:
+      if (_s(name).substr(0, 2) == "--" && _s(name).size() >= 3 &&
+          (value.empty() || is_declaration_value(value)))
+        add_parsed_property(name, property_value(value, important, false, m_layer, m_specificity));
+      else if (container)
+        container->on_unknown_property(_s(name), value);
+    }
+  }
+
+  void style::add_property(string_id name, const string &value, const string &baseurl, bool important, document_container *container, int layer, selector_specificity specificity)
+  {
+    auto tokens = normalize(value, f_componentize | f_remove_whitespace);
+    add_property(name, tokens, baseurl, important, container, layer, specificity);
+  }
+
+  bool style::parse_list_style_image(const css_token &tok, string &url)
+  {
+    if (tok.ident() == "none")
+    {
+      url = "";
+      return true;
+    }
+    return parse_url(tok, url);
+  }
+
+  void style::parse_list_style(const css_token_vector &tokens, string baseurl, bool important)
+  {
+    int type = list_style_type_disc;
+    int position = list_style_position_outside;
+    string image = "";
+
+    bool type_found = false;
+    bool position_found = false;
+    bool image_found = false;
+    int none_count = 0;
+
+    for (const auto &token : tokens)
+    {
+      if (token.ident() == "none")
+      {
+        none_count++;
+        continue;
+      }
+      if (!type_found && parse_keyword(token, type, list_style_type_strings))
+        type_found = true;
+      else if (!position_found && parse_keyword(token, position, list_style_position_strings))
+        position_found = true;
+      else if (!image_found && parse_list_style_image(token, image))
+        image_found = true;
+      else
+        return;
+    }
+
+    switch (none_count)
+    {
+    case 0:
+      break;
+    case 1:
+      if (type_found && image_found)
+        return;
+      if (!type_found)
+        type = list_style_type_none;
+      break;
+    case 2:
+      if (type_found || image_found)
+        return;
+      type = list_style_type_none;
+      break;
+    default:
+      return;
+    }
+
+    add_parsed_property(_list_style_type_, property_value(type, important, false, m_layer, m_specificity));
+    add_parsed_property(_list_style_position_, property_value(position, important, false, m_layer, m_specificity));
+    add_parsed_property(_list_style_image_, property_value(image, important, false, m_layer, m_specificity));
+    add_parsed_property(_list_style_image_baseurl_, property_value(baseurl, important, false, m_layer, m_specificity));
+  }
+
+  void style::parse_border_radius(const css_token_vector &tokens, bool important)
+  {
+    int i;
+    for (i = 0; i < (int)tokens.size() && tokens[i].ch != '/'; i++)
+    {
+    }
+
+    if (i == (int)tokens.size())
+    {
+      css_length len[4];
+      if (int n = parse_1234_lengths(tokens, len, f_length_percentage | f_positive))
+      {
+        add_four_properties(_border_top_left_radius_x_, len, n, important);
+        add_four_properties(_border_top_left_radius_y_, len, n, important);
+      }
+    }
+    else
+    {
+      auto raduis_x = slice(tokens, 0, i);
+      auto raduis_y = slice(tokens, i + 1);
+
+      css_length rx[4], ry[4];
+      int n = parse_1234_lengths(raduis_x, rx, f_length_percentage | f_positive);
+      int m = parse_1234_lengths(raduis_y, ry, f_length_percentage | f_positive);
+
+      if (n && m)
+      {
+        add_four_properties(_border_top_left_radius_x_, rx, n, important);
+        add_four_properties(_border_top_left_radius_y_, ry, m, important);
+      }
+    }
+  }
+
+    void style::parse_border_image(const css_token_vector& tokens, const string& baseurl, bool important, document_container* container)
+    {
+      image source;
+      css_length slice[4];
+      bool slice_fill = false;
+      css_length width[4];
+      css_length outset[4];
+      int repeat[2] = {border_image_repeat_stretch, border_image_repeat_stretch};
+
+      bool source_found = false;
+      bool slice_found = false;
+      bool width_found = false;
+      bool outset_found = false;
+      bool repeat_found = false;
+
+      int n_slice = 0;
+      int n_width = 0;
+      int n_outset = 0;
+
+      for (int i = 0; i < (int)tokens.size(); i++)
+      {
+        image img;
+        if (!source_found && parse_bg_image(tokens[i], img, container))
+        {
+          source = img;
+          source_found = true;
+        }
+        else if (!slice_found && (tokens[i].type == NUMBER || tokens[i].type == PERCENTAGE || tokens[i].ident() == "fill"))
+        {
+          css_token_vector slice_tokens;
+          while (i < (int)tokens.size() && (tokens[i].type == NUMBER || tokens[i].type == PERCENTAGE || tokens[i].ident() == "fill"))
+          {
+            if (tokens[i].ident() == "fill") slice_fill = true;
+            else slice_tokens.push_back(tokens[i]);
+            i++;
+          }
+          n_slice = parse_1234_lengths(slice_tokens, slice, f_number | f_percentage | f_positive);
+          if (n_slice)
+          {
+            slice_found = true;
+          }
+          i--;
+          if (at(tokens, i + 1).ch == '/')
+          {
+            i += 2;
+            css_token_vector width_tokens;
+            while (i < (int)tokens.size() && (tokens[i].type == NUMBER || tokens[i].type == PERCENTAGE || tokens[i].type == DIMENSION || tokens[i].ident() == "auto"))
+            {
+              width_tokens.push_back(tokens[i]);
+              i++;
+            }
+            n_width = parse_1234_lengths(width_tokens, width, f_length_percentage | f_number | f_positive, "auto");
+            if (n_width)
+            {
+              width_found = true;
+            }
+            i--;
+            if (at(tokens, i + 1).ch == '/')
+            {
+              i += 2;
+              css_token_vector outset_tokens;
+              while (i < (int)tokens.size() && (tokens[i].type == NUMBER || tokens[i].type == DIMENSION))
+              {
+                outset_tokens.push_back(tokens[i]);
+                i++;
+              }
+              n_outset = parse_1234_lengths(outset_tokens, outset, f_length | f_number | f_positive);
+              if (n_outset)
+              {
+                outset_found = true;
+              }
+              i--;
+            }
+          }
+        }
+        else if (!repeat_found && (value_index(tokens[i].ident(), border_image_repeat_strings) >= 0))
+        {
+          repeat[0] = value_index(tokens[i].ident(), border_image_repeat_strings);
+          if (i + 1 < (int)tokens.size() && value_index(tokens[i + 1].ident(), border_image_repeat_strings) >= 0)
+          {
+            repeat[1] = value_index(tokens[i + 1].ident(), border_image_repeat_strings);
+            i++;
+          }
+          else
+          {
+            repeat[1] = repeat[0];
+          }
+          repeat_found = true;
+        }
+      }
+
+      if (source_found)
+      {
+        add_parsed_property(_border_image_source_, property_value(source, important, false, m_layer, m_specificity));
+        add_parsed_property(_id("border-image-source-baseurl"), property_value(baseurl, important, false, m_layer, m_specificity));
+      }
+      if (slice_found)
+      {
+        add_four_properties(_border_image_slice_top_, slice, n_slice, important);
+        add_parsed_property(_id("border-image-slice-fill"), property_value(slice_fill ? 1 : 0, important, false, m_layer, m_specificity));
+      }
+      if (width_found)
+      {
+        add_four_properties(_border_image_width_top_, width, n_width, important);
+      }
+      if (outset_found)
+      {
+        add_four_properties(_border_image_outset_top_, outset, n_outset, important);
+      }
+      if (repeat_found)
+      {
+        add_parsed_property(_border_image_repeat_, property_value(repeat[0] | (repeat[1] << 8), important, false, m_layer, m_specificity));
+      }
+    }
+
+  void style::parse_border_image_repeat(const css_token_vector& tokens, bool important)
+  {
+    int repeat[2] = {border_image_repeat_stretch, border_image_repeat_stretch};
+    if (tokens.size() >= 1)
+    {
+      repeat[0] = value_index(tokens[0].ident(), border_image_repeat_strings);
+      if (tokens.size() >= 2)
+        repeat[1] = value_index(tokens[1].ident(), border_image_repeat_strings);
+      else
+        repeat[1] = repeat[0];
+
+      if (repeat[0] >= 0 && repeat[1] >= 0)
+        add_parsed_property(_border_image_repeat_, property_value(repeat[0] | (repeat[1] << 8), important, false, m_layer, m_specificity));
+    }
+  }
+
+  bool parse_border_width(const css_token &token, css_length &w)
+  {
+    css_length width;
+    if (!width.from_token(token, f_length | f_positive, border_width_strings))
+      return false;
+    if (width.is_predefined())
+      width.set_value(border_width_values[width.predef()], css_units_px);
+    w = width;
+    return true;
+  }
+
+  bool parse_border_helper(const css_token_vector &tokens, document_container *container,
+                           css_length &width, border_style &style, web_color &color)
+  {
+    css_length _width = border_width_medium_value;
+    border_style _style = border_style_none;
+    web_color _color = web_color::current_color;
+
+    bool width_found = false;
+    bool style_found = false;
+    bool color_found = false;
+
+    for (const auto &token : tokens)
+    {
+      if (!width_found && parse_border_width(token, _width))
+        width_found = true;
+      else if (!style_found && parse_keyword(token, _style, border_style_strings))
+        style_found = true;
+      else if (!color_found && parse_color(token, _color, container))
+        color_found = true;
+      else
+        return false;
+    }
+
+    width = _width;
+    style = _style;
+    color = _color;
+    return true;
+  }
+
+  void style::parse_border(const css_token_vector &tokens, bool important, document_container *container)
+  {
+    css_length width;
+    border_style style;
+    web_color color;
+
+    if (!parse_border_helper(tokens, container, width, style, color))
+      return;
+
+    for (auto name : {_border_left_width_, _border_right_width_, _border_top_width_, _border_bottom_width_})
+      add_parsed_property(name, property_value(width, important, false, m_layer, m_specificity));
+
+    for (auto name : {_border_left_style_, _border_right_style_, _border_top_style_, _border_bottom_style_})
+      add_parsed_property(name, property_value(style, important, false, m_layer, m_specificity));
+
+    for (auto name : {_border_left_color_, _border_right_color_, _border_top_color_, _border_bottom_color_})
+      add_parsed_property(name, property_value(color, important, false, m_layer, m_specificity));
+  }
+
+  void style::parse_border_side(string_id name, const css_token_vector &tokens, bool important, document_container *container)
+  {
+    css_length width;
+    border_style style;
+    web_color color;
+
+    if (!parse_border_helper(tokens, container, width, style, color))
+      return;
+
+    add_parsed_property(_id(_s(name) + "-width"), property_value(width, important, false, m_layer, m_specificity));
+    add_parsed_property(_id(_s(name) + "-style"), property_value(style, important, false, m_layer, m_specificity));
+    add_parsed_property(_id(_s(name) + "-color"), property_value(color, important, false, m_layer, m_specificity));
+  }
+
+  bool parse_length(const css_token &tok, css_length &length, int options, string keywords)
+  {
+    return length.from_token(tok, options, keywords);
+  }
+
+  bool parse_two_lengths(const css_token_vector &tokens, css_length len[2], int options)
+  {
+    auto n = tokens.size();
+    if (n != 1 && n != 2)
+      return false;
+
+    css_length a, b;
+    if (!a.from_token(tokens[0], options))
+      return false;
+    if (n == 1)
+      b = a;
+    if (n == 2 && !b.from_token(tokens[1], options))
+      return false;
+
+    len[0] = a;
+    len[1] = b;
+    return true;
+  }
+
+  template <class T, class... Args>
+  int parse_1234_values(const css_token_vector &tokens, T result[4], bool (*parse)(const css_token &, T &, Args...), Args... args)
+  {
+    if (tokens.size() > 4)
+      return 0;
+    for (size_t i = 0; i < tokens.size(); i++)
+    {
+      if (!parse(tokens[i], result[i], args...))
+        return 0;
+    }
+    return (int)tokens.size();
+  }
+
+  int parse_1234_lengths(const css_token_vector &tokens, css_length len[4], int options, string keywords)
+  {
+    return parse_1234_values(tokens, len, parse_length, options, keywords);
+  }
+
+  template <class T>
+  void style::add_four_properties(string_id top_name, T val[4], int n, bool important)
+  {
+    string_id top = top_name;
+    string_id right = string_id(top_name + 1);
+    string_id bottom = string_id(top_name + 2);
+    string_id left = string_id(top_name + 3);
+
+    add_parsed_property(top, property_value(val[0], important, false, m_layer, m_specificity));
+    add_parsed_property(right, property_value(val[n > 1], important, false, m_layer, m_specificity));
+    add_parsed_property(bottom, property_value(val[n / 3 * 2], important, false, m_layer, m_specificity));
+    add_parsed_property(left, property_value(val[n / 2 + n / 4], important, false, m_layer, m_specificity));
+  }
+
+  template <class T>
+  void style::add_two_properties(string_id start_name, T val[2], int n, bool important)
+  {
+    string_id start = start_name;
+    string_id end = string_id(start_name + 1);
+
+    add_parsed_property(start, property_value(val[0], important, false, m_layer, m_specificity));
+    add_parsed_property(end, property_value(val[n > 1], important, false, m_layer, m_specificity));
+  }
+
+  void style::parse_background(const css_token_vector &tokens, const string &baseurl, bool important, document_container *container)
+  {
+    auto layers = parse_comma_separated_list(tokens);
+    if (layers.empty())
+      return;
+
+    web_color color;
+    std::vector<image> images;
+    length_vector x_positions, y_positions;
+    size_vector sizes;
+    int_vector repeats, attachments, origins, clips;
+
+    for (size_t i = 0; i < layers.size(); i++)
+    {
+      background bg;
+      if (!parse_bg_layer(layers[i], container, bg, i == layers.size() - 1))
+        return;
+
+      color = bg.m_color;
+      images.push_back(bg.m_image[0]);
+      x_positions.push_back(bg.m_position_x[0]);
+      y_positions.push_back(bg.m_position_y[0]);
+      sizes.push_back(bg.m_size[0]);
+      repeats.push_back(bg.m_repeat[0]);
+      attachments.push_back(bg.m_attachment[0]);
+      origins.push_back(bg.m_origin[0]);
+      clips.push_back(bg.m_clip[0]);
+    }
+
+    add_parsed_property(_background_color_, property_value(color, important, false, m_layer, m_specificity));
+    add_parsed_property(_background_image_, property_value(images, important, false, m_layer, m_specificity));
+    add_parsed_property(_background_image_baseurl_, property_value(baseurl, important, false, m_layer, m_specificity));
+    add_parsed_property(_background_position_x_, property_value(x_positions, important, false, m_layer, m_specificity));
+    add_parsed_property(_background_position_y_, property_value(y_positions, important, false, m_layer, m_specificity));
+    add_parsed_property(_background_size_, property_value(sizes, important, false, m_layer, m_specificity));
+    add_parsed_property(_background_repeat_, property_value(repeats, important, false, m_layer, m_specificity));
+    add_parsed_property(_background_attachment_, property_value(attachments, important, false, m_layer, m_specificity));
+    add_parsed_property(_background_origin_, property_value(origins, important, false, m_layer, m_specificity));
+    add_parsed_property(_background_clip_, property_value(clips, important, false, m_layer, m_specificity));
+  }
+
+  bool style::parse_bg_layer(const css_token_vector &tokens, document_container *container, background &bg, bool final_layer)
+  {
+    bg.m_color = web_color::transparent;
+    bg.m_image = {{}};
+    bg.m_position_x = {css_length(0, css_units_percentage)};
+    bg.m_position_y = {css_length(0, css_units_percentage)};
+    bg.m_size = {css_size(css_length::predef_value(background_size_auto), css_length::predef_value(background_size_auto))};
+    bg.m_repeat = {background_repeat_repeat};
+    bg.m_attachment = {background_attachment_scroll};
+    bg.m_origin = {background_box_padding};
+    bg.m_clip = {background_box_border};
+
+    bool color_found = false;
+    bool image_found = false;
+    bool position_found = false;
+    bool repeat_found = false;
+    bool attachment_found = false;
+    bool origin_found = false;
+    bool clip_found = false;
+
+    for (int i = 0; i < (int)tokens.size(); i++)
+    {
+      if (!color_found && final_layer && parse_color(tokens[i], bg.m_color, container))
+        color_found = true;
+      else if (!image_found && parse_bg_image(tokens[i], bg.m_image[0], container))
+        image_found = true;
+      else if (!position_found && parse_bg_position_size(tokens, i, bg.m_position_x[0], bg.m_position_y[0], bg.m_size[0]))
+        position_found = true, i--;
+      else if (!repeat_found && parse_keyword(tokens[i], bg.m_repeat[0], background_repeat_strings))
+        repeat_found = true;
+      else if (!attachment_found && parse_keyword(tokens[i], bg.m_attachment[0], background_attachment_strings))
+        attachment_found = true;
+      else if (!origin_found && parse_keyword(tokens[i], bg.m_origin[0], background_box_strings))
+        origin_found = true, bg.m_clip[0] = bg.m_origin[0];
+      else if (!clip_found && parse_keyword(tokens[i], bg.m_clip[0], background_box_strings))
+        clip_found = true;
+      else
+        return false;
+    }
+    return true;
+  }
+
+  bool parse_bg_position_size(const css_token_vector &tokens, int &index, css_length &x, css_length &y, css_size &size)
+  {
+    if (!parse_bg_position(tokens, index, x, y, true))
+      return false;
+    if (at(tokens, index).ch != '/')
+      return true;
+    if (!parse_bg_size(tokens, ++index, size))
+    {
+      index--;
+      return false;
+    }
+    return true;
+  }
+
+  bool parse_bg_size(const css_token_vector &tokens, int &index, css_size &size)
+  {
+    css_length a, b;
+    if (!a.from_token(at(tokens, index), f_length_percentage | f_positive, background_size_strings))
+      return false;
+    if (a.is_predefined() && a.predef() != background_size_auto)
+    {
+      size.width = size.height = a;
+      index++;
+      return true;
+    }
+    if (b.from_token(at(tokens, index + 1), f_length_percentage | f_positive, "auto"))
+      index += 2;
+    else
+    {
+      b.predef(background_size_auto);
+      index++;
+    }
+    size.width = a;
+    size.height = b;
+    return true;
+  }
+
+  bool is_one_of_predef(const css_length &x, int idx1, int idx2)
+  {
+    return x.is_predefined() && is_one_of(x.predef(), idx1, idx2);
+  }
+
+  bool parse_bg_position(const css_token_vector &tokens, int &index, css_length &x, css_length &y, bool convert_keywords_to_percents)
+  {
+    enum
+    {
+      left = background_position_left,
+      right = background_position_right,
+      top = background_position_top,
+      bottom = background_position_bottom,
+      center = background_position_center
+    };
+
+    css_length a, b;
+    if (!a.from_token(at(tokens, index), f_length_percentage, background_position_strings))
+      return false;
+    if (!b.from_token(at(tokens, index + 1), f_length_percentage, background_position_strings))
+    {
+      b.predef(center);
+      if (is_one_of_predef(a, top, bottom))
+        swap(a, b);
+      index++;
+    }
+    else
+    {
+      if ((is_one_of_predef(a, top, bottom) && b.is_predefined()) ||
+          (a.is_predefined() && is_one_of_predef(b, left, right)))
+        swap(a, b);
+      if (is_one_of_predef(a, top, bottom) || is_one_of_predef(b, left, right))
+        return false;
+      index += 2;
+    }
+
+    if (convert_keywords_to_percents)
+    {
+      if (a.is_predefined())
+        a.set_value(background_position_percentages[a.predef()], css_units_percentage);
+      if (b.is_predefined())
+        b.set_value(background_position_percentages[b.predef()], css_units_percentage);
+    }
+    x = a;
+    y = b;
+    return true;
+  }
+
+  void style::parse_background_image(const css_token_vector &tokens, const string &baseurl, bool important, document_container *container)
+  {
+    auto layers = parse_comma_separated_list(tokens);
+    if (layers.empty())
+      return;
+    std::vector<image> images;
+    for (const auto &layer : layers)
+    {
+      image image;
+      if (layer.size() != 1)
+        return;
+      if (!parse_bg_image(layer[0], image, container))
+        return;
+      images.push_back(image);
+    }
+    add_parsed_property(_background_image_, property_value(images, important, false, m_layer, m_specificity));
+    add_parsed_property(_background_image_baseurl_, property_value(baseurl, important, false, m_layer, m_specificity));
+  }
+
+  bool parse_bg_image(const css_token &tok, image &bg_image, document_container *container)
+  {
+    if (tok.ident() == "none")
+    {
+      bg_image.type = image::type_none;
+      return true;
+    }
+    string url;
+    if (parse_url(tok, url))
+    {
+      bg_image.type = image::type_url;
+      bg_image.url = url;
+      return true;
+    }
+    if (parse_gradient(tok, bg_image.m_gradient, container))
+    {
+      bg_image.type = image::type_gradient;
+      return true;
+    }
+    return false;
+  }
+
+  bool parse_url(const css_token &tok, string &url)
+  {
+    if (tok.type == URL)
+    {
+      url = trim(tok.str);
+      return true;
+    }
+    if (tok.type == CV_FUNCTION && is_one_of(lowcase(tok.name), "url", "src") &&
+        tok.value.size() == 1 && tok.value[0].type == STRING)
+    {
+      url = trim(tok.value[0].str);
+      return true;
+    }
+    return false;
+  }
+
+  void style::parse_keyword_comma_list(string_id name, const css_token_vector &tokens, bool important)
+  {
+    auto layers = parse_comma_separated_list(tokens);
+    if (layers.empty())
+      return;
+    int_vector vec;
+    for (const auto &layer : layers)
+    {
+      int idx;
+      if (layer.size() != 1)
+        return;
+      if (!parse_keyword(layer[0], idx, m_valid_values[name]))
+        return;
+      vec.push_back(idx);
+    }
+    add_parsed_property(name, property_value(vec, important, false, m_layer, m_specificity));
+  }
+
+  void style::parse_background_position(const css_token_vector &tokens, bool important)
+  {
+    auto layers = parse_comma_separated_list(tokens);
+    if (layers.empty())
+      return;
+    length_vector x_positions, y_positions;
+    for (const auto &layer : layers)
+    {
+      css_length x, y;
+      int index = 0;
+      if (!parse_bg_position(layer, index, x, y, true) || index != (int)layer.size())
+        return;
+      x_positions.push_back(x);
+      y_positions.push_back(y);
+    }
+    add_parsed_property(_background_position_x_, property_value(x_positions, important, false, m_layer, m_specificity));
+    add_parsed_property(_background_position_y_, property_value(y_positions, important, false, m_layer, m_specificity));
+  }
+
+  void style::parse_background_size(const css_token_vector &tokens, bool important)
+  {
+    auto layers = parse_comma_separated_list(tokens);
+    if (layers.empty())
+      return;
+    size_vector sizes;
+    for (const auto &layer : layers)
+    {
+      css_size size;
+      int index = 0;
+      if (!parse_bg_size(layer, index, size) || index != (int)layer.size())
+        return;
+      sizes.push_back(size);
+    }
+    add_parsed_property(_background_size_, property_value(sizes, important, false, m_layer, m_specificity));
+  }
+
+  bool parse_font_weight(const css_token &tok, css_length &weight)
+  {
+    if (int idx = value_index(tok.ident(), font_weight_strings); idx >= 0)
+    {
+      weight.predef(idx);
+      return true;
+    }
+    if (tok.type == NUMBER && tok.n.number >= 1 && tok.n.number <= 1000)
+    {
+      weight.set_value(tok.n.number, css_units_none);
+      return true;
+    }
+    return false;
+  }
+
+  bool parse_font_style_variant_weight(const css_token_vector &tokens, int &index,
+                                       int &style, int &variant, css_length &weight)
+  {
+    bool style_found = false;
+    bool variant_found = false;
+    bool weight_found = false;
+    bool res = false;
+    int i = index, count = 0;
+    while (i < (int)tokens.size() && count++ < 3)
+    {
+      const auto &tok = tokens[i++];
+      if (tok.ident() == "normal")
+      {
+        index++;
+        res = true;
+      }
+      else if (!style_found && parse_keyword(tok, style, font_style_strings))
+      {
+        style_found = true;
+        index++;
+        res = true;
+      }
+      else if (!variant_found && parse_keyword(tok, variant, font_variant_strings))
+      {
+        variant_found = true;
+        index++;
+        res = true;
+      }
+      else if (!weight_found && parse_font_weight(tok, weight))
+      {
+        weight_found = true;
+        index++;
+        res = true;
+      }
+      else
+        break;
+    }
+    return res;
+  }
+
+  bool is_custom_ident(const css_token &tok)
+  {
+    if (tok.type != IDENT)
+      return false;
+    return !is_one_of(lowcase(tok.name), "default", "initial", "inherit", "unset");
+  }
+
+  bool parse_font_family(const css_token_vector &tokens, string &font_family)
+  {
+    auto list = parse_comma_separated_list(tokens);
+    if (list.empty())
+      return false;
+    string result;
+    for (const auto &name : list)
+    {
+      if (name.size() == 1 && name[0].type == STRING)
+      {
+        result += name[0].str + ',';
+        continue;
+      }
+      string str;
+      for (const auto &tok : name)
+      {
+        if (!is_custom_ident(tok))
+          return false;
+        str += tok.name + ' ';
+      }
+      result += trim(str) + ',';
+    }
+    result.resize(result.size() - 1);
+    font_family = result;
+    return true;
+  }
+
+  void style::parse_font(css_token_vector tokens, bool important)
+  {
+    int style = font_style_normal;
+    int variant = font_variant_normal;
+    css_length weight = css_length::predef_value(font_weight_normal);
+    css_length size = css_length::predef_value(font_size_medium);
+    css_length line_height = css_length::predef_value(line_height_normal);
+    string font_family;
+
+    if (tokens.size() == 1 && (tokens[0].type == STRING || tokens[0].type == IDENT) && value_in_list(tokens[0].str, font_system_family_name_strings))
+    {
+      font_family = tokens[0].str;
+    }
+    else
+    {
+      int index = 0;
+      parse_font_style_variant_weight(tokens, index, style, variant, weight);
+      if (!size.from_token(at(tokens, index), f_length_percentage | f_positive, font_size_strings))
+        return;
+      index++;
+      if (at(tokens, index).ch == '/')
+      {
+        index++;
+        if (!line_height.from_token(at(tokens, index), f_number | f_length_percentage, line_height_strings))
+          return;
+        index++;
+      }
+      remove(tokens, 0, index);
+      if (!parse_font_family(tokens, font_family))
+        return;
+    }
+    add_parsed_property(_font_style_, property_value(style, important, false, m_layer, m_specificity));
+    add_parsed_property(_font_variant_, property_value(variant, important, false, m_layer, m_specificity));
+    add_parsed_property(_font_weight_, property_value(weight, important, false, m_layer, m_specificity));
+    add_parsed_property(_font_size_, property_value(size, important, false, m_layer, m_specificity));
+    add_parsed_property(_line_height_, property_value(line_height, important, false, m_layer, m_specificity));
+    add_parsed_property(_font_family_, property_value(font_family, important, false, m_layer, m_specificity));
+  }
+
+  void style::parse_text_decoration(const css_token_vector &tokens, bool important, document_container *container)
+  {
+    css_length len;
+    css_token_vector line_tokens;
+    for (const auto &token : tokens)
+    {
+      if (parse_text_decoration_color(token, important, container))
+        continue;
+      if (parse_length(token, len, f_length_percentage | f_positive, style_text_decoration_thickness_strings))
+      {
+        add_parsed_property(_text_decoration_thickness_, property_value(len, important, false, m_layer, m_specificity));
+      }
+      else
+      {
+        if (token.type == IDENT)
+        {
+          int style = value_index(token.ident(), style_text_decoration_style_strings);
+          if (style >= 0)
+          {
+            add_parsed_property(_text_decoration_style_, property_value(style, important, false, m_layer, m_specificity));
+          }
+          else
+            line_tokens.push_back(token);
+        }
+        else
+          line_tokens.push_back(token);
+      }
+    }
+    if (!line_tokens.empty())
+      parse_text_decoration_line(line_tokens, important);
+  }
+
+  bool style::parse_text_decoration_color(const css_token &token, bool important, document_container *container)
+  {
+    web_color _color;
+    if (parse_color(token, _color, container))
+    {
+      add_parsed_property(_text_decoration_color_, property_value(_color, important, false, m_layer, m_specificity));
+      return true;
+    }
+    if (token.type == IDENT && value_in_list(token.ident(), "auto;currentcolor"))
+    {
+      add_parsed_property(_text_decoration_color_, property_value(web_color::current_color, important, false, m_layer, m_specificity));
+      return true;
+    }
+    return false;
+  }
+
+  void style::parse_text_decoration_line(const css_token_vector &tokens, bool important)
+  {
+    int val = 0;
+    for (const auto &token : tokens)
+    {
+      if (token.type == IDENT)
+      {
+        int idx = value_index(token.ident(), style_text_decoration_line_strings);
+        if (idx >= 0)
+          val |= 1 << (idx - 1);
+      }
+    }
+    add_parsed_property(_text_decoration_line_, property_value(val, important, false, m_layer, m_specificity));
+  }
+
+  void style::parse_aspect_ratio(const css_token_vector &tokens, bool important)
+  {
+    if (tokens.size() == 1 && tokens[0].ident() == "auto")
+    {
+      add_parsed_property(_aspect_ratio_, property_value(aspect_ratio(), important, false, m_layer, m_specificity));
+      return;
+    }
+
+    float w = 1, h = 1;
+    bool w_found = false, h_found = false;
+    bool auto_found = false;
+
+    for (size_t i = 0; i < tokens.size(); i++)
+    {
+      if (tokens[i].ident() == "auto")
+      {
+        auto_found = true;
+      }
+      else if (tokens[i].type == NUMBER)
+      {
+        if (!w_found)
+        {
+          w = tokens[i].n.number;
+          w_found = true;
+        }
+        else if (!h_found)
+        {
+          if (i > 0 && tokens[i - 1].ch == '/')
+          {
+            h = tokens[i].n.number;
+            h_found = true;
+          }
+          else
+            return;
+        }
+        else
+          return;
+      }
+      else if (tokens[i].ch == '/')
+      {
+        if (!w_found || h_found)
+          return;
+      }
+      else
+        return;
+    }
+
+    if (w_found)
+    {
+      add_parsed_property(_aspect_ratio_, property_value(aspect_ratio(w, h, auto_found), important, false, m_layer, m_specificity));
+    }
+  }
+
+  void style::parse_text_emphasis(const css_token_vector &tokens, bool important, document_container *container)
+  {
+    string style;
+    for (const auto &token : std::vector(tokens.rbegin(), tokens.rend()))
+    {
+      if (parse_text_emphasis_color(token, important, container))
+        continue;
+      style.insert(0, token.str + " ");
+    }
+    style = trim(style);
+    if (!style.empty())
+      add_parsed_property(_text_emphasis_style_, property_value(style, important, false, m_layer, m_specificity));
+  }
+
+  bool style::parse_text_emphasis_color(const css_token &token, bool important, document_container *container)
+  {
+    web_color _color;
+    if (parse_color(token, _color, container))
+    {
+      add_parsed_property(_text_emphasis_color_, property_value(_color, important, false, m_layer, m_specificity));
+      return true;
+    }
+    if (token.type == IDENT && value_in_list(token.ident(), "auto;currentcolor"))
+    {
+      add_parsed_property(_text_emphasis_color_, property_value(web_color::current_color, important, false, m_layer, m_specificity));
+      return true;
+    }
+    return false;
+  }
+
+  void style::parse_text_emphasis_position(const css_token_vector &tokens, bool important)
+  {
+    int val = 0;
+    for (const auto &token : tokens)
+    {
+      if (token.type == IDENT)
+      {
+        int idx = value_index(token.ident(), style_text_emphasis_position_strings);
+        if (idx >= 0)
+          val |= 1 << (idx - 1);
+      }
+    }
+    add_parsed_property(_text_emphasis_position_, property_value(val, important, false, m_layer, m_specificity));
+  }
+
+  void style::parse_flex(const css_token_vector &tokens, bool important)
+  {
+    auto n = tokens.size();
+    if (n > 3)
+      return;
+    const auto &a = at(tokens, 0);
+    const auto &b = at(tokens, 1);
+    const auto &c = at(tokens, 2);
+
+    struct flex
+    {
+      float m_grow = 1;
+      float m_shrink = 1;
+      css_length m_basis = 0;
+      bool grow(const css_token &tok)
+      {
+        if (tok.type != NUMBER || tok.n.number < 0)
+          return false;
+        m_grow = tok.n.number;
+        return true;
+      }
+      bool shrink(const css_token &tok)
+      {
+        if (tok.type != NUMBER || tok.n.number < 0)
+          return false;
+        m_shrink = tok.n.number;
+        return true;
+      }
+      bool basis(const css_token &tok, bool unitless_zero_allowed = false)
+      {
+        if (!unitless_zero_allowed && tok.type == NUMBER && tok.n.number == 0)
+          return false;
+        return m_basis.from_token(tok, f_length_percentage | f_positive, flex_basis_strings);
+      }
+    };
+    flex flex;
+
+    if (n == 1)
+    {
+      string_id ident = _id(a.ident());
+      if (is_one_of(ident, _initial_, _auto_, _none_))
+      {
+        css_length _auto = css_length::predef_value(flex_basis_auto);
+        switch (ident)
+        {
+        case _initial_:
+          flex = {0, 1, _auto};
+          break;
+        case _auto_:
+          flex = {1, 1, _auto};
+          break;
+        case _none_:
+          flex = {0, 0, _auto};
+          break;
+        default:;
+        }
+      }
+      else
+      {
+        if (!(flex.grow(a) || flex.basis(a)))
+          return;
+      }
+    }
+    else if (n == 2)
+    {
+      if (!((flex.grow(a) && (flex.shrink(b) || flex.basis(b))) || (flex.basis(a) && flex.grow(b))))
+        return;
+    }
+    else
+    {
+      if (!((flex.grow(a) && flex.shrink(b) && flex.basis(c, true)) || (flex.basis(a) && flex.grow(b) && flex.shrink(c))))
+        return;
+    }
+    add_parsed_property(_flex_grow_, property_value(flex.m_grow, important, false, m_layer, m_specificity));
+    add_parsed_property(_flex_shrink_, property_value(flex.m_shrink, important, false, m_layer, m_specificity));
+    add_parsed_property(_flex_basis_, property_value(flex.m_basis, important, false, m_layer, m_specificity));
+  }
+
+  void style::parse_flex_flow(const css_token_vector &tokens, bool important)
+  {
+    int flex_direction = flex_direction_row;
+    int flex_wrap = flex_wrap_nowrap;
+    bool direction_found = false;
+    bool wrap_found = false;
+    for (const auto &token : tokens)
+    {
+      if (!direction_found && parse_keyword(token, flex_direction, flex_direction_strings))
+        direction_found = true;
+      else if (!wrap_found && parse_keyword(token, flex_wrap, flex_wrap_strings))
+        wrap_found = true;
+      else
+        return;
+    }
+    add_parsed_property(_flex_direction_, property_value(flex_direction, important, false, m_layer, m_specificity));
+    add_parsed_property(_flex_wrap_, property_value(flex_wrap, important, false, m_layer, m_specificity));
+  }
+
+  void style::parse_align_self(string_id name, const css_token_vector &tokens, bool important)
+  {
+    auto n = tokens.size();
+    if (n > 2)
+      return;
+    if (tokens[0].type != IDENT || (n == 2 && tokens[1].type != IDENT))
+      return;
+    string a = tokens[0].ident();
+    if (name == _align_items_ && a == "auto")
+      return;
+    if (n == 1)
+    {
+      int idx = value_index(a, flex_align_items_strings);
+      if (idx >= 0)
+        add_parsed_property(name, property_value(idx, important, false, m_layer, m_specificity));
+      return;
+    }
+    string b = tokens[1].ident();
+    if (a == "baseline")
+      swap(a, b);
+    if (b == "baseline" && is_one_of(a, "first", "last"))
+    {
+      int idx = flex_align_items_baseline | (a == "first" ? flex_align_items_first : flex_align_items_last);
+      add_parsed_property(name, property_value(idx, important, false, m_layer, m_specificity));
+      return;
+    }
+    int idx = value_index(b, self_position_strings);
+    if (idx >= 0 && is_one_of(a, "safe", "unsafe"))
+    {
+      idx |= (a == "safe" ? flex_align_items_safe : flex_align_items_unsafe);
+      add_parsed_property(name, property_value(idx, important, false, m_layer, m_specificity));
+    }
+  }
+
+  void style::parse_grid_template(string_id name, const css_token_vector& tokens, bool important)
+  {
+    length_vector tracks;
+    auto add_track = [&](const css_token& tok) {
+      css_length len;
+      if (len.from_token(tok, f_length_percentage | f_positive))
+      {
+        tracks.push_back(len);
+        return true;
+      }
+      else if (tok.type == IDENT && tok.ident() == "auto")
+      {
+        len.predef(0);
+        tracks.push_back(len);
+        return true;
+      }
+      return false;
+    };
+
+    for (const auto& tok : tokens)
+    {
+      if (tok.type == CV_FUNCTION && lowcase(tok.name) == "repeat")
+      {
+        int count = 0;
+        bool auto_fit = false;
+        bool auto_fill = false;
+        css_token_vector sub_tokens;
+        bool comma_found = false;
+        for (const auto& t : tok.value)
+        {
+          if (t.type == ',')
+          {
+            comma_found = true;
+          }
+          else if (!comma_found)
+          {
+            if (t.type == NUMBER)
+              count = (int)t.n.number;
+            else if (t.type == IDENT)
+            {
+              if (lowcase(t.name) == "auto-fit") auto_fit = true;
+              else if (lowcase(t.name) == "auto-fill") auto_fill = true;
+            }
+          }
+          else if (t.type != WHITESPACE)
+          {
+            sub_tokens.push_back(t);
+          }
+        }
+
+        if (auto_fit || auto_fill)
+        {
+          std::vector<css_length> sub_tracks;
+          for (const auto& st : sub_tokens)
+          {
+            css_length sl;
+            if (sl.from_token(st, f_length_percentage | f_positive))
+              sub_tracks.push_back(sl);
+            else if (st.type == IDENT && st.ident() == "auto")
+              sub_tracks.push_back(css_length::predef_value(0));
+          }
+          if (!sub_tracks.empty())
+          {
+            css_length rep;
+            rep.set_math(auto_fit ? css_length::op_repeat_auto_fit : css_length::op_repeat_auto_fill, std::move(sub_tracks));
+            tracks.push_back(rep);
+          }
+        }
+        else if (count > 0)
+        {
+          for (int i = 0; i < count; i++)
+          {
+            for (const auto& st : sub_tokens)
+              add_track(st);
+          }
+        }
+      }
+      else if (tok.type != WHITESPACE)
+      {
+        add_track(tok);
+      }
+    }
+    if (!tracks.empty())
+      add_parsed_property(name, property_value(tracks, important, false, m_layer, m_specificity));
+  }
+
+  void style::add_parsed_property(string_id name, const property_value &propval)
+  {
+    for (auto &prop : m_properties)
+    {
+      if (prop.first == name)
+      {
+        if (propval.m_priority >= prop.second.m_priority)
+        {
+          prop.second = propval;
+        }
+        return;
+      }
+    }
+    m_properties.push_back({name, propval});
+  }
+
+  void style::remove_property(string_id name, bool important)
+  {
+    for (auto it = m_properties.begin(); it != m_properties.end(); ++it)
+    {
+      if (it->first == name)
+      {
+        if (!it->second.m_priority.important || (important && it->second.m_priority.important))
+        {
+          m_properties.erase(it);
+        }
+        return;
+      }
+    }
+  }
+
+  void style::combine(const style &src, selector_specificity specificity)
+  {
+    for (const auto &property : src.m_properties)
+    {
+        property_value val = property.second;
+        if (specificity != selector_specificity())
+        {
+            val.m_priority.specificity = specificity;
+        }
+        add_parsed_property(property.first, val);
+    }
+  }
+
+  const property_value &style::get_property(string_id name) const
+  {
+    for (const auto &prop : m_properties)
+    {
+      if (prop.first == name)
+      {
+        return prop.second;
+      }
+    }
+    static property_value dummy;
+    return dummy;
+  }
+
+  bool check_var_syntax(const css_token_vector &args)
+  {
+    if (args.empty())
+      return false;
+    if (args[0].type != IDENT)
+      return false;
+    string name = args[0].name;
+    if (name.substr(0, 2) != "--" || name.size() <= 2)
+      return false;
+    if (args.size() > 1 && args[1].ch != ',')
+      return false;
+    return true;
+  }
+
+  bool evaluate_calc(css_token_vector &tokens, const html_tag *el);
+
+  bool subst_var_nested(css_token_vector &tokens, const html_tag *el, std::set<string_id> used_vars)
+  {
+    bool replaced_any = false;
+    for (int i = 0; i < (int)tokens.size(); i++)
+    {
+      auto &tok = tokens[i];
+      if (tok.type == CV_FUNCTION && lowcase(tok.name) == "var")
+      {
+        auto args = tok.value;
+        if (!check_var_syntax(args))
+          continue;
+        auto name = _id(args[0].name);
+        if (used_vars.count(name))
+        {
+          remove(tokens, i);
+          i--;
+          replaced_any = true;
+          continue;
+        }
+        std::set<string_id> next_used_vars = used_vars;
+        next_used_vars.insert(name);
+        css_token_vector value;
+        if (el->get_custom_property(name, value))
+        {
+          subst_var_nested(value, el, next_used_vars);
+          remove(tokens, i);
+          insert(tokens, i, value);
+          i += (int)value.size() - 1;
+          replaced_any = true;
+        }
+        else
+        {
+          if (args.size() > 1)
+          {
+            css_token_vector fallback = args;
+            remove(fallback, 0, 2);
+            subst_var_nested(fallback, el, next_used_vars);
+            remove(tokens, i);
+            insert(tokens, i, fallback);
+            i += (int)fallback.size() - 1;
+            replaced_any = true;
+          }
+          else
+          {
+            remove(tokens, i);
+            i--;
+            replaced_any = true;
+          }
+        }
+      }
+      else if (tok.is_component_value())
+      {
+        if (subst_var_nested(tok.value, el, used_vars))
+        {
+          replaced_any = true;
+        }
+      }
+    }
+    return replaced_any;
+  }
+
+  bool evaluate_light_dark(css_token_vector &tokens, document_container *container)
+  {
+    bool changed = false;
+    for (int i = 0; i < (int)tokens.size(); i++)
+    {
+      auto &tok = tokens[i];
+      if (tok.type == CV_FUNCTION && lowcase(tok.name) == "light-dark")
+      {
+        auto list = parse_comma_separated_list(tok.value);
+        if (list.size() == 2)
+        {
+          color_scheme scheme = color_scheme_light;
+          if (container)
+          {
+            media_features feat;
+            container->get_media_features(feat);
+            scheme = feat.scheme;
+          }
+          css_token_vector selected = (scheme == color_scheme_dark) ? list[1] : list[0];
+          remove(tokens, i);
+          insert(tokens, i, selected);
+          changed = true;
+          i--;
+          continue;
+        }
+      }
+      if (tok.is_component_value())
+      {
+        if (evaluate_light_dark(tok.value, container))
+          changed = true;
+      }
+    }
+    return changed;
+  }
+
+  bool evaluate_op(const css_token &left, char op, const css_token &right, css_token &result)
+  {
+    if (left.type == NUMBER && right.type == NUMBER)
+    {
+      result = left;
+      if (op == '+') result.n.number = left.n.number + right.n.number;
+      else if (op == '-') result.n.number = left.n.number - right.n.number;
+      else if (op == '*') result.n.number = left.n.number * right.n.number;
+      else if (op == '/' && right.n.number != 0) result.n.number = left.n.number / right.n.number;
+      else return false;
+      return true;
+    }
+    if ((left.type == DIMENSION || left.type == PERCENTAGE) && right.type == NUMBER)
+    {
+      result = left;
+      if (op == '*') result.n.number = left.n.number * right.n.number;
+      else if (op == '/' && right.n.number != 0) result.n.number = left.n.number / right.n.number;
+      else return false;
+      return true;
+    }
+    if (left.type == NUMBER && (right.type == DIMENSION || right.type == PERCENTAGE))
+    {
+      result = right;
+      if (op == '*') result.n.number = right.n.number * left.n.number;
+      else return false;
+      return true;
+    }
+    if (left.type == right.type && (left.type == DIMENSION || left.type == PERCENTAGE))
+    {
+      if (left.type == DIMENSION && lowcase(left.unit) != lowcase(right.unit))
+        return false;
+      result = left;
+      if (op == '+') result.n.number = left.n.number + right.n.number;
+      else if (op == '-') result.n.number = left.n.number - right.n.number;
+      else return false;
+      return true;
+    }
+    return false;
+  }
+
+  bool simplify_calc_tokens(css_token_vector &val)
+  {
+    bool changed = false;
+    for (int i = 1; i < (int)val.size() - 1; )
+    {
+      if (val[i].ch == '*' || val[i].ch == '/')
+      {
+        css_token res;
+        if (evaluate_op(val[i - 1], val[i].ch, val[i + 1], res))
+        {
+          val[i - 1] = res;
+          val.erase(val.begin() + i, val.begin() + i + 2);
+          changed = true;
+          continue;
+        }
+      }
+      i++;
+    }
+    for (int i = 1; i < (int)val.size() - 1; )
+    {
+      if (val[i].ch == '+' || val[i].ch == '-')
+      {
+        css_token res;
+        if (evaluate_op(val[i - 1], val[i].ch, val[i + 1], res))
+        {
+          val[i - 1] = res;
+          val.erase(val.begin() + i, val.begin() + i + 2);
+          changed = true;
+          continue;
+        }
+      }
+      i++;
+    }
+    return changed;
+  }
+
+  bool evaluate_calc(css_token_vector &tokens, const html_tag *el)
+  {
+    bool changed = false;
+    for (int i = 0; i < (int)tokens.size(); i++)
+    {
+      auto &tok = tokens[i];
+      if (tok.type == CV_FUNCTION && (lowcase(tok.name) == "calc" || lowcase(tok.name) == "min" || lowcase(tok.name) == "max" || lowcase(tok.name) == "clamp"))
+      {
+        evaluate_calc(tok.value, el);
+        string func_name = lowcase(tok.name);
+        if (func_name == "calc")
+        {
+          css_token_vector val;
+          for (const auto& t : tok.value) if (t.type != WHITESPACE) val.push_back(t);
+          
+          while (simplify_calc_tokens(val))
+          {
+            changed = true;
+          }
+          if (val.size() == 1 && (val[0].type == DIMENSION || val[0].type == NUMBER || val[0].type == PERCENTAGE))
+          {
+            css_token inner = val[0];
+            remove(tokens, i);
+            insert(tokens, i, {inner});
+            changed = true;
+            continue;
+          }
+          if (changed)
+          {
+            tok.value = val;
+          }
+        }
+      }
+      if (tok.is_component_value())
+      {
+        if (evaluate_calc(tok.value, el)) changed = true;
+      }
+    }
+    return changed;
+  }
+
+  void subst_vars_(string_id name, css_token_vector &tokens, const html_tag *el)
+  {
+    std::set<string_id> used_vars = {name};
+    subst_var_nested(tokens, el, used_vars);
+    evaluate_calc(tokens, el);
+  }
+
+  void style::subst_vars(const html_tag *el)
+  {
+    auto properties = m_properties;
+    bool had_var_shorthand = false;
+    for (auto &prop : properties)
+    {
+      if (prop.second.m_has_var)
+      {
+        auto &value = prop.second.get<css_token_vector>();
+        subst_vars_(prop.first, value, el);
+        add_property(prop.first, value, "", prop.second.m_priority.important, el->get_document()->container(), prop.second.m_priority.layer_rank, prop.second.m_priority.specificity);
+        // Check if this was a shorthand that expands to sub-properties
+        if (!at(shorthands, prop.first).empty())
+          had_var_shorthand = true;
+      }
+    }
+    // If a shorthand with var() was re-parsed, it may have overwritten
+    // individual (non-var) sub-properties that appeared after it in the source.
+    // Re-apply those non-var properties to restore the correct cascade order.
+    if (had_var_shorthand)
+    {
+      for (auto &prop : properties)
+      {
+        if (!prop.second.m_has_var && !prop.second.is<invalid>())
+        {
+          add_parsed_property(prop.first, prop.second);
+        }
+      }
+    }
+  }
+
+  void style::parse_shadow(string_id name, const css_token_vector &tokens, bool important, document_container *container)
+  {
+    shadow_vector shadows;
+    css_token_vector shadow_tokens;
+    for (size_t i = 0; i <= tokens.size(); ++i)
+    {
+      if (i == tokens.size() || (tokens[i].type == COMMA))
+      {
+        if (!shadow_tokens.empty())
+        {
+          shadow s;
+          int lengths_count = 0;
+          for (const auto &tok : shadow_tokens)
+          {
+            if (tok.ident() == "inset")
+              s.inset = true;
+            else if (parse_color(tok, s.color, container))
+            {
+            }
+            else
+            {
+              css_length len;
+              if (len.from_token(tok, f_length))
+              {
+                if (lengths_count == 0)
+                  s.x = len;
+                else if (lengths_count == 1)
+                  s.y = len;
+                else if (lengths_count == 2)
+                  s.blur = len;
+                else if (lengths_count == 3)
+                  s.spread = len;
+                lengths_count++;
+              }
+            }
+          }
+          if (lengths_count >= 2)
+            shadows.push_back(s);
+          shadow_tokens.clear();
+        }
+      }
+      else
+        shadow_tokens.push_back(tokens[i]);
+    }
+    if (!shadows.empty())
+      add_parsed_property(name, property_value(shadows, important, false, m_layer, m_specificity));
+  }
+
+  void style::parse_place_shorthand(string_id name, const css_token_vector& tokens, bool important)
+  {
+    css_token_vector values;
+    for (const auto& tok : tokens)
+    {
+      if (tok.type != WHITESPACE)
+        values.push_back(tok);
+    }
+
+    if (values.empty() || values.size() > 2) return;
+
+    string_id align_id, justify_id;
+    if (name == _place_items_) { align_id = _align_items_; justify_id = _justify_items_; }
+    else if (name == _place_content_) { align_id = _align_content_; justify_id = _justify_content_; }
+    else if (name == _place_self_) { align_id = _align_self_; justify_id = _justify_self_; }
+    else return;
+
+    add_property(align_id, {values[0]}, "", important);
+    if (values.size() == 2)
+      add_property(justify_id, {values[1]}, "", important);
+    else
+      add_property(justify_id, {values[0]}, "", important);
+  }
+} // namespace litehtml

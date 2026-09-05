@@ -1,0 +1,16 @@
+{
+  "name": "wasm-html-to-image",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "pnpm --filter wasm-html-to-image build",
+    "build:js": "pnpm -r --if-present build",
+    "example:cli": "pnpm --filter wasm-html-to-image example:cli"
+  },
+  "devDependencies": {
+    "@types/node": "26.1.1",
+    "tsx": "^4.23.1",
+    "typescript": "^5.9.2"
+  }
+}

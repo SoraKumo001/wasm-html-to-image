@@ -1,0 +1,1198 @@
+#include "html.h"
+#include "line_box.h"
+#include "element.h"
+#include "render_item.h"
+#include "document.h"
+#include "document_container.h"
+#include "types.h"
+#include <algorithm>
+
+//////////////////////////////////////////////////////////////////////////////////////////
+
+litehtml::line_box_item::~line_box_item() = default;
+
+void litehtml::line_box_item::place_to(pixel_t x, pixel_t y)
+{
+	m_element->pos().x = x + m_element->content_offset_left();
+	m_element->pos().y = y + m_element->content_offset_top();
+}
+
+litehtml::position& litehtml::line_box_item::pos()
+{
+	return m_element->pos();
+}
+
+
+litehtml::pixel_t litehtml::line_box_item::width() const
+{
+	return m_element->width();
+}
+
+litehtml::pixel_t litehtml::line_box_item::top() const
+{
+	return m_element->top();
+}
+
+litehtml::pixel_t litehtml::line_box_item::bottom() const
+{
+	return m_element->bottom();
+}
+
+litehtml::pixel_t litehtml::line_box_item::right() const
+{
+	return m_element->right();
+}
+
+litehtml::pixel_t litehtml::line_box_item::left() const
+{
+	return m_element->left();
+}
+
+litehtml::pixel_t litehtml::line_box_item::height() const
+{
+	return m_element->height();
+}
+
+litehtml::pixel_t litehtml::line_box_item::inline_size(const satoru::WritingModeContext& wm) const
+{
+    return wm.is_vertical() ? m_element->height() : m_element->width();
+}
+
+litehtml::pixel_t litehtml::line_box_item::block_size(const satoru::WritingModeContext& wm) const
+{
+    return wm.is_vertical() ? m_element->width() : m_element->height();
+}
+
+litehtml::pixel_t litehtml::line_box_item::inline_pos(const satoru::WritingModeContext& wm) const
+{
+    return wm.is_vertical() ? m_element->top() : m_element->left();
+}
+
+litehtml::pixel_t litehtml::line_box_item::block_pos(const satoru::WritingModeContext& wm) const
+{
+    if (wm.mode() == writing_mode_vertical_rl)
+        return wm.container_width() - m_element->pos().x - m_element->width();
+    return wm.is_vertical() ? m_element->pos().x : m_element->pos().y;
+}
+
+void litehtml::line_box_item::y_shift(pixel_t shift)
+{
+m_element->y_shift(shift);
+}
+
+void litehtml::line_box_item::x_shift(pixel_t shift)
+{
+    m_element->x_shift(shift);
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////
+
+litehtml::lbi_start::lbi_start(const std::shared_ptr<render_item>& element) : line_box_item(element)
+{
+	m_pos.height = m_element->src_el()->css().get_font_metrics().height;
+	m_pos.width = m_element->content_offset_left();
+}
+
+litehtml::lbi_start::~lbi_start() = default;
+
+void litehtml::lbi_start::place_to(pixel_t x, pixel_t y)
+{
+	m_pos.x = x + m_element->content_offset_left();
+	m_pos.y = y;
+}
+
+litehtml::pixel_t litehtml::lbi_start::width() const
+{
+	return m_pos.width;
+}
+
+litehtml::pixel_t litehtml::lbi_start::top() const
+{
+	return m_pos.y;
+}
+
+litehtml::pixel_t litehtml::lbi_start::bottom() const
+{
+	return m_pos.y + m_pos.height;
+}
+
+litehtml::pixel_t litehtml::lbi_start::right() const
+{
+	return m_pos.x;
+}
+
+litehtml::pixel_t litehtml::lbi_start::left() const
+{
+	return m_pos.x - m_element->content_offset_left();
+}
+
+litehtml::pixel_t litehtml::lbi_start::height() const
+{
+	return m_pos.height;
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////
+
+litehtml::lbi_end::lbi_end(const std::shared_ptr<render_item>& element) : lbi_start(element)
+{
+	m_pos.height = m_element->src_el()->css().get_font_metrics().height;
+	m_pos.width = m_element->content_offset_right();
+}
+
+litehtml::lbi_end::~lbi_end() = default;
+
+void litehtml::lbi_end::place_to(pixel_t x, pixel_t y)
+{
+	m_pos.x = x;
+	m_pos.y = y;
+}
+
+litehtml::pixel_t litehtml::lbi_end::right() const
+{
+	return m_pos.x + m_pos.width;
+}
+
+litehtml::pixel_t litehtml::lbi_end::left() const
+{
+	return m_pos.x;
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////
+
+litehtml::lbi_continue::lbi_continue(const std::shared_ptr<render_item>& element) : lbi_start(element)
+{
+	m_pos.height = m_element->src_el()->css().get_font_metrics().height;
+	m_pos.width = 0;
+}
+
+litehtml::lbi_continue::~lbi_continue() = default;
+
+void litehtml::lbi_continue::place_to(pixel_t x, pixel_t y)
+{
+	m_pos.x = x;
+	m_pos.y = y;
+}
+
+litehtml::pixel_t litehtml::lbi_continue::right() const
+{
+	return m_pos.x;
+}
+
+litehtml::pixel_t litehtml::lbi_continue::left() const
+{
+	return m_pos.x;
+}
+
+litehtml::pixel_t litehtml::lbi_continue::width() const
+{
+	return 0;
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////
+
+void litehtml::line_box::add_item(std::unique_ptr<line_box_item> item)
+{
+	item->get_el()->skip(false);
+    bool add	= true;
+	switch (item->get_type())
+	{
+		case line_box_item::type_text_part:
+			if(item->get_el()->src_el()->is_white_space())
+			{
+				add = !is_empty() && !have_last_space();
+			}
+			break;
+		case line_box_item::type_inline_start:
+		case line_box_item::type_inline_end:
+		case line_box_item::type_inline_continue:
+			add = true;
+			break;
+	}
+	if(add)
+	{
+		if (m_writing_mode == writing_mode_horizontal_tb)
+		{
+			item->place_to(m_inline_pos + m_inline_size, m_block_pos);
+			m_inline_size += item->width();
+			m_block_size = std::max(m_block_size, item->get_el()->height());
+		}
+		else
+		{
+			item->place_to(m_inline_pos, m_block_pos + m_inline_size);
+            pixel_t item_inline_size = item->get_el()->height();
+			m_inline_size += item_inline_size;
+			m_block_size = std::max(m_block_size, item->get_el()->width());
+		}
+		m_items.emplace_back(std::move(item));
+	} else
+	{
+		item->get_el()->skip(true);
+	}
+}
+
+litehtml::pixel_t litehtml::line_box::calc_va_baseline(const va_context& current, vertical_align va, const font_metrics& new_font, pixel_t top, pixel_t bottom)
+{
+	switch(va)
+	{
+		case va_super:
+			return current.baseline - current.fm.super_shift;
+		case va_sub:
+			return current.baseline + current.fm.sub_shift;
+		case va_middle:
+			return current.baseline - current.fm.x_height / 2;
+		case va_text_top:
+			return current.baseline - (current.fm.height - current.fm.base_line()) +
+										new_font.height - new_font.base_line();
+		case va_text_bottom:
+			return current.baseline + current.fm.base_line() - new_font.base_line();
+		case va_bottom:
+			return bottom - new_font.base_line();
+		case va_top:
+			return top + new_font.height - new_font.base_line();
+		default:
+			return current.baseline;
+	}
+}
+
+std::list< std::unique_ptr<litehtml::line_box_item> > litehtml::line_box::finish(bool last_box, const containing_block_context &containing_block_size)
+{
+	if (m_text_overflow == text_overflow_ellipsis && 
+		is_one_of(m_overflow, overflow_hidden, overflow_scroll, overflow_auto) &&
+		!(containing_block_size.size_mode & containing_block_context::size_mode_content))
+	{
+		pixel_t container_width = m_inline_end - m_inline_pos;
+		
+		// 1. Calculate ellipsis width
+		pixel_t ellipsis_width = 0;
+		for (auto& item : m_items)
+		{
+			if (item->get_type() == line_box_item::type_text_part)
+			{
+				ellipsis_width = item->get_el()->src_el()->get_document()->container()->text_width("...", item->get_el()->src_el()->css().get_font(), m_direction, m_writing_mode);
+				break;
+			}
+		}
+
+		// 2. Determine if we NEED ellipsis. 
+		// We need it if physically overflowing OR if it's logically forced.
+		if (m_inline_size > container_width + 0.01)
+		{
+			auto it_f = m_items.begin();
+			auto last_visible_it = m_items.end();
+			
+			while (it_f != m_items.end())
+			{
+				if ((*it_f)->get_el()->skip()) 
+				{
+					it_f++;
+					continue;
+				}
+
+				if ((*it_f)->get_el()->pos().x + ellipsis_width > m_inline_end + 0.01)
+				{
+					break;
+				}
+				
+				last_visible_it = it_f;
+				
+				if ((*it_f)->get_el()->pos().x + (*it_f)->width() + ellipsis_width > m_inline_end + 0.01)
+				{
+					it_f++;
+					break;
+				}
+				
+				it_f++;
+			}
+
+			if (last_visible_it != m_items.end())
+			{
+				// Mark for ellipsis
+				(*last_visible_it)->get_el()->force_ellipsis(true);
+				(*last_visible_it)->get_el()->pos().width = 0.1f;
+				
+				auto next_it = std::next(last_visible_it);
+				while (next_it != m_items.end())
+				{
+					(*next_it)->get_el()->skip(true);
+					next_it = m_items.erase(next_it);
+				}
+			}
+		}
+
+		// Recalculate line width
+		m_inline_size = 0;
+		for (auto& item : m_items)
+		{
+			if (!item->get_el()->skip())
+			{
+				m_inline_size += (m_writing_mode == writing_mode_horizontal_tb) ? item->width() : item->get_el()->height();
+			}
+		}
+	}
+
+	std::list< std::unique_ptr<line_box_item> > ret_items;
+	if(!last_box)
+	{
+		while(!m_items.empty())
+		{
+			if (m_items.back()->get_type() == line_box_item::type_text_part)
+			{
+				// remove trailing spaces
+				if (m_items.back()->get_el()->src_el()->is_break() ||
+					m_items.back()->get_el()->src_el()->is_white_space())
+				{
+					m_inline_size -= m_items.back()->width();
+					m_items.back()->get_el()->skip(true);
+					m_items.pop_back();
+				} else
+				{
+					break;
+				}
+			} else if (m_items.back()->get_type() == line_box_item::type_inline_start)
+			{
+				// remove trailing empty inline_start markers
+				// these markers will be added at the beginning of the next line box
+				m_inline_size -= m_items.back()->width();
+				ret_items.emplace_back(std::move(m_items.back()));
+				m_items.pop_back();
+			} else
+			{
+				break;
+			}
+		}
+	} else
+	{
+		// remove trailing spaces
+		auto iter = m_items.rbegin();
+		while(iter != m_items.rend())
+		{
+			if ((*iter)->get_type() == line_box_item::type_text_part)
+			{
+				if((*iter)->get_el()->src_el()->is_white_space())
+				{
+					(*iter)->get_el()->skip(true);
+					m_inline_size -= (*iter)->width();
+					// Space can be between text and inline_end marker
+					// We have to shift all items on the right side
+					if(iter != m_items.rbegin())
+					{
+						auto r_iter = iter;
+						r_iter--;
+						while (true)
+						{
+							(*r_iter)->pos().x -= (*iter)->width();
+							if (r_iter == m_items.rbegin())
+							{
+								break;
+							}
+							r_iter--;
+						}
+					}
+					// erase white space element
+					iter = decltype(iter) (m_items.erase( std::next(iter).base() ));
+				} else
+				{
+					break;
+				}
+			} else
+			{
+				iter++;
+			}
+		}
+	}
+
+    if( is_empty() || (!is_empty() && last_box && is_break_only()) )
+    {
+        m_block_size = m_default_line_height.computed_value;
+		m_baseline = m_font_metrics.base_line();
+        return ret_items;
+    }
+
+    pixel_t spacing_x = 0;	// Number of pixels to distribute between elements
+    pixel_t shift_x = 0;	// Shift elements by X to apply the text-align
+
+    if (!(containing_block_size.size_mode & containing_block_context::size_mode_content) ||
+        (containing_block_size.size_mode & containing_block_context::size_mode_exact_width))
+    {
+        text_align align = m_text_align;
+        if (align == text_align_start)
+        {
+            align = (m_direction == direction_rtl ? text_align_right : text_align_left);
+        }
+        else if (align == text_align_end)
+        {
+            align = (m_direction == direction_rtl ? text_align_left : text_align_right);
+        }
+        else if (align == text_align_left && m_direction == direction_rtl)
+        {
+            align = text_align_right;
+        }
+
+        switch (align)
+        {
+            case text_align_right:
+                if (m_inline_size < (m_inline_end - m_inline_pos))
+                {
+                    shift_x = (m_inline_end - m_inline_pos) - m_inline_size;
+                }
+                break;
+            case text_align_center:
+                if (m_inline_size < (m_inline_end - m_inline_pos))
+                {
+                    shift_x = ((m_inline_end - m_inline_pos) - m_inline_size) / 2;
+                }
+                break;
+            case text_align_justify:
+                if (m_inline_size < (m_inline_end - m_inline_pos))
+                {
+                    shift_x = 0;
+                    spacing_x = (m_inline_end - m_inline_pos) - m_inline_size;
+                    // don't justify for small lines
+                    if (spacing_x > m_inline_size / 4)
+                        spacing_x = 0;
+                }
+                break;
+            default:
+                shift_x = 0;
+        }
+
+        if (m_direction == direction_rtl)
+        {
+            // Visual reordering for RTL:
+            // 1. Initial reverse of all items (Level 1 reordering)
+            std::reverse(m_items.begin(), m_items.end());
+
+            // 2. Reverse back LTR runs (Level 2 reordering)
+            auto it = m_items.begin();
+            while (it != m_items.end())
+            {
+                if ((*it)->get_bidi_level() % 2 == 0) // LTR run
+                {
+                    auto run_start = it;
+                    while (it != m_items.end() && (*it)->get_bidi_level() % 2 == 0)
+                    {
+                        it++;
+                    }
+                    std::reverse(run_start, it);
+                }
+                else
+                {
+                    it++;
+                }
+            }
+
+            // 3. Assign final coordinates from left to right in the new visual order
+            pixel_t current_x = m_inline_pos + shift_x;
+            for (auto &lbi : m_items)
+            {
+                lbi->pos().x = current_x;
+                current_x += lbi->width();
+            }
+
+            // Reset shift_x and spacing_x since we've already positioned items
+            shift_x = 0;
+            spacing_x = 0;
+        }
+    }
+
+    int counter = 0;    float offj  = float(spacing_x) / std::max(1.f, float(m_items.size()) - 1.f);
+    float cixx  = 0.0f;
+
+	std::optional<pixel_t> line_height = m_default_line_height.computed_value;
+
+	va_context current_context;
+	std::list<va_context> contexts;
+
+	current_context.baseline = 0;
+	current_context.fm = m_font_metrics;
+	current_context.start_lbi = nullptr;
+	current_context.line_height = m_default_line_height.computed_value;
+
+	m_min_width = 0;
+
+	struct items_dimensions
+	{
+		pixel_t top = 0;
+		pixel_t bottom = 0;
+		int count = 0;
+		pixel_t max_height = 0;
+
+		void add_item(line_box_item* item, writing_mode mode)
+		{
+			if (mode == writing_mode_horizontal_tb)
+			{
+				top = std::min(top, item->top());
+				bottom = std::max(bottom, item->bottom());
+				max_height = std::max(max_height, item->height());
+			}
+			else
+			{
+				// In vertical, we use Pass 1's relative X coordinate (stored in pos().x)
+				top = std::min(top, item->pos().x);
+				bottom = std::max(bottom, item->pos().x + item->get_el()->width());
+				max_height = std::max(max_height, item->get_el()->width());
+			}
+			count++;
+		}
+		pixel_t height() const { return bottom - top; }
+	};
+
+	items_dimensions line_max_height;
+	// Add strut (invisible character with the font metrics of the container)
+	// This ensures that the line box always has a baseline and accounts for the container's line-height.
+	line_max_height.top = -m_font_metrics.ascent;
+	line_max_height.bottom = m_font_metrics.descent;
+	line_max_height.count = 1;
+	line_max_height.max_height = m_font_metrics.height;
+
+	items_dimensions top_aligned_max_height;
+	items_dimensions bottom_aligned_max_height;
+	items_dimensions inline_boxes_dims;
+
+	// First pass
+	// 1. Apply text-align-justify
+	// 1. Align all items by baseline
+	// 2. top/button aligned items are aligned by baseline
+	// 3. Calculate top and button of the linebox separately for items in baseline
+	//    and for top and bottom aligned items
+    for (const auto& lbi : m_items)
+	{
+		// Reset position to avoid accumulation from previous render passes
+		if (m_writing_mode == writing_mode_horizontal_tb)
+			lbi->pos().y = 0;
+		else
+			lbi->pos().x = 0;
+
+		// Apply text-align-justify
+		m_min_width += lbi->get_rendered_min_width();
+		if (spacing_x != 0 && counter)
+		{
+			cixx += offj;
+			if ((counter + 1) == int(m_items.size()))
+				cixx += 0.99f;
+			if (m_writing_mode == writing_mode_horizontal_tb)
+				lbi->pos().x += (pixel_t) cixx;
+			else
+				lbi->pos().y += (pixel_t) cixx;
+		}
+		counter++;
+		if ((m_text_align == text_align_right || spacing_x != 0) && counter == int(m_items.size()))
+		{
+			// Forcible justify the last element to the right side for text align right and justify;
+			if (m_writing_mode == writing_mode_horizontal_tb)
+				lbi->pos().x = m_inline_end - lbi->pos().width;
+			else
+				lbi->pos().y = m_inline_end - lbi->get_el()->height();
+		} else if (shift_x != 0)
+		{
+			if (m_writing_mode == writing_mode_horizontal_tb)
+				lbi->pos().x += shift_x;
+			else
+				lbi->pos().y += shift_x;
+		}
+
+		// Calculate new baseline for inline start/continue
+		// Inline start/continue elements are inline containers like <span>
+		if (lbi->get_type() == line_box_item::type_inline_start || lbi->get_type() == line_box_item::type_inline_continue)
+		{
+			contexts.push_back(current_context);
+			if(is_one_of(lbi->get_el()->css().get_vertical_align(), va_top, va_bottom))
+			{
+				// top/bottom aligned inline boxes are aligned by baseline == 0
+				current_context.baseline = 0;
+				current_context.start_lbi = lbi.get();
+				current_context.start_lbi->reset_items_height();
+			} else if(current_context.start_lbi)
+			{
+				current_context.baseline = calc_va_baseline(current_context,
+					lbi->get_el()->css().get_vertical_align(),
+					lbi->get_el()->css().get_font_metrics(),
+					current_context.start_lbi->top(), current_context.start_lbi->bottom());
+			} else
+			{
+				current_context.start_lbi = nullptr;
+				current_context.baseline = calc_va_baseline(current_context,
+															lbi->get_el()->css().get_vertical_align(),
+															lbi->get_el()->css().get_font_metrics(),
+															line_max_height.top, line_max_height.bottom);
+			}
+			current_context.fm = lbi->get_el()->css().get_font_metrics();
+			current_context.line_height = lbi->get_el()->css().line_height().computed_value;
+		}
+
+		pixel_t bl = current_context.baseline;
+		pixel_t content_offset = 0;
+		bool is_top_bottom_box = false;
+		bool ignore = false;
+
+		// Align element by baseline
+		if(!is_one_of(lbi->get_el()->src_el()->css().get_display(), display_inline_text, display_inline))
+		{
+			// Apply margins, paddings and border for inline boxes
+			if (m_writing_mode == writing_mode_horizontal_tb)
+				content_offset = lbi->get_el()->content_offset_top();
+			else if (m_writing_mode == writing_mode_vertical_rl || m_writing_mode == writing_mode_sideways_rl)
+				content_offset = lbi->get_el()->content_offset_right();
+			else
+				content_offset = lbi->get_el()->content_offset_left();
+
+			switch (lbi->get_el()->css().get_vertical_align())
+			{
+			case va_bottom:
+			case va_top:
+				// Align by base line 0 all inline boxes with top and bottom vertical align
+				bl = 0;
+				is_top_bottom_box = true;
+				break;
+
+			case va_text_bottom:
+				if (m_writing_mode == writing_mode_horizontal_tb)
+					lbi->pos().y = bl + current_context.fm.base_line() - lbi->get_el()->height() + content_offset;
+				else
+					lbi->pos().x = bl + current_context.fm.base_line() - lbi->get_el()->width() + content_offset;
+				ignore = true;
+				break;
+
+			case va_text_top:
+				if (m_writing_mode == writing_mode_horizontal_tb)
+					lbi->pos().y = bl - current_context.fm.ascent + content_offset;
+				else
+					lbi->pos().x = bl - current_context.fm.ascent + content_offset;
+				ignore = true;
+				break;
+
+			case va_middle:
+				if (m_writing_mode == writing_mode_horizontal_tb)
+					lbi->pos().y = bl - current_context.fm.x_height / 2 - lbi->get_el()->height() / 2 + content_offset;
+				else
+					lbi->pos().x = bl - current_context.fm.x_height / 2 - lbi->get_el()->width() / 2 + content_offset;
+				ignore = true;
+				break;
+
+			default:
+				bl = calc_va_baseline(current_context,
+									  lbi->get_el()->css().get_vertical_align(),
+									  lbi->get_el()->css().get_font_metrics(),
+									  line_max_height.top, line_max_height.bottom);
+				break;
+			}
+		}
+		if(!ignore)
+		{
+			if (m_writing_mode == writing_mode_horizontal_tb)
+				lbi->pos().y = bl - lbi->get_el()->get_last_baseline() + content_offset;
+			else
+				lbi->pos().x = bl - lbi->get_el()->get_last_baseline() + content_offset;
+		}
+
+		if(is_top_bottom_box)
+		{
+			switch (lbi->get_el()->css().get_vertical_align())
+			{
+				case va_top:
+					top_aligned_max_height.add_item(lbi.get(), m_writing_mode);
+					break;
+				case va_bottom:
+					bottom_aligned_max_height.add_item(lbi.get(), m_writing_mode);
+					break;
+				default:
+					break;
+			}
+		} else if(current_context.start_lbi)
+		{
+			current_context.start_lbi->add_item_height(lbi->top(), lbi->bottom());
+			switch (current_context.start_lbi->get_el()->css().get_vertical_align())
+			{
+				case va_top:
+					top_aligned_max_height.add_item(lbi.get(), m_writing_mode);
+					break;
+				case va_bottom:
+					bottom_aligned_max_height.add_item(lbi.get(), m_writing_mode);
+					break;
+				default:
+					break;
+			}
+		} else
+		{
+			if(!lbi->get_el()->src_el()->is_inline_box())
+			{
+				line_max_height.add_item(lbi.get(), m_writing_mode);
+			} else
+			{
+				inline_boxes_dims.add_item(lbi.get(), m_writing_mode);
+			}
+		}
+
+		if(!lbi->get_el()->src_el()->is_inline_box())
+		{
+			if(line_height.has_value())
+			{
+				line_height = std::max(line_height.value(), lbi->get_el()->css().line_height().computed_value);
+			} else
+			{
+				line_height = lbi->get_el()->css().line_height().computed_value;
+			}
+		}
+
+		if (lbi->get_type() == line_box_item::type_inline_end)
+		{
+			if(!contexts.empty())
+			{
+				current_context = contexts.back();
+				contexts.pop_back();
+			}
+		}
+	}
+
+	pixel_t top_shift = 0;
+	if(line_height.has_value())
+	{
+		m_block_size = line_height.value();
+		if(line_max_height.count != 0)
+		{
+			// We have inline items
+			top_shift = std::abs(line_max_height.top);
+			const pixel_t top_shift_correction = (line_height.value() - line_max_height.height()) / 2;
+			// We have to calculate the baseline from the top of the line box due to possible round errors.
+			// The top_shift_correction is actually text offset from the top of the line box.
+			// The (top_shift_correction + line_max_height.height()): is the bottom of the text with shift (text_bottom).
+			// The line_max_height.bottom is the text baseline here.
+			// So the formula is:
+			// baseline = line_height - text_bottom + text_baseline
+			// The linebox baseline is the length from the bottom of the line box to the text baseline.
+			m_baseline = line_height.value() - (top_shift_correction + line_max_height.height()) + line_max_height.bottom;
+			top_shift += top_shift_correction;
+			if(inline_boxes_dims.count)
+			{
+				const pixel_t diff2 = std::abs(inline_boxes_dims.top) - std::abs(top_shift);
+				if(diff2 > 0)
+				{
+					m_block_size += diff2;
+					top_shift += diff2;
+					m_baseline += diff2;
+				}
+				const pixel_t diff1 = inline_boxes_dims.bottom - (line_max_height.bottom + top_shift_correction);
+				if(diff1 > 0)
+				{
+					m_block_size += diff1;
+				}
+			}
+		} else if(inline_boxes_dims.count != 0)
+		{
+			// We have inline boxes only
+			m_block_size = inline_boxes_dims.height();
+			top_shift = std::abs(inline_boxes_dims.top);
+			m_baseline = inline_boxes_dims.bottom;		} else
+		{
+			// We don't have inline items and inline boxes
+			top_shift = 0;
+		}
+
+
+		const pixel_t top_down_height = std::max(top_aligned_max_height.max_height, bottom_aligned_max_height.max_height);
+		if(top_down_height > m_block_size)
+		{
+			if(bottom_aligned_max_height.count)
+			{
+				top_shift += bottom_aligned_max_height.height() - m_block_size;
+			}
+			m_block_size = top_down_height;		}
+	} else
+	{
+		// Add inline boxes dimensions
+		line_max_height.top = std::min(line_max_height.top, inline_boxes_dims.top);
+		line_max_height.bottom = std::max(line_max_height.bottom, inline_boxes_dims.bottom);
+
+		// Height is maximum from inline elements height and top/bottom aligned elements height
+		m_block_size = std::max({line_max_height.height(), top_aligned_max_height.height(), bottom_aligned_max_height.height()});
+
+		top_shift = -std::min(line_max_height.top, line_max_height.bottom - bottom_aligned_max_height.height());
+		m_baseline = line_max_height.bottom;
+	}
+
+	struct inline_item_box
+	{
+		std::shared_ptr<render_item> element;
+		position box;
+
+		inline_item_box() = default;
+		explicit inline_item_box(const std::shared_ptr<render_item>& el) : element(el) {}
+	};
+
+	std::list<inline_item_box> inlines;
+
+	contexts.clear();
+
+	current_context.baseline = 0;
+	current_context.fm = m_font_metrics;
+	current_context.start_lbi = nullptr;
+	//int va_top_bottom = 0;
+
+	// Second pass:
+	// 1. Vertical align top/bottom
+	// 2. Apply relative shift
+	// 3. Calculate inline boxes
+    for (const auto& lbi : m_items)
+    {
+		if(is_one_of(lbi->get_type(), line_box_item::type_inline_start, line_box_item::type_inline_continue))
+		{
+			contexts.push_back(current_context);
+			current_context.fm = lbi->get_el()->css().get_font_metrics();
+
+			if(lbi->get_el()->css().get_vertical_align() == va_top)
+			{
+				current_context.baseline = m_block_pos - lbi->get_items_top();
+				current_context.start_lbi = lbi.get();
+			} else if(lbi->get_el()->css().get_vertical_align() == va_bottom)
+			{
+				current_context.baseline = m_block_pos + m_block_size - lbi->get_items_bottom();
+				current_context.start_lbi = lbi.get();
+			}
+		} else if(lbi->get_type() == line_box_item::type_inline_end)
+		{
+			if(!contexts.empty())
+			{
+				current_context = contexts.back();
+				contexts.pop_back();
+			}
+		}
+
+		if(current_context.start_lbi)
+		{
+			if (m_writing_mode == writing_mode_horizontal_tb)
+			{
+				lbi->pos().y = m_block_pos + top_shift + current_context.baseline - lbi->get_el()->get_last_baseline() +
+							lbi->get_el()->content_offset_top();
+			}
+			else
+			{
+				// In Pass 1, current_context.baseline and get_last_baseline were relative to physical X (block direction)
+				// lbi->pos().x contains the relative offset from Pass 1
+				pixel_t content_off = (m_writing_mode == writing_mode_vertical_rl || m_writing_mode == writing_mode_sideways_rl) ? 
+									  lbi->get_el()->content_offset_right() : lbi->get_el()->content_offset_left();
+				pixel_t offset = top_shift + current_context.baseline - lbi->get_el()->get_last_baseline() + content_off;
+				if (m_writing_mode == writing_mode_vertical_rl || m_writing_mode == writing_mode_sideways_rl)
+					lbi->pos().x = m_inline_pos - offset - lbi->get_el()->width();
+				else
+					lbi->pos().x = m_inline_pos + offset;
+			}
+		} else if(is_one_of(lbi->get_el()->css().get_vertical_align(), va_top, va_bottom) && lbi->get_type() == line_box_item::type_text_part)
+		{
+			if(lbi->get_el()->css().get_vertical_align() == va_top)
+			{
+				if (m_writing_mode == writing_mode_horizontal_tb)
+					lbi->pos().y = m_block_pos + lbi->get_el()->content_offset_top();
+				else
+				{
+					if (m_writing_mode == writing_mode_vertical_rl || m_writing_mode == writing_mode_sideways_rl)
+						lbi->pos().x = m_inline_pos - lbi->get_el()->width() - lbi->get_el()->content_offset_right();
+					else
+						lbi->pos().x = m_inline_pos + lbi->get_el()->content_offset_left();
+				}
+			} else
+			{
+				if (m_writing_mode == writing_mode_horizontal_tb)
+					lbi->pos().y = m_block_pos + m_block_size - (lbi->bottom() - lbi->top()) + lbi->get_el()->content_offset_bottom();
+				else
+				{
+					if (m_writing_mode == writing_mode_vertical_rl || m_writing_mode == writing_mode_sideways_rl)
+						lbi->pos().x = m_inline_pos - m_block_size + lbi->get_el()->content_offset_left();
+					else
+						lbi->pos().x = m_inline_pos + m_block_size - lbi->get_el()->width() - lbi->get_el()->content_offset_right();
+				}
+			}
+		} else
+		{
+			// move element to the correct position
+			if (m_writing_mode == writing_mode_horizontal_tb)
+				lbi->pos().y = m_block_pos + top_shift + (lbi->pos().y - 0); // lbi->pos().y is relative to baseline 0
+			else
+			{
+				pixel_t offset = top_shift + (lbi->pos().x - 0);
+				if (m_writing_mode == writing_mode_vertical_rl || m_writing_mode == writing_mode_sideways_rl)
+					lbi->pos().x = m_inline_pos - offset - lbi->get_el()->width();
+				else
+					lbi->pos().x = m_inline_pos + offset;
+			}
+		}
+
+        lbi->get_el()->apply_relative_shift(containing_block_size);
+
+		// Calculate and push inline box into the render item element
+		if(lbi->get_type() == line_box_item::type_inline_start || lbi->get_type() == line_box_item::type_inline_continue)
+		{
+			if(lbi->get_type() == line_box_item::type_inline_start)
+			{
+				lbi->get_el()->clear_inline_boxes();
+			}
+			inlines.emplace_back(lbi->get_el());
+            
+            satoru::WritingModeContext item_wm = lbi->get_el()->get_wm_context();
+			inlines.back().box.x = lbi->left();
+			inlines.back().box.y = lbi->top() - lbi->get_el()->content_offset_top();
+            
+            if (m_writing_mode == writing_mode_horizontal_tb)
+            {
+			    inlines.back().box.height = lbi->bottom() - lbi->top() + lbi->get_el()->content_offset_height();
+            }
+            else
+            {
+                // For vertical, logical height is physical width
+                inlines.back().box.width = lbi->right() - lbi->left() + lbi->get_el()->content_offset_width();
+            }
+		} else if(lbi->get_type() == line_box_item::type_inline_end)
+		{
+			if(!inlines.empty())
+			{
+                if (m_writing_mode == writing_mode_horizontal_tb)
+				    inlines.back().box.width = lbi->right() - inlines.back().box.x;
+                else
+                    inlines.back().box.height = lbi->bottom() - inlines.back().box.y;
+                
+				inlines.back().element->add_inline_box(inlines.back().box);
+				inlines.pop_back();
+			}
+		}
+    }
+
+	for(auto iter = inlines.rbegin(); iter != inlines.rend(); ++iter)
+	{
+        if (m_writing_mode == writing_mode_horizontal_tb)
+		    iter->box.width =  m_items.back()->right() - iter->box.x;
+        else
+            iter->box.height = m_items.back()->bottom() - iter->box.y;
+            
+		iter->element->add_inline_box(iter->box);
+
+		ret_items.emplace_front(std::unique_ptr<line_box_item>(new lbi_continue(iter->element)));
+	}
+
+	return ret_items;
+}
+
+std::shared_ptr<litehtml::render_item> litehtml::line_box::get_first_text_part() const
+{
+	for(const auto & item : m_items)
+	{
+		if(item->get_type() == line_box_item::type_text_part)
+		{
+			return item->get_el();
+		}
+	}
+	return nullptr;
+}
+
+
+std::shared_ptr<litehtml::render_item> litehtml::line_box::get_last_text_part() const
+{
+	for(auto iter = m_items.rbegin(); iter != m_items.rend(); iter++)
+	{
+		if((*iter)->get_type() == line_box_item::type_text_part)
+		{
+			return (*iter)->get_el();
+		}
+	}
+	return nullptr;
+}
+
+
+bool litehtml::line_box::can_hold(const std::unique_ptr<line_box_item>& item, white_space ws) const
+{
+    if(!item->get_el()->src_el()->is_inline()) return false;
+
+	if(item->get_type() == line_box_item::type_text_part)
+	{
+		// force new line on floats clearing
+		if (item->get_el()->src_el()->is_break() && item->get_el()->css().get_clear() != clear_none)
+		{
+			return false;
+		}
+
+		auto last_el = get_last_text_part();
+
+		// the first word is always can be hold
+		if(!last_el)
+		{
+			return true;		}
+
+		// force new line if the last placed element was line break
+		// Skip If the break item is float clearing
+		if (last_el && last_el->src_el()->is_break() && last_el->css().get_clear() == clear_none)
+		{
+			return false;
+		}
+
+		// line break should stay in current line box
+		if (item->get_el()->src_el()->is_break())
+		{
+			return true;
+		}
+
+		if (ws == white_space_nowrap || ws == white_space_pre ||
+			(ws == white_space_pre_wrap && item->get_el()->src_el()->is_space()))
+		{
+			return true;
+		}
+
+		if (m_writing_mode == writing_mode_horizontal_tb)
+		{
+			pixel_t item_inline_size = (m_writing_mode == writing_mode_horizontal_tb) ? item->width() : item->get_el()->height();
+			if (m_inline_pos + m_inline_size + item_inline_size > m_inline_end + 0.01)
+			{
+				return false;
+			}
+		}
+		else
+		{
+			// For vertical writing, m_inline_end is actually the bottom boundary (height limit)
+			if (m_block_pos + m_inline_size + item->get_el()->height() > m_inline_end + 0.01)
+			{
+				return false;
+			}
+		}
+	}
+
+    return true;
+}
+
+bool litehtml::line_box::have_last_space()  const
+{
+	auto last_el = get_last_text_part();
+	if(last_el)
+	{
+		return last_el->src_el()->is_white_space() || last_el->src_el()->is_break();
+	}
+	return false;
+}
+
+bool litehtml::line_box::is_empty() const
+{
+    if(m_items.empty()) return true;
+	if(m_items.size() == 1 &&
+		m_items.front()->get_el()->src_el()->is_break() &&
+		m_items.front()->get_el()->src_el()->css().get_clear() != clear_none)
+	{
+		return true;
+	}
+    for (const auto& el : m_items)
+    {
+		if(el->get_type() == line_box_item::type_text_part)
+		{
+			if (!el->get_el()->skip() || el->get_el()->src_el()->is_break())
+			{
+				return false;
+			}
+		}
+    }
+    return true;
+}
+
+litehtml::pixel_t litehtml::line_box::baseline() const
+{
+    return m_baseline;
+}
+
+litehtml::pixel_t litehtml::line_box::top_margin() const
+{
+    return 0;
+}
+
+litehtml::pixel_t litehtml::line_box::bottom_margin() const
+{
+    return 0;
+}
+
+void litehtml::line_box::y_shift( pixel_t shift )
+{
+m_block_pos += shift;
+for (auto& el : m_items)
+{
+el->y_shift(shift);
+}
+}
+
+void litehtml::line_box::x_shift( pixel_t shift )
+{
+  m_inline_pos += shift;
+  for (auto& el : m_items)
+  {
+	  el->x_shift(shift);
+  }
+}
+
+bool litehtml::line_box::is_break_only() const
+{
+    if(m_items.empty()) return false;
+
+	bool break_found = false;
+
+	for (auto iter = m_items.rbegin(); iter != m_items.rend(); iter++)
+	{
+		if((*iter)->get_type() == line_box_item::type_text_part)
+		{
+			if((*iter)->get_el()->src_el()->is_break())
+			{
+				break_found = true;
+			} else if(!(*iter)->get_el()->skip())
+			{
+				return false;
+			}
+		}
+	}
+	return break_found;
+}
+
+std::list< std::unique_ptr<litehtml::line_box_item> > litehtml::line_box::new_inline_size( pixel_t inline_pos, pixel_t inline_end)
+{
+	std::list< std::unique_ptr<line_box_item> > ret_items;
+    pixel_t add = inline_pos - m_inline_pos;
+    if(add != 0)
+    {
+		m_inline_pos	= inline_pos;
+		m_inline_end	= inline_end;
+        m_inline_size = 0;
+        auto remove_begin = m_items.end();
+		auto i = m_items.begin();
+		i++;
+		while (i != m_items.end())
+        {
+            if(!(*i)->get_el()->skip())
+            {                if (m_writing_mode == writing_mode_horizontal_tb)
+				{
+					pixel_t i_inline_size = (m_writing_mode == writing_mode_horizontal_tb) ? (*i)->width() : (*i)->get_el()->height();
+					if(m_inline_pos + m_inline_size + i_inline_size > m_inline_end)
+					{
+						remove_begin = i;
+						break;
+					}
+					(*i)->pos().x += add;
+					m_inline_size += (*i)->get_el()->width();
+				}
+				else
+				{
+					// For vertical writing, the width change (inline-size) affects Y axis or is handled by reflow
+					if(m_block_pos + m_inline_size + (*i)->get_el()->height() > m_inline_end)
+					{
+						remove_begin = i;
+						break;
+					}
+					// We don't shift physical X here because m_left update for vertical 
+					// requires full re-finish of the line box.
+					m_inline_size += (*i)->get_el()->height();
+				}
+            }
+		i++;
+        }
+        if(remove_begin != m_items.end())
+        {
+			while(remove_begin != m_items.end())
+			{
+				ret_items.emplace_back(std::move(*remove_begin));
+			}
+            m_items.erase(remove_begin, m_items.end());
+        }
+    }
+	return ret_items;
+}
+
+
