@@ -45,6 +45,13 @@ class ImageConverterInstance {
     bool crop(int x, int y, int width, int height);
     bool resize(int width, int height, FitMode fit = FitMode::Contain);
 
+    // Decoded-image -> vector (image-input svg/pdf path).
+    // encode_svg: frames[0] を PNG data URL の <image> 一枚で包んだSVG文字列
+    // (空文字=失敗)。encode_pdf: frames[0] を等倍1ページに収めたPDFバイト列
+    // (encode() と同じ set_last_output 保持。nullptr=失敗)。
+    std::string encode_svg();
+    const uint8_t* encode_pdf(int& out_size);
+
     int get_original_width() const;
     int get_original_height() const;
     bool is_original_animation() const;

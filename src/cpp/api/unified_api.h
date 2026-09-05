@@ -33,6 +33,15 @@ namespace html_to_image {
 EncodeResult render_bitmap_to_encoded(const SkBitmap& bitmap,
                                       const ConverterEncodeOptions& options);
 
+// --- Decoded-image -> vector wrappers (image-input svg/pdf path) ---
+//
+// SVG: bitmap を PNG encode → base64 data URL 化し、`<image>` 一枚で包む
+// (svg_renderer.cpp の bitmapToDataUrl と等価。テキストはパス化しない)。
+// PDF: bitmap 一枚を 1 ページに等倍配置 (`drawImage`) した単頁PDF。
+// いずれも所有権は呼び出し側の bitmap が保持する (同期実行のみ)。
+std::string encode_image_to_svg(const SkBitmap& bitmap);
+sk_sp<SkData> encode_image_to_pdf(const SkBitmap& bitmap);
+
 // lifetime注意:
 //  - bitmap の所有権は呼び出し側 (Satoru描画状態) が保持する。encode完了まで破棄禁止。
 //  - `EncodeFrameView{&bitmap, duration}` のview化は関数スコープ内に閉じ込め、

@@ -25,10 +25,8 @@ import {
 } from "./loader.js";
 import {
   htmlToImage,
-  convertImage as convertImageWithModule,
   type HtmlToImageOptions,
   type OptimizeParams,
-  type OptimizeResult,
 } from "./core.js";
 
 export type {
@@ -36,7 +34,6 @@ export type {
   RenderOptions,
   HtmlToImageOptions,
   OptimizeParams,
-  OptimizeResult,
   SingleWasmConnection,
 } from "./core.js";
 export type {
@@ -89,8 +86,8 @@ export async function getDefaultModule(
 }
 
 /**
- * Render HTML to an image on workerd.
- * `svg` resolves to `string`, other formats to `Uint8Array`.
+ * Render HTML — or convert an image — on workerd.
+ * Returns bytes (`Uint8Array`); only `svg` resolves to `string`.
  */
 export async function render(
   options: HtmlToImageOptions & { format: "svg" },
@@ -108,12 +105,4 @@ export async function render(
     await getDefaultModule(wasm ?? htmlToImageWasm),
     options,
   );
-}
-
-/** Image-to-image conversion on workerd. */
-export async function convertImage(
-  params: OptimizeParams,
-  wasm?: WebAssembly.Module,
-): Promise<OptimizeResult> {
-  return convertImageWithModule(await getDefaultModule(wasm ?? htmlToImageWasm), params);
 }

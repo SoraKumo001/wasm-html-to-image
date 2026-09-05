@@ -2,9 +2,10 @@
  * Single-WASM entry point.
  *
  * Loads the unified `html-to-image` module once (local `./loader.js`)
- * and reuses the single connection for all calls:
- * - unified `html_to_image` binding present -> Bitmap-direct single call;
- * - otherwise -> 2-call on the same module (`satoru_render` -> `converter_encode`).
+ * and reuses the single connection for all calls.
+ * `render()` accepts HTML (`string` / `string[]` / URL) or image input
+ * (`Uint8Array` / `ArrayBuffer` / `data:image/` URL); image input skips
+ * rendering and goes straight to `converter_encode`.
  */
 import {
   loadHtmlToImageModule,
@@ -12,10 +13,8 @@ import {
 } from "./loader.js";
 import {
   htmlToImage,
-  convertImage as convertImageWithModule,
   type HtmlToImageOptions,
   type OptimizeParams,
-  type OptimizeResult,
 } from "./core.js";
 
 export type {
@@ -23,7 +22,6 @@ export type {
   RenderOptions,
   HtmlToImageOptions,
   OptimizeParams,
-  OptimizeResult,
   SingleWasmConnection,
 } from "./core.js";
 export type { HtmlToImageModule } from "./loader.js";
@@ -37,8 +35,8 @@ export async function getDefaultModule(): Promise<HtmlToImageModule> {
 }
 
 /**
- * Render HTML to an image with the default single-WASM connection.
- * `svg` resolves to `string`, other formats to `Uint8Array`.
+ * Render HTML — or convert an image — with the default single-WASM
+ * connection. Returns bytes (`Uint8Array`); only `svg` resolves to `string`.
  */
 export async function render(
   options: HtmlToImageOptions & { format: "svg" },
@@ -50,11 +48,4 @@ export async function render(
   options: HtmlToImageOptions,
 ): Promise<Uint8Array | string> {
   return htmlToImage(await getDefaultModule(), options);
-}
-
-/** Image-to-image conversion with the default single-WASM connection. */
-export async function convertImage(
-  params: OptimizeParams,
-): Promise<OptimizeResult> {
-  return convertImageWithModule(await getDefaultModule(), params);
 }

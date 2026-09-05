@@ -3,6 +3,7 @@ import { program } from "commander";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { render, type HtmlToImageOptions, type OutputFormat } from "./single.js";
+import { isImageInput } from "./core.js";
 
 const OUTPUT_FORMATS = [
   "svg",
@@ -19,13 +20,30 @@ function isOutputFormat(value: string): value is OutputFormat {
   return (OUTPUT_FORMATS as readonly string[]).includes(value);
 }
 
+/**
+ * Read a local input file as binary; image files (magic-byte sniffed) are
+ * passed through as bytes, everything else as UTF-8 text (HTML).
+ */
+async function readInput(
+  input: string,
+): Promise<{ value: string | Uint8Array; baseUrl: string }> {
+  const data = await fs.readFile(input);
+  let value: string | Uint8Array = data.toString("utf-8");
+  try {
+    if (isImageInput(data)) value = data;
+  } catch {
+    // Unknown binary magic -> treat as text and let rendering decide.
+  }
+  return { value, baseUrl: path.dirname(path.resolve(input)) };
+}
+
 program
   .name("wasm-html-to-image")
   .description(
     "HTML to image converter on the single unified WASM module (svg/pdf direct, png/jpeg/webp/avif/raw/thumbhash via encode or html_to_image)",
   )
   .version("0.1.0")
-  .argument("<input>", "input HTML file path or URL")
+  .argument("<input>", "input HTML/image file path or URL")
   .option("-o, --output <path>", "output file path")
   .option("-w, --width <number>", "viewport width", (v) => parseInt(v, 10), 800)
   .option(
@@ -54,8 +72,11 @@ program
         process.exit(1);
       }
 
+      const isWindowsPath = /^[a-zA-Z]:[\\/]/.test(input);
       const isUrl =
-        /^[a-z][a-z0-9+.-]*:/i.test(input) && !input.startsWith("data:");
+        !isWindowsPath &&
+        /^[a-z][a-z0-9+.-]*:/i.test(input) &&
+        !input.startsWith("data:");
 
       let outputPath: string | undefined = options.output;
       if (!outputPath) {
@@ -76,10 +97,7 @@ program
         quality: options.quality,
         ...(isUrl
           ? { url: input, baseUrl: input }
-          : {
-              value: await fs.readFile(input, "utf-8"),
-              baseUrl: path.dirname(path.resolve(input)),
-            }),
+          : await readInput(input)),
       };
 
       const result = await render(renderOptions);

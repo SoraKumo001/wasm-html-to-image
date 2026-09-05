@@ -187,6 +187,21 @@ static val converter_encode_val(ImageConverterInstance* inst, int format, float 
     return val(typed_memory_view(size, data));
 }
 
+// 画像入力→SVG/PDF (converter instance の decode済み frames[0] を使用)。
+// SVG は std::string 返却 (embind が JS 文字列へコピーするため lifetime 安全)。
+// PDF は encode_val と同じ typed_memory_view + set_last_output 保持。
+static std::string converter_encode_svg_val(ImageConverterInstance* inst) {
+    if (!inst) return "";
+    return inst->encode_svg();
+}
+static val converter_encode_pdf_val(ImageConverterInstance* inst) {
+    if (!inst) return val::null();
+    int size = 0;
+    const uint8_t* data = inst->encode_pdf(size);
+    if (!data || size == 0) return val::null();
+    return val(typed_memory_view(size, data));
+}
+
 // converter_load_image: C APIは (inst, const uint8_t*, size_t)->success-indicator のため
 // JS直結不可。Uint8Array/ArrayBuffer受けのvalラッパ経由で登録し、成否をboolで返す。
 // (converter_api_load_image実体はapi/converter_api.cppに存在・実働。MakeWithCopyで同期コピー
@@ -319,6 +334,8 @@ EMSCRIPTEN_BINDINGS(html_to_image) {
     function("converter_set_log_level", &converter_api_set_log_level);
     function("converter_load_image", &converter_load_image_val, allow_raw_pointers());
     function("converter_encode", &converter_encode_val, allow_raw_pointers());
+    function("converter_encode_svg", &converter_encode_svg_val, allow_raw_pointers());
+    function("converter_encode_pdf", &converter_encode_pdf_val, allow_raw_pointers());
     function("converter_crop", &converter_api_crop, allow_raw_pointers());
     // converter_resize の fit は必須引数として渡す (C++側既定値fit=0=Contain)。
     function("converter_resize", &converter_api_resize, allow_raw_pointers());

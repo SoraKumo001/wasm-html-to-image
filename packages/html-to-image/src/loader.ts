@@ -41,6 +41,27 @@ export interface HtmlToImageModule {
   converter_create_instance(): WasmInstancePtr;
   converter_destroy_instance(inst: WasmInstancePtr): void;
   converter_set_log_level(level: number): void;
+  /** Registered converter instance ops (real bodies, always present). */
+  converter_load_image(
+    inst: WasmInstancePtr,
+    data: Uint8Array | ArrayBuffer,
+  ): boolean;
+  converter_crop(
+    inst: WasmInstancePtr,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+  ): boolean;
+  converter_resize(
+    inst: WasmInstancePtr,
+    width: number,
+    height: number,
+    fit: number,
+  ): boolean;
+  /** Image-input svg/pdf wrappers (registered; probed at runtime). */
+  converter_encode_svg?(inst: WasmInstancePtr): string | Promise<string>;
+  converter_encode_pdf?(inst: WasmInstancePtr): unknown;
   /** Phase 2: HTML render wrapper (single plain-options object in/out). */
   satoru_render?: (...args: unknown[]) => unknown;
   /** Phase 2: image encode wrapper (single plain-options object in/out). */
@@ -86,6 +107,50 @@ export function defaultGlueUrl(): URL {
   return new URL("./html-to-image.js", import.meta.url);
 }
 
+function isModuleNotFound(e: unknown): boolean {
+  const code = (e as { code?: unknown })?.code;
+  if (code === "ERR_MODULE_NOT_FOUND") return true;
+  const msg = e instanceof Error ? e.message : String(e);
+  return /Cannot find (module|package)/.test(msg);
+}
+
+/** `file://` directory URL to a plain fs path (browser URLs pass through). */
+function glueDirToFsPath(glueDir: string): string {
+  if (!glueDir.startsWith("file://")) return glueDir;
+  let p = decodeURIComponent(glueDir.slice("file://".length));
+  if (/^\/[A-Za-z]:\//.test(p)) p = p.slice(1); // Windows drive letter
+  return p;
+}
+
+function isNodeRuntime(): boolean {
+  const proc = (globalThis as { process?: { versions?: { node?: string } } })
+    .process;
+  return typeof proc?.versions?.node === "string";
+}
+
+/**
+ * Node-only: pre-read the sibling `.wasm` bytes. The web/worker-oriented
+ * glue has no `fs` reader, so `file://` fetching fails under Node; handing
+ * over `wasmBinary` bypasses fetching entirely. Browsers skip this (fetch
+ * works there). No static `node:` import keeps browser bundles clean.
+ */
+async function readWasmBinaryNode(
+  glueDir: string,
+): Promise<Uint8Array | undefined> {
+  if (!isNodeRuntime()) return undefined;
+  try {
+    const fs = (await import(/* @vite-ignore */ "node:fs/promises")) as typeof import(
+      "node:fs/promises"
+    );
+    const data = await fs.readFile(
+      glueDirToFsPath(glueDir) + "html-to-image.wasm",
+    );
+    return new Uint8Array(data);
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Load and instantiate the unified module (cached per process).
  * Works in Node (file URL import) and browsers (served URL import).
@@ -98,13 +163,29 @@ export async function loadHtmlToImageModule(
   let glueLabel = "(pre-bundled factory)";
   let glueDir = "";
   if (!factory) {
-    const glue = String(options.glueUrl ?? defaultGlueUrl());
-    glueLabel = glue;
-    glueDir = glue.slice(0, glue.lastIndexOf("/") + 1);
-    const ns = (await import(/* @vite-ignore */ glue)) as {
+    let glue = String(options.glueUrl ?? defaultGlueUrl());
+    let ns: {
       default?: CreateHtmlToImageModule;
       createHtmlToImageModule?: CreateHtmlToImageModule;
     };
+    try {
+      ns = (await import(/* @vite-ignore */ glue)) as typeof ns;
+    } catch (e) {
+      if (options.glueUrl || !isModuleNotFound(e)) throw e;
+      // Dev-layout fallback: running from `src/` (tsx) while the glue
+      // lives in `../dist/` next to the compiled loader.
+      const fallback = String(
+        new URL("../dist/html-to-image.js", import.meta.url),
+      );
+      try {
+        ns = (await import(/* @vite-ignore */ fallback)) as typeof ns;
+      } catch {
+        throw e; // report the original error
+      }
+      glue = fallback;
+    }
+    glueLabel = glue;
+    glueDir = glue.slice(0, glue.lastIndexOf("/") + 1);
     factory = ns.default ?? ns.createHtmlToImageModule;
   }
   if (typeof factory !== "function") {
@@ -113,11 +194,18 @@ export async function loadHtmlToImageModule(
         `(expected default export createHtmlToImageModule)`,
     );
   }
+  // Node-only: hand over pre-read `.wasm` bytes (factory path, e.g.
+  // workerd with `instantiateWasm`, is left untouched).
+  let moduleArg = options.moduleArg;
+  if (!options.factory && glueDir && moduleArg?.wasmBinary === undefined) {
+    const wasmBinary = await readWasmBinaryNode(glueDir);
+    if (wasmBinary) moduleArg = { ...moduleArg, wasmBinary };
+  }
   const module = await factory({
-    ...options.moduleArg,
+    ...moduleArg,
     locateFile:
       options.locateFile ??
-      options.moduleArg?.locateFile ??
+      moduleArg?.locateFile ??
       ((path: string) => glueDir + path),
   });
   if (!options.noCache) cachedModule = module;

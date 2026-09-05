@@ -4,6 +4,11 @@
 //   a. converter_encode (test01.jpg -> webp/png, magic RIFF/89PNG)
 //   b. satoru_render returns null without crashing (renderers unported)
 //   c. html_to_image responds without crashing
+// Loads packages/html-to-image/dist/single.js (TS facade) and checks:
+//   d. render({ value: jpgBytes, format: webp }) -> RIFF (image-input path)
+//   e. render({ value: html, format: png }) -> 89PNG (HTML unified path)
+//   f. render({ value: jpgBytes, format: svg }) -> svg string with <image>
+//   g. render({ value: jpgBytes, format: pdf }) -> %PDF magic
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -16,7 +21,7 @@ const imgPath = process.argv[2] ?? defaultImg;
 // RenderFormat enum (mirrors bridge_types.h / wasm-image-optimization core.ts)
 const FMT = { SVG: 0, PNG: 1, WebP: 2, PDF: 3, JPEG: 4, AVIF: 5, RAW: 6, ThumbHash: 7 };
 
-const results = { a: "SKIP", b: "SKIP", c: "SKIP" };
+const results = { a: "SKIP", b: "SKIP", c: "SKIP", d: "SKIP", e: "SKIP", f: "SKIP", g: "SKIP" };
 const details = {};
 
 const mod = await (await import(pathToFileURL(singleJs).href)).default();
@@ -116,4 +121,70 @@ console.log(JSON.stringify({ results, details, imgPath }, null, 2));
 console.log(`a(converter_encode): ${results.a} -- ${details.a_input ?? ""} | ${details.a_encode ?? ""}`);
 console.log(`b(satoru_render=null): ${results.b} -- ${details.b_render ?? ""}`);
 console.log(`c(html_to_image no-crash): ${results.c} -- ${details.c_unified ?? ""}`);
-process.exit(results.a === "PASS" && results.b === "PASS" && results.c === "PASS" ? 0 : 1);
+
+// ---- d/e/f. TS facade (dist/single.js render: unified htmlToImage) ----
+try {
+  const facadeUrl = pathToFileURL(path.join(repoRoot, "packages", "html-to-image", "dist", "single.js")).href;
+  const { render } = await import(facadeUrl);
+  // d. image input -> webp
+  try {
+    const jpg = fs.readFileSync(imgPath);
+    const out = await render({ value: new Uint8Array(jpg), format: "webp", quality: 80 });
+    if (!(out instanceof Uint8Array) || Buffer.from(out.subarray(0, 4)).toString("latin1") !== "RIFF") {
+      throw new Error(`webp magic mismatch: len=${out?.length}`);
+    }
+    results.d = "PASS";
+    details.d_image = `jpg->webp len=${out.length} magic=RIFF(webp)`;
+  } catch (e) {
+    results.d = "FAIL";
+    details.d_image = String(e?.message ?? e).slice(0, 300);
+  }
+  // e. HTML input -> png
+  try {
+    const out = await render({ value: "<h1>hi</h1>", width: 800, height: 600, format: "png" });
+    if (!(out instanceof Uint8Array) || !Buffer.from(out.subarray(0, 4)).toString("hex").startsWith("89504e47")) {
+      throw new Error(`png magic mismatch: len=${out?.length}`);
+    }
+    results.e = "PASS";
+    details.e_html = `html->png len=${out.length} magic=89PNG`;
+  } catch (e) {
+    results.e = "FAIL";
+    details.e_html = String(e?.message ?? e).slice(0, 300);
+  }
+  // f. image input -> svg string with <image>
+  try {
+    const jpg = fs.readFileSync(imgPath);
+    const out = await render({ value: new Uint8Array(jpg), width: 800, format: "svg" });
+    if (typeof out !== "string" || !out.includes("<svg") || !out.includes("<image")) {
+      throw new Error(`svg shape mismatch: type=${typeof out} len=${out?.length}`);
+    }
+    results.f = "PASS";
+    details.f_imgsvg = `jpg->svg len=${out.length} has <svg>+<image>`;
+  } catch (e) {
+    results.f = "FAIL";
+    details.f_imgsvg = String(e?.message ?? e).slice(0, 300);
+  }
+  // g. image input -> pdf with %PDF magic
+  try {
+    const jpg = fs.readFileSync(imgPath);
+    const out = await render({ value: new Uint8Array(jpg), width: 800, format: "pdf" });
+    if (!(out instanceof Uint8Array) || Buffer.from(out.subarray(0, 4)).toString("latin1") !== "%PDF") {
+      throw new Error(`pdf magic mismatch: len=${out?.length}`);
+    }
+    results.g = "PASS";
+    details.g_imgpdf = `jpg->pdf len=${out.length} magic=%PDF`;
+  } catch (e) {
+    results.g = "FAIL";
+    details.g_imgpdf = String(e?.message ?? e).slice(0, 300);
+  }
+} catch (e) {
+  for (const k of ["d", "e", "f", "g"]) {
+    results[k] = "FAIL";
+    details[`${k}_harness`] = `facade load error: ${String(e?.message ?? e).slice(0, 300)}`;
+  }
+}
+console.log(`d(facade jpg->webp): ${results.d} -- ${details.d_image ?? details.d_harness ?? ""}`);
+console.log(`e(facade html->png): ${results.e} -- ${details.e_html ?? details.e_harness ?? ""}`);
+console.log(`f(facade img->svg): ${results.f} -- ${details.f_imgsvg ?? details.f_harness ?? ""}`);
+console.log(`g(facade img->pdf): ${results.g} -- ${details.g_imgpdf ?? details.g_harness ?? ""}`);
+process.exit(Object.values(results).every((r) => r === "PASS") ? 0 : 1);

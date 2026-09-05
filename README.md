@@ -7,7 +7,7 @@ HTML → 画像変換の単一 Skia-WASM 統合ライブラリ。`satoru` (HTML 
 ## 構成
 
 ```text
-packages/html-to-image (単一公開パッケージ: core/single/index/cli/loader)
+packages/html-to-image (単一公開パッケージ: core/single/workerd/index/cli/loader)
         │ loadHtmlToImageModule() → HtmlToImageModule 1インスタンス共有
         ▼
 packages/html-to-image/dist (単一WASM, EXPORT_NAME=createHtmlToImageModule, MODULARIZE+EXPORT_ES6)
@@ -19,37 +19,44 @@ packages/html-to-image/dist (単一WASM, EXPORT_NAME=createHtmlToImageModule, MO
 
 - `wasm-html-to-image` (`packages/html-to-image`): 唯一の公開パッケージ。TS ファサード + 単一 WASM ローダー (`src/loader.ts`) 同梱。Node/browser 共用、`glueUrl`/`locateFile` 指定可、プロセス内キャッシュあり。単一WASM専用。旧2依存 (`satoru-render` / `wasm-image-optimization`) への依存・フォールバックなし。
 
-形式ごとの経路 (`src/core.ts`):
+形式ごとの経路 (`src/core.ts`, `htmlToImage` に統合。`convertImage` は廃止):
 
-| 出力 | 経路 |
-|---|---|
-| `svg` / `pdf` | satoru 直出力 (1 段) |
-| `png` / `jpeg` / `webp` / `avif` / `raw` / `thumbhash` | satoru PNG 中間 → encode (2 段) または `html_to_image` 直結 (1 呼出し) |
+| 入力 | 出力 | 経路 |
+|---|---|---|
+| HTML (`string`/`string[]`/URL) | `svg` / `pdf` | satoru 直出力 (`html_to_image` 統一直結) |
+| HTML | `png` / `jpeg` / `webp` / `avif` / `raw` / `thumbhash` | `html_to_image` 直結、または `satoru_render` PNG中間 → encode |
+| 画像 (バイト列/`data:image/`) | `png`/`jpeg`/`webp`/`avif`/`raw`/`thumbhash` | 描画スキップ → `converter_encode` 直行 (`width`/`height`は出力リサイズ、`crop`/`fit`適用可) |
+| 画像 | `svg` | 描画スキップ → `converter_encode_svg` (PNG data URLの`<image>`一枚で包む) |
+| 画像 | `pdf` | 描画スキップ → `converter_encode_pdf` (等倍1ページ、`drawImage`配置) |
 
-経路選択 (`htmlToImage`, 単一WASMのみ):
+入力判定 (`isImageInput`): バイナリはマジックバイト (PNG/JPEG/WebP/GIF/AVIF/BMP)、
+文字列は `data:image/` プレフィックス。未知のバイナリはエラー。
+戻り値はバイト列 (`Uint8Array`) に統一。`svg` のみ `string`。
 
-1. `html_to_image` バインディングあり → Bitmap 直結単一呼出し (`render_bitmap_to_encoded`, JS に PNG 中間を返さない)。
-2. なし → 単一モジュール 2 呼出し (`satoru_render` → `converter_encode`、同一モジュール共有)。いずれのバインディングも未登録のビルドではエラー (単一WASM必須、旧2依存フォールバックなし)。
+経路選択 (単一WASMのみ):
 
-注意: `resize`/`crop`/`fit` は描画段のみで適用しエンコード段では再適用しない。`quality`/`speed` はエンコード段のみに効く (`svg`/`pdf` では無視)。
+1. HTML入力 + `html_to_image` バインディングあり → Bitmap 直結単一呼出し (JS に PNG 中間を返さない)。
+2. なし → 単一モジュール 2 呼出し (`satoru_render` → `converter_encode`、同一モジュール共有)。いずれのバインディングも未登録のビルドではエラー。
+3. 画像入力 → 常に `converter_encode` 直行 (上記 1/2 を使わない)。
+
+注意: `crop`/`fit` は画像入力ではエンコード段、HTML入力では描画オプションとして適用。`quality` (既定85)/`speed` (既定6) はエンコード段のみに効く (`svg`/`pdf` では無視)。
 
 ## 公開 API
 
 ```ts
-// single: ゼロコンフィグ (単一WASM既定接続)
-import { render, convertImage } from "wasm-html-to-image/single";
+// single: ゼロコンフィグ (単一WASM既定接続)。render() に統合済み
+import { render, isImageInput } from "wasm-html-to-image/single";
 const png = await render({ value: "<h1>hi</h1>", width: 800, format: "png" }); // Uint8Array
 const svg = await render({ value: "<h1>hi</h1>", width: 800, format: "svg" }); // string
-await convertImage({ image: png, format: "webp", quality: 80 }); // { data, ... }
+const webp = await render({ value: png, format: "webp", quality: 80 }); // 画像→画像もrender
+isImageInput(png); // true
 
 // node: 単一接続を明示構築
-import { loadHtmlToImageModule, htmlToImage, convertImage } from "wasm-html-to-image";
+import { loadHtmlToImageModule, htmlToImage } from "wasm-html-to-image";
 const mod = await loadHtmlToImageModule();
 await htmlToImage(mod, { value: "<h1>hi</h1>", width: 800, format: "webp" });
-await convertImage(mod, { image: png, format: "jpeg", quality: 85 });
+await htmlToImage(mod, { value: png, format: "jpeg", quality: 85 });
 ```
-
-`convertImage` (single) は画像→画像変換のみ (HTML 描画なし)。
 
 ## workerd (Cloudflare Workers)
 
@@ -62,9 +69,9 @@ SINGLE_FILE 版ではなく通常版 `dist/html-to-image.wasm` を
 ```ts
 // wrangler.toml: [assets] 等で dist/html-to-image.wasm を同梱し、
 // Module として import できる構成にすること
-import { render, convertImage } from "wasm-html-to-image/workerd";
+import { render } from "wasm-html-to-image/workerd";
 const png = await render({ value: "<h1>hi</h1>", width: 800, format: "png" });
-await convertImage({ image: png, format: "webp", quality: 80 });
+const webp = await render({ value: png, format: "webp", quality: 80 });
 ```
 
 残課題: `workers` スレッドプール (`worker-lib`) は今回作らない。
@@ -75,6 +82,7 @@ await convertImage({ image: png, format: "webp", quality: 80 });
 
 ```bash
 npx tsx packages/html-to-image/src/cli.ts input.html -o out.webp -w 800 -f webp -q 85
+npx tsx packages/html-to-image/src/cli.ts photo.jpg -o out.webp -f webp   # 画像入力も可
 npx tsx packages/html-to-image/src/cli.ts https://example.com -o out.png -f png
 pnpm --filter wasm-html-to-image example:cli  # --help表示
 ```
@@ -109,11 +117,15 @@ C++ 構成の詳細は `src/cpp/common/README.md` (重複排除・`common/skia_e
 
 ## 検証実績
 
-`scripts/smoke-test.mjs` (`packages/html-to-image/dist/html-to-image-single.js` 対象): a/b/c いずれも PASS。
+`scripts/smoke-test.mjs` (`packages/html-to-image/dist/html-to-image-single.js` + TSファサード対象): a〜g いずれも PASS。
 
 - a (converter 往復): `converter_load_image` → `converter_encode(WebP)` マジック `RIFF` 確認 → `converter_crop(8x8)` → `converter_encode(PNG)` マジック `89PNG` 確認。
 - b (satoru 描画): `satoru_render("<h1>hi</h1>", 800, 600, PNG)` が PNG バイト列 (1970B) を返却。
 - c (統合): `html_to_image(...)` がクラッシュなく応答。
+- d (ファサード画像入力): `render({ value: jpgBytes, format: "webp" })` が `RIFF` を返却。
+- e (ファサードHTML入力): `render({ value: html, format: "png" })` が `89PNG` を返却。
+- f (ファサード画像入力): `render({ value: jpgBytes, format: "svg" })` が `<svg>`+`<image>` 文字列を返却。
+- g (ファサード画像入力): `render({ value: jpgBytes, format: "pdf" })` が `%PDF` を返却。
 
 ## 既知制限
 

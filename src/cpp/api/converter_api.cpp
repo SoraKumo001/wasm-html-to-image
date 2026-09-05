@@ -8,6 +8,7 @@
 // AVIF直書き・thumbhash直呼びはすべて dispatcher 配下に移譲した。
 #include "../common/image_decoder.h"
 #include "../common/skia_encode.h"
+#include "unified_api.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkData.h"
 #include "include/core/SkRect.h"
@@ -172,6 +173,27 @@ bool ImageConverterInstance::resize(int width, int height, FitMode fit) {
         frame.bitmap = resized;
     }
     return true;
+}
+
+std::string ImageConverterInstance::encode_svg() {
+    if (frames.empty()) return "";
+    return html_to_image::encode_image_to_svg(frames[0].bitmap);
+}
+
+const uint8_t* ImageConverterInstance::encode_pdf(int& out_size) {
+    if (frames.empty()) {
+        out_size = 0;
+        return nullptr;
+    }
+    sk_sp<SkData> data = html_to_image::encode_image_to_pdf(frames[0].bitmap);
+    if (!data || data->size() == 0) {
+        out_size = 0;
+        return nullptr;
+    }
+    out_size = (int)data->size();
+    const uint8_t* bytes = (const uint8_t*)data->data();
+    context.set_last_output(std::move(data));
+    return bytes;
 }
 
 int ImageConverterInstance::get_original_width() const { return original_width; }
