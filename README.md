@@ -201,5 +201,7 @@ C++ 構成の詳細は「由来・移植方針」を参照。C++ 側 LSP 設定:
 ## 既知制限
 
 - 未登録スタブ (`src/cpp/main.cpp` で明示的に除外): `load_image_pixels` (C APIなし) / `init_document` / `layout_document` / `render_from_state` / `merge_pdfs` / `get_font_diagnostics` 系。登録済み resource 系は scan_css / load_image / set_font_map / collect_resources / get_pending_resources / add_resource / load_font / load_fallback_font / get_last_*_size / collect-profile 系。TS発見ループが外部フォント/画像を解決してから同一インスタンスで描画する。
+- 画像→SVG/PDFは dispatcher (`encode_frames`) を経由せず、専用 binding (`converter_encode_svg` / `converter_encode_pdf`) で対応済み。dispatcher自体の SVG/PDF 分岐は未対応 (null) のまま残す。
+- アニメーション画像入力は `animation: true` 指定時のみ全フレーム WebP encode する (既定は先頭フレームのみ)。GIF は Skia (wuffs) デコード、アニメーション WebP 入力も全フレーム保持される。
 - TS 側は単一WASM専用。`satoru_render` / `converter_encode` / `html_to_image` の有無は実行時に `typeof` 判定し、未登録時は単一WASM必須エラーを投げる。
 - Skia は `main` 追従 (FetchContent shallow)。上流変更でビルドが壊れた場合は `builtin-baseline` (`vcpkg.json`) と Skia `GIT_TAG` の固定を検討すること。

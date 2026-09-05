@@ -14,8 +14,10 @@
 //    == encode_webp_single(pixmap, 100.0f)
 //  - pdf_renderer.cpp: PdfJpegEncoder (quality int受け)
 //    == encode_jpeg(pixmap, quality)
-// PDFドキュメント自体 (SkPDF::MakeDocument) は対象外。SVG/PDF形式指定は
-// image-opt版どおり未対応 (null result) を維持する。
+// PDFドキュメント自体 (SkPDF::MakeDocument) は対象外。dispatcherでの
+// SVG/PDF形式指定は未対応 (null result) のまま: 画像→SVG/PDFは dispatcher
+// を経由せず `converter_encode_svg` / `converter_encode_pdf` (unified_api経由)
+// で対応済みのため。
 
 #include <cstddef>
 #include <cstdint>

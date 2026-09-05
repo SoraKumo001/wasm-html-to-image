@@ -21,7 +21,7 @@ const imgPath = process.argv[2] ?? defaultImg;
 // RenderFormat enum (mirrors bridge_types.h / wasm-image-optimization core.ts)
 const FMT = { SVG: 0, PNG: 1, WebP: 2, PDF: 3, JPEG: 4, AVIF: 5, RAW: 6, ThumbHash: 7 };
 
-const results = { a: "SKIP", b: "SKIP", c: "SKIP", d: "SKIP", e: "SKIP", f: "SKIP", g: "SKIP", h: "SKIP" };
+const results = { a: "SKIP", b: "SKIP", c: "SKIP", d: "SKIP", e: "SKIP", f: "SKIP", g: "SKIP", h: "SKIP", i: "SKIP", j: "SKIP" };
 const details = {};
 
 const mod = await (await import(pathToFileURL(singleJs).href)).default();
@@ -194,8 +194,39 @@ try {
     results.h = "FAIL";
     details.h_avif = String(e?.message ?? e).slice(0, 300);
   }
+  // i. animated gif input -> animated webp (ANMF preserved)
+  let animWebp = null;
+  try {
+    const gif = fs.readFileSync(path.join(repoRoot, "packages", "visual-test", "assets", "anim-2f.gif"));
+    const out = await render({ value: new Uint8Array(gif), format: "webp", quality: 80, animation: true });
+    const head = Buffer.from(out);
+    const anim = !!(head.readUInt32LE(20) & 2);
+    const anmf = (head.toString("latin1").match(/ANMF/g) || []).length;
+    if (!(out instanceof Uint8Array) || !anim || anmf < 2) {
+      throw new Error(`animated webp mismatch: len=${out?.length} anim=${anim} anmf=${anmf}`);
+    }
+    animWebp = out;
+    results.i = "PASS";
+    details.i_anim = `gif->animated-webp len=${out.length} anmf=${anmf}`;
+  } catch (e) {
+    results.i = "FAIL";
+    details.i_anim = String(e?.message ?? e).slice(0, 300);
+  }
+  // j. animated webp input -> png (first-frame decode path)
+  try {
+    if (!animWebp) throw new Error("skipped (i failed)");
+    const back = await render({ value: animWebp, format: "png" });
+    if (!(back instanceof Uint8Array) || !Buffer.from(back.subarray(0, 4)).toString("hex").startsWith("89504e47")) {
+      throw new Error(`anim-webp->png mismatch: len=${back?.length}`);
+    }
+    results.j = "PASS";
+    details.j_animdec = `anim-webp->png len=${back.length} magic=89PNG`;
+  } catch (e) {
+    results.j = "FAIL";
+    details.j_animdec = String(e?.message ?? e).slice(0, 300);
+  }
 } catch (e) {
-  for (const k of ["d", "e", "f", "g", "h"]) {
+  for (const k of ["d", "e", "f", "g", "h", "i", "j"]) {
     results[k] = "FAIL";
     details[`${k}_harness`] = `facade load error: ${String(e?.message ?? e).slice(0, 300)}`;
   }
@@ -205,4 +236,6 @@ console.log(`e(facade html->png): ${results.e} -- ${details.e_html ?? details.e_
 console.log(`f(facade img->svg): ${results.f} -- ${details.f_imgsvg ?? details.f_harness ?? ""}`);
 console.log(`g(facade img->pdf): ${results.g} -- ${details.g_imgpdf ?? details.g_harness ?? ""}`);
 console.log(`h(facade avif roundtrip): ${results.h} -- ${details.h_avif ?? details.h_harness ?? ""}`);
+console.log(`i(facade anim gif->webp): ${results.i} -- ${details.i_anim ?? details.i_harness ?? ""}`);
+console.log(`j(facade anim-webp->png): ${results.j} -- ${details.j_animdec ?? details.j_harness ?? ""}`);
 process.exit(Object.values(results).every((r) => r === "PASS") ? 0 : 1);

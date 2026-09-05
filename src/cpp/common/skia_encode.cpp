@@ -155,7 +155,8 @@ EncodeResult encode_frames(const EncodeFrameView* frames, size_t count,
         }
         case RenderFormat::SVG: {
             out.format_name = "svg";
-            // 元実装どおり未対応 (SkiaのSVG出力はcanvas再描画が必要なため)。
+            // dispatcherでは未対応のまま (画像→SVGは converter_encode_svg 経由)。
+            // (SkiaのSVG出力はcanvas再描画が必要なため元実装どおり。)
             return out;
         }
         case RenderFormat::AVIF: {
@@ -165,7 +166,8 @@ EncodeResult encode_frames(const EncodeFrameView* frames, size_t count,
         }
         case RenderFormat::PDF: {
             out.format_name = "pdf";
-            // 元実装どおり未対応 (単画像からのPDF化は SkPDF 側の責務)。
+            // dispatcherでは未対応のまま (画像→PDFは converter_encode_pdf 経由。
+            // 単画像からのPDF化は SkPDF 側の責務のため元実装どおり)。
             return out;
         }
         case RenderFormat::RAW: {
