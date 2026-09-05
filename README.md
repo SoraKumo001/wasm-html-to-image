@@ -7,11 +7,12 @@ HTML → 画像変換の単一 Skia-WASM 統合ライブラリ。`satoru` (HTML 
 ## 構成
 
 ```text
-packages/html-to-image (単一公開パッケージ: core/single/workerd/index/cli/loader)
+packages/html-to-image (単一公開パッケージ: core/single/workerd/workers/index/cli/loader)
         │ loadHtmlToImageModule() → HtmlToImageModule 1インスタンス共有
         ▼
 packages/html-to-image/dist (単一WASM, EXPORT_NAME=createHtmlToImageModule, MODULARIZE+EXPORT_ES6)
   satoru_render (HTML→PNG/SVG/PDF/WebP) / converter_encode (PNG→JPEG/WebP/AVIF/RAW/ThumbHash)
+  converter_encode_svg / converter_encode_pdf (画像→SVG/PDF)
   html_to_image (Bitmap直結: PNG中間をJSに返さない単一呼出し)
 ```
 
@@ -77,6 +78,37 @@ const webp = await render({ value: png, format: "webp", quality: 80 });
 残課題: `workers` スレッドプール (`worker-lib`) は今回作らない。
 上流は `./workers` + `workers-dummy.js` で node/browser/workerd を切替えているが、
 本リポは単一WASM直結のため要否検討から着手すること。
+
+## workers (ワーカープール並列化)
+
+上流式 (`satoru` / `wasm-image-optimization` の `workers.ts` /
+`child-workers.ts` を踏襲)。モジュールはスレッドを跨げないため、
+ワーカー毎に loader で自前ロードする (ワーカー内遅延単一モジュール)。
+
+```ts
+import { createHtmlToImageWorker } from "wasm-html-to-image/workers";
+const pool = createHtmlToImageWorker({ maxParallel: 4, timeoutMs: 30000 });
+const [a, b] = await Promise.all([
+  pool.render({ value: "<h1>a</h1>", width: 800, format: "png" }),
+  pool.render({ value: jpgBytes, format: "webp", quality: 80 }),
+]);
+console.log(pool.getStats()); // { workerCount, activeJobs, queuedJobs, ... }
+pool.reset(); // ハング時の再生成+統計リセット
+await pool.waitAll();
+pool.close();
+```
+
+- プール化するアクションは統合 `render` 1本 (HTML/画像両対応)。
+- `./workers` export条件: `workerd` → 直結実行フォールバック
+  (`workers-dummy.js`、プール化せず `workerd.js` の `render` を呼ぶ)、
+  `node`/`browser` → `workers.js`。typesVersions なし。
+- 相違点: tsc-onlyビルドのため事前バンドルの `web-workers.js` は作らず、
+  常に `child-workers.js` を参照 (browser利用はバンドラか `worker` 指定)。
+  `worker-lib` の公開ESMは拡張子なしimportで素のNodeでは壊れる
+  (2.2.0/2.2.1共通の上流不具合) ため、`worker-lib-loader.ts` が
+  ESM試行→CJSフォールバック (`createRequire`) で吸収する。
+
+検証: `node scripts/parallel-smoke.mjs` (12件混合、逐次845ms→並列x4で328ms、全件成功)。
 
 ## CLI
 

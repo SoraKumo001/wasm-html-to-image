@@ -36,6 +36,13 @@
       "types": "./dist/workerd.d.ts",
       "import": "./dist/workerd.js"
     },
+    "./workers": {
+      "types": "./dist/workers.d.ts",
+      "workerd": "./dist/workers-dummy.js",
+      "node": "./dist/workers.js",
+      "browser": "./dist/workers.js",
+      "default": "./dist/workers-dummy.js"
+    },
     "./html-to-image.js": {
       "import": "./dist/html-to-image.js",
       "default": "./dist/html-to-image.js"
@@ -48,7 +55,8 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "commander": "15.0.0"
+    "commander": "15.0.0",
+    "worker-lib": "2.2.1"
   },
   "devDependencies": {
     "@types/node": "26.1.1",

@@ -74,6 +74,22 @@ export interface SingleWasmConnection {
   module: HtmlToImageModule;
 }
 
+/** Operational stats of the worker pool (`src/workers.ts`). */
+export interface WorkerPoolStats {
+  /** Number of workers in the pool */
+  workerCount: number;
+  /** Jobs currently being executed */
+  activeJobs: number;
+  /** Jobs waiting for a free worker */
+  queuedJobs: number;
+  /** Total jobs completed successfully since start */
+  completedJobs: number;
+  /** Total jobs that failed since start */
+  failedJobs: number;
+  /** Average time per job in milliseconds */
+  avgJobTimeMs: number;
+}
+
 /** `RenderFormat` enum values (mirrors `bridge_types.h`). */
 const FORMAT_INT: Record<OutputFormat, number> = {
   svg: 0,

@@ -23,6 +23,9 @@ importers:
       commander:
         specifier: 15.0.0
         version: 15.0.0
+      worker-lib:
+        specifier: 2.2.1
+        version: 2.2.1
     devDependencies:
       '@types/node':
         specifier: 26.1.1
@@ -222,6 +225,9 @@ packages:
   undici-types@8.3.0:
     resolution: {integrity: sha512-j375ScV60dom+YkPFIfTLcOiPxkN/buHz5GobjLhixFuANaNs3C9l4GmrWqejgXWJ7BbJcFYpTEUkS1Ge8bpZQ==}
 
+  worker-lib@2.2.1:
+    resolution: {integrity: sha512-CauU4vz3vZUBG3A2CY93GY94KLhbH8JtPKtuvKu2w5G07cHkZ73QkTAJ/lEHDL6arT5WDu1qpU++T0+kGDgSCg==}
+
 snapshots:
 
   '@esbuild/aix-ppc64@0.28.2':
@@ -349,3 +355,5 @@ snapshots:
   typescript@5.9.3: {}
 
   undici-types@8.3.0: {}
+
+  worker-lib@2.2.1: {}
