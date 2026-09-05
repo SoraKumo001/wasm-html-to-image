@@ -18,7 +18,7 @@
 #include "include/core/SkFontStyle.h"
 #include "modules/skshaper/include/SkShaper.h"
 #include "modules/skunicode/include/SkUnicode.h"
-#include "utils/lru_cache.h"
+#include "common/lru_cache.h"
 #include "utils/skia_utils.h"
 
 enum class CssChangeKind {

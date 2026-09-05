@@ -62,8 +62,6 @@ class SatoruInstance {
     ~SatoruInstance();
 
     // Core Logic
-    void init_document(const char *html, int width, int height);
-    void layout_document(int width);
     void collect_resources(const std::string &html, int width, int height, int mediaType = 0);
     const std::string &get_full_master_css() const;
     std::string get_collect_profile_json() const;
@@ -76,19 +74,11 @@ class SatoruInstance {
     void load_image(const std::string &name, const std::string &data_url, int width, int height);
     void load_image_pixels(const std::string &name, int width, int height,
                            const std::vector<uint8_t> &pixels, const std::string &data_url);
-    std::string get_pending_resources_json();
     const uint8_t *get_pending_resources_binary(int &out_size);
 };
 
 SatoruInstance *satoru_api_create_instance();
 void satoru_api_destroy_instance(SatoruInstance *inst);
-
-// State Management API
-void satoru_api_init_document(SatoruInstance *inst, const char *html, int width, int height);
-void satoru_api_layout_document(SatoruInstance *inst, int width);
-const uint8_t *satoru_api_render_from_state(SatoruInstance *inst, int width, int height,
-                                     RenderFormat format, const SatoruRenderOptions &options,
-                                     int &out_size);
 
 std::string satoru_api_html_to_svg(SatoruInstance *inst, const char *html, int width, int height,
                             const SatoruRenderOptions &options);
@@ -103,8 +93,6 @@ const uint8_t *satoru_api_htmls_to_pdf(SatoruInstance *inst, const std::vector<s
 const uint8_t *satoru_api_render(SatoruInstance *inst, const std::vector<std::string> &htmls, int width,
                           int height, RenderFormat format, const SatoruRenderOptions &options,
                           int &out_size);
-const uint8_t *satoru_api_merge_pdfs(SatoruInstance *inst, const std::vector<sk_sp<SkData>> &pdfs,
-                              int &out_size);
 int satoru_api_get_last_png_size(SatoruInstance *inst);
 int satoru_api_get_last_webp_size(SatoruInstance *inst);
 int satoru_api_get_last_pdf_size(SatoruInstance *inst);
@@ -124,8 +112,6 @@ void satoru_api_set_font_map(SatoruInstance *inst, const std::map<std::string, s
 
 void satoru_api_set_log_level(int level);
 
-std::string satoru_api_get_pending_resources(SatoruInstance *inst);
 const uint8_t *satoru_api_get_pending_resources_binary(SatoruInstance *inst, int &out_size);
-std::string satoru_api_get_font_diagnostics(SatoruInstance *inst);
 
 #endif  // HTML_TO_IMAGE_SATORU_API_H

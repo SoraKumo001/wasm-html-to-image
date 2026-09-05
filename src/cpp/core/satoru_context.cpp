@@ -17,7 +17,7 @@
 #include "include/core/SkImage.h"
 #include "include/core/SkSpan.h"
 #include "modules/skshaper/include/SkShaper_harfbuzz.h"
-#include "utils/image_decoder.h"
+#include "common/image_decoder.h"
 #include "utils/skia_utils.h"
 #include "utils/skunicode_satoru.h"
 
@@ -67,7 +67,8 @@ void SatoruContext::loadImage(const char *name, const char *data_url, int width,
 void SatoruContext::loadImageFromData(const char *name, const uint8_t *data, size_t size,
                                       const char *original_url) {
     int width = 0, height = 0;
-    auto image = satoru::ImageDecoder::decode(data, size, width, height, fontManager.getFontMgr());
+    auto image = html_to_image::ImageDecoder::decode_first(data, size, width, height,
+                                                            fontManager.getFontMgr());
     if (image) {
         image_info info;
         info.data_url = original_url ? original_url : "";

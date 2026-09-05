@@ -26,15 +26,12 @@ import {
 import {
   htmlToImage,
   type HtmlToImageOptions,
-  type OptimizeParams,
 } from "./core.js";
 
 export type {
   OutputFormat,
   RenderOptions,
   HtmlToImageOptions,
-  OptimizeParams,
-  SingleWasmConnection,
 } from "./core.js";
 export type {
   HtmlToImageModule,
@@ -67,22 +64,30 @@ function workerdModuleArg(wasm: WebAssembly.Module): EmscriptenModuleArg {
   };
 }
 
-let cachedModule: HtmlToImageModule | null = null;
+/** Module instances keyed by WASM binary: a second call with a different
+ * `wasm` must not silently reuse the first one (previous bug). Failed loads
+ * are evicted so a later call can retry. */
+const moduleByWasm = new Map<WebAssembly.Module, Promise<HtmlToImageModule>>();
 
 /**
  * Load (and reuse) the unified module on workerd.
  * @param wasm The compiled WASM module (defaults to the bundled one)
  */
-export async function getDefaultModule(
+export function getDefaultModule(
   wasm: WebAssembly.Module = htmlToImageWasm,
 ): Promise<HtmlToImageModule> {
-  if (!cachedModule) {
-    cachedModule = await loadHtmlToImageModule({
+  let pending = moduleByWasm.get(wasm);
+  if (!pending) {
+    pending = loadHtmlToImageModule({
       factory: createHtmlToImageModule,
       moduleArg: workerdModuleArg(wasm),
     });
+    moduleByWasm.set(wasm, pending);
+    pending.catch(() => {
+      if (moduleByWasm.get(wasm) === pending) moduleByWasm.delete(wasm);
+    });
   }
-  return cachedModule;
+  return pending;
 }
 
 /**

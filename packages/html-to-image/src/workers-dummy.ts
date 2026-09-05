@@ -7,9 +7,8 @@ export type {
   HtmlToImageOptions,
   OutputFormat,
   RenderOptions,
-  WorkerPoolStats,
 } from "./core.js";
-export { getDefaultModule, render } from "./workerd.js";
+export { render } from "./workerd.js";
 
 export const setLimit = (_limit: number): void => {};
 export const close = () => {};

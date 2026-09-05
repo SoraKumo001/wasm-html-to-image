@@ -1,5 +1,6 @@
 #include "skia_encode.h"
 
+#include "skia_utils.h"
 #include "thumbhash.h"
 #include "avif/avif.h"
 #include "include/core/SkStream.h"
@@ -17,6 +18,15 @@ sk_sp<SkData> encode_png(const SkPixmap& pixmap) {
     SkPngEncoder::Options options;
     if (!SkPngEncoder::Encode(&stream, pixmap, options)) return nullptr;
     return stream.detachAsData();
+}
+
+std::string encode_png_data_url(const SkBitmap& bitmap) {
+    if (bitmap.isNull() || bitmap.width() <= 0 || bitmap.height() <= 0) return "";
+    if (bitmap.getPixels() == nullptr) return "";
+    sk_sp<SkData> png = encode_png(bitmap.pixmap());
+    if (!png || png->size() == 0) return "";
+    return "data:image/png;base64," +
+           base64_encode((const uint8_t*)png->data(), png->size());
 }
 
 sk_sp<SkData> encode_webp_single(const SkPixmap& pixmap, float quality) {

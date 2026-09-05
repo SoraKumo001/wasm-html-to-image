@@ -17,9 +17,9 @@ if(NOT DEFINED WASM_EXPORT_NAME OR WASM_EXPORT_NAME STREQUAL "OFF")
     set(WASM_EXPORT_NAME "createHtmlToImageModule")
 endif()
 
-# AVIF backend:当面DAV1D既定、AOMはOPT-IN (-DWASM_AVIF_BACKEND=AOM)。
+# AVIF backend: AOM既定（encode対応。DAV1Dに戻す場合は -DWASM_AVIF_BACKEND=DAV1D）。
 # satoru=DAV1D(SYSTEM)+AVIF_ENABLE_WASM=OFF / image-opt=AOM(SYSTEM)+AVIF_ENABLE_WASM=ON
-set(WASM_AVIF_BACKEND "DAV1D" CACHE STRING "AVIF decoder backend: DAV1D (default) or AOM (opt-in)")
+set(WASM_AVIF_BACKEND "AOM" CACHE STRING "AVIF decoder backend: AOM (default) or DAV1D (decode-only)")
 
 # Text shaping: ON既定 (satoru=freetype/harfbuzz/skshaper有効 / image-opt=無効だった差分をsatoru側に統一)
 option(WASM_ENABLE_TEXT_SHAPING "Enable freetype+harfbuzz+skshaper" ON)
@@ -227,12 +227,6 @@ endif()
         "-sALLOW_MEMORY_GROWTH=1"
     )
 
-    if(DEFINED ENV{HTML_TO_IMAGE_EXTRA_LINK_OPTIONS})
-        string(REPLACE " " ";" HTML_TO_IMAGE_EXTRA_LINK_OPTIONS_LIST $ENV{HTML_TO_IMAGE_EXTRA_LINK_OPTIONS})
-        list(APPEND COMMON_LINK_OPTIONS ${HTML_TO_IMAGE_EXTRA_LINK_OPTIONS_LIST})
-        message(STATUS "Loaded extra link options from HTML_TO_IMAGE_EXTRA_LINK_OPTIONS")
-    endif()
-
 # --- COMMON/SINGLE差分メモ ---
 # COMMON(通常): ENVIRONMENT=web,worker。SINGLE派生のみ -sSINGLE_FILE=1 を追加し
 #   ENVIRONMENT=web,worker,node を許容する (image-opt single正。satoru singleはweb,workerのみだった差分)。
@@ -411,6 +405,9 @@ target_sources(html_to_image_core PRIVATE
     src/cpp/api/satoru_api.cpp
     src/cpp/api/converter_api.cpp
     src/cpp/api/unified_api.cpp
+    src/cpp/api/satoru_bindings.cpp
+    src/cpp/api/converter_bindings.cpp
+    src/cpp/api/unified_bindings.cpp
     src/cpp/api/js_logger.cpp
     src/cpp/core/container_skia.cpp
     src/cpp/core/container_skia_helpers.cpp
@@ -436,7 +433,6 @@ target_sources(html_to_image_core PRIVATE
     src/cpp/utils/pdf_merger.cpp
     src/cpp/utils/skia_stubs.cpp
     src/cpp/utils/skunicode_satoru.cpp
-    src/cpp/utils/image_decoder.cpp
 )
 target_include_directories(html_to_image_core PRIVATE
     "src/cpp"

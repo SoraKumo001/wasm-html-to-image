@@ -7,7 +7,7 @@ HTML → 画像変換の単一 Skia-WASM 統合ライブラリ。`satoru` (HTML 
 ## 構成
 
 ```text
-packages/html-to-image (単一公開パッケージ: core/single/workerd/workers/index/cli/loader)
+packages/html-to-image (単一公開パッケージ: core/single/workerd/workers/index/cli/loader/worker-lib-loader)
         │ loadHtmlToImageModule() → HtmlToImageModule 1インスタンス共有
         ▼
 packages/html-to-image/dist (単一WASM, EXPORT_NAME=createHtmlToImageModule, MODULARIZE+EXPORT_ES6)
@@ -24,8 +24,7 @@ packages/html-to-image/dist (単一WASM, EXPORT_NAME=createHtmlToImageModule, MO
 
 | 入力 | 出力 | 経路 |
 |---|---|---|
-| HTML (`string`/`string[]`/URL) | `svg` / `pdf` | satoru 直出力 (`html_to_image` 統一直結) |
-| HTML | `png` / `jpeg` / `webp` / `avif` / `raw` / `thumbhash` | `html_to_image` 直結、または `satoru_render` PNG中間 → encode |
+| HTML (`string`/`string[]`/URL) | 全形式 | 同一インスタンスで資源解決 (`satoru_collect_resources` → 取得 → `satoru_add_resource`) 後に描画。`svg`/`pdf` は satoru 直出力、ラスタは `satoru_render` PNG中間 → encode |
 | 画像 (バイト列/`data:image/`) | `png`/`jpeg`/`webp`/`avif`/`raw`/`thumbhash` | 描画スキップ → `converter_encode` 直行 (`width`/`height`は出力リサイズ、`crop`/`fit`適用可) |
 | 画像 | `svg` | 描画スキップ → `converter_encode_svg` (PNG data URLの`<image>`一枚で包む) |
 | 画像 | `pdf` | 描画スキップ → `converter_encode_pdf` (等倍1ページ、`drawImage`配置) |
@@ -36,9 +35,10 @@ packages/html-to-image/dist (単一WASM, EXPORT_NAME=createHtmlToImageModule, MO
 
 経路選択 (単一WASMのみ):
 
-1. HTML入力 + `html_to_image` バインディングあり → Bitmap 直結単一呼出し (JS に PNG 中間を返さない)。
-2. なし → 単一モジュール 2 呼出し (`satoru_render` → `converter_encode`、同一モジュール共有)。いずれのバインディングも未登録のビルドではエラー。
-3. 画像入力 → 常に `converter_encode` 直行 (上記 1/2 を使わない)。
+1. HTML入力 → 同一インスタンスで資源解決後に描画 (現行正経路)。
+2. 画像入力 → 常に `converter_*` 直行。
+3. `html_to_image` 統一bindingは、instance描画bindingを持たない旧ビルド用の
+   legacy fallback (資源解決なし)。
 
 注意: `crop`/`fit` は画像入力ではエンコード段、HTML入力では描画オプションとして適用。`quality` (既定85)/`speed` (既定6) はエンコード段のみに効く (`svg`/`pdf` では無視)。
 
@@ -59,6 +59,14 @@ await htmlToImage(mod, { value: "<h1>hi</h1>", width: 800, format: "webp" });
 await htmlToImage(mod, { value: png, format: "jpeg", quality: 85 });
 ```
 
+既定フォント解決: `@font-face` 宣言なしの汎用ファミリ
+(sans-serif/serif/monospace/cursive/fantasy/emoji) は `DEFAULT_FONT_MAP`
+(satoru既定値そのまま) を `satoru_set_font_map` で適用し、Google Fonts
+(Chrome UAでwoff2取得) から取得する。取得方式のためバンドルフォントは
+同梱しない。取得バイト列はプロセス内キャッシュ(URLキー)される。
+`fontMap`/`userAgent` オプションで上書き可。利用者注入フォールバックは
+`fallbackFonts` (バイト列・data: URL・取得URL) で描画前に投入される。
+
 ## workerd (Cloudflare Workers)
 
 上流互換の自動切替え: `workerd` 条件では `dist/workerd.js` が解決される
@@ -75,9 +83,7 @@ const png = await render({ value: "<h1>hi</h1>", width: 800, format: "png" });
 const webp = await render({ value: png, format: "webp", quality: 80 });
 ```
 
-残課題: `workers` スレッドプール (`worker-lib`) は今回作らない。
-上流は `./workers` + `workers-dummy.js` で node/browser/workerd を切替えているが、
-本リポは単一WASM直結のため要否検討から着手すること。
+並列化が必要な場合は下記 `workers` を使うこと。
 
 ## workers (ワーカープール並列化)
 
@@ -133,23 +139,56 @@ pnpm --filter wasm-html-to-image build       # tsc -b (ファサード+ローダ
 node scripts/smoke-test.mjs [test-image-path]
 ```
 
+## テスト構成 (2層)
+
+- 単体テスト (`packages/html-to-image/tests/`, vitest): 実WASMを使わず
+  モジュールスタブで高速に検証。`isImageInput` 判定 (6形式マジック/
+  `data:image/`/HTML/未知形式throw) + `htmlToImage` 経路振分け
+  (unified/2-call/画像直行/svg-pdf分岐の呼出し先assert) + エラー系
+   (未登録binding throw等)。実行: `pnpm --filter wasm-html-to-image test`
+   (`vitest run`, 41件)。
+- 実機テスト (`scripts/smoke-test.mjs` a〜h + `scripts/parallel-smoke.mjs`):
+  実WASM成果物に対する検証。重い実WASMを使う検証は単体テストと重複させず
+  こちらに集約する。
+
 CMake オプション (`CMakeLists.txt`):
 
 | オプション | 既定 | 意味 |
 |---|---|---|
 | `WASM_EXPORT_NAME` | `createHtmlToImageModule` | JS ファクトリ名 (`-sEXPORT_NAME`) |
-| `WASM_AVIF_BACKEND` | `DAV1D` | `DAV1D` 既定、`AOM` は OPT-IN (`-DWASM_AVIF_BACKEND=AOM`) |
+| `WASM_AVIF_BACKEND` | `DAV1D` | `DAV1D` 既定(デコードのみ)、`AOM` でencode/decode有効化 (`-DWASM_AVIF_BACKEND=AOM`、現ビルドはAOM適用済み) |
 | `WASM_ENABLE_TEXT_SHAPING` | `ON` | freetype+harfbuzz+skshaper |
 | `WASM_ENABLE_PDF` | `ON` | Skia PDF (`src/pdf`+`pathops`)、OFF でも pathops は残る |
 | `WASM_ENABLE_SKSL` | `OFF` | SkSL 系 (`SkRuntimeBlender` 等) を除外して軽量化 |
 
 vcpkg (`vcpkg.json`): freetype/png/jpeg-turbo/webp/dav1d/zlib/gumbo/bzip2/brotli/expat/ctre/utf8proc/libunibreak/qpdf/harfbuzz。libavif は FetchContent (`v1.1.1`)、Skia は FetchContent `main` 追従。C++ 側 LSP 設定: `.vscode/c_cpp_properties.json` (Emscripten + `build/compile_commands.json`)。
 
-C++ 構成の詳細は `src/cpp/common/README.md` (重複排除・`common/skia_encode` 方針)、残作業は `src/cpp/core/TODO.md` を参照。
+C++ 構成の詳細は「由来・移植方針」を参照。C++ 側 LSP 設定: `.vscode/c_cpp_properties.json` (Emscripten + `build/compile_commands.json`)。
+
+## 由来・移植方針
+
+`satoru` (HTML描画) と `wasm-image-optimization` (画像変換) の両リポは
+読取のみ。変更・コピー自動化なし。移植済みのため `src/cpp/common/README.md` /
+`src/cpp/core/TODO.md` の計画メモは本節に集約し、原文はリンクのみ残す。
+
+| 領域 | 正本 | 備考 |
+|---|---|---|
+| Skia描画ユーティリティ | satoru版 `utils/skia_utils` | image-opt版はサブセットのため不採用 |
+| デコーダ | converter `load_image` (全フレーム+EXIF補正+format/animated) + satoru `decode_svg` 統合 | `common/image_decoder` |
+| SVGパッチ | converter `patch_svg_data` 完全版 | satoru版はno-opのため不採用 |
+| エンコード分岐 | image-opt `encode()` switchをインスタンス非依存のdispatcher化 | `common/skia_encode` (`encode_single_bitmap`/`encode_frames`)。satoru各rendererの使い方はprimitiveの特殊化と等価 |
+| ThumbHash | converter `utils/thumbhash` | `common/thumbhash` |
+| PDFマージャ | satoru側 | |
+| 実行コンテキスト | 分離維持 (`SatoruContext`/`ImageConverterContext`) | 描画状態と変換状態は寿命・所有権が異なるため統合しない |
+| LRUキャッシュ | 両リポ同一ロジックを共通化1本 | namespace差のみ |
+| core一式・renderers・api | satoru側を改名移植 (`satoru_api_*`) + converter側 (`converter_api_*`) | mangle回避のprefix分離は `src/cpp/main.cpp` 参照 |
+
+`api/unified_api`: `SkBitmap` → `render_bitmap_to_encoded` の薄ラッパ
+(`encode_single_bitmap` 経由、PNG中間なし)。所有権は呼び出し側保持。
 
 ## 検証実績
 
-`scripts/smoke-test.mjs` (`packages/html-to-image/dist/html-to-image-single.js` + TSファサード対象): a〜g いずれも PASS。
+`scripts/smoke-test.mjs` (`packages/html-to-image/dist/html-to-image-single.js` + TSファサード対象): a〜h いずれも PASS。
 
 - a (converter 往復): `converter_load_image` → `converter_encode(WebP)` マジック `RIFF` 確認 → `converter_crop(8x8)` → `converter_encode(PNG)` マジック `89PNG` 確認。
 - b (satoru 描画): `satoru_render("<h1>hi</h1>", 800, 600, PNG)` が PNG バイト列 (1970B) を返却。
@@ -161,6 +200,6 @@ C++ 構成の詳細は `src/cpp/common/README.md` (重複排除・`common/skia_e
 
 ## 既知制限
 
-- 未登録スタブ (`src/cpp/main.cpp` で明示的に除外): `collect_resources` / `add_resource` / `load_font` / `load_fallback_font` / `init_document` / `layout_document` / `render_from_state` / `merge_pdfs` / `get_pending_resources` / `get_font_diagnostics` 系。C++ 実体が TODO スタブのためバインディング未公開。登録済み resource 系は `scan_css` / `load_image` / `set_font_map` / `get_last_*_size` / collect-profile 系のみ。
+- 未登録スタブ (`src/cpp/main.cpp` で明示的に除外): `load_image_pixels` (C APIなし) / `init_document` / `layout_document` / `render_from_state` / `merge_pdfs` / `get_font_diagnostics` 系。登録済み resource 系は scan_css / load_image / set_font_map / collect_resources / get_pending_resources / add_resource / load_font / load_fallback_font / get_last_*_size / collect-profile 系。TS発見ループが外部フォント/画像を解決してから同一インスタンスで描画する。
 - TS 側は単一WASM専用。`satoru_render` / `converter_encode` / `html_to_image` の有無は実行時に `typeof` 判定し、未登録時は単一WASM必須エラーを投げる。
 - Skia は `main` 追従 (FetchContent shallow)。上流変更でビルドが壊れた場合は `builtin-baseline` (`vcpkg.json`) と Skia `GIT_TAG` の固定を検討すること。

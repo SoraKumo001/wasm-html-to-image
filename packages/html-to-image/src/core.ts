@@ -1,11 +1,21 @@
 import type { HtmlToImageModule } from "./loader.js";
+import { buildSatoruOptions, FIT_INT, FORMAT_INT } from "./encode-args.js";
+import { dataUrlToBytes, imageInputToBytes, isImageInput, toBytes } from "./input.js";
+
+// Backward compatibility: `isImageInput` now lives in `./input.js` but
+// stays importable from here (and therefore from the package root).
+export { isImageInput };
 
 /**
  * Final output formats. Single-WASM internal routing:
- * - HTML input: unified `html_to_image` binding (Bitmap-direct, no JS
- *   round-trip), or `satoru_render` -> PNG -> `converter_encode` fallback.
- * - Image input: render stage skipped, straight to `converter_encode`
- *   (`converter_load_image` -> optional crop/resize -> `converter_encode`).
+ * - HTML input: resources are resolved on the instance first
+ *   (`satoru_collect_resources` -> fetch -> `satoru_add_resource`), then
+ *   `satoru_render` direct (svg/pdf) or `satoru_render` PNG intermediate ->
+ *   `converter_encode`. The unified `html_to_image` binding is only a legacy
+ *   fallback for builds without instance render bindings.
+ * - Image input: render stage skipped, straight to `converter_*`
+ *   (`converter_load_image` -> optional crop/resize -> `converter_encode`,
+ *   or `converter_encode_svg` / `converter_encode_pdf`).
  */
 export type OutputFormat =
   | "svg"
@@ -29,7 +39,7 @@ export interface RenderOptions {
   baseUrl?: string;
   width: number;
   height?: number;
-  format?: string;
+  format?: OutputFormat;
 }
 
 /**
@@ -40,8 +50,7 @@ export interface RenderOptions {
  * - Image input: render stage is skipped; `width`/`height`/`crop`/`fit`
  *   are applied as output resize on the encode stage.
  */
-export interface HtmlToImageOptions extends Omit<RenderOptions, "format"> {
-  format?: OutputFormat;
+export interface HtmlToImageOptions extends RenderOptions {
   /** Encode quality 0-100 (encode stage only, default 85; ignored for svg/pdf). */
   quality?: number;
   /** Encode speed 0-10, mainly for AVIF (encode stage only, default 6). */
@@ -52,186 +61,279 @@ export interface HtmlToImageOptions extends Omit<RenderOptions, "format"> {
   crop?: { x: number; y: number; width: number; height: number };
   /** Resize strategy (encode stage for image input, render options for HTML). */
   fit?: "contain" | "cover" | "fill";
+  /**
+   * Generic family -> font URL map (upstream `DEFAULT_FONT_MAP` strategy).
+   * Applied via `satoru_set_font_map` before resource discovery, so
+   * `@font-face`-less text (sans-serif/serif/...) resolves through Google
+   * Fonts instead of rendering blank. Defaults to `DEFAULT_FONT_MAP`.
+   */
+  fontMap?: Record<string, string>;
+  /** User-Agent for resource fetches (default: Chrome, for woff2 CSS). */
+  userAgent?: string;
+  /**
+   * User-supplied fallback font(s), applied to the instance before resource
+   * discovery (upstream `fallbackFonts` idiom). Entries may be raw bytes
+   * (`Uint8Array` / `ArrayBuffer`), a `data:` URL, or a fetchable URL
+   * (http(s) or baseUrl-relative file on Node).
+   */
+  fallbackFonts?: (Uint8Array | ArrayBuffer | string)[];
   /** Extra keys are forwarded to the WASM render options object. */
   [key: string]: unknown;
 }
 
-/** Encode-stage params (kept for option-shape documentation). */
-export type OptimizeParams = {
-  image: Uint8Array | ArrayBuffer | string;
-  crop?: { x: number; y: number; width: number; height: number };
-  width?: number;
-  height?: number;
-  fit?: "contain" | "cover" | "fill";
-  format?: "none" | "png" | "webp" | "jpeg" | "avif" | "raw" | "thumbhash";
-  quality?: number;
-  speed?: number;
-  animation?: boolean;
-};
+const DEFAULT_USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
-/** Single-WASM connection handle (one unified module instance). */
-export interface SingleWasmConnection {
-  module: HtmlToImageModule;
-}
-
-/** Operational stats of the worker pool (`src/workers.ts`). */
-export interface WorkerPoolStats {
-  /** Number of workers in the pool */
-  workerCount: number;
-  /** Jobs currently being executed */
-  activeJobs: number;
-  /** Jobs waiting for a free worker */
-  queuedJobs: number;
-  /** Total jobs completed successfully since start */
-  completedJobs: number;
-  /** Total jobs that failed since start */
-  failedJobs: number;
-  /** Average time per job in milliseconds */
-  avgJobTimeMs: number;
-}
-
-/** `RenderFormat` enum values (mirrors `bridge_types.h`). */
-const FORMAT_INT: Record<OutputFormat, number> = {
-  svg: 0,
-  png: 1,
-  webp: 2,
-  pdf: 3,
-  jpeg: 4,
-  avif: 5,
-  raw: 6,
-  thumbhash: 7,
-};
-
-const FIT_INT: Record<NonNullable<HtmlToImageOptions["fit"]>, number> = {
-  contain: 0,
-  cover: 1,
-  fill: 2,
-};
-
-function ascii(
-  bytes: Uint8Array,
-  start: number,
-  end: number,
-): string | null {
-  if (bytes.length < end) return null;
-  let s = "";
-  for (let i = start; i < end; i++) s += String.fromCharCode(bytes[i]);
-  return s;
-}
-
-/** Detect a known image container by magic bytes; `null` when unknown. */
-function sniffImageFormat(bytes: Uint8Array): string | null {
-  if (
-    bytes.length >= 4 &&
-    bytes[0] === 0x89 &&
-    bytes[1] === 0x50 &&
-    bytes[2] === 0x4e &&
-    bytes[3] === 0x47
-  )
-    return "png";
-  if (
-    bytes.length >= 3 &&
-    bytes[0] === 0xff &&
-    bytes[1] === 0xd8 &&
-    bytes[2] === 0xff
-  )
-    return "jpeg";
-  if (ascii(bytes, 0, 4) === "RIFF" && ascii(bytes, 8, 12) === "WEBP")
-    return "webp";
-  if (ascii(bytes, 0, 6) === "GIF87a" || ascii(bytes, 0, 6) === "GIF89a")
-    return "gif";
-  if (
-    ascii(bytes, 4, 8) === "ftyp" &&
-    (ascii(bytes, 8, 12) === "avif" || ascii(bytes, 8, 12) === "avis")
-  )
-    return "avif";
-  if (bytes.length >= 2 && bytes[0] === 0x42 && bytes[1] === 0x4d)
-    return "bmp";
-  return null;
-}
+const EMOJI_URL =
+  "https://cdn.jsdelivr.net/npm/@fontsource/noto-color-emoji/files/noto-color-emoji-emoji-400-normal.woff2";
 
 /**
- * Whether `value` is image input.
- *
- * - Binary (`Uint8Array` / `ArrayBuffer`): magic-byte sniffing for
- *   PNG/JPEG/WebP/GIF/AVIF/BMP. Unknown magic throws.
- * - `string`: `data:image/` prefix means image input; anything else is HTML.
- * - `string[]` (HTML vector) / `undefined`: not image input.
+ * Upstream default font strategy (verbatim from satoru `DEFAULT_FONT_MAP`):
+ * generic families resolve to Google Fonts css2 URLs (fetched with a browser
+ * UA so woff2 is served); fetched at render time, nothing bundled.
  */
-export function isImageInput(value: unknown): boolean {
-  if (value === undefined || value === null || Array.isArray(value))
-    return false;
-  if (typeof value === "string") return value.startsWith("data:image/");
-  const bytes =
-    value instanceof Uint8Array
-      ? value
-      : value instanceof ArrayBuffer
-        ? new Uint8Array(value)
-        : null;
-  if (bytes === null) {
-    throw new Error(
-      "wasm-html-to-image: unsupported input type (expected HTML string, data URL, or image bytes)",
-    );
-  }
-  if (sniffImageFormat(bytes) !== null) return true;
-  throw new Error(
-    `wasm-html-to-image: unrecognized image input (unknown magic bytes, len=${bytes.length})`,
-  );
-}
+export const DEFAULT_FONT_MAP: Record<string, string> = {
+  "sans-serif": "https://fonts.googleapis.com/css2?family=Noto+Sans+JP",
+  serif: "https://fonts.googleapis.com/css2?family=Noto+Serif+JP",
+  monospace: "https://fonts.googleapis.com/css2?family=M+PLUS+1+Code",
+  cursive: "https://fonts.googleapis.com/css2?family=Yuji+Syuku",
+  fantasy: "https://fonts.googleapis.com/css2?family=Reggae+One",
+  "Noto Color Emoji": EMOJI_URL,
+  emoji: EMOJI_URL,
+  "Noto Emoji": EMOJI_URL,
+  notocoloremoji: EMOJI_URL,
+  notoemoji: EMOJI_URL,
+};
 
-function dataUrlToBytes(s: string): Uint8Array {
-  const comma = s.indexOf(",");
-  if (comma < 0 || !s.startsWith("data:")) {
-    throw new Error("wasm-html-to-image: malformed data URL");
-  }
-  const meta = s.slice(0, comma);
-  const body = s.slice(comma + 1);
-  if (meta.includes(";base64")) {
-    const bin = atob(body.replace(/\s/g, ""));
-    const out = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-    return out;
-  }
-  return new TextEncoder().encode(decodeURIComponent(body));
-}
+/** Process-wide fetched-bytes cache (upstream `resourceCache` parity). */
+const resourceCache = new Map<string, Uint8Array>();
 
-/** Normalize image input to raw bytes (data URLs are decoded). */
-function imageInputToBytes(
-  value: string | Uint8Array | ArrayBuffer,
-): Uint8Array {
-  if (typeof value === "string") return dataUrlToBytes(value);
-  return value instanceof Uint8Array ? value : new Uint8Array(value);
-}
+/** Binding names reported by {@link requireBindingError}. */
+export type WasmBindingName =
+  | "satoru_render"
+  | "converter_encode"
+  | "converter_encode_svg"
+  | "converter_encode_pdf"
+  | "converter_load_image"
+  | "html_to_image";
 
-function requireBindingError(
-  name:
-    | "satoru_render"
-    | "converter_encode"
-    | "converter_encode_svg"
-    | "converter_encode_pdf"
-    | "converter_load_image"
-    | "html_to_image",
-): Error {
+function requireBindingError(name: WasmBindingName): Error {
   return new Error(
     `wasm-html-to-image: single-WASM binding "${name}" is required but not exposed by this build ` +
       `(rebuild the unified module; single-WASM only).`,
   );
 }
 
-/** Map `crop`/`fit` to satoru render-option fields (`parse_satoru_options`). */
-function buildSatoruOptions(
-  crop: HtmlToImageOptions["crop"],
-  fit: HtmlToImageOptions["fit"],
-): Record<string, unknown> {
-  const o: Record<string, unknown> = {};
-  if (crop) {
-    o.cropX = crop.x;
-    o.cropY = crop.y;
-    o.cropWidth = crop.width;
-    o.cropHeight = crop.height;
+function isNodeRuntime(): boolean {
+  const proc = (globalThis as { process?: { versions?: { node?: string } } })
+    .process;
+  return typeof proc?.versions?.node === "string";
+}
+
+function fileUrlToFsPath(p: string): string {
+  if (!p.startsWith("file://")) return p;
+  let out = decodeURIComponent(p.slice("file://".length));
+  if (/^\/[A-Za-z]:\//.test(out)) out = out.slice(1);
+  return out;
+}
+
+/**
+ * Fetch external resource bytes. `data:` URLs resolve inline in C++
+ * (`request()`), so they are skipped here. Relative URLs resolve against
+ * `baseUrl` (http base via fetch, fs path via node:fs on Node).
+ */
+async function fetchResourceBytes(
+  url: string,
+  baseUrl?: string,
+  userAgent?: string,
+): Promise<Uint8Array | null> {
+  if (url.startsWith("data:")) return null;
+  const headers = userAgent ? { "User-Agent": userAgent } : undefined;
+  const fetchBytes = async (target: string): Promise<Uint8Array | null> => {
+    const cached = resourceCache.get(target);
+    if (cached) return cached;
+    try {
+      const res = await fetch(target, headers ? { headers } : undefined);
+      if (!res.ok) return null;
+      const bytes = toBytes(await res.arrayBuffer());
+      resourceCache.set(target, bytes);
+      return bytes;
+    } catch {
+      return null;
+    }
+  };
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(url)) {
+    return fetchBytes(url);
   }
-  if (fit) o.fitType = FIT_INT[fit];
-  return o;
+  if (baseUrl !== undefined) {
+    if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(baseUrl)) {
+      try {
+        return await fetchBytes(new URL(url, baseUrl).href);
+      } catch {
+        return null;
+      }
+    }
+    if (isNodeRuntime()) {
+      try {
+        const fs = await import(/* @vite-ignore */ "node:fs/promises");
+        const path = await import(/* @vite-ignore */ "node:path");
+        const joined = path.join(fileUrlToFsPath(baseUrl), url);
+        const cached = resourceCache.get(joined);
+        if (cached) return cached;
+        // Keep an owning copy: fs Buffers may ride a shared pool.
+        const bytes = new Uint8Array(await fs.readFile(joined));
+        resourceCache.set(joined, bytes);
+        return bytes;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+  if (isNodeRuntime()) {
+    try {
+      const cached = resourceCache.get(url);
+      if (cached) return cached;
+      const fs = await import(/* @vite-ignore */ "node:fs/promises");
+      // Keep an owning copy: fs Buffers may ride a shared pool.
+      const bytes = new Uint8Array(await fs.readFile(url));
+      resourceCache.set(url, bytes);
+      return bytes;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+interface PendingResource {
+  type: "font" | "image" | "css";
+  url: string;
+  name: string;
+}
+
+/** Parse the `get_pending_resources` binary form (see loader.ts). */
+function parsePendingResources(bin: Uint8Array | null | undefined): PendingResource[] {
+  if (!bin || bin.length < 4) return [];
+  const view = new DataView(bin.buffer, bin.byteOffset, bin.byteLength);
+  const dec = new TextDecoder();
+  let off = 0;
+  const readStr = (): string | null => {
+    if (off + 4 > bin.byteLength) return null;
+    const len = view.getUint32(off, true);
+    off += 4;
+    if (off + len > bin.byteLength) return null;
+    const s = dec.decode(new Uint8Array(bin.buffer, bin.byteOffset + off, len));
+    off += len;
+    return s;
+  };
+  const count = view.getUint32(off, true);
+  off += 4;
+  const out: PendingResource[] = [];
+  for (let i = 0; i < count; i++) {
+    if (off + 2 > bin.byteLength) break;
+    const typeInt = view.getUint8(off);
+    off += 2; // type + redraw_on_ready
+    const url = readStr();
+    const name = readStr();
+    if (readStr() === null || url === null || name === null) break;
+    out.push({
+      type: typeInt === 2 ? "image" : typeInt === 3 ? "css" : "font",
+      url,
+      name,
+    });
+  }
+  return out;
+}
+
+/**
+ * Upstream-style discovery loop: collect pending URLs on the satoru
+ * instance, fetch them (file/http), and inject the bytes back, so the
+ * subsequent render on the SAME instance sees cached fonts/images.
+ * Missing bindings (old builds) skip the loop silently.
+ */
+async function resolveHtmlResources(
+  module: HtmlToImageModule,
+  satoruInst: unknown,
+  htmls: string | string[],
+  width: number,
+  height: number | undefined,
+  baseUrl: string | undefined,
+  fontMap: Record<string, string> | undefined,
+  userAgent: string | undefined,
+  fallbackFonts: (Uint8Array | ArrayBuffer | string)[] | undefined,
+): Promise<void> {
+  const collect = module.satoru_collect_resources;
+  const getPending = module.satoru_get_pending_resources;
+  const addRes = module.satoru_add_resource;
+  if (
+    typeof collect !== "function" ||
+    typeof getPending !== "function" ||
+    typeof addRes !== "function"
+  )
+    return;
+  // Upstream default: generic families resolve via fontMap before discovery.
+  if (fontMap) {
+    const setFontMap = module.satoru_set_font_map;
+    if (typeof setFontMap === "function") {
+      (await setFontMap(satoruInst, { ...fontMap })) as unknown;
+    }
+  }
+  // Upstream idiom: user-supplied fallback fonts go in before discovery.
+  if (fallbackFonts && fallbackFonts.length > 0) {
+    const loadFallback = module.satoru_load_fallback_font;
+    if (typeof loadFallback === "function") {
+      for (const entry of fallbackFonts) {
+        try {
+          const bytes =
+            typeof entry === "string"
+              ? entry.startsWith("data:")
+                ? dataUrlToBytes(entry)
+                : await fetchResourceBytes(entry, baseUrl, userAgent)
+              : entry instanceof Uint8Array
+                ? entry
+                : new Uint8Array(entry);
+          if (!bytes || bytes.length === 0) continue;
+          (await loadFallback(satoruInst, bytes)) as unknown;
+        } catch {
+          // Per-font failure is non-fatal; discovery proceeds regardless.
+        }
+      }
+    }
+  }
+  const list = Array.isArray(htmls) ? htmls : [htmls];
+  for (let round = 0; round < 10; round++) {
+    let progressed = false;
+    for (const html of list) {
+      (await collect(satoruInst, html, width, height ?? 0, 0)) as unknown;
+      const bin = (await getPending(satoruInst)) as
+        | Uint8Array
+        | null
+        | undefined;
+      const pending = parsePendingResources(
+        bin instanceof Uint8Array ? bin : undefined,
+      );
+      if (pending.length === 0) continue;
+      progressed = true;
+      await Promise.all(
+        pending.map(async (r) => {
+          try {
+            const bytes = await fetchResourceBytes(r.url, baseUrl, userAgent);
+            if (!bytes) return;
+            (await addRes(
+              satoruInst,
+              r.url,
+              r.type === "image" ? 2 : r.type === "css" ? 3 : 1,
+              bytes,
+            )) as unknown;
+          } catch {
+            // Per-resource failure is non-fatal; render proceeds regardless.
+          }
+        }),
+      );
+    }
+    if (!progressed) break;
+  }
 }
 
 /**
@@ -263,6 +365,10 @@ export async function htmlToImage(
     fit,
     value,
     url,
+    baseUrl,
+    fontMap,
+    userAgent,
+    fallbackFonts,
   } = options;
   const fmtInt = FORMAT_INT[format];
 
@@ -336,12 +442,16 @@ export async function htmlToImage(
     }
   }
 
-  // ---- HTML input: unified binding first, instance 2-call fallback ----
+  // ---- HTML input: resolve resources on the instance, then render ----
+  // (unified `html_to_image` builds its own instance internally and cannot
+  // see pre-resolved fonts/images, so it is only a legacy fallback here).
   let htmls: string | string[];
   if (value !== undefined) {
     htmls = value as string | string[];
   } else if (typeof url === "string") {
-    const res = await fetch(url);
+    const res = await fetch(url, {
+      headers: { "User-Agent": userAgent ?? DEFAULT_USER_AGENT },
+    });
     if (!res.ok) {
       throw new Error(
         `wasm-html-to-image: failed to fetch HTML from URL: ${url} (${res.status})`,
@@ -353,6 +463,85 @@ export async function htmlToImage(
   }
   const satoruOpts = buildSatoruOptions(crop, fit);
 
+  const renderBinding = module.satoru_render;
+  const encodeBinding = module.converter_encode;
+  if (
+    typeof renderBinding === "function" &&
+    typeof encodeBinding === "function"
+  ) {
+    const loadImage = module.converter_load_image;
+    if (typeof loadImage !== "function")
+      throw requireBindingError("converter_load_image");
+    const sInst = module.satoru_create_instance();
+    try {
+      await resolveHtmlResources(
+        module,
+        sInst,
+        htmls,
+        width,
+        height,
+        baseUrl,
+        fontMap ?? DEFAULT_FONT_MAP,
+        userAgent ?? DEFAULT_USER_AGENT,
+        fallbackFonts,
+      );
+
+      if (format === "svg" || format === "pdf") {
+        const out = (await renderBinding(
+          sInst,
+          htmls,
+          width,
+          height ?? 0,
+          fmtInt,
+          satoruOpts,
+        )) as Uint8Array | null | undefined;
+        if (out == null) {
+          throw new Error("wasm-html-to-image: satoru_render returned null");
+        }
+        const bytes = new Uint8Array(
+          out instanceof Uint8Array ? out : new Uint8Array(out as ArrayBuffer),
+        );
+        return format === "svg" ? new TextDecoder().decode(bytes) : bytes;
+      }
+
+      const png = (await renderBinding(
+        sInst,
+        htmls,
+        width,
+        height ?? 0,
+        FORMAT_INT.png,
+        satoruOpts,
+      )) as Uint8Array | null | undefined;
+      if (png == null) {
+        throw new Error("wasm-html-to-image: satoru_render returned null");
+      }
+      const cInst = module.converter_create_instance();
+      try {
+        if (!loadImage(cInst, png)) {
+          throw new Error("wasm-html-to-image: failed to load render output");
+        }
+        const out = (await encodeBinding(
+          cInst,
+          fmtInt,
+          quality,
+          speed,
+          animation,
+        )) as Uint8Array | null | undefined;
+        if (out == null) {
+          throw new Error("wasm-html-to-image: failed to encode image");
+        }
+        return new Uint8Array(
+          out instanceof Uint8Array ? out : new Uint8Array(out as ArrayBuffer),
+        );
+      } finally {
+        module.converter_destroy_instance(cInst);
+      }
+    } finally {
+      module.satoru_destroy_instance(sInst);
+    }
+  }
+
+  // Legacy fallback for builds without instance render bindings.
   const unified = module.html_to_image;
   if (typeof unified === "function") {
     const out = (await unified(
@@ -373,75 +562,5 @@ export async function htmlToImage(
     );
     return format === "svg" ? new TextDecoder().decode(bytes) : bytes;
   }
-
-  const renderBinding = module.satoru_render;
-  const encodeBinding = module.converter_encode;
-  if (typeof renderBinding !== "function")
-    throw requireBindingError("satoru_render");
-  if (typeof encodeBinding !== "function")
-    throw requireBindingError("converter_encode");
-  const loadImage = module.converter_load_image;
-  if (typeof loadImage !== "function")
-    throw requireBindingError("converter_load_image");
-
-  if (format === "svg" || format === "pdf") {
-    const inst = module.satoru_create_instance();
-    try {
-      const out = (await renderBinding(
-        inst,
-        htmls,
-        width,
-        height ?? 0,
-        fmtInt,
-        satoruOpts,
-      )) as Uint8Array | null | undefined;
-      if (out == null) {
-        throw new Error("wasm-html-to-image: satoru_render returned null");
-      }
-      const bytes = new Uint8Array(
-        out instanceof Uint8Array ? out : new Uint8Array(out as ArrayBuffer),
-      );
-      return format === "svg" ? new TextDecoder().decode(bytes) : bytes;
-    } finally {
-      module.satoru_destroy_instance(inst);
-    }
-  }
-
-  const sInst = module.satoru_create_instance();
-  try {
-    const png = (await renderBinding(
-      sInst,
-      htmls,
-      width,
-      height ?? 0,
-      FORMAT_INT.png,
-      satoruOpts,
-    )) as Uint8Array | null | undefined;
-    if (png == null) {
-      throw new Error("wasm-html-to-image: satoru_render returned null");
-    }
-    const cInst = module.converter_create_instance();
-    try {
-      if (!loadImage(cInst, png)) {
-        throw new Error("wasm-html-to-image: failed to load render output");
-      }
-      const out = (await encodeBinding(
-        cInst,
-        fmtInt,
-        quality,
-        speed,
-        animation,
-      )) as Uint8Array | null | undefined;
-      if (out == null) {
-        throw new Error("wasm-html-to-image: failed to encode image");
-      }
-      return new Uint8Array(
-        out instanceof Uint8Array ? out : new Uint8Array(out as ArrayBuffer),
-      );
-    } finally {
-      module.converter_destroy_instance(cInst);
-    }
-  } finally {
-    module.satoru_destroy_instance(sInst);
-  }
+  throw requireBindingError("satoru_render");
 }

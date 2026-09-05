@@ -14,24 +14,21 @@ import {
 import {
   htmlToImage,
   type HtmlToImageOptions,
-  type OptimizeParams,
 } from "./core.js";
+import { isImageInput } from "./input.js";
 
 export type {
   OutputFormat,
   RenderOptions,
   HtmlToImageOptions,
-  OptimizeParams,
-  SingleWasmConnection,
 } from "./core.js";
+export { isImageInput };
 export type { HtmlToImageModule } from "./loader.js";
+export { dropCachedModule } from "./loader.js";
 
-let cachedModule: HtmlToImageModule | null = null;
-
-/** Lazily load (and reuse) the unified module. */
-export async function getDefaultModule(): Promise<HtmlToImageModule> {
-  if (!cachedModule) cachedModule = await loadHtmlToImageModule();
-  return cachedModule;
+/** Default connection: thin delegation to the loader-owned cache. */
+export function getDefaultModule(): Promise<HtmlToImageModule> {
+  return loadHtmlToImageModule();
 }
 
 /**

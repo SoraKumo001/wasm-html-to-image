@@ -24,11 +24,9 @@ EncodeResult render_bitmap_to_encoded(const SkBitmap& bitmap,
 std::string encode_image_to_svg(const SkBitmap& bitmap) {
     if (bitmap.isNull() || bitmap.width() <= 0 || bitmap.height() <= 0) return "";
     if (bitmap.getPixels() == nullptr) return "";
-    // svg_renderer.cpp の bitmapToDataUrl と等価 (encode_png + base64)。
-    sk_sp<SkData> png = encode_png(bitmap.pixmap());
-    if (!png || png->size() == 0) return "";
-    std::string url =
-        "data:image/png;base64," + base64_encode((const uint8_t*)png->data(), png->size());
+    // PNG data URL 化は common/skia_encode に一本化 (svg_renderer と共有)。
+    std::string url = encode_png_data_url(bitmap);
+    if (url.empty()) return "";
     const int w = bitmap.width();
     const int h = bitmap.height();
     std::ostringstream out;

@@ -36,10 +36,8 @@ std::vector<css_token_vector> parse_comma_separated_list(const css_token_vector&
 
 namespace {
 static std::string bitmapToDataUrl(const SkBitmap& bitmap) {
-    // 寄せ: common/skia_encode の encode_png と等価。
-    sk_sp<SkData> data = html_to_image::encode_png(bitmap.pixmap());
-    if (!data) return "";
-    return "data:image/png;base64," + base64_encode((const uint8_t*)data->data(), data->size());
+    // 寄せ: common/skia_encode の encode_png_data_url と等価のため委譲。
+    return html_to_image::encode_png_data_url(bitmap);
 }
 
 static bool has_radius(const litehtml::border_radiuses& r) {

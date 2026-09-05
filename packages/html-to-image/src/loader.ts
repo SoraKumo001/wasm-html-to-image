@@ -7,14 +7,13 @@
  * - Single `EMSCRIPTEN_BINDINGS(html_to_image)` with `satoru_*` /
  *   `converter_*` prefixed JS names (no bare `create_instance` etc.).
  *
- * Currently registered (Phase 1): instance lifecycle + log level only
- * (`satoru_create_instance` / `satoru_destroy_instance` /
- * `satoru_set_log_level` / `converter_create_instance` /
- * `converter_destroy_instance` / `converter_set_log_level`).
- * Per-value `satoru_render` / `converter_encode` wrappers and the unified
- * Bitmap-direct `html_to_image` binding land in Phase 2 (C++ lane) and are
- * therefore typed as optional here; callers must feature-check at runtime
- * (see `./core.ts`).
+ * Registered bindings: instance lifecycle + log level, render/encode
+ * (`satoru_render`, `converter_encode`, ...), resource discovery/injection
+ * (`satoru_collect_resources`, `satoru_get_pending_resources`,
+ * `satoru_add_resource`, `satoru_load_font`, `satoru_load_fallback_font`,
+ * `satoru_set_font_map`, ...), and the unified `html_to_image` call.
+ * Bindings added over time stay optional in the type below; callers must
+ * feature-check at runtime (see `./core.ts`).
  *
  * Node and browser share this minimal shape: dynamic `import()` of the glue
  * file URL, then invoking the factory. No `node:` builtins are used so the
@@ -31,8 +30,8 @@ export interface EmscriptenModuleArg extends Record<string, unknown> {
 
 /**
  * Structural view of the instantiated unified module.
- * Required members are the Phase-1-registered bindings; optional members
- * are the Phase-2 bindings (probed with `typeof` before use).
+ * Lifecycle bindings are required; feature bindings added over time stay
+ * optional and are probed with `typeof` before use.
  */
 export interface HtmlToImageModule {
   satoru_create_instance(): WasmInstancePtr;
@@ -62,14 +61,46 @@ export interface HtmlToImageModule {
   /** Image-input svg/pdf wrappers (registered; probed at runtime). */
   converter_encode_svg?(inst: WasmInstancePtr): string | Promise<string>;
   converter_encode_pdf?(inst: WasmInstancePtr): unknown;
-  /** Phase 2: HTML render wrapper (single plain-options object in/out). */
+  /**
+   * HTML resource discovery/injection (registered; probed at runtime).
+   * `collect` gathers pending URLs for the HTML, `get_pending_resources`
+   * returns them in the binary form (u32 count, then per entry: u8 type
+   * 1=font/2=image/3=css, u8 redraw flag, u32+url, u32+name, u32+characters),
+   * and `add_resource` injects fetched bytes back (same type ints).
+   */
+  satoru_collect_resources?(
+    inst: WasmInstancePtr,
+    html: string,
+    width: number,
+    height: number,
+    mediaType: number,
+  ): unknown;
+  satoru_get_pending_resources?(inst: WasmInstancePtr): unknown;
+  satoru_add_resource?(
+    inst: WasmInstancePtr,
+    url: string,
+    type: number,
+    data: Uint8Array,
+  ): unknown;
+  satoru_load_font?(
+    inst: WasmInstancePtr,
+    name: string,
+    data: Uint8Array,
+  ): unknown;
+  /** Family -> URL map for generic font resolution (registered). */
+  satoru_set_font_map?(
+    inst: WasmInstancePtr,
+    fontMap: Record<string, string>,
+  ): unknown;
+  /** User-supplied fallback font bytes (registered; upstream idiom). */
+  satoru_load_fallback_font?(inst: WasmInstancePtr, data: Uint8Array): unknown;
+  /** HTML render wrapper (positional: instance, htmls, w, h, format, options). */
   satoru_render?: (...args: unknown[]) => unknown;
-  /** Phase 2: image encode wrapper (single plain-options object in/out). */
+  /** Image encode wrapper (positional: instance, format, quality, speed, animation). */
   converter_encode?: (...args: unknown[]) => unknown;
   /**
-   * Phase 2 (planned): unified Bitmap-direct call
-   * (`render_bitmap_to_encoded` exposed to JS, no PNG intermediate
-   * round-trip through JS). Provisional name — the C++ lane owns it.
+   * Unified Bitmap-direct call (`render_bitmap_to_encoded` exposed to JS,
+   * no PNG intermediate round-trip through JS).
    */
   html_to_image?: (...args: unknown[]) => unknown;
   [key: string]: unknown;

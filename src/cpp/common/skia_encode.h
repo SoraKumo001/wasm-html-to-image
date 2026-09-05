@@ -45,6 +45,11 @@ struct EncodeResult {
 // --- 単形式primitive (satoru renderersの使い方と1:1) ---
 
 sk_sp<SkData> encode_png(const SkPixmap& pixmap);
+
+// PNG encode + base64 `data:image/png` URL. Shared implementation behind
+// `svg_renderer.cpp` `bitmapToDataUrl` and `encode_image_to_svg` below.
+// Returns "" when the bitmap cannot be encoded.
+std::string encode_png_data_url(const SkBitmap& bitmap);
 sk_sp<SkData> encode_webp_single(const SkPixmap& pixmap, float quality);
 sk_sp<SkData> encode_jpeg(const SkPixmap& pixmap, int quality);
 sk_sp<SkData> encode_avif(const SkBitmap& bitmap, int quality, int speed);

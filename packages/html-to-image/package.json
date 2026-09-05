@@ -10,6 +10,7 @@
   },
   "scripts": {
     "build": "tsc -b",
+    "test": "vitest run",
     "example:cli": "tsx src/cli.ts --help"
   },
   "exports": {
@@ -61,6 +62,7 @@
   "devDependencies": {
     "@types/node": "26.1.1",
     "tsx": "^4.23.1",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.2",
+    "vitest": "^4.1.10"
   }
 }

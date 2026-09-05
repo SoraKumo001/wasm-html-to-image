@@ -9,10 +9,10 @@
 
 struct SatoruInstance;
 sk_sp<SkData> renderDocumentToPdf(SatoruInstance* inst, int width, int height,
-                                  const RenderOptions& options);
+                                  const SatoruRenderOptions& options);
 
 sk_sp<SkData> renderHtmlsToPdf(const std::vector<std::string>& htmls, int width, int height,
                                SatoruContext& context, const char* master_css, const char* user_css,
-                               const RenderOptions& options);
+                               const SatoruRenderOptions& options);
 
 #endif  // PDF_RENDERER_H

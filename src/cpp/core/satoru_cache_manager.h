@@ -4,8 +4,8 @@
 #include <string>
 #include <vector>
 
+#include "common/lru_cache.h"
 #include "core/text/text_types.h"
-#include "utils/lru_cache.h"
 
 namespace satoru {
 
@@ -26,13 +26,13 @@ class SatoruCacheManager {
     }
 
     // テキスト整形キャッシュ (キー: ShapingKey, 値: ShapedResult)
-    LruCache<ShapingKey, ShapedResult, ShapingKeyHash> shapingCache;
+    html_to_image::LruCache<ShapingKey, ShapedResult, ShapingKeyHash> shapingCache;
 
     // テキスト計測キャッシュ (キー: MeasureKey, 値: MeasureResult)
-    LruCache<MeasureKey, MeasureResult, MeasureKeyHash> measureCache;
+    html_to_image::LruCache<MeasureKey, MeasureResult, MeasureKeyHash> measureCache;
 
     // 改行位置解析キャッシュ (キー: std::string, 値: 改行位置フラグ列)
-    LruCache<std::string, std::vector<char>> lineBreakCache;
+    html_to_image::LruCache<std::string, std::vector<char>> lineBreakCache;
 };
 
 }  // namespace satoru

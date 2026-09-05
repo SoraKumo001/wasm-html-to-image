@@ -1,8 +1,24 @@
 import { loadWorkerLib } from "./worker-lib-loader.js";
 import type { HtmlToImageWorker } from "./child-workers.js";
 export type { HtmlToImageWorker } from "./child-workers.js";
-import { type HtmlToImageOptions, type WorkerPoolStats } from "./core.js";
-export type { HtmlToImageOptions, WorkerPoolStats } from "./core.js";
+import { type HtmlToImageOptions } from "./core.js";
+export type { HtmlToImageOptions } from "./core.js";
+
+/** Operational stats of the worker pool. */
+export interface WorkerPoolStats {
+  /** Number of workers in the pool */
+  workerCount: number;
+  /** Jobs currently being executed */
+  activeJobs: number;
+  /** Jobs waiting for a free worker */
+  queuedJobs: number;
+  /** Total jobs completed successfully since start */
+  completedJobs: number;
+  /** Total jobs that failed since start */
+  failedJobs: number;
+  /** Average time per job in milliseconds */
+  avgJobTimeMs: number;
+}
 
 // worker-lib's published ESM is broken under plain Node (see
 // worker-lib-loader.ts); top-level await keeps call sites sync-shaped.
@@ -130,14 +146,11 @@ export const createHtmlToImageWorker = (params?: {
       if (prop in target) {
         return Reflect.get(target, prop, receiver);
       }
-      return async (...args: any[]) => {
-        totalPendingJobs++;
-        try {
-          return await target.execute(prop as any, ...args);
-        } finally {
-          totalPendingJobs--;
-        }
-      };
+      // No generic `execute` forwarding: only the explicit pool API above
+      // (render/getStats/reset) plus worker-lib's own methods (close,
+      // launchWorker, setLimit, waitAll, waitReady) are available.
+      // Returning undefined (instead of throwing) keeps `await pool` working.
+      return undefined;
     },
   }) as unknown as Omit<typeof workerInstance, "execute"> &
     HtmlToImageWorker & {
@@ -165,11 +178,40 @@ export const createHtmlToImageWorker = (params?: {
   return proxy;
 };
 
-const defaultWorker = createHtmlToImageWorker({ maxParallel: 1 });
+type DefaultWorker = ReturnType<typeof createHtmlToImageWorker>;
 
-export const { close, render, launchWorker, setLimit, waitAll, waitReady } =
-  defaultWorker;
+let defaultWorker: DefaultWorker | undefined;
 
-export const reset = () => defaultWorker.reset();
+/** Lazily create the shared single-slot pool on first use (not at import). */
+function getDefaultWorker(): DefaultWorker {
+  if (!defaultWorker) {
+    defaultWorker = createHtmlToImageWorker({ maxParallel: 1 });
+  }
+  return defaultWorker;
+}
 
-export const getStats = () => defaultWorker.getStats();
+export const close = (): void => {
+  getDefaultWorker().close();
+};
+
+export const render = (
+  options: HtmlToImageOptions,
+): Promise<Uint8Array | string> => getDefaultWorker().render(options);
+
+export const launchWorker = (): Promise<void[]> =>
+  getDefaultWorker().launchWorker();
+
+export const setLimit = (limit: number): void => {
+  getDefaultWorker().setLimit(limit);
+};
+
+export const waitAll = (): Promise<void> => getDefaultWorker().waitAll();
+
+export const waitReady = (retryTime?: number): Promise<void> =>
+  getDefaultWorker().waitReady(retryTime);
+
+export const reset = (): void => {
+  getDefaultWorker().reset();
+};
+
+export const getStats = (): WorkerPoolStats => getDefaultWorker().getStats();

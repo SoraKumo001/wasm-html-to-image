@@ -106,30 +106,6 @@ SatoruInstance::~SatoruInstance() {}
 
 const std::string& SatoruInstance::get_full_master_css() const { return cached_full_master_css; }
 
-void SatoruInstance::init_document(const char* html, int width, int height) {
-    int initial_height = (height > 0) ? height : 3000;
-    render_container = std::make_unique<container_skia>(width, initial_height, nullptr, context,
-                                                        &resourceManager, false);
-
-    std::string master_css = get_full_master_css() + "\nbr { display: -litehtml-br !important; }\n";
-    std::string user_css = context.getExtraCss();
-    doc = litehtml::document::createFromString(html, render_container.get(), master_css.c_str(),
-                                               user_css.c_str());
-    if (render_container) {
-        render_container->set_document(doc.get());
-    }
-}
-
-void SatoruInstance::layout_document(int width) {
-    if (doc && width != last_width) {
-        doc->render(width);
-        last_width = width;
-        if (render_container) {
-            render_container->set_height(doc->height());
-        }
-    }
-}
-
 static void scan_image_sizes(litehtml::element::ptr el, SatoruContext& context) {
     if (!el) return;
     const char* tag = el->get_tagName();
@@ -493,29 +469,6 @@ void SatoruInstance::load_image_pixels(const std::string& name, int width, int h
     context.loadImageFromPixels(name.c_str(), width, height, pixels.data(), data_url.c_str());
 }
 
-std::string SatoruInstance::get_pending_resources_json() {
-    auto requests = resourceManager.getPendingRequests();
-    if (requests.empty()) return "";
-
-    std::stringstream ss;
-    ss << "[";
-    for (size_t i = 0; i < requests.size(); ++i) {
-        const auto& req = requests[i];
-        std::string typeStr = "font";
-        if (req.type == ResourceType::Image)
-            typeStr = "image";
-        else if (req.type == ResourceType::Css)
-            typeStr = "css";
-
-        ss << "{\"url\":\"" << json_escape(req.url) << "\",\"name\":\"" << json_escape(req.name)
-           << "\",\"characters\":\"" << json_escape(req.characters) << "\",\"type\":\"" << typeStr
-           << "\",\"redraw_on_ready\":" << (req.redraw_on_ready ? "true" : "false") << "}";
-        if (i < requests.size() - 1) ss << ",";
-    }
-    ss << "]";
-    return ss.str();
-}
-
 const uint8_t* SatoruInstance::get_pending_resources_binary(int& out_size) {
     auto requests = resourceManager.getPendingRequests();
     pending_resources_buffer.clear();
@@ -697,124 +650,6 @@ void satoru_api_set_font_map(SatoruInstance* inst, const std::map<std::string, s
 
 void satoru_api_set_log_level(int level) { g_js_logger.setLogLevel((LogLevel)level); }
 
-std::string satoru_api_get_pending_resources(SatoruInstance* inst) {
-    return inst->get_pending_resources_json();
-}
-
 const uint8_t* satoru_api_get_pending_resources_binary(SatoruInstance* inst, int& out_size) {
     return inst->get_pending_resources_binary(out_size);
-}
-
-std::string satoru_api_get_font_diagnostics(SatoruInstance* inst) {
-    if (!inst || !inst->render_container) return "[]";
-    std::ostringstream ss;
-    ss << "[";
-
-    const auto& reqs = inst->render_container->get_requested_font_attributes();
-    const auto& missing = inst->render_container->get_missing_fonts();
-
-    bool first = true;
-    for (const auto& req : reqs) {
-        if (!first) ss << ",";
-        first = false;
-
-        bool isMissing = missing.find(req) != missing.end();
-
-        std::vector<char32_t> usedFontCharacters;
-        inst->render_container->collect_used_font_characters(req, usedFontCharacters);
-        std::string chars = codepoints_to_utf8(usedFontCharacters);
-
-        std::string styleStr = "normal";
-        if (req.slant == SkFontStyle::kItalic_Slant)
-            styleStr = "italic";
-        else if (req.slant == SkFontStyle::kOblique_Slant)
-            styleStr = "oblique";
-
-        ss << "{";
-        ss << "\"family\":\"" << json_escape(req.family) << "\",";
-        ss << "\"weight\":" << req.weight << ",";
-        ss << "\"style\":\"" << styleStr << "\",";
-        ss << "\"status\":\"" << (isMissing ? "missing" : "loaded") << "\",";
-        ss << "\"characters\":\"" << json_escape(chars) << "\"";
-        ss << "}";
-    }
-    ss << "]";
-    return ss.str();
-}
-
-void satoru_api_init_document(SatoruInstance* inst, const char* html, int width, int height) {
-    if (!inst) return;
-    inst->init_document(html, width, height);
-}
-
-void satoru_api_layout_document(SatoruInstance* inst, int width) {
-    if (!inst) return;
-    inst->layout_document(width);
-}
-
-const uint8_t* satoru_api_render_from_state(SatoruInstance* inst, int width, int height,
-                                     RenderFormat format, const SatoruRenderOptions& options,
-                                     int& out_size) {
-    if (!inst) {
-        out_size = 0;
-        return nullptr;
-    }
-    if (!inst->doc) {
-        out_size = 0;
-        return nullptr;
-    }
-
-    switch (format) {
-        case RenderFormat::SVG: {
-            std::string svg = renderDocumentToSvg(inst, width, height, options);
-            auto data = SkData::MakeWithCopy(svg.c_str(), svg.length());
-            inst->context.set_last_svg(std::move(data));
-            out_size = (int)inst->context.get_last_svg()->size();
-            return inst->context.get_last_svg()->bytes();
-        }
-        case RenderFormat::PNG:
-            return render_and_store(
-                inst, [&]() { return renderDocumentToPng(inst, width, height, options); },
-                &SatoruContext::set_last_png, out_size);
-        case RenderFormat::WebP:
-            return render_and_store(
-                inst, [&]() { return renderDocumentToWebp(inst, width, height, options); },
-                &SatoruContext::set_last_webp, out_size);
-        case RenderFormat::PDF:
-            return render_and_store(
-                inst, [&]() { return renderDocumentToPdf(inst, width, height, options); },
-                &SatoruContext::set_last_pdf, out_size);
-        default:
-            break;
-    }
-    out_size = 0;
-    return nullptr;
-}
-
-const uint8_t* satoru_api_merge_pdfs(SatoruInstance* inst, const std::vector<sk_sp<SkData>>& pdfs,
-                              int& out_size) {
-    if (pdfs.empty()) {
-        out_size = 0;
-        return nullptr;
-    }
-
-    std::vector<const uint8_t*> data_ptrs;
-    std::vector<size_t> sizes;
-    for (auto& pdf : pdfs) {
-        if (pdf) {
-            data_ptrs.push_back(reinterpret_cast<const uint8_t*>(pdf->data()));
-            sizes.push_back(pdf->size());
-        }
-    }
-
-    auto merged = satoru::merge_pdf_binaries(data_ptrs, sizes);
-    if (merged.empty()) {
-        out_size = 0;
-        return nullptr;
-    }
-
-    auto merged_data = SkData::MakeWithCopy(merged.data(), merged.size());
-    inst->context.set_last_pdf(merged_data);
-    out_size = (int)merged_data->size();
-    return reinterpret_cast<const uint8_t*>(merged_data->data());
 }

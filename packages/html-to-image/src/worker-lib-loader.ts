@@ -28,6 +28,15 @@ export function loadWorkerLib(): Promise<WorkerLib> {
         return mod.createRequire(import.meta.url)("worker-lib") as WorkerLib;
       }
     })();
+    // A rejected load must not poison the cache; allow a later retry.
+    cached.catch(() => {
+      resetWorkerLib();
+    });
   }
   return cached;
+}
+
+/** Drop the cached load (e.g. after a failed load) so it can be retried. */
+export function resetWorkerLib(): void {
+  cached = undefined;
 }

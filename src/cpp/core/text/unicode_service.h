@@ -6,9 +6,9 @@
 #include <unordered_map>
 #include <vector>
 
+#include "common/lru_cache.h"
 #include "include/core/SkRefCnt.h"
 #include "modules/skunicode/include/SkUnicode.h"
-#include "utils/lru_cache.h"
 
 namespace satoru {
 

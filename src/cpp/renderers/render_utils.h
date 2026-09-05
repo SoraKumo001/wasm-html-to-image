@@ -6,7 +6,7 @@
 #include "include/core/SkCanvas.h"
 
 inline void apply_resize_transform(SkCanvas* canvas, int src_w, int src_h,
-                                   const RenderOptions& options) {
+                                   const SatoruRenderOptions& options) {
     if (options.outputWidth > 0 || options.outputHeight > 0) {
         if (src_w < 1) src_w = 1;
         if (src_h < 1) src_h = 1;

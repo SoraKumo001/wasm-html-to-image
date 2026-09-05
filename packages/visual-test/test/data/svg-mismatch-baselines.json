@@ -1,0 +1,102 @@
+{
+  "01-layout.html": {
+    "fill": 11.970973782771535,
+    "outline": 8.09503745318352
+  },
+  "02-typography.html": {
+    "fill": 4.250610252237592,
+    "outline": 10.713181448331978
+  },
+  "03-graphics.html": {
+    "fill": 6.5962414578587705,
+    "outline": 10.71611617312073
+  },
+  "04-box-model.html": {
+    "fill": 7.955144777662874,
+    "outline": 13.595915201654602
+  },
+  "05-images.html": {
+    "fill": 13.05648249452954,
+    "outline": 15.99042669584245
+  },
+  "06-flexbox.html": {
+    "fill": 6.808080808080808,
+    "outline": 14.074179292929292
+  },
+  "07-table.html": {
+    "fill": 12.104383886255924,
+    "outline": 17.432938388625594
+  },
+  "08-list-marker.html": {
+    "fill": 1.5301724137931034,
+    "outline": 4.384967672413794
+  },
+  "09-grid.html": {
+    "fill": 8.720780590717299,
+    "outline": 12.059810126582278
+  },
+  "10-container-queries.html": {
+    "fill": 4.773866348448688,
+    "outline": 6.065632458233891
+  },
+  "11-complex-text.html": {
+    "fill": 1.535211267605634,
+    "outline": 2.261150234741784
+  },
+  "12-bidi-text.html": {
+    "fill": 3.9897388059701493,
+    "outline": 9.563432835820896
+  },
+  "13-backdrop-filter.html": {
+    "fill": 4.193333333333333,
+    "outline": 7.07875
+  },
+  "14-line-clamp.html": {
+    "fill": 4.521284271284271,
+    "outline": 13.968073593073594
+  },
+  "15-showcase.html": {
+    "fill": 3.6363912515188335,
+    "outline": 6.718712029161604
+  },
+  "16-advanced-shapes.html": {
+    "fill": 4.762303149606299,
+    "outline": 2.921998031496063
+  },
+  "17-background-clip.html": {
+    "fill": 7.721824942791762,
+    "outline": 6.158466819221968
+  },
+  "18-border-image.html": {
+    "fill": 13.44297542735043,
+    "outline": 12.030448717948717
+  },
+  "19-mask.html": {
+    "fill": 19.532852564102566,
+    "outline": 8.568108974358974
+  },
+  "20-flex-absolute.html": {
+    "fill": 4.623860182370821,
+    "outline": 6.990786474164133
+  },
+  "21-vertical-writing.html": {
+    "fill": 4.246011376248612,
+    "outline": 12.75690205327414
+  },
+  "22-modern-features.html": {
+    "fill": 12.116313094367227,
+    "outline": 16.79965252377469
+  },
+  "23-test-repro-black.html": {
+    "fill": 6.710117773019272,
+    "outline": 14.470958244111348
+  },
+  "24-media-print.html": {
+    "fill": 3.2455583756345177,
+    "outline": 4.435120558375635
+  },
+  "25-page-breaks.html": {
+    "fill": 0.2558233394833948,
+    "outline": 0.3261070110701107
+  }
+}
