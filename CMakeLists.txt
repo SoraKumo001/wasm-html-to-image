@@ -453,7 +453,7 @@ add_executable(html_to_image $<TARGET_OBJECTS:html_to_image_core>)
 target_link_libraries(html_to_image PRIVATE litehtml skia_lib)
 target_link_options(html_to_image PRIVATE ${COMMON_LINK_OPTIONS})
 set_target_properties(html_to_image PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/packages/wasm/dist"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/packages/html-to-image/dist"
     OUTPUT_NAME "html-to-image"
     SUFFIX ".js"
 )
@@ -463,7 +463,7 @@ target_link_libraries(html_to_image_single PRIVATE litehtml skia_lib)
 # SINGLE派生のみ +SINGLE_FILE と ENVIRONMENT=web,worker,node許容 (COMMON/SINGLE差分)
 target_link_options(html_to_image_single PRIVATE ${COMMON_LINK_OPTIONS} "-sSINGLE_FILE=1" "-sENVIRONMENT=web,worker,node")
 set_target_properties(html_to_image_single PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/packages/wasm/dist"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/packages/html-to-image/dist"
     OUTPUT_NAME "html-to-image-single"
     SUFFIX ".js"
 )

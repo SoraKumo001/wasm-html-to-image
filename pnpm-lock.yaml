@@ -23,9 +23,6 @@ importers:
       commander:
         specifier: 15.0.0
         version: 15.0.0
-      wasm-html-to-image-wasm:
-        specifier: workspace:*
-        version: link:../wasm
     devDependencies:
       '@types/node':
         specifier: 26.1.1
@@ -33,22 +30,6 @@ importers:
       tsx:
         specifier: ^4.23.1
         version: 4.23.13
-      typescript:
-        specifier: ^5.9.2
-        version: 5.9.3
-    optionalDependencies:
-      satoru-render:
-        specifier: 1.0.15
-        version: 1.0.15
-      wasm-image-optimization:
-        specifier: 2.0.10
-        version: 2.0.10
-
-  packages/wasm:
-    devDependencies:
-      '@types/node':
-        specifier: 26.1.1
-        version: 26.1.1
       typescript:
         specifier: ^5.9.2
         version: 5.9.3
@@ -228,33 +209,6 @@ packages:
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
     os: [darwin]
 
-  satoru-render@1.0.15:
-    resolution: {integrity: sha512-/Sk3IdhJYcYeJFMkeQameiSYBeXtQvEQhrWqpI1GUvxn1ntOrgPh5WhDZCmU6D4GyLD9IrbCFnISk2y325wJCA==}
-    hasBin: true
-    peerDependencies:
-      '@unocss/core': ^66.6.5
-      '@unocss/preset-wind4': ^66.6.5
-      jsdom: ^20.0.0 || ^21.0.0 || ^22.0.0 || ^23.0.0 || ^24.0.0 || ^25.0.0 || ^29.0.0
-      preact: ^10.28.0
-      preact-render-to-string: ^6.6.0
-      react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
-      react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
-    peerDependenciesMeta:
-      '@unocss/core':
-        optional: true
-      '@unocss/preset-wind4':
-        optional: true
-      jsdom:
-        optional: true
-      preact:
-        optional: true
-      preact-render-to-string:
-        optional: true
-      react:
-        optional: true
-      react-dom:
-        optional: true
-
   tsx@4.23.13:
     resolution: {integrity: sha512-BL5MGkRln6aDYhb0xbQlEAGw743BaZYWdbWtdJOBriYJboKgUUYCadFp2/FpBBZquBC/ezNBn7wMMPx7FDZUDw==}
     engines: {node: '>=18.0.0'}
@@ -267,16 +221,6 @@ packages:
 
   undici-types@8.3.0:
     resolution: {integrity: sha512-j375ScV60dom+YkPFIfTLcOiPxkN/buHz5GobjLhixFuANaNs3C9l4GmrWqejgXWJ7BbJcFYpTEUkS1Ge8bpZQ==}
-
-  wasm-image-optimization@2.0.10:
-    resolution: {integrity: sha512-O2hMEuaQmNkbkmz0Kvh2RZ4T6F2sAx8jeRBYg01IWpyJ4TkxY41z9zGYwZUhNFZTb6060/XWPe2N10mgD5jRng==}
-    hasBin: true
-
-  worker-lib@2.2.0:
-    resolution: {integrity: sha512-femfnzMFgw9Uvj9LUJ1bkIi/3PJavpZNCgq9OGsrcCzxmRp2+RGkq1d+kjsvOxC8JKIAI7K4+laeq8cMWT2AYQ==}
-
-  worker-lib@2.2.1:
-    resolution: {integrity: sha512-CauU4vz3vZUBG3A2CY93GY94KLhbH8JtPKtuvKu2w5G07cHkZ73QkTAJ/lEHDL6arT5WDu1qpU++T0+kGDgSCg==}
 
 snapshots:
 
@@ -396,11 +340,6 @@ snapshots:
   fsevents@2.3.3:
     optional: true
 
-  satoru-render@1.0.15:
-    dependencies:
-      worker-lib: 2.2.0
-    optional: true
-
   tsx@4.23.13:
     dependencies:
       esbuild: 0.28.2
@@ -410,15 +349,3 @@ snapshots:
   typescript@5.9.3: {}
 
   undici-types@8.3.0: {}
-
-  wasm-image-optimization@2.0.10:
-    dependencies:
-      commander: 15.0.0
-      worker-lib: 2.2.1
-    optional: true
-
-  worker-lib@2.2.0:
-    optional: true
-
-  worker-lib@2.2.1:
-    optional: true

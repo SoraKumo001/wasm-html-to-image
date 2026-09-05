@@ -1,114 +1,122 @@
-# wasm-html-to-image (Phase 1: 統合SDKの足場)
+# wasm-html-to-image
 
-HTML → 画像変換の統合SDK。2つのWASMエンジンをTypeScript層でオーケストレーションする。
+HTML → 画像変換の単一 Skia-WASM 統合ライブラリ。`satoru` (HTML 描画) と `wasm-image-optimization` (画像変換) を 1 つの Emscripten モジュールに統合し、TypeScript ファサードから利用する。
 
-## Phase 1 構成図
+成果物: `packages/html-to-image/dist/html-to-image.{js,wasm}` (通常版)、`packages/html-to-image/dist/html-to-image-single.js` (SINGLE_FILE 版)。公開パッケージは `wasm-html-to-image` の1つのみ (ローダー同梱)。
+
+## 構成
 
 ```text
-                    ┌─────────────────────────────┐
- input.html / URL   │     wasm-html-to-image      │
-        │           │  packages/html-to-image     │
-        ▼           │                             │
- ┌────────────┐     │  src/core.ts                │
- │ CLI (cli)  │────▶│   htmlToImage()             │
- │ commander  │     │   convertImage()            │
- └────────────┘     │        │          │         │
-        │           │        ▼          ▼         │
-        │           │  ┌──────────┐ ┌──────────┐  │
-        │           │  │ satoru-  │ │ wasm-    │  │
-        └──────────▶│  │ render   │ │ image-   │  │
-  src/single.ts     │  │ (HTML→   │ │ optimiza-│  │
-  (embedded WASM    │  │ SVG/PNG/ │ │ tion     │  │
-   既定インスタンス) │  │ PDF/WebP)│ │ (PNG→    │  │
-                    │  └────┬─────┘ │ JPEG/    │  │
-                    │       │ PNG   │ WebP/    │  │
-                    │       │ 中間  │ AVIF/    │  │
-                    │       └──────▶│ RAW/TH)  │  │
-                    │               └──────────┘  │
-                    └─────────────────────────────┘
+packages/html-to-image (単一公開パッケージ: core/single/index/cli/loader)
+        │ loadHtmlToImageModule() → HtmlToImageModule 1インスタンス共有
+        ▼
+packages/html-to-image/dist (単一WASM, EXPORT_NAME=createHtmlToImageModule, MODULARIZE+EXPORT_ES6)
+  satoru_render (HTML→PNG/SVG/PDF/WebP) / converter_encode (PNG→JPEG/WebP/AVIF/RAW/ThumbHash)
+  html_to_image (Bitmap直結: PNG中間をJSに返さない単一呼出し)
 ```
 
-### 形式ごとの経路
+ワークスペース (`pnpm-workspace.yaml`, `packages/*`):
 
-| 出力形式 | 経路 |
+- `wasm-html-to-image` (`packages/html-to-image`): 唯一の公開パッケージ。TS ファサード + 単一 WASM ローダー (`src/loader.ts`) 同梱。Node/browser 共用、`glueUrl`/`locateFile` 指定可、プロセス内キャッシュあり。単一WASM専用。旧2依存 (`satoru-render` / `wasm-image-optimization`) への依存・フォールバックなし。
+
+形式ごとの経路 (`src/core.ts`):
+
+| 出力 | 経路 |
 |---|---|
-| `svg` / `pdf` | satoru直出力 (1段) |
-| `png` / `jpeg` / `webp` / `avif` / `raw` / `thumbhash` | satoru PNG中間 → `optimizeImage` エンコード (2段) |
+| `svg` / `pdf` | satoru 直出力 (1 段) |
+| `png` / `jpeg` / `webp` / `avif` / `raw` / `thumbhash` | satoru PNG 中間 → encode (2 段) または `html_to_image` 直結 (1 呼出し) |
 
-※ `raw` / `thumbhash` は画像バイナリではなく生ピクセル/ハッシュバイト列を返す
-(`wasm-image-optimization` の仕様通り)。
+経路選択 (`htmlToImage`, 単一WASMのみ):
 
-### エントリ
+1. `html_to_image` バインディングあり → Bitmap 直結単一呼出し (`render_bitmap_to_encoded`, JS に PNG 中間を返さない)。
+2. なし → 単一モジュール 2 呼出し (`satoru_render` → `converter_encode`、同一モジュール共有)。いずれのバインディングも未登録のビルドではエラー (単一WASM必須、旧2依存フォールバックなし)。
 
-| エントリ | 用途 |
-|---|---|
-| `wasm-html-to-image` / `./index` | Node用: `core.ts` 再export + `createDeps()` (利用者が `Satoru` / `ImageConverter` を注入) |
-| `./single` | embedded-WASM用: `Satoru.create()` / `ImageConverter.create()` の既定インスタンスで `render()` / `convertImage()` |
-| `wasm-html-to-image` (bin) | CLI |
+注意: `resize`/`crop`/`fit` は描画段のみで適用しエンコード段では再適用しない。`quality`/`speed` はエンコード段のみに効く (`svg`/`pdf` では無視)。
 
-## 使い方
-
-```bash
-# 依存導入 + ビルド (Phase 2 以降に実行)
-pnpm install
-pnpm build
-
-# CLI 動作確認 (ビルド不要, tsx で直接実行)
-pnpm example:cli
-npx tsx packages/html-to-image/src/cli.ts input.html -o out.webp -w 800 -f webp -q 85
-```
+## 公開 API
 
 ```ts
-// single (簡易)
-import { render } from "wasm-html-to-image/single";
-const webp = await render({ value: "<h1>hi</h1>", width: 800, format: "webp" });
+// single: ゼロコンフィグ (単一WASM既定接続)
+import { render, convertImage } from "wasm-html-to-image/single";
+const png = await render({ value: "<h1>hi</h1>", width: 800, format: "png" }); // Uint8Array
 const svg = await render({ value: "<h1>hi</h1>", width: 800, format: "svg" }); // string
+await convertImage({ image: png, format: "webp", quality: 80 }); // { data, ... }
 
-// node (注入)
-import { Satoru } from "satoru-render/index";
-import { ImageConverter } from "wasm-image-optimization";
-import { createDeps, htmlToImage } from "wasm-html-to-image";
+// node: 単一接続を明示構築
+import { loadHtmlToImageModule, htmlToImage, convertImage } from "wasm-html-to-image";
+const mod = await loadHtmlToImageModule();
+await htmlToImage(mod, { value: "<h1>hi</h1>", width: 800, format: "webp" });
+await convertImage(mod, { image: png, format: "jpeg", quality: 85 });
 ```
 
-CLI オプション: `<input> -o -w -h -f -q`
+`convertImage` (single) は画像→画像変換のみ (HTML 描画なし)。
 
-## Phase 2 方針 (単一WASM化)
+## workerd (Cloudflare Workers)
 
-- C++基盤の方針は `src/cpp/common/README.md` を正とする
-  (重複排除・`common/skia_encode` 切出し・コンテキスト分離維持)。
-- ビルド基盤: `CMakeLists.txt` / `vcpkg.json` / `triplets/` / `scripts/build-wasm.ts`、
-  統合型: `src/cpp/bridge/bridge_types.h`、単一エントリ: `src/cpp/main.cpp`。
+上流互換の自動切替え: `workerd` 条件では `dist/workerd.js` が解決される
+(`.` の `workerd` 条件 + `./workerd` サブパス公開、typesVersions なし)。
+SINGLE_FILE 版ではなく通常版 `dist/html-to-image.wasm` を
+`WebAssembly.Module` として束ね、`instantiateWasm` を上書きする上流式
+(`satoru` / `wasm-image-optimization` の `workerd.ts` を踏襲)。
 
-- [ ] `pnpm install` + `tsc -b` で型解決を確認 (`satoru-render@1.0.15` / `wasm-image-optimization@2.0.10` はバージョン参照で仮置き)
-- [ ] `example:cli` および実HTMLでの全形式マトリクス確認 (svg/png/pdf/jpeg/webp/avif/raw/thumbhash)
-- [ ] `dist` バンドル方針の決定 (上流は `tsc -b && rolldown -c`; Phase 1 の `build` は `tsc -b` のみ)
-- [ ] `workerd` / `workers` エントリの要否検討 (上流両リポにあるが Phase 1 では未作成)
-- [ ] JSDOM ハイドレーション (`satoru` CLI の `--no-jsdom` 相当) の要否検討
-- [ ] `diagnostics` / `limits` / `quality` 既定値の調整とテスト追加
-- [ ] `raw` / `thumbhash` 出力の拡張子・取り扱い整理
+```ts
+// wrangler.toml: [assets] 等で dist/html-to-image.wasm を同梱し、
+// Module として import できる構成にすること
+import { render, convertImage } from "wasm-html-to-image/workerd";
+const png = await render({ value: "<h1>hi</h1>", width: 800, format: "png" });
+await convertImage({ image: png, format: "webp", quality: 80 });
+```
 
-## 切替方針: 単一WASM接続 (primary) + 2依存フォールバック (kept)
+残課題: `workers` スレッドプール (`worker-lib`) は今回作らない。
+上流は `./workers` + `workers-dummy.js` で node/browser/workerd を切替えているが、
+本リポは単一WASM直結のため要否検討から着手すること。
 
-- TSファサードの既定経路は **単一WASM接続** (`packages/wasm` の
-  `loadHtmlToImageModule()` → `HtmlToImageModule` 1インスタンス共有)。
-  `./single` はこの経路のみを使う。
-- 経路選択 (`core.ts` `htmlToImageSingle`):
-  1. `html_to_image` バインディング有り → **Bitmap直結単一呼出し**
-     (PNG中間をJSに返さない。C++ `render_bitmap_to_encoded` のJS公開待ち);
-  2. 無し → **単一モジュール2呼出し** (`satoru_render` → `converter_encode`,
-     `satoru_*` / `converter_*` 値ラッパーのC++登録待ち);
-  3. 上記バインディング未登録の現行ビルドでは `./index` の `createDeps()`
-     による **2依存フォールバック** (`satoru-render` +
-     `wasm-image-optimization`, `optionalDependencies`) を使用。
-- 2依存版は **フォールバックとして残す** (削除しない)。
-  C++側 (`CMakeLists` / `build` / `src/cpp`) には触らない。
+## CLI
 
-## 制約事項: バイナリ2本併用 (フォールバック経路のみ)
+```bash
+npx tsx packages/html-to-image/src/cli.ts input.html -o out.webp -w 800 -f webp -q 85
+npx tsx packages/html-to-image/src/cli.ts https://example.com -o out.png -f png
+pnpm --filter wasm-html-to-image example:cli  # --help表示
+```
 
-- 本SDKは Phase 1 では **2つのWASMバイナリを併用** する
-  (`satoru.wasm` + `wasm-image-optimization.wasm`)。C++/CMake/vcpkg には触らない。
-- 2段経路では **PNG中間バッファのコピーが1回発生** する (大判出力時のメモリに注意)。
-- `resize` / `crop` / `fit` は **satoru描画段でのみ適用** し、エンコード段では再適用しない
-  (二重リサイズ防止のため `width` / `height` / `crop` / `fit` を渡さない設計)。
-- `quality` / `speed` はエンコード段のみに効く (`svg` / `pdf` 直出力時は無視される)。
-- 両エンジンの `logLevel` / `onLog` 連携は未実装 (必要になれば `deps` 経由で個別設定)。
+オプション: `<input (HTMLパス|URL)> -o/--output -w/--width(既定800) -h/--height(省略時auto) -f/--format(svg/png/pdf/jpeg/webp/avif/raw/thumbhash, 既定png) -q/--quality(既定85)`
+
+## ビルド
+
+前提: EMSDK (`EMSDK`, `EMSDK_VERSION` 任意), `VCPKG_ROOT`, Git `patch.exe` (Windows では Git 同梱版を自動優先), Ninja (あれば使用、なければ make)。
+
+```bash
+pnpm install
+npx tsx scripts/build-wasm.ts configure [--force]
+npx tsx scripts/build-wasm.ts build
+pnpm --filter wasm-html-to-image build       # tsc -b (ファサード+ローダー型)
+node scripts/smoke-test.mjs [test-image-path]
+```
+
+CMake オプション (`CMakeLists.txt`):
+
+| オプション | 既定 | 意味 |
+|---|---|---|
+| `WASM_EXPORT_NAME` | `createHtmlToImageModule` | JS ファクトリ名 (`-sEXPORT_NAME`) |
+| `WASM_AVIF_BACKEND` | `DAV1D` | `DAV1D` 既定、`AOM` は OPT-IN (`-DWASM_AVIF_BACKEND=AOM`) |
+| `WASM_ENABLE_TEXT_SHAPING` | `ON` | freetype+harfbuzz+skshaper |
+| `WASM_ENABLE_PDF` | `ON` | Skia PDF (`src/pdf`+`pathops`)、OFF でも pathops は残る |
+| `WASM_ENABLE_SKSL` | `OFF` | SkSL 系 (`SkRuntimeBlender` 等) を除外して軽量化 |
+
+vcpkg (`vcpkg.json`): freetype/png/jpeg-turbo/webp/dav1d/zlib/gumbo/bzip2/brotli/expat/ctre/utf8proc/libunibreak/qpdf/harfbuzz。libavif は FetchContent (`v1.1.1`)、Skia は FetchContent `main` 追従。C++ 側 LSP 設定: `.vscode/c_cpp_properties.json` (Emscripten + `build/compile_commands.json`)。
+
+C++ 構成の詳細は `src/cpp/common/README.md` (重複排除・`common/skia_encode` 方針)、残作業は `src/cpp/core/TODO.md` を参照。
+
+## 検証実績
+
+`scripts/smoke-test.mjs` (`packages/html-to-image/dist/html-to-image-single.js` 対象): a/b/c いずれも PASS。
+
+- a (converter 往復): `converter_load_image` → `converter_encode(WebP)` マジック `RIFF` 確認 → `converter_crop(8x8)` → `converter_encode(PNG)` マジック `89PNG` 確認。
+- b (satoru 描画): `satoru_render("<h1>hi</h1>", 800, 600, PNG)` が PNG バイト列 (1970B) を返却。
+- c (統合): `html_to_image(...)` がクラッシュなく応答。
+
+## 既知制限
+
+- 未登録スタブ (`src/cpp/main.cpp` で明示的に除外): `collect_resources` / `add_resource` / `load_font` / `load_fallback_font` / `init_document` / `layout_document` / `render_from_state` / `merge_pdfs` / `get_pending_resources` / `get_font_diagnostics` 系。C++ 実体が TODO スタブのためバインディング未公開。登録済み resource 系は `scan_css` / `load_image` / `set_font_map` / `get_last_*_size` / collect-profile 系のみ。
+- TS 側は単一WASM専用。`satoru_render` / `converter_encode` / `html_to_image` の有無は実行時に `typeof` 判定し、未登録時は単一WASM必須エラーを投げる。
+- Skia は `main` 追従 (FetchContent shallow)。上流変更でビルドが壊れた場合は `builtin-baseline` (`vcpkg.json`) と Skia `GIT_TAG` の固定を検討すること。

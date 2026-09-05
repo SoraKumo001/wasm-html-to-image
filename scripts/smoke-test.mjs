@@ -1,6 +1,6 @@
 // Single-WASM smoke test (reproducible).
 // Usage: node scripts/smoke-test.mjs [test-image-path]
-// Loads packages/wasm/dist/html-to-image-single.js and checks:
+// Loads packages/html-to-image/dist/html-to-image-single.js and checks:
 //   a. converter_encode (test01.jpg -> webp/png, magic RIFF/89PNG)
 //   b. satoru_render returns null without crashing (renderers unported)
 //   c. html_to_image responds without crashing
@@ -9,7 +9,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const singleJs = path.join(repoRoot, "packages", "wasm", "dist", "html-to-image-single.js");
+const singleJs = path.join(repoRoot, "packages", "html-to-image", "dist", "html-to-image-single.js");
 const defaultImg = "C:/prog/npms/@node-libraries/wasm-image-optimization/images/test01.jpg";
 const imgPath = process.argv[2] ?? defaultImg;
 

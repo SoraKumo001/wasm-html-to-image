@@ -14,7 +14,7 @@
  * Per-value `satoru_render` / `converter_encode` wrappers and the unified
  * Bitmap-direct `html_to_image` binding land in Phase 2 (C++ lane) and are
  * therefore typed as optional here; callers must feature-check at runtime
- * (see `packages/html-to-image/src/core.ts`).
+ * (see `./core.ts`).
  *
  * Node and browser share this minimal shape: dynamic `import()` of the glue
  * file URL, then invoking the factory. No `node:` builtins are used so the
@@ -69,6 +69,12 @@ export interface LoadOptions {
   locateFile?: (path: string, scriptDirectory: string) => string;
   /** Extra Emscripten `Module` arguments. */
   moduleArg?: EmscriptenModuleArg;
+  /**
+   * Pre-bundled MODULARIZE factory (workerd: statically imported glue).
+   * When set, the dynamic `import()` of the glue file is skipped.
+   * Non-breaking addition; existing callers are unaffected.
+   */
+  factory?: CreateHtmlToImageModule;
   /** Bypass the process-wide cache (tests). */
   noCache?: boolean;
 }
@@ -88,16 +94,22 @@ export async function loadHtmlToImageModule(
   options: LoadOptions = {},
 ): Promise<HtmlToImageModule> {
   if (cachedModule && !options.noCache) return cachedModule;
-  const glue = String(options.glueUrl ?? defaultGlueUrl());
-  const glueDir = glue.slice(0, glue.lastIndexOf("/") + 1);
-  const ns = (await import(/* @vite-ignore */ glue)) as {
-    default?: CreateHtmlToImageModule;
-    createHtmlToImageModule?: CreateHtmlToImageModule;
-  };
-  const factory = ns.default ?? ns.createHtmlToImageModule;
+  let factory = options.factory;
+  let glueLabel = "(pre-bundled factory)";
+  let glueDir = "";
+  if (!factory) {
+    const glue = String(options.glueUrl ?? defaultGlueUrl());
+    glueLabel = glue;
+    glueDir = glue.slice(0, glue.lastIndexOf("/") + 1);
+    const ns = (await import(/* @vite-ignore */ glue)) as {
+      default?: CreateHtmlToImageModule;
+      createHtmlToImageModule?: CreateHtmlToImageModule;
+    };
+    factory = ns.default ?? ns.createHtmlToImageModule;
+  }
   if (typeof factory !== "function") {
     throw new Error(
-      `wasm-html-to-image-wasm: no MODULARIZE factory in ${glue} ` +
+      `wasm-html-to-image: no MODULARIZE factory in ${glueLabel} ` +
         `(expected default export createHtmlToImageModule)`,
     );
   }

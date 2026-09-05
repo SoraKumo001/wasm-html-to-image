@@ -22,7 +22,7 @@ function isOutputFormat(value: string): value is OutputFormat {
 program
   .name("wasm-html-to-image")
   .description(
-    "HTML to image converter (satoru direct: svg/png/pdf, PNG-intermediate encode: jpeg/webp/avif/raw/thumbhash)",
+    "HTML to image converter on the single unified WASM module (svg/pdf direct, png/jpeg/webp/avif/raw/thumbhash via encode or html_to_image)",
   )
   .version("0.1.0")
   .argument("<input>", "input HTML file path or URL")
