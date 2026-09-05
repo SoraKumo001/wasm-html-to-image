@@ -1,0 +1,18 @@
+{
+  "name": "e2e-vite",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "26.1.1",
+    "typescript": "^5.9.2",
+    "vite": "^7.0.0",
+    "vitest": "^4.1.10"
+  },
+  "dependencies": {
+    "wasm-html-to-image": "workspace:*"
+  }
+}

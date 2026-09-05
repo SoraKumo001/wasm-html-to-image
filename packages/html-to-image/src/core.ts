@@ -1,4 +1,5 @@
 import type { HtmlToImageModule } from "./loader.js";
+import { importNode } from "./loader.js";
 import { buildSatoruOptions, FIT_INT, FORMAT_INT } from "./encode-args.js";
 import { dataUrlToBytes, imageInputToBytes, isImageInput, toBytes } from "./input.js";
 
@@ -175,8 +176,8 @@ async function fetchResourceBytes(
     }
     if (isNodeRuntime()) {
       try {
-        const fs = await import(/* @vite-ignore */ "node:fs/promises");
-        const path = await import(/* @vite-ignore */ "node:path");
+        const fs = await importNode<typeof import("node:fs/promises")>("fs/promises");
+        const path = await importNode<typeof import("node:path")>("path");
         const joined = path.join(fileUrlToFsPath(baseUrl), url);
         const cached = resourceCache.get(joined);
         if (cached) return cached;
@@ -194,7 +195,7 @@ async function fetchResourceBytes(
     try {
       const cached = resourceCache.get(url);
       if (cached) return cached;
-      const fs = await import(/* @vite-ignore */ "node:fs/promises");
+      const fs = await importNode<typeof import("node:fs/promises")>("fs/promises");
       // Keep an owning copy: fs Buffers may ride a shared pool.
       const bytes = new Uint8Array(await fs.readFile(url));
       resourceCache.set(url, bytes);

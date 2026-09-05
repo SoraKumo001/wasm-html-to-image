@@ -1,46 +1,83 @@
-# vcpkg dependencies
-vcpkg_installed/
-
-# Dependency directories
+# ===== Dependencies (Node.js / pnpm workspace) =====
 node_modules/
+.pnp
+.pnp.*
+.pnpm-store/
+.pnpm-debug.log*
 
-# Emscripten / CMake build artifacts
-dist/wasm/
-
-# Vite / Build outputs
+# ===== TypeScript / Vite / library build outputs =====
 dist/
-!dist/wasm/
+*.tsbuildinfo
 
-# IDEs
-.vscode/*
-.idea/
-*.swp
-*.swo
+# ===== Next.js (packages/e2e-next) =====
+.next/
+out/
+next-env.d.ts
 
-# OS files
-.DS_Store
-Thumbs.db
+# ===== Vitest / Playwright / coverage =====
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
+playwright/.cache/
 
-# Logs
+# ===== CMake / Ninja / Emscripten / vcpkg (WASM build) =====
+build/
+build-*/
+vcpkg_installed/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+_deps/
+*.ninja
+.ninja_deps
+.ninja_log
+
+# C/C++ object artifacts (safety net outside build/)
+*.o
+*.obj
+*.a
+*.so
+*.dylib
+
+# compile DB / clang tooling
+compile_commands.json
+.cache/
+.clangd/
+
+# ===== Logs / env / package artifacts =====
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
+.env*
+!.env.example
+*.tgz
+*.tar.gz
 
-temp
-external
-*.log
-tsconfig.tsbuildinfo
-build-wasm-debug
-build-wasm-release
-build
-tests/build
-.env
-.cache
-.clangd
-compile_commands.json
+# ===== visual-test generated images (packages/visual-test/.gitignore と重複、明示化) =====
+packages/visual-test/diff/
+packages/visual-test/reference/
+packages/visual-test/temp/
+packages/visual-test/output/
+
+# ===== IDE / OS =====
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ===== Local scratch (個人作業用、コミット不要) =====
 scratch/
-a.html
-a_files
+temp/
+tmp/
+
+# ===== Agent / tooling =====
 .omo/
 .slim/
-tests/build_debug

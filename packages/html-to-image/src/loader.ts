@@ -145,6 +145,36 @@ function isModuleNotFound(e: unknown): boolean {
   return /Cannot find (module|package)/.test(msg);
 }
 
+type GlueNamespace = {
+  default?: CreateHtmlToImageModule;
+  createHtmlToImageModule?: CreateHtmlToImageModule;
+};
+
+/**
+ * Import glue by URL, tolerating bundlers that hijack dynamic `import()`.
+ * Webpack rewrites even variable `import(url)` into chunk loading, which
+ * cannot resolve runtime URLs ("Cannot find module"). The native attempt
+ * runs first (unchanged behavior everywhere it already works, including
+ * strict-CSP pages); only on failure is an indirect import (invisible to
+ * bundlers' static analysis) retried. The original error is rethrown when
+ * both attempts fail, preserving existing error semantics (e.g. the
+ * src→dist dev fallback branching below).
+ */
+async function importGlueModule(glue: string): Promise<GlueNamespace> {
+  try {
+    return (await import(/* @vite-ignore */ glue)) as GlueNamespace;
+  } catch (first) {
+    try {
+      const indirect = new Function("u", "return import(u)") as (
+        u: string,
+      ) => Promise<GlueNamespace>;
+      return await indirect(glue);
+    } catch {
+      throw first;
+    }
+  }
+}
+
 /** `file://` directory URL to a plain fs path (browser URLs pass through). */
 function glueDirToFsPath(glueDir: string): string {
   if (!glueDir.startsWith("file://")) return glueDir;
@@ -160,6 +190,17 @@ function isNodeRuntime(): boolean {
 }
 
 /**
+ * Runtime-only dynamic import of a `node:` builtin (e.g. `importNode("fs/promises")`).
+ * The specifier is intentionally non-literal so bundlers (webpack/vite/rollup,
+ * including Next.js SWC which strips magic comments) leave it as a runtime
+ * import instead of trying to bundle a builtin. All call sites are guarded
+ * to run on Node only; other runtimes never evaluate these branches.
+ */
+export function importNode<T = unknown>(name: string): Promise<T> {
+  return import(/* @vite-ignore, webpackIgnore: true */ `node:${name}`) as Promise<T>;
+}
+
+/**
  * Node-only: pre-read the sibling `.wasm` bytes. The web/worker-oriented
  * glue has no `fs` reader, so `file://` fetching fails under Node; handing
  * over `wasmBinary` bypasses fetching entirely. Browsers skip this (fetch
@@ -170,9 +211,7 @@ async function readWasmBinaryNode(
 ): Promise<Uint8Array | undefined> {
   if (!isNodeRuntime()) return undefined;
   try {
-    const fs = (await import(/* @vite-ignore */ "node:fs/promises")) as typeof import(
-      "node:fs/promises"
-    );
+    const fs = await importNode<typeof import("node:fs/promises")>("fs/promises");
     const data = await fs.readFile(
       glueDirToFsPath(glueDir) + "html-to-image.wasm",
     );
@@ -195,12 +234,9 @@ export async function loadHtmlToImageModule(
   let glueDir = "";
   if (!factory) {
     let glue = String(options.glueUrl ?? defaultGlueUrl());
-    let ns: {
-      default?: CreateHtmlToImageModule;
-      createHtmlToImageModule?: CreateHtmlToImageModule;
-    };
+    let ns: GlueNamespace;
     try {
-      ns = (await import(/* @vite-ignore */ glue)) as typeof ns;
+      ns = await importGlueModule(glue);
     } catch (e) {
       if (options.glueUrl || !isModuleNotFound(e)) throw e;
       // Dev-layout fallback: running from `src/` (tsx) while the glue
@@ -209,7 +245,7 @@ export async function loadHtmlToImageModule(
         new URL("../dist/html-to-image.js", import.meta.url),
       );
       try {
-        ns = (await import(/* @vite-ignore */ fallback)) as typeof ns;
+        ns = await importGlueModule(fallback);
       } catch {
         throw e; // report the original error
       }

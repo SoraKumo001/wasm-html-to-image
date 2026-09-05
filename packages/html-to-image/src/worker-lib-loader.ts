@@ -1,4 +1,5 @@
 import type * as WorkerLibTypes from "worker-lib";
+import { importNode } from "./loader.js";
 
 export interface WorkerLib {
   createWorker: typeof WorkerLibTypes.createWorker;
@@ -24,7 +25,7 @@ export function loadWorkerLib(): Promise<WorkerLib> {
       try {
         return (await import("worker-lib")) as unknown as WorkerLib;
       } catch {
-        const mod = await import(/* @vite-ignore */ "node:module");
+        const mod = await importNode<typeof import("node:module")>("module");
         return mod.createRequire(import.meta.url)("worker-lib") as WorkerLib;
       }
     })();
