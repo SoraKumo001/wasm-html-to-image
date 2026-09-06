@@ -4,13 +4,15 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run",
+    "generate-reference": "tsx tools/generate-reference.ts"
   },
   "devDependencies": {
     "@types/node": "26.4.1",
     "@types/pixelmatch": "5.2.6",
     "@types/pngjs": "6.0.5",
     "pixelmatch": "7.2.0",
+    "playwright": "1.51.0",
     "pngjs": "7.0.0",
     "tsx": "^4.23.13",
     "typescript": "^7.0.2",
