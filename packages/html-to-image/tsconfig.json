@@ -14,5 +14,5 @@
     "forceConsistentCasingInFileNames": true
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["test", "dist/html-to-image.js", "dist/html-to-image.wasm", "dist/html-to-image-single.js"]
+  "exclude": ["test", "dist/html-to-image.js", "dist/html-to-image.wasm", "dist/html-to-image-single.js", "dist/html-to-image-wasm.js"]
 }

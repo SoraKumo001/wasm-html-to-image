@@ -9,7 +9,7 @@
     "wasm-html-to-image": "./dist/cli.js"
   },
   "scripts": {
-    "build": "tsc -b && rolldown -c rolldown.config.js",
+    "build": "tsc -b && node scripts/compress-wasm.mjs && rolldown -c rolldown.config.js",
     "test": "vitest run",
     "example:cli": "tsx src/cli.ts --help"
   },
