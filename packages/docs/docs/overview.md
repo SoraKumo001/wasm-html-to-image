@@ -53,11 +53,68 @@ const png = await render({
   format: "png",
 });
 
-// 画像から WebP への変換・圧縮も同じ render() 関数で実行可能
+// 2. 画像から画像へのフォーマット変換・圧縮・リサイズも同じ render() 関数で実行可能
 const webp = await render({
-  value: png,
+  value: png, // 画像バイト列 (Uint8Array / Buffer) を直接渡す
+  width: 400, // リサイズ後の幅
   format: "webp",
   quality: 80,
+});
+```
+
+---
+
+## 🖼️ 画像から画像へのフォーマット変換 (Image-to-Image)
+
+**wasm-html-to-image** は HTML からの画像生成だけでなく、既存の画像ファイルを直接入力として受け取り、高速に**フォーマット変換・リサイズ・品質圧縮・ThumbHash 生成**を行う画像処理エンジンとしても動作します。
+
+```mermaid
+graph LR
+    InputImg[入力画像 <br/> PNG / JPEG / WebP / GIF / AVIF / BMP] --> AutoDetect{マジックバイト自動認識}
+    AutoDetect --> FastPath[高速画像処理パイプライン <br/> (HTML描画段スキップ)]
+    FastPath --> OutputImg[出力画像 <br/> WebP / AVIF / JPEG / PNG / ThumbHash / SVG / PDF]
+```
+
+### 特徴
+
+- **自動入力判定 (`isImageInput`)**: バイト列先頭のマジックバイト（PNG, JPEG, WebP, GIF, AVIF, BMP）や `data:image/...` プレフィックスを自動検知。
+- **ゼロオーバーヘッド**: 画像入力時は HTML/CSS レイアウト段を完全にスキップし、Skia の高速ネイティブデコーダから直接画像変換パイプラインへ直行します。
+- **多彩な出力**:
+  - **次世代形式への圧縮**: 巨大な PNG や JPEG を WebP や AVIF に高圧縮
+  - **リサイズ & フィット**: `width`, `height`, `fit` (`contain` / `cover` / `fill`), `crop` オプションをサポート
+  - **SVG 化**: 画像を埋め込んだベクター SVG マークアップを出力
+  - **PDF 化**: 画像を等倍配置した 1 ページ PDF ドキュメントを出力
+  - **ThumbHash 生成**: プレースホルダー用の超軽量ハッシュバイト列を直接算出
+
+### コード例: 画像変換
+
+```typescript
+import fs from "node:fs/promises";
+import { render } from "wasm-html-to-image/single";
+
+// JPEG 画像ファイルを読み込み
+const jpegBuffer = await fs.readFile("photo.jpg");
+
+// 1. JPEG -> AVIF にリサイズ＆圧縮
+const avif = await render({
+  value: jpegBuffer,
+  width: 800,
+  format: "avif",
+  quality: 75,
+  speed: 6,
+});
+
+// 2. JPEG -> プレースホルダー用 ThumbHash
+const thumbhash = await render({
+  value: jpegBuffer,
+  width: 100,
+  format: "thumbhash",
+});
+
+// 3. JPEG -> 1ページ PDF
+const pdf = await render({
+  value: jpegBuffer,
+  format: "pdf",
 });
 ```
 

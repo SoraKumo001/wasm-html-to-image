@@ -51,11 +51,68 @@ const png = await render({
   format: "png",
 });
 
-// Convert and optimize image to WebP with the same render() function
+// 2. Convert and resize image with the same render() function
 const webp = await render({
-  value: png,
+  value: png, // Pass raw image buffer (Uint8Array / Buffer) directly
+  width: 400, // Target resized width
   format: "webp",
   quality: 80,
+});
+```
+
+---
+
+## 🖼️ Image-to-Image Conversion & Optimization
+
+In addition to HTML rendering, **wasm-html-to-image** functions as a high-speed, native **image conversion, resizing, and optimization engine**.
+
+```mermaid
+graph LR
+    InputImg[Input Image <br/> PNG / JPEG / WebP / GIF / AVIF / BMP] --> AutoDetect{Magic-byte Auto Detection}
+    AutoDetect --> FastPath[Fast Image Pipeline <br/> (Bypasses HTML layout)]
+    FastPath --> OutputImg[Output Image <br/> WebP / AVIF / JPEG / PNG / ThumbHash / SVG / PDF]
+```
+
+### Highlights
+
+- **Automatic Input Detection (`isImageInput`)**: Detects magic bytes for PNG, JPEG, WebP, GIF, AVIF, and BMP or `data:image/...` strings automatically.
+- **Zero Overhead**: Bypasses the HTML/CSS DOM layout phase completely, routing directly from Skia's native decoders into the image encoding pipeline.
+- **Comprehensive Output Features**:
+  - **Modern Next-Gen Compression**: Convert large PNGs/JPEGs into compact WebP or AVIF files.
+  - **Resize & Fit**: Supports `width`, `height`, `fit` (`contain` / `cover` / `fill`), and `crop`.
+  - **Vector SVG Generation**: Wraps image data directly inside an SVG document.
+  - **Single-page PDF Generation**: Wraps image into a 1-page vector PDF.
+  - **ThumbHash Generation**: Generates ultra-compact placeholder blur hashes directly.
+
+### Code Example: Image-to-Image Conversion
+
+```typescript
+import fs from "node:fs/promises";
+import { render } from "wasm-html-to-image/single";
+
+// Read JPEG image buffer
+const jpegBuffer = await fs.readFile("photo.jpg");
+
+// 1. Convert JPEG -> AVIF with resizing and compression
+const avif = await render({
+  value: jpegBuffer,
+  width: 800,
+  format: "avif",
+  quality: 75,
+  speed: 6,
+});
+
+// 2. Generate ThumbHash placeholder bytes from JPEG
+const thumbhash = await render({
+  value: jpegBuffer,
+  width: 100,
+  format: "thumbhash",
+});
+
+// 3. Convert JPEG -> Single-Page PDF
+const pdf = await render({
+  value: jpegBuffer,
+  format: "pdf",
 });
 ```
 
