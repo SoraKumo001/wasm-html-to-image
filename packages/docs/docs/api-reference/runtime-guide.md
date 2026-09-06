@@ -14,9 +14,9 @@ Node.js 環境ではすべてのサブパスが利用可能です。
 ### 単発・シンプル処理
 
 ```typescript
-import { render } from "wasm-html-to-image/single";
+import { render } from "wasm-html-to-image";
 
-const png = await render({
+const { data } = await render({
   value: "<h1>Hello Node.js</h1>",
   width: 800,
   format: "png",
@@ -26,7 +26,7 @@ const png = await render({
 ### サーバー立ち上げ時のインスタンス再利用
 
 ```typescript
-import { loadHtmlToImageModule, htmlToImage } from "wasm-html-to-image";
+import { loadHtmlToImageModule, htmlToImage } from "wasm-html-to-image/index";
 
 // サーバー起動時に一度だけロード
 const mod = await loadHtmlToImageModule();
@@ -47,7 +47,7 @@ app.get("/ogp", async (req, res) => {
 
 ## 2. Cloudflare Workers (`workerd`)
 
-Cloudflare Workers では、`wasm-html-to-image/workerd` を使用します。
+Cloudflare Workers では、ルートの `wasm-html-to-image`（自動検出で `workerd` 実装がロードされます）または明示的な `wasm-html-to-image/workerd` を使用します。
 
 ### wrangler.jsonc 設定
 
@@ -70,7 +70,7 @@ Miniflare / Wrangler が `.wasm` ファイルを正しく WebAssembly.Module と
 ### Worker コード
 
 ```typescript
-import { render } from "wasm-html-to-image/workerd";
+import { render } from "wasm-html-to-image"; // Cloudflare Workers (workerd) 実装が自動選択されます
 
 export default {
   async fetch(request: Request): Promise<Response> {
@@ -125,7 +125,7 @@ export async function GET(request: Request) {
 ブラウザでは、メインスレッドでの直接実行または Web Worker 経由での並列実行が可能です。
 
 ```typescript
-import { render } from "wasm-html-to-image/single";
+import { render } from "wasm-html-to-image";
 
 const result = await render({
   value: "<h1>Browser Client-side Rendering</h1>",

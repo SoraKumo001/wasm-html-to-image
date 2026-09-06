@@ -10,7 +10,7 @@ Cloudflare Workers 上で OGP 画像を生成する際、Cache API を活用す�
 ## Cache API と組み合わせる例
 
 ```typescript
-import { render } from "wasm-html-to-image/workerd";
+import { render } from "wasm-html-to-image"; // workerd 環境では自動的に Workers 最適化版が解決されます
 
 export default {
   async fetch(

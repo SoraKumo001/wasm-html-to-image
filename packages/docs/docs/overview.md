@@ -21,8 +21,8 @@ graph LR
 - **単一 WASM モジュール統合**: HTML のパース・CSS レイアウト・Skia 描画・画像エンコード（WebP/AVIF/JPEG等）を単一バイナリ内で実行。中間データを JS とやり取りするオーバーヘッドをゼロに。
 - **多彩な入力**: HTML 文字列、HTML 文字列配列（複数ページ PDF 用）、URL（Web ページ直接描画）、各種画像バッファ（PNG, JPEG, WebP, GIF, AVIF, BMP, Data URL）に対応。
 - **多彩な出力フォーマット**: SVG（ベクター）、PNG、JPEG、WebP、AVIF、RAW ピクセル、ThumbHash、複数ページ対応 PDF を標準サポート。
-- **Zero-Config `render()`**: `wasm-html-to-image/single` により、事前の WASM ロード設定や初期化不要で即座に実行可能。
-- **Edge・Cloudflare Workers 最適化**: `wasm-html-to-image/workerd` および `edge-light` サブパスにより、エッジ環境の制限に完全適合。
+- **Zero-Config `render()`**: `wasm-html-to-image` のルートインポートにより、事前の WASM ロード設定や初期化不要で即座に実行可能（Cloudflare Workers では自動的に `workerd` 実装へ切り替わります）。
+- **Edge・Cloudflare Workers 最適化**: 自動判別に加え、明示的な `wasm-html-to-image/workerd` および `edge-light` サブパスにより、エッジ環境の制限に完全適合。
 - **並列 Worker プール**: `wasm-html-to-image/workers` によるマルチスレッド処理で、大量のリクエストやバッチ処理を高速並行実行。
 - **リッチなエコシステム**: React / Preact JSX コンポーネント描画や、UnoCSS ベースの Tailwind ユーティリティクラスによるインラインスタイリングを標準サポート。
 
@@ -36,12 +36,12 @@ graph LR
 npm install wasm-html-to-image
 ```
 
-### 1. 最もシンプルな使い方 (`/single`)
+### 1. 最もシンプルな使い方
 
-ゼロコンフィグ版の `wasm-html-to-image/single` をインポートすると、WASM モジュールが自動解決され、すぐに `render()` を呼び出すことができます。
+`wasm-html-to-image` をインポートすると、WASM モジュールが自動解決され、手動でのロード処理を書かずに直接 `render()` を呼び出すことができます。
 
 ```typescript
-import { render } from "wasm-html-to-image/single";
+import { render } from "wasm-html-to-image";
 
 // HTML から PNG を生成 (戻り値は RenderResult)
 const res = await render({
@@ -96,7 +96,7 @@ graph LR
 
 ```typescript
 import fs from "node:fs/promises";
-import { render } from "wasm-html-to-image/single";
+import { render } from "wasm-html-to-image";
 
 // JPEG 画像ファイルを読み込み
 const jpegBuffer = await fs.readFile("photo.jpg");
@@ -126,10 +126,10 @@ const pdf = await render({
 
 ### 2. インスタンスの明示的構築 (`/index`)
 
-サーバー起動時などに WASM モジュールを一度だけ初期化し、再利用することで最大のスループットを発揮します。
+サーバー起動時などに WASM モジュールを一度だけ手動で初期化し、再利用することで最大のスループットを発揮します。
 
 ```typescript
-import { loadHtmlToImageModule, htmlToImage } from "wasm-html-to-image";
+import { loadHtmlToImageModule, htmlToImage } from "wasm-html-to-image/index";
 
 // モジュールのロード（プロセス内でキャッシュ可能）
 const mod = await loadHtmlToImageModule();
@@ -150,16 +150,17 @@ const result = await htmlToImage(mod, {
 
 用途やランタイム環境に応じて、最適なサブパスを選択できます。
 
-| サブパス                        | 対象環境 / 用途            | 説明                                                     |
-| ------------------------------- | -------------------------- | -------------------------------------------------------- |
-| `wasm-html-to-image`            | 全環境（明示的制御）       | コア関数 `loadHtmlToImageModule`, `htmlToImage` を提供   |
-| `wasm-html-to-image/single`     | Node.js / バンドラ         | 単一WASM内包、ゼロコンフィグで即利用可能な `render()`    |
-| `wasm-html-to-image/workerd`    | Cloudflare Workers         | WebAssembly.Module インポートに対応した Workers 最適化版 |
-| `wasm-html-to-image/edge-light` | Vercel Edge / Edge Runtime | Edge Runtime 向け最適化版                                |
-| `wasm-html-to-image/workers`    | Node.js / ブラウザ         | Worker スレッド / Web Worker による並列処理プール        |
-| `wasm-html-to-image/react`      | React 連携                 | React JSX ノードを直接描画するラッパー                   |
-| `wasm-html-to-image/preact`     | Preact 連携                | Preact JSX ノードを直接描画するラッパー                  |
-| `wasm-html-to-image/tailwind`   | スタイリング               | Tailwind CSS クラスをインラインスタイルへ展開            |
+| サブパス                        | 対象環境 / 用途            | 説明                                                                                      |
+| ------------------------------- | -------------------------- | ----------------------------------------------------------------------------------------- |
+| `wasm-html-to-image`            | 全環境（標準）             | ゼロコンフィグ標準エントリー（Cloudflare では `workerd`、他環境では `single` を自動解決） |
+| `wasm-html-to-image/single`     | Node.js / バンドラ         | 単一WASM内包エントリーポイント                                                            |
+| `wasm-html-to-image/index`      | 低レイヤ手動制御           | コア関数 `loadHtmlToImageModule`, `htmlToImage` を提供                                    |
+| `wasm-html-to-image/workerd`    | Cloudflare Workers         | WebAssembly.Module インポートに対応した Workers 最適化版                                  |
+| `wasm-html-to-image/edge-light` | Vercel Edge / Edge Runtime | Edge Runtime 向け最適化版                                                                 |
+| `wasm-html-to-image/workers`    | Node.js / ブラウザ         | Worker スレッド / Web Worker による並列処理プール                                         |
+| `wasm-html-to-image/react`      | React 連携                 | React JSX ノードを直接描画するラッパー                                                    |
+| `wasm-html-to-image/preact`     | Preact 連携                | Preact JSX ノードを直接描画するラッパー                                                   |
+| `wasm-html-to-image/tailwind`   | スタイリング               | Tailwind CSS クラスをインラインスタイルへ展開                                             |
 
 ---
 

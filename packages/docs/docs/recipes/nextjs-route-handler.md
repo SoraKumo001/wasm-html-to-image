@@ -14,7 +14,7 @@ Node.js ランタイムまたは Edge ランタイムのいずれでも利用可
 ```typescript
 // app/api/og/route.ts
 import { NextRequest } from "next/server";
-import { render } from "wasm-html-to-image/single";
+import { render } from "wasm-html-to-image";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);

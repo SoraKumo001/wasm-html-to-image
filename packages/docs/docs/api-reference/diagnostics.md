@@ -12,7 +12,7 @@ title: ログ & 診断 (Diagnostics)
 `logLevel` オプションにより、TypeScript 層および WASM ネイティブ層のログ出力を制御できます。
 
 ```typescript
-import { render, LogLevel } from "wasm-html-to-image/single";
+import { render, LogLevel } from "wasm-html-to-image";
 
 await render({
   value: "<h1>Debugging</h1>",
@@ -41,7 +41,7 @@ await render({
 `diagnostics: true` を指定すると、フォント解決結果、画像リソースの読み込み成否、各処理ステージの所要時間を含む完全なレポートが生成されます。
 
 ```typescript
-import { render } from "wasm-html-to-image/single";
+import { render } from "wasm-html-to-image";
 
 await render({
   value: `<img src="https://example.com/logo.png" />`,

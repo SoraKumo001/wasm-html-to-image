@@ -11,7 +11,7 @@ title: 複数ページ PDF 帳票・レポート生成
 
 ```typescript
 import fs from "node:fs/promises";
-import { render } from "wasm-html-to-image/single";
+import { render } from "wasm-html-to-image";
 
 // ページごとの HTML を定義
 const page1 = `

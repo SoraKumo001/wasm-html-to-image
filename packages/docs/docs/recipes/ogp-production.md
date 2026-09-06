@@ -11,7 +11,7 @@ SNS 共有（Twitter Card、Open Graph）用の動的画像を生成する実装
 
 ```typescript
 import { Hono } from "hono";
-import { render } from "wasm-html-to-image/single";
+import { render } from "wasm-html-to-image";
 
 const app = new Hono();
 

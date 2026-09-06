@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "description": "HTML to image converter on a single unified WASM module",
   "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./dist/single.js",
+  "types": "./dist/single.d.ts",
   "bin": {
     "wasm-html-to-image": "./dist/cli.js"
   },
@@ -19,9 +19,17 @@
         "types": "./dist/workerd.d.ts",
         "import": "./dist/workerd.js"
       },
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "default": "./dist/index.js"
+      "deno": {
+        "types": "./dist/single.d.ts",
+        "import": "./dist/single.js"
+      },
+      "single": {
+        "types": "./dist/single.d.ts",
+        "import": "./dist/single.js"
+      },
+      "types": "./dist/single.d.ts",
+      "import": "./dist/single.js",
+      "default": "./dist/single.js"
     },
     "./index": {
       "types": "./dist/index.d.ts",

@@ -9,16 +9,17 @@ title: API 概要
 
 ## 主要 API エントリーポイント
 
-| パス                            | 関数 / クラス                                             | 主な用途                                                                |
-| ------------------------------- | --------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `wasm-html-to-image/single`     | `render(options)`                                         | 単一 WASM 内包。設定不要ですぐに使える最も手軽なエントリーポイント      |
-| `wasm-html-to-image`            | `loadHtmlToImageModule()`<br/>`htmlToImage(mod, options)` | WASM モジュールインスタンスを明示的に保持・再利用する高パフォーマンス版 |
-| `wasm-html-to-image/workerd`    | `render(options)`                                         | Cloudflare Workers 環境専用に最適化されたレンダラー                     |
-| `wasm-html-to-image/edge-light` | `render(options)`                                         | Vercel Edge Runtime 等のエッジ向けレンダラー                            |
-| `wasm-html-to-image/workers`    | `createHtmlToImageWorker()`<br/>`render(options)`         | マルチスレッド Worker プールによる並列処理版                            |
-| `wasm-html-to-image/react`      | `render(options)`                                         | React JSX エレメントを直接渡して描画するラッパー                        |
-| `wasm-html-to-image/preact`     | `render(options)`                                         | Preact JSX エレメントを直接渡して描画するラッパー                       |
-| `wasm-html-to-image/tailwind`   | `inlineTailwind(html)`                                    | Tailwind CSS クラスをインラインスタイルへ変換                           |
+| パス                            | 関数 / クラス                                             | 主な用途                                                                          |
+| ------------------------------- | --------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `wasm-html-to-image`            | `render(options)`                                         | ユニバーサル標準エントリー（Cloudflare では `workerd`、他は `single` を自動解決） |
+| `wasm-html-to-image/single`     | `render(options)`                                         | 単一 WASM 内包エントリーポイント                                                  |
+| `wasm-html-to-image/index`      | `loadHtmlToImageModule()`<br/>`htmlToImage(mod, options)` | WASM モジュールインスタンスを明示的に保持・再利用する低レイヤ版                   |
+| `wasm-html-to-image/workerd`    | `render(options)`                                         | Cloudflare Workers 環境専用に最適化されたレンダラー                               |
+| `wasm-html-to-image/edge-light` | `render(options)`                                         | Vercel Edge Runtime 等のエッジ向けレンダラー                                      |
+| `wasm-html-to-image/workers`    | `createHtmlToImageWorker()`<br/>`render(options)`         | マルチスレッド Worker プールによる並列処理版                                      |
+| `wasm-html-to-image/react`      | `render(options)`                                         | React JSX エレメントを直接渡して描画するラッパー                                  |
+| `wasm-html-to-image/preact`     | `render(options)`                                         | Preact JSX エレメントを直接渡して描画するラッパー                                 |
+| `wasm-html-to-image/tailwind`   | `inlineTailwind(html)`                                    | Tailwind CSS クラスをインラインスタイルへ変換                                     |
 
 ---
 

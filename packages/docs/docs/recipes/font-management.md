@@ -12,7 +12,7 @@ title: 高度なフォント管理と事前ロード
 `wasm-html-to-image` は取得したフォントをプロセス内メモリに自動キャッシュします。サーバー起動時にダミー描画を行うことで、初回リクエストの遅延を解消（ウォームアップ）できます。
 
 ```typescript
-import { render } from "wasm-html-to-image/single";
+import { render } from "wasm-html-to-image";
 
 // サーバー起動時のウォームアップ
 export async function warmupFonts() {
@@ -32,7 +32,7 @@ export async function warmupFonts() {
 
 ```typescript
 import fs from "node:fs/promises";
-import { render } from "wasm-html-to-image/single";
+import { render } from "wasm-html-to-image";
 
 const notoSansJP = await fs.readFile("./fonts/NotoSansJP-Bold.ttf");
 

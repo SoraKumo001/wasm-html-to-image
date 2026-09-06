@@ -27,10 +27,10 @@ export type {
   ResolveResourceHook,
   ResourceDiagnostic,
 } from "./core.js";
-export { DIAGNOSTIC_CODES, LogLevel } from "./core.js";
+export { DIAGNOSTIC_CODES, LogLevel, htmlToImage } from "./core.js";
 export { isImageInput };
 export type { HtmlToImageModule } from "./loader.js";
-export { dropCachedModule } from "./loader.js";
+export { dropCachedModule, loadHtmlToImageModule } from "./loader.js";
 
 /** Default connection: thin delegation to the loader-owned cache. */
 export function getDefaultModule(): Promise<HtmlToImageModule> {

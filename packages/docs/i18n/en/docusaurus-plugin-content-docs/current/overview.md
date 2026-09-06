@@ -21,8 +21,8 @@ graph LR
 - **Single Unified WASM Module**: Parses HTML, calculates CSS layout, renders with Skia, and encodes images (WebP/AVIF/JPEG, etc.) inside one binary without passing intermediate frame buffers across JS boundaries.
 - **Versatile Inputs**: Supports HTML strings, HTML string arrays (for multi-page PDF), URLs, and raw image buffers (PNG, JPEG, WebP, GIF, AVIF, BMP, Data URLs).
 - **Multiple Output Formats**: Direct SVG vector output, high-quality PNG, JPEG, WebP, AVIF, raw pixels, ThumbHash, and multi-page PDF generation.
-- **Zero-Config `render()`**: Import `wasm-html-to-image/single` and render immediately without separate WASM asset distribution or setup.
-- **Edge & Cloudflare Workers Ready**: Dedicated `wasm-html-to-image/workerd` and `edge-light` subpath exports fit constrained serverless edge environments.
+- **Zero-Config `render()`**: Import directly from `wasm-html-to-image` and render immediately without manual WASM loading or setup (automatically resolves `workerd` in Cloudflare Workers).
+- **Edge & Cloudflare Workers Ready**: Along with auto-detection, dedicated `wasm-html-to-image/workerd` and `edge-light` subpaths fit constrained serverless edge environments.
 - **Parallel Worker Pool**: Built-in multi-threaded pool in `wasm-html-to-image/workers` allows batch generation without stalling the main event loop.
 - **Rich Ecosystem Integration**: Seamless JSX rendering for React and Preact, plus UnoCSS-based Tailwind CSS utility classes.
 
@@ -36,10 +36,10 @@ graph LR
 npm install wasm-html-to-image
 ```
 
-### 1. Simplest Usage (`/single`)
+### 1. Simplest Usage
 
 ```typescript
-import { render } from "wasm-html-to-image/single";
+import { render } from "wasm-html-to-image";
 
 // 1. Generate PNG from HTML (returns RenderResult)
 const result = await render({
@@ -74,14 +74,14 @@ In addition to HTML rendering, **wasm-html-to-image** functions as a high-speed,
 
 ```mermaid
 graph LR
-    InputImg[Input Image <br/> PNG / JPEG / WebP / GIF / AVIF / BMP] --> AutoDetect{Magic-byte Auto Detection}
-    AutoDetect --> FastPath[Fast Image Pipeline <br/> (Bypasses HTML layout)]
+    InputImg[Input Image <br/> PNG / JPEG / WebP / GIF / AVIF / BMP] --> AutoDetect{Magic Bytes Detection}
+    AutoDetect --> FastPath[Fast Image Pipeline <br/> (Skips HTML pass)]
     FastPath --> OutputImg[Output Image <br/> WebP / AVIF / JPEG / PNG / ThumbHash / SVG / PDF]
 ```
 
-### Highlights
+### Key Features
 
-- **Automatic Input Detection (`isImageInput`)**: Detects magic bytes for PNG, JPEG, WebP, GIF, AVIF, and BMP or `data:image/...` strings automatically.
+- **Automatic Format Detection (`isImageInput`)**: Recognizes magic bytes for PNG, JPEG, WebP, GIF, AVIF, BMP, or `data:image/...` strings.
 - **Zero Overhead**: Bypasses the HTML/CSS DOM layout phase completely, routing directly from Skia's native decoders into the image encoding pipeline.
 - **Comprehensive Output Features**:
   - **Modern Next-Gen Compression**: Convert large PNGs/JPEGs into compact WebP or AVIF files.
@@ -94,7 +94,7 @@ graph LR
 
 ```typescript
 import fs from "node:fs/promises";
-import { render } from "wasm-html-to-image/single";
+import { render } from "wasm-html-to-image";
 
 // Read JPEG image buffer
 const jpegBuffer = await fs.readFile("photo.jpg");
@@ -125,7 +125,7 @@ const pdf = await render({
 ### 2. Explicit Instance Management (`/index`)
 
 ```typescript
-import { loadHtmlToImageModule, htmlToImage } from "wasm-html-to-image";
+import { loadHtmlToImageModule, htmlToImage } from "wasm-html-to-image/index";
 
 // Load module once at application startup
 const mod = await loadHtmlToImageModule();
@@ -144,13 +144,14 @@ const result = await htmlToImage(mod, {
 
 ## Subpath Overview
 
-| Subpath                         | Target Environment / Purpose | Description                                            |
-| ------------------------------- | ---------------------------- | ------------------------------------------------------ |
-| `wasm-html-to-image`            | Universal (explicit control) | Exports core `loadHtmlToImageModule` and `htmlToImage` |
-| `wasm-html-to-image/single`     | Node.js / Bundlers           | Bundles single WASM; zero-config `render()`            |
-| `wasm-html-to-image/workerd`    | Cloudflare Workers           | Optimized for WebAssembly.Module imports in Workers    |
-| `wasm-html-to-image/edge-light` | Vercel Edge / Edge Runtime   | Optimized for Vercel Edge environments                 |
-| `wasm-html-to-image/workers`    | Node.js / Browsers           | Multi-threaded worker pool for high throughput         |
-| `wasm-html-to-image/react`      | React integration            | Direct rendering wrapper for React JSX nodes           |
-| `wasm-html-to-image/preact`     | Preact integration           | Direct rendering wrapper for Preact JSX nodes          |
-| `wasm-html-to-image/tailwind`   | Styling pipeline             | Inlines Tailwind CSS utility classes                   |
+| Subpath                         | Target Environment / Purpose | Description                                                            |
+| ------------------------------- | ---------------------------- | ---------------------------------------------------------------------- |
+| `wasm-html-to-image`            | Universal (Standard)         | Zero-config default: auto routes to single/workerd, instant `render()` |
+| `wasm-html-to-image/single`     | Node.js / Bundlers           | Single bundled WASM entry point                                        |
+| `wasm-html-to-image/index`      | Low-level control            | Exports core `loadHtmlToImageModule` and `htmlToImage`                 |
+| `wasm-html-to-image/workerd`    | Cloudflare Workers           | Optimized for WebAssembly.Module imports in Workers                    |
+| `wasm-html-to-image/edge-light` | Vercel Edge / Edge Runtime   | Optimized for Vercel Edge environments                                 |
+| `wasm-html-to-image/workers`    | Node.js / Browsers           | Multi-threaded worker pool for high throughput                         |
+| `wasm-html-to-image/react`      | React integration            | Direct rendering wrapper for React JSX nodes                           |
+| `wasm-html-to-image/preact`     | Preact integration           | Direct rendering wrapper for Preact JSX nodes                          |
+| `wasm-html-to-image/tailwind`   | Styling pipeline             | Inlines Tailwind CSS utility classes                                   |

@@ -34,12 +34,12 @@ npm install wasm-html-to-image
 
 ## 🚀 Quick Start
 
-### Zero-Config Rendering (`wasm-html-to-image/single`)
+### Zero-Config Rendering (`wasm-html-to-image`)
 
-The easiest way to get started. WASM is embedded and loaded automatically:
+The easiest way to get started. WASM is embedded and loaded automatically (in Cloudflare Workers, the workerd-optimized module is automatically selected):
 
 ```typescript
-import { render } from "wasm-html-to-image/single";
+import { render } from "wasm-html-to-image";
 
 // 1. Render HTML to PNG (returns RenderResult with .data and dimensions)
 const result = await render({
@@ -159,16 +159,17 @@ All formats return a `RenderResult<T>` object containing `.data` (`Uint8Array` o
 
 Choose the optimal entry point for your application and environment:
 
-| Subpath                         | Target Environment      | Highlights                                           |
-| ------------------------------- | ----------------------- | ---------------------------------------------------- |
-| `wasm-html-to-image/single`     | Node.js, Bundlers       | Zero-config, single bundled WASM, instant `render()` |
-| `wasm-html-to-image`            | High-throughput servers | Explicit `loadHtmlToImageModule()` & instance reuse  |
-| `wasm-html-to-image/workerd`    | Cloudflare Workers      | WebAssembly.Module compilation compatible            |
-| `wasm-html-to-image/edge-light` | Vercel Edge Runtime     | Optimized for Edge Runtime constraints               |
-| `wasm-html-to-image/workers`    | Node.js, Browsers       | Multi-threaded worker pool for high concurrency      |
-| `wasm-html-to-image/react`      | React integration       | Directly render React JSX element trees              |
-| `wasm-html-to-image/preact`     | Preact integration      | Directly render Preact JSX element trees             |
-| `wasm-html-to-image/tailwind`   | Utility styling         | Inlines UnoCSS / Tailwind classes                    |
+| Subpath                         | Target Environment                       | Highlights                                                             |
+| ------------------------------- | ---------------------------------------- | ---------------------------------------------------------------------- |
+| `wasm-html-to-image`            | Universal (Node, Edge, Cloudflare, Deno) | Zero-config default: auto routes to single/workerd, instant `render()` |
+| `wasm-html-to-image/single`     | Node.js, Bundlers                        | Single bundled WASM entry point                                        |
+| `wasm-html-to-image/index`      | High-throughput servers                  | Explicit `loadHtmlToImageModule()` & manual instance reuse             |
+| `wasm-html-to-image/workerd`    | Cloudflare Workers                       | WebAssembly.Module compilation compatible                              |
+| `wasm-html-to-image/edge-light` | Vercel Edge Runtime                      | Optimized for Edge Runtime constraints                                 |
+| `wasm-html-to-image/workers`    | Node.js, Browsers                        | Multi-threaded worker pool for high concurrency                        |
+| `wasm-html-to-image/react`      | React integration                        | Directly render React JSX element trees                                |
+| `wasm-html-to-image/preact`     | Preact integration                       | Directly render Preact JSX element trees                               |
+| `wasm-html-to-image/tailwind`   | Utility styling                          | Inlines UnoCSS / Tailwind classes                                      |
 
 ---
 

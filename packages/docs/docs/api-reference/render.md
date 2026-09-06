@@ -10,7 +10,7 @@ title: render() & オプション
 ## シグネチャ
 
 ```typescript
-// wasm-html-to-image/single, /workers, /workerd, /edge-light
+// wasm-html-to-image (標準), /single, /workers, /workerd, /edge-light
 export function render(
   options: HtmlToImageOptions & { format: "svg" },
 ): Promise<RenderResult<string>>;
@@ -18,7 +18,7 @@ export function render(
   options: HtmlToImageOptions,
 ): Promise<RenderResult<Uint8Array | string>>;
 
-// wasm-html-to-image
+// wasm-html-to-image/index (低レイヤ明示的モジュール版)
 export function htmlToImage(
   module: HtmlToImageModule,
   options: HtmlToImageOptions & { format: "svg" },

@@ -34,7 +34,7 @@ title: 画像相互変換・最適化 & ThumbHash
 
 ```typescript
 import fs from "node:fs/promises";
-import { render } from "wasm-html-to-image/single";
+import { render } from "wasm-html-to-image";
 
 const inputImage = await fs.readFile("photo.jpg");
 

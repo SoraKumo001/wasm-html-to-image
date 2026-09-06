@@ -33,7 +33,7 @@ flowchart TD
 取得時の HTTP リクエストには、最新の WOFF2 フォーマットを取得するために最適な Chrome 互換の `User-Agent` が自動適用されます。
 
 ```typescript
-import { render } from "wasm-html-to-image/single";
+import { render } from "wasm-html-to-image";
 
 const { data } = await render({
   value: `<div style="font-family: 'Noto Serif JP', serif;">
@@ -56,7 +56,7 @@ const { data } = await render({
 
 ```typescript
 import fs from "node:fs/promises";
-import { render } from "wasm-html-to-image/single";
+import { render } from "wasm-html-to-image";
 
 const fontData = await fs.readFile("./fonts/MyCustomFont.ttf");
 
