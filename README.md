@@ -85,27 +85,31 @@ const webp = await render({ value: png, format: "webp", quality: 80 });
 
 並列化が必要な場合は下記 `workers` を使うこと。
 
-Miniflare (ローカル検証・`@cloudflare/vitest-pool-workers`) 既定では
+Miniflare (ローカル検証・`wrangler dev`) 既定では
 `.wasm` が JavaScript としてパースされ
 `Cannot find package 'a' imported from .../html-to-image.wasm` で失敗する。
-`modulesRules: [{ type: "CompiledWasm", include: ["**/*.wasm"] }]` を渡すと
+`wrangler.jsonc` に下記ルールを渡すと
 `WebAssembly.Module` として束ねられる。
 
-```ts
-// vitest.config.ts
-import { defineConfig } from "vitest/config";
-import { cloudflareTest } from "@cloudflare/vitest-pool-workers";
-export default defineConfig({
-  plugins: [
-    cloudflareTest({
-      miniflare: { modulesRules: [{ type: "CompiledWasm", include: ["**/*.wasm"] }] },
-    }),
-  ],
-  test: { pool: "@cloudflare/vitest-pool-workers" },
-});
+```jsonc
+// wrangler.jsonc
+{
+  "main": "src/index.tsx",
+  "rules": [{ "type": "CompiledWasm", "globs": ["**/*.wasm"], "fallthrough": false }]
+}
 ```
 
-検証例は `packages/e2e-cloudflare` (PNG magic・SVG string・不正入力の3件)。
+検証は `wrangler dev` + HTTP スモーク (`scripts/smoke.mjs`、vitest 不使用)。
+空きポートで `wrangler dev` を起動し、HTTP 越しに PNG 形状等を assert する。
+`@cloudflare/vitest-pool-workers` は vitest 5 系に未対応のため不使用
+(対応版が出るまでは本方式を維持)。
+
+- `packages/cloudflare-ogp`: `pnpm --filter cloudflare-ogp test`
+  (`GET /?title=Hello` → PNG、`GET /not-found` → 404)。
+- `packages/e2e-cloudflare`: `src/smoke-worker.ts`
+  (workerd entry 公開用の最小ワーカー) を `wrangler dev` で起動し、
+  `/png` (magic+length)・`/svg` (文字列)・`/invalid` (400) を検証。
+  実行: `pnpm --filter e2e-cloudflare test`。
 
 ## workers (ワーカープール並列化)
 
@@ -168,7 +172,7 @@ node scripts/smoke-test.mjs [test-image-path]
   `data:image/`/HTML/未知形式throw) + `htmlToImage` 経路振分け
   (unified/2-call/画像直行/svg-pdf分岐の呼出し先assert) + エラー系
    (未登録binding throw等)。実行: `pnpm --filter wasm-html-to-image test`
-   (`vitest run`, 41件)。
+   (`vitest run`, 49件)。
 - 実機テスト (`scripts/smoke-test.mjs` a〜h + `scripts/parallel-smoke.mjs`):
   実WASM成果物に対する検証。重い実WASMを使う検証は単体テストと重複させず
   こちらに集約する。
