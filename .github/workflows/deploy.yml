@@ -51,15 +51,11 @@ jobs:
             vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json', 'triplets/**') }}-
             vcpkg-${{ runner.os }}-
 
-      - name: Install Ninja & ccache
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ninja-build ccache
-
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
           key: ${{ runner.os }}-wasm
+          max-size: 2G
 
       - name: Cache Emscripten
         uses: actions/cache@v4
@@ -83,7 +79,7 @@ jobs:
       - name: Cache Skia Source
         uses: actions/cache@v4
         with:
-          path: external/skia
+          path: build/_deps/skia-src
           key: skia-${{ hashFiles('CMakeLists.txt') }}
           restore-keys: |
             skia-
@@ -118,6 +114,7 @@ jobs:
         run: pnpm test
 
       - name: Cache Playwright Browsers
+        id: playwright-cache
         uses: actions/cache@v4
         with:
           path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
@@ -126,6 +123,7 @@ jobs:
             playwright-${{ runner.os }}-
 
       - name: Install Playwright Browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: pnpm --filter visual-test exec playwright install chromium --with-deps
 
       - name: Generate Reference PNGs
@@ -142,62 +140,61 @@ jobs:
         env:
           DOCUSAURUS_BASE_URL: /wasm-html-to-image/${{ github.ref_name }}/docs/
 
-      - name: Deploy Playground to GitHub Pages
-        uses: JamesIves/github-pages-deploy-action@v4
-        with:
-          folder: packages/playground/dist
-          target-folder: ${{ github.ref_name }}
-          branch: gh-pages
-          clean: false
-
-      - name: Deploy Docs to GitHub Pages
-        uses: JamesIves/github-pages-deploy-action@v4
-        with:
-          folder: packages/docs/build
-          target-folder: ${{ github.ref_name }}/docs
-          branch: gh-pages
-          clean: false
-
-      - name: Update Index Page
+      - name: Deploy to GitHub Pages
         run: |
-          git config user.name github-actions
-          git config user.email github-actions@github.com
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          DEPLOY_TEMP=$(mktemp -d)
+          mkdir -p "$DEPLOY_TEMP/${{ github.ref_name }}/docs"
+          cp -r packages/playground/dist/* "$DEPLOY_TEMP/${{ github.ref_name }}/"
+          cp -r packages/docs/build/* "$DEPLOY_TEMP/${{ github.ref_name }}/docs/"
+
           for i in {1..10}; do
             git fetch origin gh-pages || true
             if git ls-remote --exit-code --heads origin gh-pages; then
               git checkout -B gh-pages origin/gh-pages
-              
-              # Generate index.html
-              echo "<!DOCTYPE html><html><head><title>wasm-html-to-image - Branch Previews</title>" > index.html
-              echo "<style>body{font-family:sans-serif;padding:40px;line-height:1.6;}ul{list-style:none;padding:0;}li{margin:10px 0;}a{text-decoration:none;color:#0366d6;}a:hover{text-decoration:underline;}</style>" >> index.html
-              echo "</head><body><h1>wasm-html-to-image Previews</h1><ul>" >> index.html
-              
-              # Get list of remote branches
-              BRANCHES=$(git ls-remote --heads origin | awk -F'refs/heads/' '{print $2}')
-              
-              for d in */ ; do
-                BN=$(basename "$d")
-                if [ "$BN" != "node_modules" ] && [ "$BN" != "assets" ] && [ -d "$d" ]; then
-                  if echo "$BRANCHES" | grep -qxw "$BN"; then
-                    echo "<li><a href=\"./$BN/\">$BN (Playground)</a> | <a href=\"./$BN/docs/\">Docs</a></li>" >> index.html
-                  fi
+            else
+              git checkout --orphan gh-pages
+              git rm -rf . || true
+            fi
+
+            rm -rf "${{ github.ref_name }}"
+            mkdir -p "${{ github.ref_name }}"
+            cp -r "$DEPLOY_TEMP/${{ github.ref_name }}"/* "${{ github.ref_name }}/"
+
+            # Generate index.html
+            echo "<!DOCTYPE html><html><head><title>wasm-html-to-image - Branch Previews</title>" > index.html
+            echo "<style>body{font-family:sans-serif;padding:40px;line-height:1.6;}ul{list-style:none;padding:0;}li{margin:10px 0;}a{text-decoration:none;color:#0366d6;}a:hover{text-decoration:underline;}</style>" >> index.html
+            echo "</head><body><h1>wasm-html-to-image Previews</h1><ul>" >> index.html
+
+            BRANCHES=$(git ls-remote --heads origin | awk -F'refs/heads/' '{print $2}')
+            for d in */ ; do
+              BN=$(basename "$d")
+              if [ "$BN" != "node_modules" ] && [ "$BN" != "assets" ] && [ -d "$d" ]; then
+                if echo "$BRANCHES" | grep -qxw "$BN"; then
+                  echo "<li><a href=\"./$BN/\">$BN (Playground)</a> | <a href=\"./$BN/docs/\">Docs</a></li>" >> index.html
                 fi
-              done
-              
-              echo "</ul></body></html>" >> index.html
-              
-              git add index.html
-              if git commit -m "Update index page"; then
-                if git push origin gh-pages; then
-                  exit 0
-                fi
-              else
+              fi
+            done
+            echo "</ul></body></html>" >> index.html
+
+            git add -A
+            if git diff --staged --quiet; then
+              echo "No changes to deploy."
+              exit 0
+            fi
+
+            if git commit -m "Deploy ${{ github.ref_name }} and update index page"; then
+              if git push origin gh-pages; then
+                echo "Successfully deployed to gh-pages."
                 exit 0
               fi
             else
-              echo "gh-pages branch not found, skipping index update"
               exit 0
             fi
+
+            echo "Push conflict or failure, retrying in $(( i * 2 ))s..."
             sleep $(( i * 2 ))
           done
           exit 1
