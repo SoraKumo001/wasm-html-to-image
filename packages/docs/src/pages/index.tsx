@@ -1,0 +1,47 @@
+import type { ReactNode } from "react";
+import Link from "@docusaurus/Link";
+import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
+import Layout from "@theme/Layout";
+import HomepageFeatures from "@site/src/components/HomepageFeatures";
+import Heading from "@theme/Heading";
+
+function HomepageHeader() {
+  const { siteConfig, i18n } = useDocusaurusContext();
+  const isEnglish = i18n.currentLocale === "en";
+  return (
+    <header className="hero-banner">
+      <div className="container text--center">
+        <Heading as="h1" className="hero-title">
+          {siteConfig.title}
+        </Heading>
+        <p className="hero-subtitle">{siteConfig.tagline}</p>
+        <div className="hero-buttons">
+          <Link className="btn-primary-gradient" to="/docs/overview">
+            {isEnglish ? "Read the docs" : "ドキュメントを読む"} 🚀
+          </Link>
+          <Link
+            className="btn-secondary-outline"
+            to="https://sorakumo001.github.io/wasm-html-to-image/master"
+          >
+            {isEnglish ? "Open Playground" : "Playground デモを試す"}
+          </Link>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+export default function Home(): ReactNode {
+  const { siteConfig } = useDocusaurusContext();
+  return (
+    <Layout
+      title={`${siteConfig.title} - ${siteConfig.tagline}`}
+      description="Unified WebAssembly-powered HTML to Image and Image Conversion Engine. Supports SVG, PNG, JPEG, WebP, AVIF, and PDF without headless browsers."
+    >
+      <HomepageHeader />
+      <main>
+        <HomepageFeatures />
+      </main>
+    </Layout>
+  );
+}

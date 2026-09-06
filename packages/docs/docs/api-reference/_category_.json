@@ -1,0 +1,8 @@
+{
+  "label": "API リファレンス",
+  "position": 5,
+  "link": {
+    "type": "generated-index",
+    "description": "wasm-html-to-image の API 一覧とオプション詳細です。"
+  }
+}

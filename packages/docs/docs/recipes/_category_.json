@@ -1,0 +1,8 @@
+{
+  "label": "レシピ集",
+  "position": 6,
+  "link": {
+    "type": "generated-index",
+    "description": "実践的なユースケースとベストプラクティス集です。"
+  }
+}

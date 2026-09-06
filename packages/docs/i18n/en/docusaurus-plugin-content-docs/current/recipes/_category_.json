@@ -1,0 +1,8 @@
+{
+  "label": "Recipes",
+  "position": 6,
+  "link": {
+    "type": "generated-index",
+    "description": "Practical recipes and production patterns for wasm-html-to-image."
+  }
+}

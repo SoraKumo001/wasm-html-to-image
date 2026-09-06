@@ -1,0 +1,8 @@
+{
+  "label": "API Reference",
+  "position": 5,
+  "link": {
+    "type": "generated-index",
+    "description": "Comprehensive API reference and options for wasm-html-to-image."
+  }
+}
