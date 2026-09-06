@@ -1,0 +1,220 @@
+# wasm-html-to-image
+
+> High-performance WebAssembly HTML-to-image renderer and image optimization engine.
+> Consolidates HTML rendering (Satoru / Skia / litehtml) and native image encoding (WebP / AVIF / JPEG) into a single, unified WASM binary.
+
+## Core Capabilities
+- **HTML to Image**: Render HTML strings, arrays (multi-page PDF), or remote URLs directly to PNG, JPEG, WebP, AVIF, RAW, ThumbHash, SVG, or vector PDF.
+- **Image Optimization & Conversion**: Direct image-to-image resizing, cropping, and format re-encoding (e.g., JPEG to WebP/AVIF, GIF to animated WebP) without HTML layout overhead.
+- **Universal Runtime**: Runs seamlessly on Node.js (>=20), Cloudflare Workers, Vercel Edge Runtime, Browsers, Deno, and CLI.
+- **Zero Heavy Dependencies**: NO Puppeteer, Chromium, Playwright, or node-canvas required.
+
+---
+
+## Installation
+
+```bash
+npm install wasm-html-to-image
+```
+
+---
+
+## Subpaths & Environment Guide
+
+Choose the appropriate import based on runtime and use case:
+
+| Subpath | Target Environment | Description |
+|---|---|---|
+| `wasm-html-to-image` | Universal (Recommended) | Auto-routes: uses `workerd` on Cloudflare, `single` elsewhere. Direct `render()`. |
+| `wasm-html-to-image/single` | Node.js, Bundlers | Self-contained single-bundle WASM entry with instant `render()`. |
+| `wasm-html-to-image/workerd` | Cloudflare Workers | Pre-compiled `WebAssembly.Module` compatible with strict Cloudflare isolates. |
+| `wasm-html-to-image/edge-light` | Vercel Edge Runtime | Tailored for edge sandbox memory and execution constraints. |
+| `wasm-html-to-image/workers` | Node.js, Browsers (on workerd: no pool, falls back to direct execution) | Multi-threaded worker pool for high-throughput batch rendering. |
+| `wasm-html-to-image/react` | React (JSX) | Directly render React element trees. |
+| `wasm-html-to-image/preact` | Preact (JSX) | Directly render Preact element trees. |
+| `wasm-html-to-image/tailwind` | Tailwind CSS | Inlines UnoCSS / Tailwind utility classes into inline CSS styles. |
+| `wasm-html-to-image/index` | High-throughput servers | Manual WASM module reuse via `loadHtmlToImageModule()` and `htmlToImage()`. |
+
+---
+
+## Standard Usage Patterns
+
+### 1. Zero-Config HTML Rendering
+
+```typescript
+import { render } from "wasm-html-to-image";
+
+const result = await render({
+  value: `<div style="padding: 20px; background: #1e293b; color: white; font-family: sans-serif;">
+    <h1 style="margin: 0; font-size: 24px;">Hello World</h1>
+  </div>`,
+  width: 800,
+  format: "png", // 'png' | 'jpeg' | 'webp' | 'avif' | 'svg' | 'pdf' | 'raw' | 'thumbhash'
+});
+
+console.log(result.data); // Uint8Array (or string for format: 'svg')
+console.log(result.width, result.height); // Output dimensions
+```
+
+### 2. Image Optimization & Format Conversion
+
+Pass an image buffer (`Uint8Array` or `Buffer`) or a `data:image/...` URL directly to `render()`. The library automatically detects image magic bytes and skips the HTML layout pass.
+
+```typescript
+import fs from "node:fs/promises";
+import { render } from "wasm-html-to-image";
+
+const inputBuffer = await fs.readFile("input.jpg");
+
+// Convert & compress JPEG -> WebP
+const webp = await render({
+  value: inputBuffer,
+  width: 600, // Optional resize
+  format: "webp",
+  quality: 80, // 0-100
+});
+
+// Convert -> AVIF with speed control
+const avif = await render({
+  value: inputBuffer,
+  width: 800,
+  format: "avif",
+  quality: 75,
+  speed: 6, // 0 (best quality) - 10 (fastest)
+});
+
+// Crop and resize
+const cropped = await render({
+  value: inputBuffer,
+  crop: { x: 50, y: 50, width: 300, height: 300 },
+  width: 150,
+  height: 150,
+  format: "png",
+});
+```
+
+### 3. Cloudflare Workers (root import recommended)
+
+```typescript
+// wrangler.jsonc: no "rules" needed on current Wrangler (v3/v4) —
+// `import ... from "*.wasm"` is bundled as WebAssembly.Module by default.
+// Minimal wrangler.jsonc: { "main": "src/index.ts", "compatibility_date": "2026-09-01" }
+// (Only configure "rules" yourself if you customize bundling rules or use a very old Wrangler.
+// Note: @cloudflare/vite-plugin ignores "rules".)
+
+import { render } from "wasm-html-to-image"; // auto-selects the workerd build on Cloudflare ("wasm-html-to-image/workerd" also works)
+
+export default {
+  async fetch(request: Request): Promise<Response> {
+    const result = await render({
+      value: `<h1 style="color: blue;">Edge OGP Image</h1>`,
+      width: 1200,
+      height: 630,
+      format: "png",
+    });
+
+    return new Response(result.data, {
+      headers: { "Content-Type": "image/png" },
+    });
+  },
+};
+```
+
+### 4. Vercel Edge Runtime (`edge-light`: caller-supplied wasm required)
+
+Unlike `workerd`, `edge-light` bundles no default wasm: `render(options, wasm)` requires a pre-compiled `WebAssembly.Module` as the 2nd argument.
+
+```typescript
+import { render } from "wasm-html-to-image/edge-light";
+
+const wasm = await WebAssembly.compile(
+  await (await fetch(wasmUrl)).arrayBuffer(),
+);
+
+const result = await render(
+  {
+    value: `<h1 style="color: blue;">Edge OGP Image</h1>`,
+    width: 1200,
+    height: 630,
+    format: "png",
+  },
+  wasm,
+);
+```
+
+### 5. High-Throughput Worker Pool (`workers`)
+
+```typescript
+import { render } from "wasm-html-to-image/workers";
+
+const tasks = items.map((item) =>
+  render({
+    value: `<h1>${item.title}</h1>`,
+    width: 600,
+    height: 400,
+    format: "webp",
+  }),
+);
+
+const images = await Promise.all(tasks);
+```
+
+### 6. High-Throughput Server Module Reuse (`index`)
+
+```typescript
+import { loadHtmlToImageModule, htmlToImage } from "wasm-html-to-image/index";
+
+// Load WASM module once at server boot
+const mod = await loadHtmlToImageModule();
+
+// Reuse in request handlers
+app.get("/ogp", async (req, res) => {
+  const result = await htmlToImage(mod, {
+    value: `<h1>${req.query.title}</h1>`,
+    width: 1200,
+    height: 630,
+    format: "png",
+  });
+  res.type("image/png").send(Buffer.from(result.data));
+});
+```
+
+---
+
+## Options Reference (`RenderOptions`)
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `value` | `string \| string[] \| Uint8Array \| ArrayBuffer` | - | HTML string, array of HTML strings (multi-page PDF), or raw image bytes (`Buffer` works as `Uint8Array`) |
+| `url` | `string` | - | Remote URL to fetch and render (alternative to `value`) |
+| `width` | `number` | `800` | Target viewport / output width in pixels |
+| `height` | `number` | auto / content | Target viewport / output height in pixels |
+| `format` | `string` | `"png"` | Output format: `"png"`, `"jpeg"`, `"webp"`, `"avif"`, `"svg"`, `"pdf"`, `"raw"`, `"thumbhash"`, `"none"` |
+| `quality` | `number` | `85` | Compression quality (0-100) for JPEG, WebP, and AVIF |
+| `speed` | `number` | `6` | CPU effort/speed (0=best quality/slowest, 10=fastest) for AVIF |
+| `scale` | `number` | `1.0` | Device pixel ratio / render scaling factor |
+| `crop` | `{ x, y, width, height }` | - | Rectangular cropping coordinates |
+| `fallbackFonts` | `(Uint8Array \| Buffer)[]` | - | Inlined custom font binaries for air-gapped / offline rendering |
+| `fonts` | `Record<string, Uint8Array \| Buffer>` | - | Font family mapping dictionary |
+| `timeout` | `number` | `10000` | Timeout in milliseconds for resource loading |
+
+Additional extension keys exist (e.g. `baseUrl`, `fit`, `animation`); see the type definitions for the full list.
+
+---
+
+## Critical Rules for AI Agents (Anti-Patterns to AVOID)
+
+1. **NEVER use Puppeteer, Playwright, or Chromium with this package**: `wasm-html-to-image` compiles litehtml and Skia directly to WebAssembly. It operates entirely in-memory without browser processes.
+2. **DO NOT install `@napi-rs/canvas` or `node-canvas`**: Canvas rendering is built directly into the unified WASM engine.
+3. **DO NOT pass Base64 data back and forth unnecessarily**: Pass raw `Uint8Array` or `Buffer` directly to `render()`.
+4. **Cloudflare Workers preference**: Import from `wasm-html-to-image` (recommended; auto-selects the workerd build on Cloudflare, explicit `wasm-html-to-image/workerd` also works) (no wrangler rules needed on current Wrangler; only needed if you customize bundling rules or use very old Wrangler).
+5. **Google Fonts resolution**: Google Fonts are downloaded automatically in WOFF2 format by default. You do NOT need manual font download logic unless working offline.
+
+---
+
+## Official Links & Resources
+
+- **Documentation**: [https://sorakumo001.github.io/wasm-html-to-image/master/docs/](https://sorakumo001.github.io/wasm-html-to-image/master/docs/)
+- **Sample Code Repository**: [https://github.com/SoraKumo001/wasm-html-to-image-samples](https://github.com/SoraKumo001/wasm-html-to-image-samples)
+- **Live Playground**: [https://sorakumo001.github.io/wasm-html-to-image/master](https://sorakumo001.github.io/wasm-html-to-image/master)
+- **GitHub Repository**: [https://github.com/SoraKumo001/wasm-html-to-image](https://github.com/SoraKumo001/wasm-html-to-image)
