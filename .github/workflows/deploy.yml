@@ -145,56 +145,53 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          DEPLOY_TEMP=$(mktemp -d)
-          mkdir -p "$DEPLOY_TEMP/${{ github.ref_name }}/docs"
-          cp -r packages/playground/dist/* "$DEPLOY_TEMP/${{ github.ref_name }}/"
-          cp -r packages/docs/build/* "$DEPLOY_TEMP/${{ github.ref_name }}/docs/"
+          DEPLOY_DIR=$(mktemp -d)
 
-          for i in {1..10}; do
-            git fetch origin gh-pages || true
-            if git ls-remote --exit-code --heads origin gh-pages; then
-              git checkout -B gh-pages origin/gh-pages
-            else
-              git checkout --orphan gh-pages
-              git rm -rf . || true
-            fi
+          if git ls-remote --exit-code --heads origin gh-pages; then
+            git fetch origin gh-pages:gh-pages
+            git worktree add "$DEPLOY_DIR" gh-pages
+          else
+            git worktree add --orphan -B gh-pages "$DEPLOY_DIR"
+          fi
 
-            rm -rf "${{ github.ref_name }}"
-            mkdir -p "${{ github.ref_name }}"
-            cp -r "$DEPLOY_TEMP/${{ github.ref_name }}"/* "${{ github.ref_name }}/"
+          mkdir -p "$DEPLOY_DIR/${{ github.ref_name }}/docs"
+          rm -rf "$DEPLOY_DIR/${{ github.ref_name }}"/*
+          cp -r packages/playground/dist/* "$DEPLOY_DIR/${{ github.ref_name }}/"
+          cp -r packages/docs/build/* "$DEPLOY_DIR/${{ github.ref_name }}/docs/"
 
-            # Generate index.html
-            echo "<!DOCTYPE html><html><head><title>wasm-html-to-image - Branch Previews</title>" > index.html
-            echo "<style>body{font-family:sans-serif;padding:40px;line-height:1.6;}ul{list-style:none;padding:0;}li{margin:10px 0;}a{text-decoration:none;color:#0366d6;}a:hover{text-decoration:underline;}</style>" >> index.html
-            echo "</head><body><h1>wasm-html-to-image Previews</h1><ul>" >> index.html
+          cd "$DEPLOY_DIR"
 
-            BRANCHES=$(git ls-remote --heads origin | awk -F'refs/heads/' '{print $2}')
-            for d in */ ; do
-              BN=$(basename "$d")
-              if [ "$BN" != "node_modules" ] && [ "$BN" != "assets" ] && [ -d "$d" ]; then
-                if echo "$BRANCHES" | grep -qxw "$BN"; then
-                  echo "<li><a href=\"./$BN/\">$BN (Playground)</a> | <a href=\"./$BN/docs/\">Docs</a></li>" >> index.html
-                fi
+          # Generate index.html
+          echo "<!DOCTYPE html><html><head><title>wasm-html-to-image - Branch Previews</title>" > index.html
+          echo "<style>body{font-family:sans-serif;padding:40px;line-height:1.6;}ul{list-style:none;padding:0;}li{margin:10px 0;}a{text-decoration:none;color:#0366d6;}a:hover{text-decoration:underline;}</style>" >> index.html
+          echo "</head><body><h1>wasm-html-to-image Previews</h1><ul>" >> index.html
+
+          BRANCHES=$(git ls-remote --heads origin | awk -F'refs/heads/' '{print $2}')
+          for d in */ ; do
+            BN=$(basename "$d")
+            if [ "$BN" != "node_modules" ] && [ "$BN" != "assets" ] && [ -d "$d" ]; then
+              if echo "$BRANCHES" | grep -qxw "$BN"; then
+                echo "<li><a href=\"./$BN/\">$BN (Playground)</a> | <a href=\"./$BN/docs/\">Docs</a></li>" >> index.html
               fi
-            done
-            echo "</ul></body></html>" >> index.html
-
-            git add -A
-            if git diff --staged --quiet; then
-              echo "No changes to deploy."
-              exit 0
             fi
+          done
+          echo "</ul></body></html>" >> index.html
 
-            if git commit -m "Deploy ${{ github.ref_name }} and update index page"; then
+          git add -A
+          if git diff --staged --quiet; then
+            echo "No changes to deploy."
+          else
+            git commit -m "Deploy ${{ github.ref_name }} and update index page"
+            for i in {1..10}; do
               if git push origin gh-pages; then
                 echo "Successfully deployed to gh-pages."
-                exit 0
+                break
               fi
-            else
-              exit 0
-            fi
+              echo "Push conflict, retrying in $(( i * 2 ))s..."
+              git pull --rebase origin gh-pages || true
+              sleep $(( i * 2 ))
+            done
+          fi
 
-            echo "Push conflict or failure, retrying in $(( i * 2 ))s..."
-            sleep $(( i * 2 ))
-          done
-          exit 1
+          cd -
+          git worktree remove --force "$DEPLOY_DIR" || true

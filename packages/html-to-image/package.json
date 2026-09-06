@@ -14,7 +14,7 @@
     "url": "git+https://github.com/SoraKumo001/wasm-html-to-image.git",
     "directory": "packages/html-to-image"
   },
-  "homepage": "https://sorakumo001.github.io/wasm-html-to-image/",
+  "homepage": "https://sorakumo001.github.io/wasm-html-to-image/master/docs/",
   "bugs": {
     "url": "https://github.com/SoraKumo001/wasm-html-to-image/issues"
   },
