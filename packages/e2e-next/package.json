@@ -8,16 +8,16 @@
     "build": "next build"
   },
   "dependencies": {
-    "next": "^16.0.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
+    "next": "^16.3.4",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
     "wasm-html-to-image": "workspace:*",
     "worker-lib": "2.2.1"
   },
   "devDependencies": {
     "@types/node": "26.4.1",
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
     "typescript": "^7.0.2",
     "vitest": "^5.0.0"
   }

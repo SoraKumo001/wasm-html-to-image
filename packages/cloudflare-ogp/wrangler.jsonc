@@ -3,6 +3,7 @@
 	"name": "cloudflare-ogp",
 	"main": "src/index.tsx",
 	"compatibility_date": "2025-02-04",
+	"rules": [{ "type": "CompiledWasm", "globs": ["**/*.wasm"], "fallthrough": false }],
 	"observability": {
 		"enabled": true
 	}

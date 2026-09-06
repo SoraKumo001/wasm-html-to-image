@@ -1,0 +1,9 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "e2e-cloudflare-smoke",
+	"main": "src/smoke-worker.ts",
+	"compatibility_date": "2025-02-04",
+	"observability": {
+		"enabled": false
+	}
+}

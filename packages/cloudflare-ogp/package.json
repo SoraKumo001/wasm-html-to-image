@@ -6,17 +6,16 @@
   "scripts": {
     "dev": "wrangler dev",
     "build": "tsc",
-    "test": "vitest run"
+    "test": "node scripts/smoke.mjs"
   },
   "dependencies": {
-    "preact": "^10.29.7",
+    "preact": "^10.29.8",
     "wasm-html-to-image": "workspace:*"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.22.0",
-    "@cloudflare/workers-types": "^5.20260905.1",
+    "@cloudflare/workers-types": "^5.20260906.1",
     "@types/node": "26.4.1",
     "typescript": "^7.0.2",
-    "vitest": "^4.1.11"
+    "wrangler": "^4.129.0"
   }
 }
