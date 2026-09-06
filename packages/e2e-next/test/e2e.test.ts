@@ -92,7 +92,7 @@ async function startBuiltApp(): Promise<StartedApp> {
   };
 }
 
-// One built app shared by all three cells (single `next build`).
+// One built app shared by all cells (single `next build`).
 let app: StartedApp | undefined;
 
 beforeAll(async () => {
@@ -146,6 +146,38 @@ describe("next web (Client Component in Chromium)", () => {
       expect(value?.head?.map((n) => n.toString(16).padStart(2, "0")).join("")).toBe(PNG_MAGIC);
       expect(value?.len ?? 0).toBeGreaterThan(100);
       console.log(`web: PNG ${value?.len}B rendered in Chromium`);
+    },
+    180000,
+  );
+});
+
+describe("next workers (worker pool in Chromium)", () => {
+  let chrome: ChromeHandle | undefined;
+
+  beforeAll(async () => {
+    chrome = await launchChrome();
+  }, 120000);
+
+  afterAll(async () => {
+    await chrome?.close();
+  });
+
+  it(
+    "renders PNG inside a worker via page.evaluate",
+    async () => {
+      const value = (await cdpEvaluate(
+        chrome!.port,
+        `${app!.baseUrl}/workers`,
+        "window.__e2e",
+        120000,
+      )) as { ok: boolean; len?: number; head?: number[]; error?: string };
+      if (value?.ok !== true) {
+        console.log(`workers error: ${JSON.stringify(value).slice(0, 500)}`);
+      }
+      expect(value?.ok).toBe(true);
+      expect(value?.head?.map((n) => n.toString(16).padStart(2, "0")).join("")).toBe(PNG_MAGIC);
+      expect(value?.len ?? 0).toBeGreaterThan(100);
+      console.log(`workers: PNG ${value?.len}B rendered in a worker`);
     },
     180000,
   );

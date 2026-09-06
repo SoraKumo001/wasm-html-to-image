@@ -9,7 +9,7 @@
     "wasm-html-to-image": "./dist/cli.js"
   },
   "scripts": {
-    "build": "tsc -b",
+    "build": "tsc -b && rolldown -c rolldown.config.js",
     "test": "vitest run",
     "example:cli": "tsx src/cli.ts --help"
   },
@@ -34,14 +34,30 @@
       "default": "./dist/single.js"
     },
     "./workerd": {
+      "workerd": {
+        "types": "./dist/workerd.d.ts",
+        "import": "./dist/workerd.js",
+        "default": "./dist/workerd.js"
+      },
+      "edge-light": {
+        "types": "./dist/edge-light.d.ts",
+        "import": "./dist/edge-light.js",
+        "default": "./dist/edge-light.js"
+      },
       "types": "./dist/workerd.d.ts",
-      "import": "./dist/workerd.js"
+      "import": "./dist/workerd.js",
+      "default": "./dist/workerd.js"
+    },
+    "./edge-light": {
+      "types": "./dist/edge-light.d.ts",
+      "import": "./dist/edge-light.js",
+      "default": "./dist/edge-light.js"
     },
     "./workers": {
       "types": "./dist/workers.d.ts",
       "workerd": "./dist/workers-dummy.js",
       "node": "./dist/workers.js",
-      "browser": "./dist/workers.js",
+      "browser": "./dist/workers-parent.js",
       "default": "./dist/workers-dummy.js"
     },
     "./html-to-image.js": {
@@ -61,6 +77,7 @@
   },
   "devDependencies": {
     "@types/node": "26.1.1",
+    "rolldown": "^1.2.7",
     "tsx": "^4.23.1",
     "typescript": "^5.9.2",
     "vitest": "^4.1.10"

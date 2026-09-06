@@ -8,10 +8,11 @@
     "build": "next build"
   },
   "dependencies": {
-    "next": "^15.0.0",
+    "next": "^16.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "wasm-html-to-image": "workspace:*"
+    "wasm-html-to-image": "workspace:*",
+    "worker-lib": "2.2.1"
   },
   "devDependencies": {
     "@types/node": "26.1.1",

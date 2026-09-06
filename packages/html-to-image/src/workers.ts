@@ -32,9 +32,10 @@ const { createWorker, Worker } = await loadWorkerLib();
  *
  * @param params Initialization parameters
  * @param params.worker Optional: Path to the worker file, a URL, or a factory function.
- *                      Defaults to the bundled child-workers.js in the same directory.
- *                      (tsc-only build: no pre-bundled web-workers.js; browser apps
- *                      should either bundle child-workers.js or pass a custom worker.)
+ *                      Defaults to the pre-bundled browser worker
+ *                      (`./web-workers.js`, SINGLE_FILE inlined) when
+ *                      `window` exists, else the Node worker
+ *                      (`./child-workers.js`) next to this file.
  * @param params.maxParallel Maximum number of parallel workers (default: 4)
  * @param params.timeoutMs Optional: Default timeout in milliseconds for each render job.
  *                         If a render job times out, the pool is reset to prevent hung workers.
@@ -51,8 +52,12 @@ export const createHtmlToImageWorker = (params?: {
     if (worker) {
       w = typeof worker === "function" ? worker() : worker;
     } else {
-      // tsc-only build: always the compiled child-workers.js next to this file.
-      const workerUrl = new URL("./child-workers.js", import.meta.url);
+      // child-workers.js = Node worker; web-workers.js = pre-bundled
+      // browser worker (SINGLE_FILE inlined, no .wasm fetch needed).
+      const workerUrl =
+        typeof window !== "undefined"
+          ? new URL("./web-workers.js", import.meta.url)
+          : new URL("./child-workers.js", import.meta.url);
 
       if (typeof Worker !== "undefined") {
         w = new Worker(workerUrl, { type: "module" });

@@ -161,8 +161,10 @@ type GlueNamespace = {
  * src→dist dev fallback branching below).
  */
 async function importGlueModule(glue: string): Promise<GlueNamespace> {
+  // `webpackIgnore` keeps Turbopack (Next.js 16 default builder) from trying
+  // to resolve the runtime URL at build time; webpack/vite honor it too.
   try {
-    return (await import(/* @vite-ignore */ glue)) as GlueNamespace;
+    return (await import(/* @vite-ignore, webpackIgnore: true */ glue)) as GlueNamespace;
   } catch (first) {
     try {
       const indirect = new Function("u", "return import(u)") as (
@@ -190,14 +192,36 @@ function isNodeRuntime(): boolean {
 }
 
 /**
- * Runtime-only dynamic import of a `node:` builtin (e.g. `importNode("fs/promises")`).
- * The specifier is intentionally non-literal so bundlers (webpack/vite/rollup,
- * including Next.js SWC which strips magic comments) leave it as a runtime
- * import instead of trying to bundle a builtin. All call sites are guarded
- * to run on Node only; other runtimes never evaluate these branches.
+ * Runtime-only load of a `node:` builtin (e.g. `importNode("fs/promises")`).
+ * Uses `process.getBuiltinModule` (Node 22.3+/20.16+) so there is NO `import`
+ * syntax at all: bundlers with static analysis (webpack/vite/rollup, and
+ * Turbopack — the Next.js 16 default builder, which rejects both dynamic
+ * `` `node:${name}` `` requests and literal `import("node:*")` inside Edge
+ * graphs) have nothing to resolve or rewrite. Only the builtins actually
+ * used by this package are supported. All call sites are guarded to run on
+ * Node only; other runtimes never evaluate these branches. A `new Function`
+ * indirect-import fallback keeps older Node working without adding any
+ * statically analyzable import.
  */
 export function importNode<T = unknown>(name: string): Promise<T> {
-  return import(/* @vite-ignore, webpackIgnore: true */ `node:${name}`) as Promise<T>;
+  if (name !== "fs/promises" && name !== "path" && name !== "module") {
+    throw new Error(`wasm-html-to-image: unsupported node builtin "${name}"`);
+  }
+  const proc = (
+    globalThis as {
+      process?: { getBuiltinModule?: (id: string) => T };
+    }
+  ).process;
+  try {
+    const mod = proc?.getBuiltinModule?.(`node:${name}`);
+    if (mod) return Promise.resolve(mod);
+  } catch {
+    // fall through to the indirect dynamic import below
+  }
+  const indirect = new Function("s", "return import(s)") as (
+    s: string,
+  ) => Promise<T>;
+  return indirect(`node:${name}`);
 }
 
 /**
