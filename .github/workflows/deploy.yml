@@ -1,0 +1,188 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: ["**"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: "pages-${{ github.ref_name }}"
+  cancel-in-progress: true
+
+jobs:
+  build-test-deploy:
+    runs-on: ubuntu-latest
+    env:
+      VCPKG_ROOT: /usr/local/share/vcpkg
+      VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}/vcpkg_cache,readwrite"
+      VCPKG_DOWNLOADS: "${{ github.workspace }}/vcpkg_downloads"
+      EMSDK_VERSION: "4.0.15"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Cache vcpkg downloads
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/vcpkg_downloads
+          key: vcpkg-downloads-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-downloads-
+
+      - name: Pre-download gumbo
+        run: |
+          mkdir -p ${{ github.workspace }}/vcpkg_downloads
+          if [ ! -f ${{ github.workspace }}/vcpkg_downloads/gumbo-0.12.3.tar.gz ]; then
+            curl -L --retry 5 --retry-delay 10 -o ${{ github.workspace }}/vcpkg_downloads/gumbo-0.12.3.tar.gz https://codeberg.org/gumbo-parser/gumbo-parser/archive/0.12.3.tar.gz
+          fi
+
+      - name: Cache vcpkg binaries
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/vcpkg_cache
+          key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json', 'triplets/**') }}-${{ github.run_id }}
+          restore-keys: |
+            vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json', 'triplets/**') }}-
+            vcpkg-${{ runner.os }}-
+
+      - name: Install Ninja & ccache
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build ccache
+
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ runner.os }}-wasm
+
+      - name: Cache Emscripten
+        uses: actions/cache@v4
+        with:
+          path: emsdk-cache
+          key: ${{ runner.os }}-emsdk-${{ env.EMSDK_VERSION }}-${{ hashFiles('package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-emsdk-${{ env.EMSDK_VERSION }}-
+
+      - name: Setup Emscripten
+        uses: emscripten-core/setup-emsdk@v16
+        with:
+          version: ${{ env.EMSDK_VERSION }}
+          actions-cache-folder: "emsdk-cache"
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Cache Skia Source
+        uses: actions/cache@v4
+        with:
+          path: external/skia
+          key: skia-${{ hashFiles('CMakeLists.txt') }}
+          restore-keys: |
+            skia-
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Wasm Configure
+        run: pnpm wasm:configure
+        env:
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
+
+      - name: Wasm Build
+        run: pnpm wasm:build
+
+      - name: ccache stats
+        run: ccache -s
+
+      - name: Build JS Packages
+        run: |
+          pnpm build:js
+          pnpm --filter playground build
+
+      - name: Run Unit Tests
+        run: pnpm test
+
+      - name: Run Visual Tests
+        run: pnpm test:visual
+
+      - name: Run Smoke Tests
+        run: pnpm test:smoke
+
+      - name: Build Docs
+        run: pnpm docs:build
+        env:
+          DOCUSAURUS_BASE_URL: /wasm-html-to-image/${{ github.ref_name }}/docs/
+
+      - name: Deploy Playground to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: packages/playground/dist
+          target-folder: ${{ github.ref_name }}
+          branch: gh-pages
+          clean: false
+
+      - name: Deploy Docs to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: packages/docs/build
+          target-folder: ${{ github.ref_name }}/docs
+          branch: gh-pages
+          clean: false
+
+      - name: Update Index Page
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          for i in {1..10}; do
+            git fetch origin gh-pages || true
+            if git ls-remote --exit-code --heads origin gh-pages; then
+              git checkout -B gh-pages origin/gh-pages
+              
+              # Generate index.html
+              echo "<!DOCTYPE html><html><head><title>wasm-html-to-image - Branch Previews</title>" > index.html
+              echo "<style>body{font-family:sans-serif;padding:40px;line-height:1.6;}ul{list-style:none;padding:0;}li{margin:10px 0;}a{text-decoration:none;color:#0366d6;}a:hover{text-decoration:underline;}</style>" >> index.html
+              echo "</head><body><h1>wasm-html-to-image Previews</h1><ul>" >> index.html
+              
+              # Get list of remote branches
+              BRANCHES=$(git ls-remote --heads origin | awk -F'refs/heads/' '{print $2}')
+              
+              for d in */ ; do
+                BN=$(basename "$d")
+                if [ "$BN" != "node_modules" ] && [ "$BN" != "assets" ] && [ -d "$d" ]; then
+                  if echo "$BRANCHES" | grep -qxw "$BN"; then
+                    echo "<li><a href=\"./$BN/\">$BN (Playground)</a> | <a href=\"./$BN/docs/\">Docs</a></li>" >> index.html
+                  fi
+                fi
+              done
+              
+              echo "</ul></body></html>" >> index.html
+              
+              git add index.html
+              if git commit -m "Update index page"; then
+                if git push origin gh-pages; then
+                  exit 0
+                fi
+              else
+                exit 0
+              fi
+            else
+              echo "gh-pages branch not found, skipping index update"
+              exit 0
+            fi
+            sleep $(( i * 2 ))
+          done
+          exit 1
