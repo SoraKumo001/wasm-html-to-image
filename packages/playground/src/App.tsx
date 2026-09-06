@@ -10,7 +10,7 @@ type Params = {
   asset?: string;
   width: number;
   height?: number;
-  format: "svg" | "png" | "webp" | "pdf";
+  format: "svg" | "png" | "webp" | "avif" | "pdf";
   textToPaths: boolean;
   value?: string | null;
   mediaType: "screen" | "print";
@@ -41,7 +41,9 @@ const App: React.FC = () => {
       width: w ? parseInt(w) : 588,
       height: h ? parseInt(h) : undefined,
       format:
-        f && ["svg", "png", "webp", "pdf"].includes(f) ? (f as any) : "svg",
+        f && ["svg", "png", "webp", "avif", "pdf"].includes(f)
+          ? (f as any)
+          : "svg",
       textToPaths: t !== null ? t === "true" : true,
       value: v,
       mediaType: params.get("mediaType") === "print" ? "print" : "screen",
@@ -96,7 +98,9 @@ const App: React.FC = () => {
         width: w ? parseInt(w) : 588,
         height: h ? parseInt(h) : undefined,
         format:
-          f && ["svg", "png", "webp", "pdf"].includes(f) ? (f as any) : "svg",
+          f && ["svg", "png", "webp", "avif", "pdf"].includes(f)
+            ? (f as any)
+            : "svg",
         textToPaths: t !== null ? t === "true" : true,
         mediaType: p.get("mediaType") === "print" ? "print" : "screen",
       });
@@ -135,7 +139,9 @@ const App: React.FC = () => {
       width: w ? parseInt(w) : 588,
       height: h ? parseInt(h) : undefined,
       format:
-        f && ["svg", "png", "webp", "pdf"].includes(f) ? (f as any) : "svg",
+        f && ["svg", "png", "webp", "avif", "pdf"].includes(f)
+          ? (f as any)
+          : "svg",
       textToPaths: t !== null ? t === "true" : true,
       asset: a ?? undefined,
       value: params.value !== undefined ? (params.value as string) : prev.value,
@@ -340,7 +346,9 @@ const App: React.FC = () => {
             ? "image/png"
             : format === "webp"
               ? "image/webp"
-              : "application/pdf";
+              : format === "avif"
+                ? "image/avif"
+                : "application/pdf";
         const blob = new Blob([result.slice()], { type: mimeType });
         setObjectUrl(URL.createObjectURL(blob));
       }
@@ -378,7 +386,9 @@ const App: React.FC = () => {
           ? "image/png"
           : format === "webp"
             ? "image/webp"
-            : "application/pdf";
+            : format === "avif"
+              ? "image/avif"
+              : "application/pdf";
     const content =
       typeof renderResult === "string" ? renderResult : renderResult.slice();
     const blob = new Blob([content as BlobPart], { type: mimeType });
@@ -493,6 +503,7 @@ const App: React.FC = () => {
                 <option value="svg">SVG (Vector)</option>
                 <option value="png">PNG (Raster)</option>
                 <option value="webp">WebP (Raster)</option>
+                <option value="avif">AVIF (Raster)</option>
                 <option value="pdf">PDF (Document)</option>
               </select>
             </label>
@@ -759,7 +770,9 @@ const App: React.FC = () => {
               />
             )}
             {objectUrl &&
-              (params.format === "png" || params.format === "webp") && (
+              (params.format === "png" ||
+                params.format === "webp" ||
+                params.format === "avif") && (
                 <div>
                   <img
                     src={objectUrl}
