@@ -51,12 +51,65 @@ const png = await render({
   format: "png",
 });
 
-// 2. Convert and resize image to WebP with the same render() function
+// 2. Convert and resize image with the same render() function
 const webp = await render({
-  value: png,
-  width: 400,
+  value: png, // Pass raw image buffer (Uint8Array / Buffer) directly
+  width: 400, // Target resized width
   format: "webp",
   quality: 80,
+});
+```
+
+---
+
+## 🖼️ Image-to-Image Conversion & Optimization
+
+`wasm-html-to-image` is not only an HTML renderer — it also serves as a high-speed, self-contained **image-to-image converter, resizer, and compressor** without requiring heavy native libraries like Sharp or ImageMagick.
+
+Simply pass raw image bytes (`Uint8Array` or `Buffer`) or a `data:image/...` URL to `render()`. It automatically identifies input magic bytes, skips the HTML layout pass, and routes straight into the native Skia image pipeline:
+
+```typescript
+import fs from "node:fs/promises";
+import { render } from "wasm-html-to-image/single";
+
+const imageBuffer = await fs.readFile("photo.jpg");
+
+// 1. Convert JPEG -> AVIF (highest compression)
+const avif = await render({
+  value: imageBuffer,
+  width: 800,
+  format: "avif",
+  quality: 75,
+  speed: 6, // 0 (best quality) - 10 (fastest)
+});
+
+// 2. Crop & Resize -> PNG
+const cropped = await render({
+  value: imageBuffer,
+  crop: { x: 50, y: 50, width: 300, height: 300 },
+  width: 150,
+  height: 150,
+  format: "png",
+});
+
+// 3. Generate ThumbHash Blur Placeholder
+const thumbhash = await render({
+  value: imageBuffer,
+  width: 100,
+  format: "thumbhash",
+});
+
+// 4. Convert Image -> Single-Page Vector PDF
+const pdf = await render({
+  value: imageBuffer,
+  format: "pdf",
+});
+
+// 5. Convert Animated GIF -> Animated WebP
+const animatedWebp = await render({
+  value: await fs.readFile("animation.gif"),
+  format: "webp",
+  animation: true,
 });
 ```
 
@@ -66,26 +119,26 @@ const webp = await render({
 
 ### Inputs (`value` / `url`)
 
-| Input Type | Detection | Description |
-|---|---|---|
-| **HTML String** | Text starting with tags / markup | Standard HTML/CSS rendering |
-| **HTML Array (`string[]`)** | Array of HTML strings | Multi-page PDF generation (one page per item) |
-| **URL (`url`)** | `http://` or `https://` | Automatically fetches and renders remote web pages |
-| **Image Buffer** | `Uint8Array` / `Buffer` | Magic-byte recognition for PNG, JPEG, WebP, GIF, AVIF, BMP |
-| **Data URL** | `data:image/*;base64,...` | Inlined image data URL, routed straight to image pipeline |
+| Input Type                  | Detection                        | Description                                                |
+| --------------------------- | -------------------------------- | ---------------------------------------------------------- |
+| **HTML String**             | Text starting with tags / markup | Standard HTML/CSS rendering                                |
+| **HTML Array (`string[]`)** | Array of HTML strings            | Multi-page PDF generation (one page per item)              |
+| **URL (`url`)**             | `http://` or `https://`          | Automatically fetches and renders remote web pages         |
+| **Image Buffer**            | `Uint8Array` / `Buffer`          | Magic-byte recognition for PNG, JPEG, WebP, GIF, AVIF, BMP |
+| **Data URL**                | `data:image/*;base64,...`        | Inlined image data URL, routed straight to image pipeline  |
 
 ### Outputs (`format`)
 
-| Format | Return Type | HTML Input | Image Input |
-|---|---|---|---|
-| `png` | `Uint8Array` | Skia render → PNG encode | Decodes and converts to PNG |
-| `jpeg` | `Uint8Array` | Skia render → JPEG encode (`quality`) | Decodes and compresses JPEG |
-| `webp` | `Uint8Array` | Skia render → WebP encode (`quality`) | Decodes and compresses WebP |
-| `avif` | `Uint8Array` | Skia render → AVIF encode (`quality`, `speed`) | Decodes and compresses AVIF |
-| `raw` | `Uint8Array` | Uncompressed RGBA pixel bytes | Uncompressed RGBA pixel bytes |
-| `thumbhash` | `Uint8Array` | Computes ThumbHash from render | Computes ThumbHash from image |
-| `svg` | `string` | Skia vector drawing stream | Single `<image>` wrapper SVG |
-| `pdf` | `Uint8Array` | SkPDFDocument vector PDF | Single-page centered PDF |
+| Format      | Return Type  | HTML Input                                     | Image Input                   |
+| ----------- | ------------ | ---------------------------------------------- | ----------------------------- |
+| `png`       | `Uint8Array` | Skia render → PNG encode                       | Decodes and converts to PNG   |
+| `jpeg`      | `Uint8Array` | Skia render → JPEG encode (`quality`)          | Decodes and compresses JPEG   |
+| `webp`      | `Uint8Array` | Skia render → WebP encode (`quality`)          | Decodes and compresses WebP   |
+| `avif`      | `Uint8Array` | Skia render → AVIF encode (`quality`, `speed`) | Decodes and compresses AVIF   |
+| `raw`       | `Uint8Array` | Uncompressed RGBA pixel bytes                  | Uncompressed RGBA pixel bytes |
+| `thumbhash` | `Uint8Array` | Computes ThumbHash from render                 | Computes ThumbHash from image |
+| `svg`       | `string`     | Skia vector drawing stream                     | Single `<image>` wrapper SVG  |
+| `pdf`       | `Uint8Array` | SkPDFDocument vector PDF                       | Single-page centered PDF      |
 
 ---
 
@@ -93,16 +146,16 @@ const webp = await render({
 
 Choose the optimal entry point for your application and environment:
 
-| Subpath | Target Environment | Highlights |
-|---|---|---|
-| `wasm-html-to-image/single` | Node.js, Bundlers | Zero-config, single bundled WASM, instant `render()` |
-| `wasm-html-to-image` | High-throughput servers | Explicit `loadHtmlToImageModule()` & instance reuse |
-| `wasm-html-to-image/workerd` | Cloudflare Workers | WebAssembly.Module compilation compatible |
-| `wasm-html-to-image/edge-light` | Vercel Edge Runtime | Optimized for Edge Runtime constraints |
-| `wasm-html-to-image/workers` | Node.js, Browsers | Multi-threaded worker pool for high concurrency |
-| `wasm-html-to-image/react` | React integration | Directly render React JSX element trees |
-| `wasm-html-to-image/preact` | Preact integration | Directly render Preact JSX element trees |
-| `wasm-html-to-image/tailwind` | Utility styling | Inlines UnoCSS / Tailwind classes |
+| Subpath                         | Target Environment      | Highlights                                           |
+| ------------------------------- | ----------------------- | ---------------------------------------------------- |
+| `wasm-html-to-image/single`     | Node.js, Bundlers       | Zero-config, single bundled WASM, instant `render()` |
+| `wasm-html-to-image`            | High-throughput servers | Explicit `loadHtmlToImageModule()` & instance reuse  |
+| `wasm-html-to-image/workerd`    | Cloudflare Workers      | WebAssembly.Module compilation compatible            |
+| `wasm-html-to-image/edge-light` | Vercel Edge Runtime     | Optimized for Edge Runtime constraints               |
+| `wasm-html-to-image/workers`    | Node.js, Browsers       | Multi-threaded worker pool for high concurrency      |
+| `wasm-html-to-image/react`      | React integration       | Directly render React JSX element trees              |
+| `wasm-html-to-image/preact`     | Preact integration      | Directly render Preact JSX element trees             |
+| `wasm-html-to-image/tailwind`   | Utility styling         | Inlines UnoCSS / Tailwind classes                    |
 
 ---
 
@@ -178,7 +231,7 @@ const tasks = items.map((item) =>
     width: 600,
     height: 400,
     format: "webp",
-  })
+  }),
 );
 
 const images = await Promise.all(tasks);
@@ -221,10 +274,12 @@ For full guides, architecture deep-dives, font management, and advanced recipes:
 <summary>Click to view repository build and test instructions</summary>
 
 ### Prerequisites
+
 - Node.js >= 20, pnpm >= 9
 - Emscripten SDK (emsdk), CMake, Ninja, vcpkg (for C++ WASM builds)
 
 ### Building
+
 ```bash
 # Install workspace dependencies
 pnpm install
@@ -238,6 +293,7 @@ pnpm docs:build
 ```
 
 ### Testing
+
 ```bash
 # Unit tests (Vitest)
 pnpm --filter wasm-html-to-image test
@@ -245,6 +301,7 @@ pnpm --filter wasm-html-to-image test
 # Visual regression tests
 pnpm --filter visual-test test
 ```
+
 </details>
 
 ---

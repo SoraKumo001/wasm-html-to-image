@@ -51,12 +51,65 @@ const png = await render({
   format: "png",
 });
 
-// 2. Convert and resize image to WebP with the same render() function
+// 2. Convert and resize image with the same render() function
 const webp = await render({
-  value: png,
-  width: 400,
+  value: png, // Pass raw image buffer (Uint8Array / Buffer) directly
+  width: 400, // Target resized width
   format: "webp",
   quality: 80,
+});
+```
+
+---
+
+## 🖼️ Image-to-Image Conversion & Optimization
+
+`wasm-html-to-image` is not only an HTML renderer — it also serves as a high-speed, self-contained **image-to-image converter, resizer, and compressor** without requiring heavy native libraries like Sharp or ImageMagick.
+
+Simply pass raw image bytes (`Uint8Array` or `Buffer`) or a `data:image/...` URL to `render()`. It automatically identifies input magic bytes, skips the HTML layout pass, and routes straight into the native Skia image pipeline:
+
+```typescript
+import fs from "node:fs/promises";
+import { render } from "wasm-html-to-image/single";
+
+const imageBuffer = await fs.readFile("photo.jpg");
+
+// 1. Convert JPEG -> AVIF (highest compression)
+const avif = await render({
+  value: imageBuffer,
+  width: 800,
+  format: "avif",
+  quality: 75,
+  speed: 6, // 0 (best quality) - 10 (fastest)
+});
+
+// 2. Crop & Resize -> PNG
+const cropped = await render({
+  value: imageBuffer,
+  crop: { x: 50, y: 50, width: 300, height: 300 },
+  width: 150,
+  height: 150,
+  format: "png",
+});
+
+// 3. Generate ThumbHash Blur Placeholder
+const thumbhash = await render({
+  value: imageBuffer,
+  width: 100,
+  format: "thumbhash",
+});
+
+// 4. Convert Image -> Single-Page Vector PDF
+const pdf = await render({
+  value: imageBuffer,
+  format: "pdf",
+});
+
+// 5. Convert Animated GIF -> Animated WebP
+const animatedWebp = await render({
+  value: await fs.readFile("animation.gif"),
+  format: "webp",
+  animation: true,
 });
 ```
 
