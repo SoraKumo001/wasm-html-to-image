@@ -3,6 +3,18 @@ import type { HtmlToImageWorker } from "./child-workers.js";
 export type { HtmlToImageWorker } from "./child-workers.js";
 import { type HtmlToImageOptions } from "./core.js";
 export type { HtmlToImageOptions } from "./core.js";
+// Playground parity: diagnostics surface is usable through the pool —
+// function-valued options (`onLog`/`onDiagnostics`/`resolveResource`) are
+// forwarded untouched by the `render` proxy below (worker-lib RPC).
+export { DEFAULT_FONT_MAP, DIAGNOSTIC_CODES, LogLevel } from "./core.js";
+export type {
+  DiagnosticMessage,
+  FontDiagnostic,
+  RenderDiagnostics,
+  RenderLimits,
+  ResolveResourceHook,
+  ResourceDiagnostic,
+} from "./core.js";
 
 /** Operational stats of the worker pool. */
 export interface WorkerPoolStats {

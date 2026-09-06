@@ -87,6 +87,16 @@ export interface HtmlToImageModule {
     name: string,
     data: Uint8Array,
   ): unknown;
+  /** Pre-scan a CSS string (registered; probed at runtime). */
+  satoru_scan_css?(inst: WasmInstancePtr, css: string): unknown;
+  /** Named image preload (registered; takes a `data:` URL). */
+  satoru_load_image?(
+    inst: WasmInstancePtr,
+    name: string,
+    dataUrl: string,
+    width: number,
+    height: number,
+  ): unknown;
   /** Family -> URL map for generic font resolution (registered). */
   satoru_set_font_map?(
     inst: WasmInstancePtr,
@@ -94,6 +104,12 @@ export interface HtmlToImageModule {
   ): unknown;
   /** User-supplied fallback font bytes (registered; upstream idiom). */
   satoru_load_fallback_font?(inst: WasmInstancePtr, data: Uint8Array): unknown;
+  /** Collect-phase profile (registered; JSON string, probed at runtime). */
+  satoru_get_collect_profile?(inst: WasmInstancePtr): unknown;
+  satoru_set_collect_profile_enabled?(
+    inst: WasmInstancePtr,
+    enabled: boolean,
+  ): unknown;
   /** HTML render wrapper (positional: instance, htmls, w, h, format, options). */
   satoru_render?: (...args: unknown[]) => unknown;
   /** Image encode wrapper (positional: instance, format, quality, speed, animation). */

@@ -18,6 +18,26 @@ const PNG_DATA_URL =
 
 type StubBindings = Record<string, ReturnType<typeof vi.fn>>;
 
+// Default satoru render options object (parity defaults: text-to-paths on,
+// screen media, blank PDF metadata). Passed to `satoru_render` and the
+// legacy `html_to_image` fallback when no explicit option overrides them.
+const DEFAULT_SATORU_OPTS = {
+  svgTextToPaths: true,
+  mediaType: 0,
+  pdfTitle: "",
+  pdfAuthor: "",
+  pdfSubject: "",
+  pdfKeywords: "",
+  pdfCreator: "",
+  pdfProducer: "",
+  pdfMarginTop: 0,
+  pdfMarginRight: 0,
+  pdfMarginBottom: 0,
+  pdfMarginLeft: 0,
+  pdfHeader: "",
+  pdfFooter: "",
+};
+
 function stubModule(overrides: StubBindings = {}): {
   mod: HtmlToImageModule;
   calls: StubBindings;
@@ -69,7 +89,7 @@ describe("htmlToImage: HTML via unified binding (legacy fallback)", () => {
       800,
       600,
       2, // webp
-      {},
+      DEFAULT_SATORU_OPTS,
       85,
       6,
       false,
@@ -113,7 +133,7 @@ describe("htmlToImage: HTML via unified binding (legacy fallback)", () => {
       100,
       0,
       1, // png
-      {},
+      DEFAULT_SATORU_OPTS,
       85,
       6,
       false,
@@ -149,7 +169,7 @@ describe("htmlToImage: HTML via 2-call fallback (no unified binding)", () => {
       800,
       600,
       0, // svg
-      {},
+      DEFAULT_SATORU_OPTS,
     );
     expect(calls.converter_encode).not.toHaveBeenCalled();
     expect(calls.satoru_destroy_instance).toHaveBeenCalledWith({ tag: "satoru" });
@@ -165,7 +185,7 @@ describe("htmlToImage: HTML via 2-call fallback (no unified binding)", () => {
       800,
       600,
       1, // png intermediate
-      {},
+      DEFAULT_SATORU_OPTS,
     );
     expect(calls.converter_load_image).toHaveBeenCalledWith(
       { tag: "converter" },

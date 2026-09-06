@@ -21,7 +21,14 @@ export type {
   OutputFormat,
   RenderOptions,
   HtmlToImageOptions,
+  DiagnosticMessage,
+  FontDiagnostic,
+  RenderDiagnostics,
+  RenderLimits,
+  ResolveResourceHook,
+  ResourceDiagnostic,
 } from "./core.js";
+export { DIAGNOSTIC_CODES, LogLevel } from "./core.js";
 export { isImageInput };
 export type { HtmlToImageModule } from "./loader.js";
 export { dropCachedModule } from "./loader.js";

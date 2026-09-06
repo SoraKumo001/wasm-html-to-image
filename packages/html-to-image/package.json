@@ -63,6 +63,18 @@
     "./html-to-image.js": {
       "import": "./dist/html-to-image.js",
       "default": "./dist/html-to-image.js"
+    },
+    "./react": {
+      "types": "./dist/react.d.ts",
+      "import": "./dist/react.js"
+    },
+    "./preact": {
+      "types": "./dist/preact.d.ts",
+      "import": "./dist/preact.js"
+    },
+    "./tailwind": {
+      "types": "./dist/tailwind.d.ts",
+      "import": "./dist/tailwind.js"
     }
   },
   "files": [
@@ -75,8 +87,38 @@
     "commander": "15.0.0",
     "worker-lib": "2.2.1"
   },
+  "peerDependencies": {
+    "@unocss/core": "^66.6.5",
+    "@unocss/preset-wind4": "^66.6.5",
+    "preact": "^10.28.0",
+    "preact-render-to-string": "^6.6.0",
+    "react": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0",
+    "react-dom": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@unocss/core": {
+      "optional": true
+    },
+    "@unocss/preset-wind4": {
+      "optional": true
+    },
+    "preact": {
+      "optional": true
+    },
+    "preact-render-to-string": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@types/node": "26.4.1",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
     "rolldown": "^1.2.7",
     "tsx": "^4.23.1",
     "typescript": "^7.0.2",
