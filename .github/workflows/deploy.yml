@@ -154,9 +154,10 @@ jobs:
             git worktree add --orphan -B gh-pages "$DEPLOY_DIR"
           fi
 
-          mkdir -p "$DEPLOY_DIR/${{ github.ref_name }}/docs"
-          rm -rf "$DEPLOY_DIR/${{ github.ref_name }}"/*
+          rm -rf "$DEPLOY_DIR/${{ github.ref_name }}"
+          mkdir -p "$DEPLOY_DIR/${{ github.ref_name }}"
           cp -r packages/playground/dist/* "$DEPLOY_DIR/${{ github.ref_name }}/"
+          mkdir -p "$DEPLOY_DIR/${{ github.ref_name }}/docs"
           cp -r packages/docs/build/* "$DEPLOY_DIR/${{ github.ref_name }}/docs/"
 
           cd "$DEPLOY_DIR"
