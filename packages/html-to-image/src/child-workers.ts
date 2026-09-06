@@ -1,6 +1,6 @@
 import { loadWorkerLib } from "./worker-lib-loader.js";
 import { getDefaultModule } from "./single.js";
-import { htmlToImage, type HtmlToImageOptions } from "./core.js";
+import { createRenderActions } from "./worker-actions.js";
 import type { HtmlToImageModule } from "./loader.js";
 
 const { initWorker } = await loadWorkerLib();
@@ -21,11 +21,5 @@ const getModule = async () => {
  * Each worker thread loads its own module instance (modules cannot cross
  * thread boundaries, so nothing is shared with the parent).
  */
-const actions = {
-  async render(options: HtmlToImageOptions): Promise<Uint8Array | string> {
-    return await htmlToImage(await getModule(), options);
-  },
-};
-
-const map = initWorker(actions);
+const map = initWorker(createRenderActions(getModule));
 export type HtmlToImageWorker = typeof map;

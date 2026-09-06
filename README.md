@@ -85,6 +85,28 @@ const webp = await render({ value: png, format: "webp", quality: 80 });
 
 並列化が必要な場合は下記 `workers` を使うこと。
 
+Miniflare (ローカル検証・`@cloudflare/vitest-pool-workers`) 既定では
+`.wasm` が JavaScript としてパースされ
+`Cannot find package 'a' imported from .../html-to-image.wasm` で失敗する。
+`modulesRules: [{ type: "CompiledWasm", include: ["**/*.wasm"] }]` を渡すと
+`WebAssembly.Module` として束ねられる。
+
+```ts
+// vitest.config.ts
+import { defineConfig } from "vitest/config";
+import { cloudflareTest } from "@cloudflare/vitest-pool-workers";
+export default defineConfig({
+  plugins: [
+    cloudflareTest({
+      miniflare: { modulesRules: [{ type: "CompiledWasm", include: ["**/*.wasm"] }] },
+    }),
+  ],
+  test: { pool: "@cloudflare/vitest-pool-workers" },
+});
+```
+
+検証例は `packages/e2e-cloudflare` (PNG magic・SVG string・不正入力の3件)。
+
 ## workers (ワーカープール並列化)
 
 上流式 (`satoru` / `wasm-image-optimization` の `workers.ts` /

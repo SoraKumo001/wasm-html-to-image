@@ -1,12 +1,12 @@
 // Generates `dist/html-to-image-wasm.js`: the WASM binary compressed
-// (gzip vs brotli, smaller wins) and inlined as base64, so the browser
-// worker bundle (`dist/web-workers.js`) embeds ~4MB instead of the
-// 12MB SINGLE_FILE glue. Plain Node, no dependencies.
+// with gzip (level 9) and inlined as base64, so the browser worker bundle
+// (`dist/web-workers.js`) embeds ~5MB instead of the 12MB SINGLE_FILE
+// glue. Plain Node, no dependencies.
 //
 // Usage (from `packages/html-to-image/`):
 //   node scripts/compress-wasm.mjs
 import { readFileSync, writeFileSync } from "node:fs";
-import { brotliCompressSync, gzipSync } from "node:zlib";
+import { gzipSync } from "node:zlib";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -16,15 +16,12 @@ const outPath = join(root, "dist", "html-to-image-wasm.js");
 
 const raw = readFileSync(wasmPath);
 const gz = gzipSync(raw, { level: 9 });
-const br = brotliCompressSync(raw);
-// NOTE: brotli is measured for the size report only. The payload must be
-// `gzip`: `DecompressionStream` (W3C Compression Standard) accepts only
-// "gzip"/"deflate"/"deflate-raw" — "br" is rejected by both browsers and
-// Node (`not a valid enum value of type CompressionFormat`), so a brotli
-// payload could never be restored at runtime.
+// NOTE: gzip only — `DecompressionStream` (W3C Compression Standard)
+// accepts only "gzip"/"deflate"/"deflate-raw"; "br" is rejected by both
+// browsers and Node (`not a valid enum value of type CompressionFormat`),
+// so a brotli payload could never be restored at runtime.
 const encoding = "gzip";
-const compressed = gz;
-const base64 = compressed.toString("base64");
+const base64 = gz.toString("base64");
 
 writeFileSync(
   outPath,
@@ -34,6 +31,6 @@ writeFileSync(
 );
 
 console.log(
-  `raw=${raw.length} gzip=${gz.length} br=${br.length} ` +
+  `raw=${raw.length} gzip=${gz.length} ` +
     `base64=${base64.length} encoding=${encoding} -> dist/html-to-image-wasm.js`,
 );

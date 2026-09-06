@@ -4,8 +4,8 @@ import {
   type CreateHtmlToImageModule,
   type HtmlToImageModule,
 } from "./loader.js";
-import { htmlToImage, type HtmlToImageOptions } from "./core.js";
 import { loadCompressedWasmBinary } from "./wasm-payload.js";
+import { createRenderActions } from "./worker-actions.js";
 
 // @ts-expect-error — dist/html-to-image.js is generated at build time
 import createHtmlToImageModule from "../dist/html-to-image.js";
@@ -32,11 +32,5 @@ const getModule = async () => {
  * to the regular glue as `wasmBinary`, so no `.wasm` fetch/`locateFile`
  * is needed.
  */
-const actions = {
-  async render(options: HtmlToImageOptions): Promise<Uint8Array | string> {
-    return await htmlToImage(await getModule(), options);
-  },
-};
-
-const map = initWorker(actions);
+const map = initWorker(createRenderActions(getModule));
 export type HtmlToImageWorker = typeof map;

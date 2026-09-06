@@ -11,7 +11,10 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    // TS7 (tsgo): automatic @types inclusion no longer picks up the
+    // pnpm-symlinked node_modules/@types/node, so name it explicitly.
+    "types": ["node"]
   },
   "include": ["src/**/*.ts"],
   "exclude": ["test", "dist/html-to-image.js", "dist/html-to-image.wasm", "dist/html-to-image-single.js", "dist/html-to-image-wasm.js"]

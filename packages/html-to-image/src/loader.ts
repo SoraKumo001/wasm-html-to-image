@@ -131,7 +131,17 @@ export interface LoadOptions {
   noCache?: boolean;
 }
 
-let cachedModule: HtmlToImageModule | null = null;
+/**
+ * Process-wide module cache, keyed by factory then moduleArg: different
+ * factories, or different WASM payloads (e.g. workerd/edge-light calls
+ * with distinct `WebAssembly.Module`s), must not share an instance.
+ * Callers with their own scoping (workerd/edge-light per-wasm maps,
+ * single.ts default path, `*-workers` lazy vars) are unaffected.
+ */
+const moduleCache = new Map<
+  CreateHtmlToImageModule | undefined,
+  Map<EmscriptenModuleArg | undefined, HtmlToImageModule>
+>();
 
 /** Default glue URL: `./html-to-image.js` next to the compiled loader. */
 export function defaultGlueUrl(): URL {
@@ -246,13 +256,19 @@ async function readWasmBinaryNode(
 }
 
 /**
- * Load and instantiate the unified module (cached per process).
+ * Load and instantiate the unified module (cached per process, keyed by
+ * factory then moduleArg — see `moduleCache`).
  * Works in Node (file URL import) and browsers (served URL import).
  */
 export async function loadHtmlToImageModule(
   options: LoadOptions = {},
 ): Promise<HtmlToImageModule> {
-  if (cachedModule && !options.noCache) return cachedModule;
+  const cacheKeyFactory = options.factory ?? undefined;
+  const cacheKeyModuleArg = options.moduleArg ?? undefined;
+  if (!options.noCache) {
+    const hit = moduleCache.get(cacheKeyFactory)?.get(cacheKeyModuleArg);
+    if (hit) return hit;
+  }
   let factory = options.factory;
   let glueLabel = "(pre-bundled factory)";
   let glueDir = "";
@@ -299,11 +315,18 @@ export async function loadHtmlToImageModule(
       moduleArg?.locateFile ??
       ((path: string) => glueDir + path),
   });
-  if (!options.noCache) cachedModule = module;
+  if (!options.noCache) {
+    let inner = moduleCache.get(cacheKeyFactory);
+    if (!inner) {
+      inner = new Map();
+      moduleCache.set(cacheKeyFactory, inner);
+    }
+    inner.set(cacheKeyModuleArg, module);
+  }
   return module;
 }
 
-/** Drop the cached instance (tests / HMR). */
+/** Drop all cached instances (tests / HMR). */
 export function dropCachedModule(): void {
-  cachedModule = null;
+  moduleCache.clear();
 }
