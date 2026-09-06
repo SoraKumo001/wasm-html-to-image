@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "build": "pnpm --filter wasm-html-to-image build",
+    "build": "pnpm wasm:build && pnpm --filter wasm-html-to-image build",
     "build:js": "pnpm -r --if-present build",
     "example:cli": "pnpm --filter wasm-html-to-image example:cli",
     "docs:dev": "pnpm --filter wasm-html-to-image-docs start",

@@ -23,18 +23,32 @@ const FILES = fs
   .filter((f) => f.endsWith(".html"))
   .sort();
 
+import { chromium } from "playwright";
+
 /**
  * Locate a Chromium binary without the playwright npm package (not installed
  * by design): env override, then the pre-installed ms-playwright browsers.
  * Throws with a clear message when none is found.
+ * Locate a Chromium binary:
+ * 1. CHROME_PATH environment variable
+ * 2. playwright's chromium.executablePath()
+ * 3. PLAYWRIGHT_BROWSERS_PATH / home ms-playwright directories
+ * 4. System installed browsers
  */
 function findChrome(): string {
   if (process.env.CHROME_PATH && fs.existsSync(process.env.CHROME_PATH)) {
     return process.env.CHROME_PATH;
   }
+  try {
+    const p = chromium.executablePath();
+    if (p && fs.existsSync(p)) return p;
+  } catch {
+    // Playwright executable not found or errored
+  }
   const home = os.homedir();
   const candidates: string[] = [];
   const roots = [
+    ...(process.env.PLAYWRIGHT_BROWSERS_PATH ? [process.env.PLAYWRIGHT_BROWSERS_PATH] : []),
     path.join(home, "AppData/Local/ms-playwright"),
     path.join(home, ".cache/ms-playwright"),
     path.join(home, "Library/Caches/ms-playwright"),
@@ -49,15 +63,26 @@ function findChrome(): string {
     for (const e of entries) {
       candidates.push(
         path.join(root, e, "chrome-win64/chrome.exe"),
+        path.join(root, e, "chrome-win/chrome.exe"),
         path.join(root, e, "chrome-linux/chrome"),
         path.join(
           root,
           e,
           "chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
         ),
+        path.join(
+          root,
+          e,
+          "chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
+        ),
       );
     }
   }
+  candidates.push(
+    "/usr/bin/google-chrome",
+    "/usr/bin/chromium",
+    "/usr/bin/chromium-browser",
+  );
   for (const c of candidates) {
     if (fs.existsSync(c)) return c;
   }

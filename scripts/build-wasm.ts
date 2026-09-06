@@ -2,6 +2,24 @@ import { execSync } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
 
+// Load .env if present
+const envCandidates = [
+  path.resolve(process.cwd(), ".env"),
+  path.resolve(import.meta.dirname, "../.env"),
+];
+for (const envFile of envCandidates) {
+  if (
+    fs.existsSync(envFile) &&
+    typeof (process as unknown as { loadEnvFile?: (path?: string) => void })
+      .loadEnvFile === "function"
+  ) {
+    (
+      process as unknown as { loadEnvFile: (path?: string) => void }
+    ).loadEnvFile(envFile);
+    break;
+  }
+}
+
 const isWin = process.platform === "win32";
 const action = process.argv[2];
 
@@ -35,7 +53,10 @@ const shell = isWin ? "cmd.exe" : "/bin/sh";
 let useNinja = false;
 let ninjaPath = "";
 try {
-  const result = execSync(isWin ? "where ninja" : "which ninja").toString().trim().split(/\r?\n/)[0];
+  const result = execSync(isWin ? "where ninja" : "which ninja")
+    .toString()
+    .trim()
+    .split(/\r?\n/)[0];
   if (result) {
     ninjaPath = result;
     execSync(`"${ninjaPath}" --version`, { stdio: "ignore" });
@@ -52,7 +73,10 @@ if (isWin) {
   } catch (e) {
     const commonPaths = [
       "C:\\Program Files\\Git\\usr\\bin\\patch.exe",
-      path.join(process.env.USERPROFILE || "", "AppData\\Local\\Programs\\Git\\usr\\bin\\patch.exe"),
+      path.join(
+        process.env.USERPROFILE || "",
+        "AppData\\Local\\Programs\\Git\\usr\\bin\\patch.exe",
+      ),
     ];
     for (const p of commonPaths) {
       if (fs.existsSync(p)) {
@@ -84,7 +108,9 @@ if (action === "configure") {
     try {
       fs.rmSync(buildDir, { recursive: true, force: true });
     } catch (e) {
-      console.warn(`Warning: Could not remove ${buildDir} directory, attempting to continue.`);
+      console.warn(
+        `Warning: Could not remove ${buildDir} directory, attempting to continue.`,
+      );
     }
   }
   if (!fs.existsSync(buildDir)) {
@@ -104,12 +130,16 @@ if (action === "configure") {
     `-DVCPKG_OVERLAY_TRIPLETS="${projectRoot}/triplets" ` +
     `-DVCPKG_OVERLAY_PORTS="${projectRoot}/ports" ` +
     `-DCMAKE_EXPORT_COMPILE_COMMANDS=ON` +
-    (useNinja && ninjaPath ? ` -DCMAKE_MAKE_PROGRAM="${ninjaPath.replace(/\\/g, "/")}"` : "");
+    (useNinja && ninjaPath
+      ? ` -DCMAKE_MAKE_PROGRAM="${ninjaPath.replace(/\\/g, "/")}"`
+      : "");
 
   run(cmakeCmd, buildDir);
 } else if (action === "build") {
   if (!fs.existsSync(buildDir)) {
-    console.error(`Error: Build directory ${buildDir} does not exist. Run configure first.`);
+    console.error(
+      `Error: Build directory ${buildDir} does not exist. Run configure first.`,
+    );
     process.exit(1);
   }
 
