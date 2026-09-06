@@ -32,15 +32,15 @@ flowchart TB
         Direct["ダイレクト Bitmap 直結 (メモリ内中間バッファ)"]
     end
 
-    Input -->|HTML / URL| Res
+    Input -->|"HTML / URL"| Res
     Res --> LiteHTML
     LiteHTML --> Text
     Text --> Skia
-    Skia -->|ラスタ形式 (WebP/JPEG等)| Direct
+    Skia -->|"ラスタ形式 (WebP/JPEG等)"| Direct
     Direct --> Encoder
-    Skia -->|ベクター / ドキュメント| OutVec["SVG / PDF 出力"]
+    Skia -->|"ベクター / ドキュメント"| OutVec["SVG / PDF 出力"]
 
-    Input -->|画像バイナリ| Decoder
+    Input -->|"画像バイナリ"| Decoder
     Decoder --> Transform
     Transform --> Encoder
     Encoder --> OutRaster["画像バイナリ (Uint8Array)"]

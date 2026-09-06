@@ -11,9 +11,9 @@ Chromium や Puppeteer、Playwright などの重厚なヘッドレスブラウ�
 
 ```mermaid
 graph LR
-    HTML[HTML / URL / React] --> Engine[wasm-html-to-image <br/> 単一 Skia-WASM エンジン]
-    Img[画像バイト列 / DataURL] --> Engine
-    Engine --> Output[PNG / JPEG / WebP / AVIF <br/> RAW / ThumbHash / SVG / PDF]
+    HTML["HTML / URL / React"] --> Engine["wasm-html-to-image <br/> 単一 Skia-WASM エンジン"]
+    Img["画像バイト列 / DataURL"] --> Engine
+    Engine --> Output["PNG / JPEG / WebP / AVIF <br/> RAW / ThumbHash / SVG / PDF"]
 ```
 
 ## 主な特徴

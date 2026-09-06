@@ -11,9 +11,9 @@ It requires no heavy headless browsers like Chromium, Puppeteer, or Playwright, 
 
 ```mermaid
 graph LR
-    HTML[HTML / URL / React] --> Engine[wasm-html-to-image <br/> Single Skia-WASM Engine]
-    Img[Image Bytes / DataURL] --> Engine
-    Engine --> Output[PNG / JPEG / WebP / AVIF <br/> RAW / ThumbHash / SVG / PDF]
+    HTML["HTML / URL / React"] --> Engine["wasm-html-to-image <br/> Single Skia-WASM Engine"]
+    Img["Image Bytes / DataURL"] --> Engine
+    Engine --> Output["PNG / JPEG / WebP / AVIF <br/> RAW / ThumbHash / SVG / PDF"]
 ```
 
 ## Key Features

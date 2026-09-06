@@ -11,11 +11,11 @@ WebAssembly の実行は CPU バウンドであるため、マルチコア環境
 
 ```mermaid
 flowchart LR
-    App[メインスレッド / サーバー] --> Pool[Worker プール (wasm-html-to-image/workers)]
-    Pool --> W1[Worker Thread 1 <br/> WASM インスタンス]
-    Pool --> W2[Worker Thread 2 <br/> WASM インスタンス]
-    Pool --> W3[Worker Thread 3 <br/> WASM インスタンス]
-    Pool --> W4[Worker Thread 4 <br/> WASM インスタンス]
+    App["メインスレッド / サーバー"] --> Pool["Worker プール (wasm-html-to-image/workers)"]
+    Pool --> W1["Worker Thread 1 <br/> WASM インスタンス"]
+    Pool --> W2["Worker Thread 2 <br/> WASM インスタンス"]
+    Pool --> W3["Worker Thread 3 <br/> WASM インスタンス"]
+    Pool --> W4["Worker Thread 4 <br/> WASM インスタンス"]
 ```
 
 ---

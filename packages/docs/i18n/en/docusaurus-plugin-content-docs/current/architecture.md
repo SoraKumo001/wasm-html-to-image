@@ -32,15 +32,15 @@ flowchart TB
         Direct["Direct Bitmap Memory Link"]
     end
 
-    Input -->|HTML / URL| Res
+    Input -->|"HTML / URL"| Res
     Res --> LiteHTML
     LiteHTML --> Text
     Text --> Skia
-    Skia -->|Raster Formats| Direct
+    Skia -->|"Raster Formats"| Direct
     Direct --> Encoder
-    Skia -->|Vector Formats| OutVec["SVG / PDF Output"]
+    Skia -->|"Vector Formats"| OutVec["SVG / PDF Output"]
 
-    Input -->|Image Buffer| Decoder
+    Input -->|"Image Buffer"| Decoder
     Decoder --> Transform
     Transform --> Encoder
     Encoder --> OutRaster["Image Output (Uint8Array)"]

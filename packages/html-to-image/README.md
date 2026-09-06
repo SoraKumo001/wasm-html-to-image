@@ -4,7 +4,7 @@
 [![npm downloads](https://img.shields.io/npm/dw/wasm-html-to-image.svg)](https://www.npmjs.com/package/wasm-html-to-image)
 [![license](https://img.shields.io/npm/l/wasm-html-to-image.svg)](https://github.com/SoraKumo001/wasm-html-to-image/blob/master/LICENSE)
 [![Playground](https://img.shields.io/badge/Demo-Playground-blueviolet)](https://sorakumo001.github.io/wasm-html-to-image/master)
-[![Documentation](https://img.shields.io/badge/Docs-Docusaurus-blue)](https://sorakumo001.github.io/wasm-html-to-image/)
+[![Documentation](https://img.shields.io/badge/Docs-Docusaurus-blue)](https://sorakumo001.github.io/wasm-html-to-image/master/docs)
 
 A high-performance, WebAssembly-powered HTML-to-image renderer and image optimization engine. It consolidates HTML rendering (**Satoru** / **Skia** / **litehtml**) and native image encoding (**WebP / AVIF / JPEG**) into a single, unified WASM binary.
 
@@ -142,17 +142,16 @@ await fs.writeFile("animation.webp", Buffer.from(animatedWebp.data));
 
 All formats return a `RenderResult<T>` object containing `.data` (`Uint8Array` or `string` for SVG) and metadata (`width`, `height`, `originalWidth`, `originalHeight`, `format`, `isAnimated`):
 
-| Format      | `result.data` Type | HTML Input                                     | Image Input                                   |
-| ----------- | ------------------ | ---------------------------------------------- | --------------------------------------------- |
-| `png`       | `Uint8Array`       | Skia render → PNG encode                       | Decodes and converts to PNG                   |
-| `jpeg`      | `Uint8Array`       | Skia render → JPEG encode (`quality`)          | Decodes and compresses JPEG                   |
-| `webp`      | `Uint8Array`       | Skia render → WebP encode (`quality`)          | Decodes and compresses WebP                   |
-| `avif`      | `Uint8Array`       | Skia render → AVIF encode (`quality`, `speed`) | Decodes and compresses AVIF                   |
-| `raw`       | `Uint8Array`       | Uncompressed RGBA pixel bytes                  | Uncompressed RGBA pixel bytes                 |
-| `thumbhash` | `Uint8Array`       | Computes ThumbHash from render                 | Computes ThumbHash from image                 |
-| `svg`       | `string`           | Skia vector drawing stream                     | Single `<image>` wrapper SVG                  |
-| `pdf`       | `Uint8Array`       | SkPDFDocument vector PDF                       | Single-page centered PDF                      |
-| `none`      | `Uint8Array`       | N/A (throws error)                             | Passthrough original bytes + extract metadata |
+| Format      | `result.data` Type | HTML Input                                     | Image Input                   |
+| ----------- | ------------------ | ---------------------------------------------- | ----------------------------- |
+| `png`       | `Uint8Array`       | Skia render → PNG encode                       | Decodes and converts to PNG   |
+| `jpeg`      | `Uint8Array`       | Skia render → JPEG encode (`quality`)          | Decodes and compresses JPEG   |
+| `webp`      | `Uint8Array`       | Skia render → WebP encode (`quality`)          | Decodes and compresses WebP   |
+| `avif`      | `Uint8Array`       | Skia render → AVIF encode (`quality`, `speed`) | Decodes and compresses AVIF   |
+| `raw`       | `Uint8Array`       | Uncompressed RGBA pixel bytes                  | Uncompressed RGBA pixel bytes |
+| `thumbhash` | `Uint8Array`       | Computes ThumbHash from render                 | Computes ThumbHash from image |
+| `svg`       | `string`           | Skia vector drawing stream                     | Single `<image>` wrapper SVG  |
+| `pdf`       | `Uint8Array`       | SkPDFDocument vector PDF                       | Single-page centered PDF      |
 
 ---
 

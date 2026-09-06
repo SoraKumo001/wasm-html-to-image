@@ -11,17 +11,17 @@ HTML 描画では、外部画像やフォントファイルの読み込みが不
 
 ```mermaid
 flowchart TD
-    CSS[HTML/CSS 内のフォント指定] --> Check{フォント種別}
-    Check -->|@font-face 宣言あり| FetchDirect[指定URLからフォント取得]
-    Check -->|汎用名 sans-serif 等| FontMap[fontMap により Google Fonts URL に変換]
-    Check -->|未登録 Web フォント| Fallback[fallbackFonts / システム代替フォント]
+    CSS["HTML/CSS 内のフォント指定"] --> Check{"フォント種別"}
+    Check -->|"@font-face 宣言あり"| FetchDirect["指定URLからフォント取得"]
+    Check -->|"汎用名 sans-serif 等"| FontMap["fontMap により Google Fonts URL に変換"]
+    Check -->|"未登録 Web フォント"| Fallback["fallbackFonts / システム代替フォント"]
 
-    FetchDirect --> CacheCheck{プロセス内キャッシュ?}
+    FetchDirect --> CacheCheck{"プロセス内キャッシュ?"}
     FontMap --> CacheCheck
     Fallback --> CacheCheck
 
-    CacheCheck -->|キャッシュ命中| Apply[WASM に即座に投入]
-    CacheCheck -->|ミス| Network[HTTP/HTTPS 取得] --> SaveCache[キャッシュ保存] --> Apply
+    CacheCheck -->|"キャッシュ命中"| Apply["WASM に即座に投入"]
+    CacheCheck -->|"ミス"| Network["HTTP/HTTPS 取得"] --> SaveCache["キャッシュ保存"] --> Apply
 ```
 
 ---
