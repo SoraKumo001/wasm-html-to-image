@@ -18,13 +18,10 @@ type Params = {
 
 const App: React.FC = () => {
   const [assetList] = useState<string[]>(() => {
-    const assetFiles = import.meta.glob(
-      "../../visual-test/assets/*.html",
-      {
-        query: "?url",
-        import: "default",
-      },
-    );
+    const assetFiles = import.meta.glob("../../visual-test/assets/*.html", {
+      query: "?url",
+      import: "default",
+    });
     return Object.keys(assetFiles).map((path) => path.split("/").pop()!);
   });
   // Initialize state from URL parameters
@@ -69,7 +66,9 @@ const App: React.FC = () => {
   const [renderResult, setRenderResult] = useState<string | Uint8Array | null>(
     null,
   );
-  const [diagnostics, setDiagnostics] = useState<RenderDiagnostics | null>(null);
+  const [diagnostics, setDiagnostics] = useState<RenderDiagnostics | null>(
+    null,
+  );
   const [logs, setLogs] = useState<{ level: LogLevel; message: string }[]>([]);
   const [inspectorTab, setInspectorTab] = useState<string>("Output");
   const [renderTime, setRenderTime] = useState<number | null>(null);
@@ -270,7 +269,9 @@ const App: React.FC = () => {
         void e;
       }
 
-      console.log(`[wasm-html-to-image] Rendering via Worker (ID: ${requestId})`);
+      console.log(
+        `[wasm-html-to-image] Rendering via Worker (ID: ${requestId})`,
+      );
       const { width, height, format, textToPaths, mediaType } = params;
       const result = await render({
         value: currentHtml,
@@ -332,7 +333,9 @@ const App: React.FC = () => {
       property.current.isRender = false;
 
       if (requestId !== latestRenderId.current) {
-        console.log(`[wasm-html-to-image] Render result discarded (ID: ${requestId})`);
+        console.log(
+          `[wasm-html-to-image] Render result discarded (ID: ${requestId})`,
+        );
         return;
       }
 
@@ -796,7 +799,14 @@ const App: React.FC = () => {
 
       <div style={{ marginTop: "30px" }}>
         <div style={{ display: "flex", borderBottom: "1px solid #ccc" }}>
-          {["Output", "Diagnostics", "Resources", "Fonts", "Timings", "Logs"].map((tab) => (
+          {[
+            "Output",
+            "Diagnostics",
+            "Resources",
+            "Fonts",
+            "Timings",
+            "Logs",
+          ].map((tab) => (
             <button
               key={tab}
               onClick={() => setInspectorTab(tab)}
@@ -814,7 +824,16 @@ const App: React.FC = () => {
             >
               {tab}
               {tab === "Logs" && logs.length > 0 && (
-                <span style={{ marginLeft: "6px", background: "#f44336", color: "white", borderRadius: "10px", padding: "0 6px", fontSize: "11px" }}>
+                <span
+                  style={{
+                    marginLeft: "6px",
+                    background: "#f44336",
+                    color: "white",
+                    borderRadius: "10px",
+                    padding: "0 6px",
+                    fontSize: "11px",
+                  }}
+                >
                   {logs.length}
                 </span>
               )}
@@ -833,7 +852,9 @@ const App: React.FC = () => {
         >
           {inspectorTab === "Output" && (
             <div>
-              <h3>Output Source {params.format !== "svg" ? "(Base64)" : ""}:</h3>
+              <h3>
+                Output Source {params.format !== "svg" ? "(Base64)" : ""}:
+              </h3>
               <textarea
                 value={outputSource}
                 readOnly
@@ -853,12 +874,20 @@ const App: React.FC = () => {
 
           {inspectorTab === "Diagnostics" && (
             <div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
                 <h3>Diagnostics JSON:</h3>
                 {diagnostics && (
                   <button
                     onClick={() => {
-                      navigator.clipboard.writeText(JSON.stringify(diagnostics, null, 2));
+                      navigator.clipboard.writeText(
+                        JSON.stringify(diagnostics, null, 2),
+                      );
                     }}
                     style={{
                       padding: "4px 10px",
@@ -874,7 +903,11 @@ const App: React.FC = () => {
                 )}
               </div>
               <textarea
-                value={diagnostics ? JSON.stringify(diagnostics, null, 2) : "No diagnostics available"}
+                value={
+                  diagnostics
+                    ? JSON.stringify(diagnostics, null, 2)
+                    : "No diagnostics available"
+                }
                 readOnly
                 style={{
                   width: "100%",
@@ -896,35 +929,83 @@ const App: React.FC = () => {
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
                   <tr style={{ background: "#f5f5f5", textAlign: "left" }}>
-                    <th style={{ padding: "8px", borderBottom: "2px solid #ddd" }}>Type</th>
-                    <th style={{ padding: "8px", borderBottom: "2px solid #ddd" }}>URL</th>
-                    <th style={{ padding: "8px", borderBottom: "2px solid #ddd" }}>Status</th>
-                    <th style={{ padding: "8px", borderBottom: "2px solid #ddd" }}>Size</th>
+                    <th
+                      style={{ padding: "8px", borderBottom: "2px solid #ddd" }}
+                    >
+                      Type
+                    </th>
+                    <th
+                      style={{ padding: "8px", borderBottom: "2px solid #ddd" }}
+                    >
+                      URL
+                    </th>
+                    <th
+                      style={{ padding: "8px", borderBottom: "2px solid #ddd" }}
+                    >
+                      Status
+                    </th>
+                    <th
+                      style={{ padding: "8px", borderBottom: "2px solid #ddd" }}
+                    >
+                      Size
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {diagnostics?.resources?.map((res, i) => (
                     <tr key={i} style={{ borderBottom: "1px solid #eee" }}>
                       <td style={{ padding: "8px" }}>{res.type}</td>
-                      <td style={{ padding: "8px", maxWidth: "400px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={res.url}>
+                      <td
+                        style={{
+                          padding: "8px",
+                          maxWidth: "400px",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                        title={res.url}
+                      >
                         {res.url}
                       </td>
                       <td style={{ padding: "8px" }}>
-                        <span style={{
-                          padding: "2px 6px",
-                          borderRadius: "4px",
-                          fontSize: "12px",
-                          color: "white",
-                          background: res.status === "loaded" ? "#4caf50" : res.status === "failed" ? "#f44336" : "#ff9800"
-                        }}>
+                        <span
+                          style={{
+                            padding: "2px 6px",
+                            borderRadius: "4px",
+                            fontSize: "12px",
+                            color: "white",
+                            background:
+                              res.status === "loaded"
+                                ? "#4caf50"
+                                : res.status === "failed"
+                                  ? "#f44336"
+                                  : "#ff9800",
+                          }}
+                        >
                           {res.status}
                         </span>
                       </td>
-                      <td style={{ padding: "8px" }}>{res.bytes ? `${(res.bytes / 1024).toFixed(1)} KB` : "-"}</td>
+                      <td style={{ padding: "8px" }}>
+                        {res.bytes
+                          ? `${(res.bytes / 1024).toFixed(1)} KB`
+                          : "-"}
+                      </td>
                     </tr>
                   ))}
-                  {(!diagnostics?.resources || diagnostics.resources.length === 0) && (
-                    <tr><td colSpan={4} style={{ padding: "20px", textAlign: "center", color: "#999" }}>No resources recorded</td></tr>
+                  {(!diagnostics?.resources ||
+                    diagnostics.resources.length === 0) && (
+                    <tr>
+                      <td
+                        colSpan={4}
+                        style={{
+                          padding: "20px",
+                          textAlign: "center",
+                          color: "#999",
+                        }}
+                      >
+                        No resources recorded
+                      </td>
+                    </tr>
                   )}
                 </tbody>
               </table>
@@ -941,35 +1022,80 @@ const App: React.FC = () => {
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
                   <tr style={{ background: "#f5f5f5", textAlign: "left" }}>
-                    <th style={{ padding: "8px", borderBottom: "2px solid #ddd" }}>Family</th>
-                    <th style={{ padding: "8px", borderBottom: "2px solid #ddd" }}>Weight/Style</th>
-                    <th style={{ padding: "8px", borderBottom: "2px solid #ddd" }}>Status</th>
-                    <th style={{ padding: "8px", borderBottom: "2px solid #ddd" }}>Source</th>
+                    <th
+                      style={{ padding: "8px", borderBottom: "2px solid #ddd" }}
+                    >
+                      Family
+                    </th>
+                    <th
+                      style={{ padding: "8px", borderBottom: "2px solid #ddd" }}
+                    >
+                      Weight/Style
+                    </th>
+                    <th
+                      style={{ padding: "8px", borderBottom: "2px solid #ddd" }}
+                    >
+                      Status
+                    </th>
+                    <th
+                      style={{ padding: "8px", borderBottom: "2px solid #ddd" }}
+                    >
+                      Source
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {diagnostics?.fonts?.map((f, i) => (
                     <tr key={i} style={{ borderBottom: "1px solid #eee" }}>
                       <td style={{ padding: "8px" }}>{f.family}</td>
-                      <td style={{ padding: "8px" }}>{f.weight} {f.style}</td>
                       <td style={{ padding: "8px" }}>
-                        <span style={{
-                          padding: "2px 6px",
-                          borderRadius: "4px",
-                          fontSize: "12px",
-                          color: "white",
-                          background: f.status === "loaded" ? "#4caf50" : f.status === "missing" ? "#f44336" : "#2196f3"
-                        }}>
+                        {f.weight} {f.style}
+                      </td>
+                      <td style={{ padding: "8px" }}>
+                        <span
+                          style={{
+                            padding: "2px 6px",
+                            borderRadius: "4px",
+                            fontSize: "12px",
+                            color: "white",
+                            background:
+                              f.status === "loaded"
+                                ? "#4caf50"
+                                : f.status === "missing"
+                                  ? "#f44336"
+                                  : "#2196f3",
+                          }}
+                        >
                           {f.status}
                         </span>
                       </td>
-                      <td style={{ padding: "8px", maxWidth: "300px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={f.source}>
+                      <td
+                        style={{
+                          padding: "8px",
+                          maxWidth: "300px",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                        title={f.source}
+                      >
                         {f.source || "-"}
                       </td>
                     </tr>
                   ))}
                   {(!diagnostics?.fonts || diagnostics.fonts.length === 0) && (
-                    <tr><td colSpan={4} style={{ padding: "20px", textAlign: "center", color: "#999" }}>No font information available</td></tr>
+                    <tr>
+                      <td
+                        colSpan={4}
+                        style={{
+                          padding: "20px",
+                          textAlign: "center",
+                          color: "#999",
+                        }}
+                      >
+                        No font information available
+                      </td>
+                    </tr>
                   )}
                 </tbody>
               </table>
@@ -982,19 +1108,39 @@ const App: React.FC = () => {
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
                   <tr style={{ background: "#f5f5f5", textAlign: "left" }}>
-                    <th style={{ padding: "8px", borderBottom: "2px solid #ddd" }}>Phase</th>
-                    <th style={{ padding: "8px", borderBottom: "2px solid #ddd" }}>Duration (ms)</th>
+                    <th
+                      style={{ padding: "8px", borderBottom: "2px solid #ddd" }}
+                    >
+                      Phase
+                    </th>
+                    <th
+                      style={{ padding: "8px", borderBottom: "2px solid #ddd" }}
+                    >
+                      Duration (ms)
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {diagnostics && Object.entries(diagnostics.timings).map(([name, ms], i) => (
-                    <tr key={i} style={{ borderBottom: "1px solid #eee" }}>
-                      <td style={{ padding: "8px" }}>{name}</td>
-                      <td style={{ padding: "8px" }}>{ms.toFixed(2)}</td>
-                    </tr>
-                  ))}
+                  {diagnostics &&
+                    Object.entries(diagnostics.timings).map(([name, ms], i) => (
+                      <tr key={i} style={{ borderBottom: "1px solid #eee" }}>
+                        <td style={{ padding: "8px" }}>{name}</td>
+                        <td style={{ padding: "8px" }}>{ms.toFixed(2)}</td>
+                      </tr>
+                    ))}
                   {!diagnostics && (
-                    <tr><td colSpan={2} style={{ padding: "20px", textAlign: "center", color: "#999" }}>No timing data available</td></tr>
+                    <tr>
+                      <td
+                        colSpan={2}
+                        style={{
+                          padding: "20px",
+                          textAlign: "center",
+                          color: "#999",
+                        }}
+                      >
+                        No timing data available
+                      </td>
+                    </tr>
                   )}
                 </tbody>
               </table>
@@ -1007,15 +1153,49 @@ const App: React.FC = () => {
           {inspectorTab === "Logs" && (
             <div>
               <h3>Worker Logs:</h3>
-              <div style={{ maxHeight: "400px", overflowY: "auto", fontFamily: "monospace", fontSize: "12px", background: "#333", color: "#eee", padding: "10px", borderRadius: "4px" }}>
+              <div
+                style={{
+                  maxHeight: "400px",
+                  overflowY: "auto",
+                  fontFamily: "monospace",
+                  fontSize: "12px",
+                  background: "#333",
+                  color: "#eee",
+                  padding: "10px",
+                  borderRadius: "4px",
+                }}
+              >
                 {logs.map((log, i) => (
-                  <div key={i} style={{ marginBottom: "4px", borderBottom: "1px solid #444", paddingBottom: "2px", color: log.level === LogLevel.Error ? "#ff8a80" : log.level === LogLevel.Warning ? "#ffd180" : "#eee" }}>
-                    <span style={{ opacity: 0.6, marginRight: "8px" }}>[{LogLevel[log.level]}]</span>
+                  <div
+                    key={i}
+                    style={{
+                      marginBottom: "4px",
+                      borderBottom: "1px solid #444",
+                      paddingBottom: "2px",
+                      color:
+                        log.level === LogLevel.Error
+                          ? "#ff8a80"
+                          : log.level === LogLevel.Warning
+                            ? "#ffd180"
+                            : "#eee",
+                    }}
+                  >
+                    <span style={{ opacity: 0.6, marginRight: "8px" }}>
+                      [{LogLevel[log.level]}]
+                    </span>
                     {log.message}
                   </div>
                 ))}
                 {logs.length === 0 && (
-                  <div style={{ textAlign: "center", color: "#888", padding: "20px" }}>No logs recorded</div>
+                  <div
+                    style={{
+                      textAlign: "center",
+                      color: "#888",
+                      padding: "20px",
+                    }}
+                  >
+                    No logs recorded
+                  </div>
                 )}
               </div>
             </div>
