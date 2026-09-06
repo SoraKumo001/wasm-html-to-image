@@ -23,6 +23,9 @@ for (const envFile of envCandidates) {
 const isWin = process.platform === "win32";
 const action = process.argv[2];
 
+// Suppress verbose EMSDK setup messages
+process.env.EMSDK_QUIET = "1";
+
 // NOTE: satoru版を正とする。image-opt版との差分:
 //  - EMSDK_VERSION env対応あり (image-optは latest 固定)
 //  - OVERLAY_PORTS=ports あり (image-optは無し。ports/gumbo 用に必須)
@@ -92,8 +95,8 @@ function run(cmd: string, cwd?: string) {
   const fullCmd = process.env.GITHUB_ACTIONS
     ? cmd
     : isWin
-      ? `call "${emsdkEnv}" && emsdk activate ${EMSDK_VERSION} && ${cmd}`
-      : `. ${path.join(EMSDK!, "emsdk_env.sh")} && emsdk activate ${EMSDK_VERSION} && ${cmd}`;
+      ? `set EMSDK_QUIET=1 && call "${emsdkEnv}" && emsdk activate ${EMSDK_VERSION} && ${cmd}`
+      : `export EMSDK_QUIET=1 && . ${path.join(EMSDK!, "emsdk_env.sh")} && emsdk activate ${EMSDK_VERSION} && ${cmd}`;
 
   console.log(`> ${cmd}`);
   execSync(fullCmd, { stdio: "inherit", shell, cwd });
@@ -123,6 +126,8 @@ if (action === "configure") {
   const cmakeCmd =
     `cmake .. -G "${generator}" ` +
     `-Wno-dev ` +
+    `-Wno-deprecated ` +
+    `-DCMAKE_WARN_DEPRECATED=OFF ` +
     `-DCMAKE_BUILD_TYPE=${buildType} ` +
     `-DCMAKE_TOOLCHAIN_FILE="${vcpkgCmake}" ` +
     `-DVCPKG_CHAINLOAD_TOOLCHAIN_FILE="${emscriptenCmake}" ` +

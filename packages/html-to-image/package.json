@@ -8,8 +8,39 @@
   "bin": {
     "wasm-html-to-image": "./dist/cli.js"
   },
+  "author": "SoraKumo <info@croud.jp>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SoraKumo001/wasm-html-to-image.git",
+    "directory": "packages/html-to-image"
+  },
+  "homepage": "https://sorakumo001.github.io/wasm-html-to-image/",
+  "bugs": {
+    "url": "https://github.com/SoraKumo001/wasm-html-to-image/issues"
+  },
+  "keywords": [
+    "wasm",
+    "webassembly",
+    "html-to-image",
+    "html2image",
+    "skia",
+    "litehtml",
+    "image-optimization",
+    "screenshot",
+    "ogp",
+    "avif",
+    "webp",
+    "pdf",
+    "thumbhash",
+    "cloudflare-workers",
+    "edge-runtime"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "build": "tsc -b && node scripts/compress-wasm.mjs && rolldown -c rolldown.config.js",
+    "prepublishOnly": "npm run build",
     "test": "vitest run",
     "example:cli": "tsx src/cli.ts --help"
   },

@@ -1,4 +1,6 @@
 cmake_minimum_required(VERSION 3.14)
+set(CMAKE_WARN_DEPRECATED OFF CACHE BOOL "" FORCE)
+
 
 # --- Toolchain setup (satoru正) ---
 set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" CACHE STRING "")
@@ -223,8 +225,9 @@ endif()
         # Some Skia symbols (SkSL, RuntimeEffect) are undefined because we exclude their sources
         # to keep the binary size small. They are not used in our current rendering path.
         "-sERROR_ON_UNDEFINED_SYMBOLS=0"
-        "-sWARN_ON_UNDEFINED_SYMBOLS=1"
+        "-sWARN_ON_UNDEFINED_SYMBOLS=0"
         "-sALLOW_MEMORY_GROWTH=1"
+
     )
 
 # --- COMMON/SINGLE差分メモ ---
@@ -241,7 +244,8 @@ target_include_directories(litehtml PUBLIC
     "${LITEHTML_DIR}/include/litehtml"
 )
 target_link_libraries(litehtml PRIVATE unofficial::gumbo::gumbo)
-target_compile_options(litehtml PRIVATE ${COMMON_COMPILE_OPTIONS})
+target_compile_options(litehtml PRIVATE ${COMMON_COMPILE_OPTIONS} -w)
+
 
 # --- Target: skia_lib ---
 # satoru正をベースに統合:
@@ -386,8 +390,9 @@ if(WASM_ENABLE_TEXT_SHAPING)
     list(APPEND SKIA_UNIFIED_DEFS SK_SHAPER_HARFBUZZ_AVAILABLE SK_SHAPER_UNICODE_AVAILABLE)
 endif()
 target_compile_definitions(skia_lib PUBLIC ${SKIA_UNIFIED_DEFS})
-target_compile_options(skia_lib PRIVATE ${COMMON_COMPILE_OPTIONS})
+target_compile_options(skia_lib PRIVATE ${COMMON_COMPILE_OPTIONS} -w)
 target_link_libraries(skia_lib PUBLIC ${HTML_TO_IMAGE_LIBS})
+
 
 # --- Target: html_to_image_core (satoru_core + image_converter_core 統合予定) ---
 # Phase2で satoru_core由来 (container_skia/renderers等) と image_converter_core由来

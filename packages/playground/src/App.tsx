@@ -1,24 +1,24 @@
 import React, { useState, useEffect } from "react";
-import { ImagePlayground } from "./ImagePlayground";
 import { HtmlPlayground } from "./HtmlPlayground";
+import { ImagePlayground } from "./ImagePlayground";
 
 export const App: React.FC = () => {
-  const [tab, setTab] = useState<"image" | "html">(() => {
+  const [tab, setTab] = useState<"html" | "image">(() => {
     const params = new URLSearchParams(window.location.search);
     const mode = params.get("mode");
-    return mode === "html" ? "html" : "image";
+    return mode === "image" ? "image" : "html";
   });
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const currentMode = params.get("mode");
-    if (tab === "image" && currentMode === "html") {
+    if (tab === "image" && currentMode !== "image") {
+      params.set("mode", "image");
+      const url = `${window.location.pathname}?${params.toString()}`;
+      window.history.replaceState({}, "", url);
+    } else if (tab === "html" && currentMode) {
       params.delete("mode");
       const url = `${window.location.pathname}${params.toString() ? "?" + params.toString() : ""}`;
-      window.history.replaceState({}, "", url);
-    } else if (tab === "html" && currentMode !== "html") {
-      params.set("mode", "html");
-      const url = `${window.location.pathname}?${params.toString()}`;
       window.history.replaceState({}, "", url);
     }
   }, [tab]);
@@ -32,16 +32,6 @@ export const App: React.FC = () => {
           </h1>
           <nav className="flex gap-2 bg-gray-100 p-1 rounded-lg border border-gray-200 text-sm font-medium">
             <button
-              onClick={() => setTab("image")}
-              className={`px-4 py-1.5 rounded-md transition-colors cursor-pointer ${
-                tab === "image"
-                  ? "bg-white text-blue-600 font-semibold shadow-xs"
-                  : "text-gray-600 hover:text-gray-900"
-              }`}
-            >
-              Image Optimization
-            </button>
-            <button
               onClick={() => setTab("html")}
               className={`px-4 py-1.5 rounded-md transition-colors cursor-pointer ${
                 tab === "html"
@@ -50,6 +40,16 @@ export const App: React.FC = () => {
               }`}
             >
               HTML to Image
+            </button>
+            <button
+              onClick={() => setTab("image")}
+              className={`px-4 py-1.5 rounded-md transition-colors cursor-pointer ${
+                tab === "image"
+                  ? "bg-white text-blue-600 font-semibold shadow-xs"
+                  : "text-gray-600 hover:text-gray-900"
+              }`}
+            >
+              Image Optimization
             </button>
           </nav>
         </div>
@@ -66,7 +66,7 @@ export const App: React.FC = () => {
       </header>
 
       <main className="max-w-7xl mx-auto p-4">
-        {tab === "image" ? <ImagePlayground /> : <HtmlPlayground />}
+        {tab === "html" ? <HtmlPlayground /> : <ImagePlayground />}
       </main>
     </div>
   );
