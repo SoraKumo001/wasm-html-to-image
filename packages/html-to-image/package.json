@@ -114,12 +114,14 @@
     "./tailwind": {
       "types": "./dist/tailwind.d.ts",
       "import": "./dist/tailwind.js"
-    }
+    },
+    "./llms.txt": "./llms.txt"
   },
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "llms.txt"
   ],
   "license": "MIT",
   "dependencies": {

@@ -52,6 +52,8 @@ export async function GET(req: NextRequest) {
 
 ## Edge ランタイムでの実装 (`edge-light`)
 
+`edge-light` は WASM を内包しないため、`render(options, wasm)` の第2引数に呼び出し側で用意した `WebAssembly.Module` を渡す必要があります。
+
 ```typescript
 // app/api/og/route.ts
 import { NextRequest } from "next/server";
@@ -60,12 +62,19 @@ import { render } from "wasm-html-to-image/edge-light";
 export const runtime = "edge";
 
 export async function GET(req: NextRequest) {
-  const { data } = await render({
-    value: "<h1>Edge Runtime on Vercel</h1>",
-    width: 1200,
-    height: 630,
-    format: "webp",
-  });
+  const wasm = await WebAssembly.compile(
+    await (await fetch(wasmUrl)).arrayBuffer(),
+  );
+
+  const { data } = await render(
+    {
+      value: "<h1>Edge Runtime on Vercel</h1>",
+      width: 1200,
+      height: 630,
+      format: "webp",
+    },
+    wasm,
+  );
 
   return new Response(data, {
     headers: { "Content-Type": "image/webp" },

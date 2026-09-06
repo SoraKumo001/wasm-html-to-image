@@ -23,21 +23,18 @@ const png = await render({
 
 ## 2. Cloudflare Workers (`workerd`)
 
-In `wrangler.jsonc`, configure compiled WASM rules:
+No `rules` are needed in `wrangler.jsonc` on current Wrangler (v3/v4):
+`import ... from "*.wasm"` is bundled as `WebAssembly.Module` by default.
+A minimal config is sufficient:
 
 ```jsonc
 {
   "main": "src/index.ts",
   "compatibility_date": "2026-09-01",
-  "rules": [
-    {
-      "type": "CompiledWasm",
-      "globs": ["**/*.wasm"],
-      "fallthrough": false,
-    },
-  ],
 }
 ```
+
+> Compatibility note: writing `rules` yourself overrides the defaults, so only keep `rules: [{ "type": "CompiledWasm", "globs": ["**/*.wasm"], "fallthrough": false }]` if you customize bundling rules or use a very old Wrangler. `rules` are ignored by `@cloudflare/vite-plugin`.
 
 ```typescript
 import { render } from "wasm-html-to-image/workerd";
@@ -62,18 +59,27 @@ export default {
 
 ## 3. Vercel Edge Runtime (`edge-light`)
 
+`edge-light` bundles no default wasm: pass a caller-supplied `WebAssembly.Module` as the 2nd argument of `render(options, wasm)`.
+
 ```typescript
 import { render } from "wasm-html-to-image/edge-light";
 
 export const runtime = "edge";
 
 export async function GET(request: Request) {
-  const webp = await render({
-    value: "<h1>Edge Runtime OGP</h1>",
-    width: 1200,
-    height: 630,
-    format: "webp",
-  });
+  const wasm = await WebAssembly.compile(
+    await (await fetch(wasmUrl)).arrayBuffer(),
+  );
+
+  const webp = await render(
+    {
+      value: "<h1>Edge Runtime OGP</h1>",
+      width: 1200,
+      height: 630,
+      format: "webp",
+    },
+    wasm,
+  );
 
   return new Response(webp, {
     headers: { "Content-Type": "image/webp" },

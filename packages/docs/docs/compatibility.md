@@ -55,7 +55,7 @@ title: 互換性と仕様
 | ランタイム              | サポート | 推奨サブパス                                                                          | 備考                                                                             |
 | ----------------------- | :------: | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
 | **Node.js (>=20)**      |    ✅    | `wasm-html-to-image/single`<br/>`wasm-html-to-image`<br/>`wasm-html-to-image/workers` | シングルスレッド、インスタンス再利用、マルチスレッド Worker プールすべて利用可能 |
-| **Cloudflare Workers**  |    ✅    | `wasm-html-to-image/workerd`                                                          | `rules: [{ type: "CompiledWasm" }]` 設定により通常版 WASM を直接束ねて実行       |
+| **Cloudflare Workers**  |    ✅    | `wasm-html-to-image/workerd`                                                          | `.wasm` の import は現行 Wrangler でデフォルトでバンドルされるため追加設定不要（`rules` を自前定義するとデフォルト上書きになるため、カスタマイズ時・非常に古い Wrangler 利用時のみ必要） |
 | **Vercel Edge Runtime** |    ✅    | `wasm-html-to-image/edge-light`                                                       | Edge 環境特有のメモリ制限・API 制約に最適化                                      |
 | **モダンブラウザ**      |    ✅    | `wasm-html-to-image/single`<br/>`wasm-html-to-image/workers`                          | Web Worker を用いたバックグラウンド描画が可能                                    |
 | **Deno**                |    ✅    | `wasm-html-to-image`                                                                  | Deno Deploy やローカル CLI で動作                                                |

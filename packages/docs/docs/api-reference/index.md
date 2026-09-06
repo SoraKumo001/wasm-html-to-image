@@ -15,7 +15,7 @@ title: API 概要
 | `wasm-html-to-image/single`     | `render(options)`                                         | 単一 WASM 内包エントリーポイント                                                  |
 | `wasm-html-to-image/index`      | `loadHtmlToImageModule()`<br/>`htmlToImage(mod, options)` | WASM モジュールインスタンスを明示的に保持・再利用する低レイヤ版                   |
 | `wasm-html-to-image/workerd`    | `render(options)`                                         | Cloudflare Workers 環境専用に最適化されたレンダラー                               |
-| `wasm-html-to-image/edge-light` | `render(options)`                                         | Vercel Edge Runtime 等のエッジ向けレンダラー                                      |
+| `wasm-html-to-image/edge-light` | `render(options, wasm)`                                   | Vercel Edge Runtime 等のエッジ向けレンダラー（呼び出し側が `WebAssembly.Module` を用意して第2引数で渡す） |
 | `wasm-html-to-image/workers`    | `createHtmlToImageWorker()`<br/>`render(options)`         | マルチスレッド Worker プールによる並列処理版                                      |
 | `wasm-html-to-image/react`      | `render(options)`                                         | React JSX エレメントを直接渡して描画するラッパー                                  |
 | `wasm-html-to-image/preact`     | `render(options)`                                         | Preact JSX エレメントを直接渡して描画するラッパー                                 |

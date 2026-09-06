@@ -207,10 +207,13 @@ app.listen(3000);
 Generate dynamic social preview images at the edge:
 
 ```typescript
-// wrangler.jsonc:
-// { "rules": [{ "type": "CompiledWasm", "globs": ["**/*.wasm"], "fallthrough": false }] }
+// wrangler.jsonc: no "rules" needed on current Wrangler (v3/v4) —
+// `import ... from "*.wasm"` is bundled as WebAssembly.Module by default.
+// Minimal wrangler.jsonc: { "main": "src/index.ts", "compatibility_date": "2026-09-01" }
+// (Only configure "rules" yourself if you customize bundling rules or use a very old Wrangler.
+// Note: @cloudflare/vite-plugin ignores "rules".)
 
-import { render } from "wasm-html-to-image/workerd";
+import { render } from "wasm-html-to-image"; // auto-selects the workerd build on Cloudflare ("wasm-html-to-image/workerd" also works)
 
 export default {
   async fetch(request: Request): Promise<Response> {

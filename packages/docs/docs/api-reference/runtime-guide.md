@@ -51,21 +51,16 @@ Cloudflare Workers では、ルートの `wasm-html-to-image`（自動検出で 
 
 ### wrangler.jsonc 設定
 
-Miniflare / Wrangler が `.wasm` ファイルを正しく WebAssembly.Module としてバンドルできるように設定します。
+現行の Wrangler（v3/v4）では `.wasm` の import はデフォルトで `WebAssembly.Module` としてバンドルされるため、`rules` の設定は不要です。最小構成は以下で可です。
 
 ```jsonc
 {
   "main": "src/index.ts",
   "compatibility_date": "2026-09-01",
-  "rules": [
-    {
-      "type": "CompiledWasm",
-      "globs": ["**/*.wasm"],
-      "fallthrough": false,
-    },
-  ],
 }
 ```
+
+> 後方互換メモ: `rules` を自前で書くとデフォルトを上書きします。バンドルルールをカスタマイズする場合や非常に古い Wrangler を使う場合のみ `rules: [{ "type": "CompiledWasm", "globs": ["**/*.wasm"], "fallthrough": false }]` を維持してください。`@cloudflare/vite-plugin` では `rules` は無視されます。
 
 ### Worker コード
 
@@ -97,7 +92,7 @@ export default {
 
 ## 3. Vercel Edge Runtime (`edge-light`)
 
-Vercel Edge Functions や Next.js の `runtime = "edge"` では、`wasm-html-to-image/edge-light` を使用します。
+Vercel Edge Functions や Next.js の `runtime = "edge"` では、`wasm-html-to-image/edge-light` を使用します。`edge-light` は WASM を内包しないため、`render(options, wasm)` の第2引数に呼び出し側で用意した `WebAssembly.Module` を渡す必要があります。
 
 ```typescript
 import { render } from "wasm-html-to-image/edge-light";
@@ -105,12 +100,19 @@ import { render } from "wasm-html-to-image/edge-light";
 export const runtime = "edge";
 
 export async function GET(request: Request) {
-  const { data } = await render({
-    value: "<h1>Edge Runtime OGP</h1>",
-    width: 1200,
-    height: 630,
-    format: "webp",
-  });
+  const wasm = await WebAssembly.compile(
+    await (await fetch(wasmUrl)).arrayBuffer(),
+  );
+
+  const { data } = await render(
+    {
+      value: "<h1>Edge Runtime OGP</h1>",
+      width: 1200,
+      height: 630,
+      format: "webp",
+    },
+    wasm,
+  );
 
   return new Response(data, {
     headers: { "Content-Type": "image/webp" },
