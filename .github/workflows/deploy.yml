@@ -23,12 +23,12 @@ jobs:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/ms-playwright
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           submodules: recursive
 
       - name: Cache vcpkg downloads
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ github.workspace }}/vcpkg_downloads
           key: vcpkg-downloads-${{ hashFiles('vcpkg.json') }}
@@ -43,7 +43,7 @@ jobs:
           fi
 
       - name: Cache vcpkg binaries
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ github.workspace }}/vcpkg_cache
           key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json', 'triplets/**') }}-${{ github.run_id }}
@@ -58,7 +58,7 @@ jobs:
           max-size: 2G
 
       - name: Cache Emscripten
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: emsdk-cache
           key: ${{ runner.os }}-emsdk-${{ env.EMSDK_VERSION }}-${{ hashFiles('package.json') }}
@@ -72,12 +72,12 @@ jobs:
           actions-cache-folder: "emsdk-cache"
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 10
 
       - name: Cache Skia Source
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: build/_deps/skia-src
           key: skia-${{ hashFiles('CMakeLists.txt') }}
@@ -85,7 +85,7 @@ jobs:
             skia-
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: "pnpm"
@@ -115,7 +115,7 @@ jobs:
 
       - name: Cache Playwright Browsers
         id: playwright-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
           key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'packages/visual-test/package.json') }}
