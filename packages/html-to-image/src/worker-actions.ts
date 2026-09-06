@@ -1,4 +1,8 @@
-import { htmlToImage, type HtmlToImageOptions } from "./core.js";
+import {
+  htmlToImage,
+  type HtmlToImageOptions,
+  type RenderResult,
+} from "./core.js";
 import type { HtmlToImageModule } from "./loader.js";
 
 /**
@@ -10,7 +14,9 @@ export function createRenderActions(
   getModule: () => Promise<HtmlToImageModule>,
 ) {
   return {
-    async render(options: HtmlToImageOptions): Promise<Uint8Array | string> {
+    async render(
+      options: HtmlToImageOptions,
+    ): Promise<RenderResult<Uint8Array | string>> {
       return await htmlToImage(await getModule(), options);
     },
   };

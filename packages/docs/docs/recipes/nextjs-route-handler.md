@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const title = searchParams.get("title") || "Next.js Blog";
 
-  const png = await render({
+  const { data } = await render({
     value: `
       <div style="
         width: 1200px;
@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
     format: "png",
   });
 
-  return new Response(png, {
+  return new Response(data, {
     headers: {
       "Content-Type": "image/png",
       "Cache-Control": "public, max-age=31536000, immutable",
@@ -60,14 +60,14 @@ import { render } from "wasm-html-to-image/edge-light";
 export const runtime = "edge";
 
 export async function GET(req: NextRequest) {
-  const webp = await render({
+  const { data } = await render({
     value: "<h1>Edge Runtime on Vercel</h1>",
     width: 1200,
     height: 630,
     format: "webp",
   });
 
-  return new Response(webp, {
+  return new Response(data, {
     headers: { "Content-Type": "image/webp" },
   });
 }

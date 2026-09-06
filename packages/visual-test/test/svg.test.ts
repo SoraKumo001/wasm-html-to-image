@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -26,9 +26,6 @@ const FILES = fs
 import { chromium } from "playwright";
 
 /**
- * Locate a Chromium binary without the playwright npm package (not installed
- * by design): env override, then the pre-installed ms-playwright browsers.
- * Throws with a clear message when none is found.
  * Locate a Chromium binary:
  * 1. CHROME_PATH environment variable
  * 2. playwright's chromium.executablePath()
@@ -48,7 +45,9 @@ function findChrome(): string {
   const home = os.homedir();
   const candidates: string[] = [];
   const roots = [
-    ...(process.env.PLAYWRIGHT_BROWSERS_PATH ? [process.env.PLAYWRIGHT_BROWSERS_PATH] : []),
+    ...(process.env.PLAYWRIGHT_BROWSERS_PATH
+      ? [process.env.PLAYWRIGHT_BROWSERS_PATH]
+      : []),
     path.join(home, "AppData/Local/ms-playwright"),
     path.join(home, ".cache/ms-playwright"),
     path.join(home, "Library/Caches/ms-playwright"),
@@ -91,7 +90,12 @@ function findChrome(): string {
   );
 }
 
-function screenshotSvg(svg: string, svgWidth: number, svgHeight: number, outPng: string): void {
+function screenshotSvg(
+  svg: string,
+  svgWidth: number,
+  svgHeight: number,
+  outPng: string,
+): void {
   const wrapper = path.join(
     TEMP_DIR,
     `svg-shot-${process.pid}-${Date.now()}.html`,
@@ -123,8 +127,8 @@ function screenshotSvg(svg: string, svgWidth: number, svgHeight: number, outPng:
   }
 }
 
-describe("SVG (Chromium) Visual Tests", () => {
-  const baselines: Record<string, { fill: number; outline: number }> = {};
+describe("SVG (Chromium) Visual Tests", { timeout: 60000 }, () => {
+  let baselines: Record<string, { fill: number; outline: number }> = {};
 
   beforeAll(() => {
     [DIFF_DIR, TEMP_DIR].forEach(
@@ -132,6 +136,28 @@ describe("SVG (Chromium) Visual Tests", () => {
     );
     // Fail fast with a clear message when no browser is available.
     findChrome();
+    if (fs.existsSync(BASELINE_PATH)) {
+      baselines = JSON.parse(fs.readFileSync(BASELINE_PATH, "utf8"));
+    }
+  });
+
+  afterAll(() => {
+    if (process.env.UPDATE_SNAPSHOTS) {
+      const current = fs.existsSync(BASELINE_PATH)
+        ? JSON.parse(fs.readFileSync(BASELINE_PATH, "utf8"))
+        : {};
+
+      for (const file in baselines) {
+        current[file] = baselines[file];
+      }
+
+      const dir = path.dirname(BASELINE_PATH);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+
+      fs.writeFileSync(BASELINE_PATH, JSON.stringify(current, null, 2));
+    }
   });
 
   for (const file of FILES) {
@@ -139,12 +165,12 @@ describe("SVG (Chromium) Visual Tests", () => {
       const refPath = path.join(REFERENCE_DIR, file.replace(".html", ".png"));
       const html = fs.readFileSync(path.join(ASSETS_DIR, file), "utf8");
 
-      const svg = (await render({
+      const { data: svg } = await render({
         value: html,
         width: 800,
         format: "svg",
         baseUrl: ASSETS_DIR,
-      })) as string;
+      });
 
       fs.writeFileSync(path.join(TEMP_DIR, file.replace(".html", ".svg")), svg);
 
@@ -153,7 +179,10 @@ describe("SVG (Chromium) Visual Tests", () => {
       const svgWidth = widthMatch ? parseInt(widthMatch[1], 10) : 800;
       const svgHeight = heightMatch ? parseInt(heightMatch[1], 10) : 1000;
 
-      const shotPath = path.join(TEMP_DIR, `svg-${file.replace(".html", ".png")}`);
+      const shotPath = path.join(
+        TEMP_DIR,
+        `svg-${file.replace(".html", ".png")}`,
+      );
       screenshotSvg(svg, svgWidth, svgHeight, shotPath);
 
       if (!fs.existsSync(refPath)) {
@@ -178,8 +207,4 @@ describe("SVG (Chromium) Visual Tests", () => {
       expect(result.fill).toBeLessThan(45);
     });
   }
-
-  it("writes baselines", () => {
-    fs.writeFileSync(BASELINE_PATH, JSON.stringify(baselines, null, 2));
-  });
 });

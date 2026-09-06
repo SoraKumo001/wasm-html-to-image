@@ -40,7 +40,7 @@ const page2 = `
 `;
 
 // 配列として渡すことで複数ページ PDF を生成
-const pdfBuffer = await render({
+const { data: pdfBuffer } = await render({
   value: [page1, page2],
   width: 595, // A4 幅 (pt)
   height: 842, // A4 高さ (pt)

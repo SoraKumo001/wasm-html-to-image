@@ -13,19 +13,59 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const singleJs = path.join(repoRoot, "packages", "html-to-image", "dist", "html-to-image-single.js");
-const defaultImg = path.join(repoRoot, "packages", "visual-test", "assets", "images", "image01.jpg");
+const repoRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+);
+const singleJs = path.join(
+  repoRoot,
+  "packages",
+  "html-to-image",
+  "dist",
+  "html-to-image-single.js",
+);
+const defaultImg = path.join(
+  repoRoot,
+  "packages",
+  "visual-test",
+  "assets",
+  "images",
+  "image01.jpg",
+);
 const imgPath = process.argv[2] ?? defaultImg;
 
 // RenderFormat enum (mirrors bridge_types.h / wasm-image-optimization core.ts)
-const FMT = { SVG: 0, PNG: 1, WebP: 2, PDF: 3, JPEG: 4, AVIF: 5, RAW: 6, ThumbHash: 7 };
+const FMT = {
+  SVG: 0,
+  PNG: 1,
+  WebP: 2,
+  PDF: 3,
+  JPEG: 4,
+  AVIF: 5,
+  RAW: 6,
+  ThumbHash: 7,
+};
 
-const results = { a: "SKIP", b: "SKIP", c: "SKIP", d: "SKIP", e: "SKIP", f: "SKIP", g: "SKIP", h: "SKIP", i: "SKIP", j: "SKIP" };
+const results = {
+  a: "SKIP",
+  b: "SKIP",
+  c: "SKIP",
+  d: "SKIP",
+  e: "SKIP",
+  f: "SKIP",
+  g: "SKIP",
+  h: "SKIP",
+  i: "SKIP",
+  j: "SKIP",
+};
 const details = {};
 
 const mod = await (await import(pathToFileURL(singleJs).href)).default();
-console.log(`loaded single.js keys: ${Object.keys(mod).filter((k) => /satoru|converter|html_to_image/.test(k)).join(",")}`);
+console.log(
+  `loaded single.js keys: ${Object.keys(mod)
+    .filter((k) => /satoru|converter|html_to_image/.test(k))
+    .join(",")}`,
+);
 
 // ---- a. converter roundtrip (load_image -> encode webp -> crop -> encode png) ----
 try {
@@ -37,22 +77,32 @@ try {
     const loaded = mod.converter_load_image(ci, jpg);
     steps.push(`load=${loaded}`);
     if (!loaded) throw new Error("converter_load_image => false");
-    steps.push(`orig=${mod.converter_get_original_width(ci)}x${mod.converter_get_original_height(ci)} ${mod.converter_get_original_format(ci)}`);
+    steps.push(
+      `orig=${mod.converter_get_original_width(ci)}x${mod.converter_get_original_height(ci)} ${mod.converter_get_original_format(ci)}`,
+    );
     const webp = mod.converter_encode(ci, FMT.WebP, 80, 6, false);
-    if (webp === null || webp === undefined) throw new Error("converter_encode(webp) => null");
+    if (webp === null || webp === undefined)
+      throw new Error("converter_encode(webp) => null");
     const wb = Buffer.from(webp);
     if (wb.subarray(0, 4).toString("latin1") !== "RIFF") {
-      throw new Error(`webp magic mismatch: ${wb.subarray(0, 8).toString("hex")}`);
+      throw new Error(
+        `webp magic mismatch: ${wb.subarray(0, 8).toString("hex")}`,
+      );
     }
     steps.push(`webp len=${wb.length} magic=RIFF(webp)`);
     const cropped = mod.converter_crop(ci, 0, 0, 8, 8);
-    steps.push(`crop=${cropped} size=${mod.converter_get_width(ci)}x${mod.converter_get_height(ci)}`);
+    steps.push(
+      `crop=${cropped} size=${mod.converter_get_width(ci)}x${mod.converter_get_height(ci)}`,
+    );
     if (!cropped) throw new Error("converter_crop => false");
     const png = mod.converter_encode(ci, FMT.PNG, 0, 0, false);
-    if (png === null || png === undefined) throw new Error("converter_encode(png) => null");
+    if (png === null || png === undefined)
+      throw new Error("converter_encode(png) => null");
     const pb = Buffer.from(png);
     if (!pb.subarray(0, 4).toString("hex").startsWith("89504e47")) {
-      throw new Error(`png magic mismatch: ${pb.subarray(0, 8).toString("hex")}`);
+      throw new Error(
+        `png magic mismatch: ${pb.subarray(0, 8).toString("hex")}`,
+      );
     }
     steps.push(`png len=${pb.length} magic=89PNG`);
     results.a = "PASS";
@@ -61,7 +111,9 @@ try {
     results.a = "FAIL";
     details.a_encode = `${steps.join(" | ")} || ${String(e?.message ?? e).slice(0, 300)}`;
   }
-  try { mod.converter_destroy_instance(ci); } catch {}
+  try {
+    mod.converter_destroy_instance(ci);
+  } catch {}
 } catch (e) {
   results.a = "FAIL";
   details.a_encode = `harness error: ${String(e?.message ?? e).slice(0, 300)}`;
@@ -82,12 +134,15 @@ try {
     details.b_render = `throw (crash): ${threw}`;
   } else if (out === null || out === undefined) {
     results.b = "PASS";
-    details.b_render = "satoru_render => null (expected; renderers unported, no crash)";
+    details.b_render =
+      "satoru_render => null (expected; renderers unported, no crash)";
   } else {
     results.b = "PASS";
     details.b_render = `satoru_render => bytes len=${out.length} (unexpected but no crash)`;
   }
-  try { mod.satoru_destroy_instance(si); } catch {}
+  try {
+    mod.satoru_destroy_instance(si);
+  } catch {}
 } catch (e) {
   results.b = "FAIL";
   details.b_render = `harness error: ${String(e?.message ?? e).slice(0, 300)}`;
@@ -107,7 +162,8 @@ try {
     details.c_unified = `throw (crash): ${threw}`;
   } else if (out === null || out === undefined) {
     results.c = "PASS";
-    details.c_unified = "html_to_image => null (no crash; satoru stub propagates null)";
+    details.c_unified =
+      "html_to_image => null (no crash; satoru stub propagates null)";
   } else {
     details.c_unified = `html_to_image => len=${out.length} head=${Buffer.from(out.subarray(0, 8)).toString("hex")}`;
     results.c = "PASS";
@@ -118,35 +174,65 @@ try {
 }
 
 console.log(JSON.stringify({ results, details, imgPath }, null, 2));
-console.log(`a(converter_encode): ${results.a} -- ${details.a_input ?? ""} | ${details.a_encode ?? ""}`);
+console.log(
+  `a(converter_encode): ${results.a} -- ${details.a_input ?? ""} | ${details.a_encode ?? ""}`,
+);
 console.log(`b(satoru_render=null): ${results.b} -- ${details.b_render ?? ""}`);
-console.log(`c(html_to_image no-crash): ${results.c} -- ${details.c_unified ?? ""}`);
+console.log(
+  `c(html_to_image no-crash): ${results.c} -- ${details.c_unified ?? ""}`,
+);
 
 // ---- d/e/f. TS facade (dist/single.js render: unified htmlToImage) ----
 try {
-  const facadeUrl = pathToFileURL(path.join(repoRoot, "packages", "html-to-image", "dist", "single.js")).href;
+  const facadeUrl = pathToFileURL(
+    path.join(repoRoot, "packages", "html-to-image", "dist", "single.js"),
+  ).href;
   const { render } = await import(facadeUrl);
   // d. image input -> webp
   try {
     const jpg = fs.readFileSync(imgPath);
-    const out = await render({ value: new Uint8Array(jpg), format: "webp", quality: 80 });
-    if (!(out instanceof Uint8Array) || Buffer.from(out.subarray(0, 4)).toString("latin1") !== "RIFF") {
-      throw new Error(`webp magic mismatch: len=${out?.length}`);
+    const res = await render({
+      value: new Uint8Array(jpg),
+      format: "webp",
+      quality: 80,
+    });
+    const out = res.data;
+    if (
+      !(out instanceof Uint8Array) ||
+      Buffer.from(out.subarray(0, 4)).toString("latin1") !== "RIFF" ||
+      !res.width ||
+      !res.originalWidth
+    ) {
+      throw new Error(
+        `webp magic/metadata mismatch: len=${out?.length} w=${res.width} origW=${res.originalWidth}`,
+      );
     }
     results.d = "PASS";
-    details.d_image = `jpg->webp len=${out.length} magic=RIFF(webp)`;
+    details.d_image = `jpg->webp len=${out.length} magic=RIFF(webp) size=${res.width}x${res.height} orig=${res.originalWidth}x${res.originalHeight}`;
   } catch (e) {
     results.d = "FAIL";
     details.d_image = String(e?.message ?? e).slice(0, 300);
   }
   // e. HTML input -> png
   try {
-    const out = await render({ value: "<h1>hi</h1>", width: 800, height: 600, format: "png" });
-    if (!(out instanceof Uint8Array) || !Buffer.from(out.subarray(0, 4)).toString("hex").startsWith("89504e47")) {
-      throw new Error(`png magic mismatch: len=${out?.length}`);
+    const res = await render({
+      value: "<h1>hi</h1>",
+      width: 800,
+      height: 600,
+      format: "png",
+    });
+    const out = res.data;
+    if (
+      !(out instanceof Uint8Array) ||
+      !Buffer.from(out.subarray(0, 4)).toString("hex").startsWith("89504e47") ||
+      res.width !== 800
+    ) {
+      throw new Error(
+        `png magic/metadata mismatch: len=${out?.length} w=${res.width}`,
+      );
     }
     results.e = "PASS";
-    details.e_html = `html->png len=${out.length} magic=89PNG`;
+    details.e_html = `html->png len=${out.length} magic=89PNG size=${res.width}x${res.height}`;
   } catch (e) {
     results.e = "FAIL";
     details.e_html = String(e?.message ?? e).slice(0, 300);
@@ -154,9 +240,20 @@ try {
   // f. image input -> svg string with <image>
   try {
     const jpg = fs.readFileSync(imgPath);
-    const out = await render({ value: new Uint8Array(jpg), width: 800, format: "svg" });
-    if (typeof out !== "string" || !out.includes("<svg") || !out.includes("<image")) {
-      throw new Error(`svg shape mismatch: type=${typeof out} len=${out?.length}`);
+    const res = await render({
+      value: new Uint8Array(jpg),
+      width: 800,
+      format: "svg",
+    });
+    const out = res.data;
+    if (
+      typeof out !== "string" ||
+      !out.includes("<svg") ||
+      !out.includes("<image")
+    ) {
+      throw new Error(
+        `svg shape mismatch: type=${typeof out} len=${out?.length}`,
+      );
     }
     results.f = "PASS";
     details.f_imgsvg = `jpg->svg len=${out.length} has <svg>+<image>`;
@@ -167,8 +264,16 @@ try {
   // g. image input -> pdf with %PDF magic
   try {
     const jpg = fs.readFileSync(imgPath);
-    const out = await render({ value: new Uint8Array(jpg), width: 800, format: "pdf" });
-    if (!(out instanceof Uint8Array) || Buffer.from(out.subarray(0, 4)).toString("latin1") !== "%PDF") {
+    const res = await render({
+      value: new Uint8Array(jpg),
+      width: 800,
+      format: "pdf",
+    });
+    const out = res.data;
+    if (
+      !(out instanceof Uint8Array) ||
+      Buffer.from(out.subarray(0, 4)).toString("latin1") !== "%PDF"
+    ) {
       throw new Error(`pdf magic mismatch: len=${out?.length}`);
     }
     results.g = "PASS";
@@ -180,12 +285,25 @@ try {
   // h. avif roundtrip: jpg -> avif (ftyp) -> png (89PNG)
   try {
     const jpg = fs.readFileSync(imgPath);
-    const avif = await render({ value: new Uint8Array(jpg), format: "avif", quality: 50, speed: 6 });
-    if (!(avif instanceof Uint8Array) || Buffer.from(avif.subarray(4, 12)).toString("latin1") !== "ftypavif") {
+    const resAvif = await render({
+      value: new Uint8Array(jpg),
+      format: "avif",
+      quality: 50,
+      speed: 6,
+    });
+    const avif = resAvif.data;
+    if (
+      !(avif instanceof Uint8Array) ||
+      Buffer.from(avif.subarray(4, 12)).toString("latin1") !== "ftypavif"
+    ) {
       throw new Error(`avif magic mismatch: len=${avif?.length}`);
     }
-    const back = await render({ value: avif, format: "png" });
-    if (!(back instanceof Uint8Array) || !Buffer.from(back.subarray(0, 4)).toString("hex").startsWith("89504e47")) {
+    const resBack = await render({ value: avif, format: "png" });
+    const back = resBack.data;
+    if (
+      !(back instanceof Uint8Array) ||
+      !Buffer.from(back.subarray(0, 4)).toString("hex").startsWith("89504e47")
+    ) {
       throw new Error(`avif->png mismatch: len=${back?.length}`);
     }
     results.h = "PASS";
@@ -197,13 +315,23 @@ try {
   // i. animated gif input -> animated webp (ANMF preserved)
   let animWebp = null;
   try {
-    const gif = fs.readFileSync(path.join(repoRoot, "packages", "visual-test", "assets", "anim-2f.gif"));
-    const out = await render({ value: new Uint8Array(gif), format: "webp", quality: 80, animation: true });
+    const gif = fs.readFileSync(
+      path.join(repoRoot, "packages", "visual-test", "assets", "anim-2f.gif"),
+    );
+    const res = await render({
+      value: new Uint8Array(gif),
+      format: "webp",
+      quality: 80,
+      animation: true,
+    });
+    const out = res.data;
     const head = Buffer.from(out);
     const anim = !!(head.readUInt32LE(20) & 2);
     const anmf = (head.toString("latin1").match(/ANMF/g) || []).length;
     if (!(out instanceof Uint8Array) || !anim || anmf < 2) {
-      throw new Error(`animated webp mismatch: len=${out?.length} anim=${anim} anmf=${anmf}`);
+      throw new Error(
+        `animated webp mismatch: len=${out?.length} anim=${anim} anmf=${anmf}`,
+      );
     }
     animWebp = out;
     results.i = "PASS";
@@ -215,8 +343,12 @@ try {
   // j. animated webp input -> png (first-frame decode path)
   try {
     if (!animWebp) throw new Error("skipped (i failed)");
-    const back = await render({ value: animWebp, format: "png" });
-    if (!(back instanceof Uint8Array) || !Buffer.from(back.subarray(0, 4)).toString("hex").startsWith("89504e47")) {
+    const res = await render({ value: animWebp, format: "png" });
+    const back = res.data;
+    if (
+      !(back instanceof Uint8Array) ||
+      !Buffer.from(back.subarray(0, 4)).toString("hex").startsWith("89504e47")
+    ) {
       throw new Error(`anim-webp->png mismatch: len=${back?.length}`);
     }
     results.j = "PASS";
@@ -228,14 +360,29 @@ try {
 } catch (e) {
   for (const k of ["d", "e", "f", "g", "h", "i", "j"]) {
     results[k] = "FAIL";
-    details[`${k}_harness`] = `facade load error: ${String(e?.message ?? e).slice(0, 300)}`;
+    details[`${k}_harness`] =
+      `facade load error: ${String(e?.message ?? e).slice(0, 300)}`;
   }
 }
-console.log(`d(facade jpg->webp): ${results.d} -- ${details.d_image ?? details.d_harness ?? ""}`);
-console.log(`e(facade html->png): ${results.e} -- ${details.e_html ?? details.e_harness ?? ""}`);
-console.log(`f(facade img->svg): ${results.f} -- ${details.f_imgsvg ?? details.f_harness ?? ""}`);
-console.log(`g(facade img->pdf): ${results.g} -- ${details.g_imgpdf ?? details.g_harness ?? ""}`);
-console.log(`h(facade avif roundtrip): ${results.h} -- ${details.h_avif ?? details.h_harness ?? ""}`);
-console.log(`i(facade anim gif->webp): ${results.i} -- ${details.i_anim ?? details.i_harness ?? ""}`);
-console.log(`j(facade anim-webp->png): ${results.j} -- ${details.j_animdec ?? details.j_harness ?? ""}`);
+console.log(
+  `d(facade jpg->webp): ${results.d} -- ${details.d_image ?? details.d_harness ?? ""}`,
+);
+console.log(
+  `e(facade html->png): ${results.e} -- ${details.e_html ?? details.e_harness ?? ""}`,
+);
+console.log(
+  `f(facade img->svg): ${results.f} -- ${details.f_imgsvg ?? details.f_harness ?? ""}`,
+);
+console.log(
+  `g(facade img->pdf): ${results.g} -- ${details.g_imgpdf ?? details.g_harness ?? ""}`,
+);
+console.log(
+  `h(facade avif roundtrip): ${results.h} -- ${details.h_avif ?? details.h_harness ?? ""}`,
+);
+console.log(
+  `i(facade anim gif->webp): ${results.i} -- ${details.i_anim ?? details.i_harness ?? ""}`,
+);
+console.log(
+  `j(facade anim-webp->png): ${results.j} -- ${details.j_animdec ?? details.j_harness ?? ""}`,
+);
 process.exit(Object.values(results).every((r) => r === "PASS") ? 0 : 1);

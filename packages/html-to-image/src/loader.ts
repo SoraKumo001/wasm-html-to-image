@@ -61,6 +61,15 @@ export interface HtmlToImageModule {
   /** Image-input svg/pdf wrappers (registered; probed at runtime). */
   converter_encode_svg?(inst: WasmInstancePtr): string | Promise<string>;
   converter_encode_pdf?(inst: WasmInstancePtr): unknown;
+  /** Converter metadata getters */
+  converter_get_original_width?(inst: WasmInstancePtr): number;
+  converter_get_original_height?(inst: WasmInstancePtr): number;
+  converter_is_original_animation?(inst: WasmInstancePtr): boolean;
+  converter_get_original_format?(inst: WasmInstancePtr): string;
+  converter_get_width?(inst: WasmInstancePtr): number;
+  converter_get_height?(inst: WasmInstancePtr): number;
+  converter_is_animation?(inst: WasmInstancePtr): boolean;
+  converter_get_format?(inst: WasmInstancePtr): string;
   /**
    * HTML resource discovery/injection (registered; probed at runtime).
    * `collect` gathers pending URLs for the HTML, `get_pending_resources`
@@ -190,7 +199,9 @@ async function importGlueModule(glue: string): Promise<GlueNamespace> {
   // `webpackIgnore` keeps Turbopack (Next.js 16 default builder) from trying
   // to resolve the runtime URL at build time; webpack/vite honor it too.
   try {
-    return (await import(/* @vite-ignore, webpackIgnore: true */ glue)) as GlueNamespace;
+    return (await import(
+      /* @vite-ignore, webpackIgnore: true */ glue
+    )) as GlueNamespace;
   } catch (first) {
     try {
       const indirect = new Function("u", "return import(u)") as (
@@ -261,7 +272,8 @@ async function readWasmBinaryNode(
 ): Promise<Uint8Array | undefined> {
   if (!isNodeRuntime()) return undefined;
   try {
-    const fs = await importNode<typeof import("node:fs/promises")>("fs/promises");
+    const fs =
+      await importNode<typeof import("node:fs/promises")>("fs/promises");
     const data = await fs.readFile(
       glueDirToFsPath(glueDir) + "html-to-image.wasm",
     );

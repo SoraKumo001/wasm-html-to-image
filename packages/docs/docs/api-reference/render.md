@@ -10,20 +10,50 @@ title: render() & オプション
 ## シグネチャ
 
 ```typescript
-// wasm-html-to-image/single
+// wasm-html-to-image/single, /workers, /workerd, /edge-light
+export function render(
+  options: HtmlToImageOptions & { format: "svg" },
+): Promise<RenderResult<string>>;
 export function render(
   options: HtmlToImageOptions,
-): Promise<Uint8Array | string>;
+): Promise<RenderResult<Uint8Array | string>>;
 
 // wasm-html-to-image
 export function htmlToImage(
   module: HtmlToImageModule,
+  options: HtmlToImageOptions & { format: "svg" },
+): Promise<RenderResult<string>>;
+export function htmlToImage(
+  module: HtmlToImageModule,
   options: HtmlToImageOptions,
-): Promise<Uint8Array | string>;
+): Promise<RenderResult<Uint8Array | string>>;
+```
+
+## 戻り値 (`RenderResult<T>`)
+
+`render()` および `htmlToImage()` は、生成された画像データと画像メタデータ（寸法・フォーマット等）を格納した `RenderResult` オブジェクトを返します。
+
+```typescript
+export interface RenderResult<T = Uint8Array | string> {
+  /** 出力バイナリデータ (Uint8Array)、またはSVGマークアップ文字列 (string) */
+  data: T;
+  /** 出力画像の幅（ピクセル単位） */
+  width?: number;
+  /** 出力画像の高さ（ピクセル単位） */
+  height?: number;
+  /** 変換前の元画像の幅（画像入力時） */
+  originalWidth?: number;
+  /** 変換前の元画像の高さ（画像入力時） */
+  originalHeight?: number;
+  /** 出力フォーマット */
+  format?: ImageFormat;
+  /** アニメーション画像であるか */
+  isAnimated?: boolean;
+}
 ```
 
 :::note 戻り値の型
-フォーマットが `svg` の場合は `string`（SVG マークアップ文字列）、それ以外のすべての形式（`png`, `jpeg`, `webp`, `avif`, `pdf`, `raw`, `thumbhash`）では `Uint8Array` を返します。
+出力データ本体は `result.data` に格納されます。フォーマットが `svg` の場合は `string`（SVG マークアップ文字列）、それ以外のすべての形式（`png`, `jpeg`, `webp`, `avif`, `pdf`, `raw`, `thumbhash`）では `Uint8Array` となります。
 :::
 
 ---

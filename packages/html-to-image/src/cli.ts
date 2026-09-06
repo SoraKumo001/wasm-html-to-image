@@ -2,7 +2,11 @@
 import { program } from "commander";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { render, type HtmlToImageOptions, type OutputFormat } from "./single.js";
+import {
+  render,
+  type HtmlToImageOptions,
+  type OutputFormat,
+} from "./single.js";
 import { isImageInput } from "./core.js";
 
 const OUTPUT_FORMATS = [
@@ -46,10 +50,8 @@ program
   .argument("<input>", "input HTML/image file path or URL")
   .option("-o, --output <path>", "output file path")
   .option("-w, --width <number>", "viewport width", (v) => parseInt(v, 10), 800)
-  .option(
-    "-h, --height <number>",
-    "viewport height (omit for auto)",
-    (v) => parseInt(v, 10),
+  .option("-h, --height <number>", "viewport height (omit for auto)", (v) =>
+    parseInt(v, 10),
   )
   .option(
     "-f, --format <format>",
@@ -95,15 +97,15 @@ program
         height: options.height,
         format,
         quality: options.quality,
-        ...(isUrl
-          ? { url: input, baseUrl: input }
-          : await readInput(input)),
+        ...(isUrl ? { url: input, baseUrl: input } : await readInput(input)),
       };
 
       const result = await render(renderOptions);
       await fs.writeFile(
         outputPath,
-        typeof result === "string" ? result : Buffer.from(result),
+        typeof result.data === "string"
+          ? result.data
+          : Buffer.from(result.data),
       );
       console.log(`Successfully rendered to ${outputPath}`);
     } catch (err) {

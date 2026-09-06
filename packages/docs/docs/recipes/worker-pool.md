@@ -43,7 +43,7 @@ async function generateAllCards() {
         </div>
       `;
 
-      const webp = await render({
+      const { data } = await render({
         value: html,
         width: 400,
         height: 300,
@@ -53,7 +53,7 @@ async function generateAllCards() {
 
       await fs.writeFile(
         path.join(outputDir, `${item.id}.webp`),
-        Buffer.from(webp),
+        Buffer.from(data),
       );
     }),
   );

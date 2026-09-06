@@ -32,12 +32,14 @@ import {
 import {
   htmlToImage,
   type HtmlToImageOptions,
+  type RenderResult,
 } from "./core.js";
 
 export type {
   OutputFormat,
   RenderOptions,
   HtmlToImageOptions,
+  RenderResult,
   DiagnosticMessage,
   FontDiagnostic,
   RenderDiagnostics,
@@ -104,22 +106,19 @@ export function getDefaultModule(
 
 /**
  * Render HTML — or convert an image — on an edge runtime.
- * Returns bytes (`Uint8Array`); only `svg` resolves to `string`.
+ * Returns RenderResult containing data and metadata.
  */
 export async function render(
   options: HtmlToImageOptions & { format: "svg" },
   wasm: WebAssembly.Module,
-): Promise<string>;
+): Promise<RenderResult<string>>;
 export async function render(
   options: HtmlToImageOptions,
   wasm: WebAssembly.Module,
-): Promise<Uint8Array | string>;
+): Promise<RenderResult<Uint8Array | string>>;
 export async function render(
   options: HtmlToImageOptions,
   wasm: WebAssembly.Module,
-): Promise<Uint8Array | string> {
-  return htmlToImage(
-    await getDefaultModule(wasm),
-    options,
-  );
+): Promise<RenderResult<Uint8Array | string>> {
+  return htmlToImage(await getDefaultModule(wasm), options);
 }

@@ -7,13 +7,11 @@
  * (`Uint8Array` / `ArrayBuffer` / `data:image/` URL); image input skips
  * rendering and goes straight to `converter_encode`.
  */
-import {
-  loadHtmlToImageModule,
-  type HtmlToImageModule,
-} from "./loader.js";
+import { loadHtmlToImageModule, type HtmlToImageModule } from "./loader.js";
 import {
   htmlToImage,
   type HtmlToImageOptions,
+  type RenderResult,
 } from "./core.js";
 import { isImageInput } from "./input.js";
 
@@ -21,6 +19,7 @@ export type {
   OutputFormat,
   RenderOptions,
   HtmlToImageOptions,
+  RenderResult,
   DiagnosticMessage,
   FontDiagnostic,
   RenderDiagnostics,
@@ -40,16 +39,16 @@ export function getDefaultModule(): Promise<HtmlToImageModule> {
 
 /**
  * Render HTML — or convert an image — with the default single-WASM
- * connection. Returns bytes (`Uint8Array`); only `svg` resolves to `string`.
+ * connection. Returns RenderResult containing data and metadata.
  */
 export async function render(
   options: HtmlToImageOptions & { format: "svg" },
-): Promise<string>;
+): Promise<RenderResult<string>>;
 export async function render(
   options: HtmlToImageOptions,
-): Promise<Uint8Array | string>;
+): Promise<RenderResult<Uint8Array | string>>;
 export async function render(
   options: HtmlToImageOptions,
-): Promise<Uint8Array | string> {
+): Promise<RenderResult<Uint8Array | string>> {
   return htmlToImage(await getDefaultModule(), options);
 }

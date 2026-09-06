@@ -13,6 +13,7 @@
     "wasm:build": "tsx ./scripts/build-wasm.ts build",
     "test": "pnpm --filter wasm-html-to-image test",
     "test:visual": "pnpm --filter visual-test test",
+    "test:visual:update": "pnpm --filter visual-test test:update",
     "test:smoke": "node scripts/smoke-test.mjs && node scripts/parallel-smoke.mjs"
   },
   "devDependencies": {

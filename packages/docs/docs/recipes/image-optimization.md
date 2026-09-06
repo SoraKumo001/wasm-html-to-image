@@ -30,6 +30,8 @@ title: 画像相互変換・最適化 & ThumbHash
 
 ### A. JPEG/PNG から WebP / AVIF への変換・圧縮
 
+`render()` の戻り値は `RenderResult` オブジェクトとなり、バイナリデータ本体は `.data` に格納されます。また、変換前後の寸法やフォーマット情報などのメタデータも同時に取得できます。
+
 ```typescript
 import fs from "node:fs/promises";
 import { render } from "wasm-html-to-image/single";
@@ -44,7 +46,10 @@ const webp = await render({
   quality: 80,
   fit: "contain",
 });
-await fs.writeFile("photo.webp", Buffer.from(webp));
+
+console.log(`元サイズ: ${webp.originalWidth}x${webp.originalHeight}`);
+console.log(`変換後: ${webp.width}x${webp.height} (${webp.format})`);
+await fs.writeFile("photo.webp", Buffer.from(webp.data));
 
 // JPEG を AVIF (最高圧縮率) に変換
 const avif = await render({
@@ -54,7 +59,7 @@ const avif = await render({
   quality: 75,
   speed: 6, // 0(最高品質・低速) 〜 10(高速)
 });
-await fs.writeFile("photo.avif", Buffer.from(avif));
+await fs.writeFile("photo.avif", Buffer.from(avif.data));
 ```
 
 ---
@@ -72,6 +77,9 @@ const cropped = await render({
   height: 200,
   format: "png",
 });
+
+console.log(`出力サイズ: ${cropped.width}x${cropped.height}`);
+await fs.writeFile("cropped.png", Buffer.from(cropped.data));
 ```
 
 ---
@@ -90,7 +98,8 @@ const animatedWebp = await render({
   animation: true, // アニメーションフレームを保持
 });
 
-await fs.writeFile("animation.webp", Buffer.from(animatedWebp));
+console.log("アニメーション:", animatedWebp.isAnimated); // true
+await fs.writeFile("animation.webp", Buffer.from(animatedWebp.data));
 ```
 
 ---
@@ -100,13 +109,13 @@ await fs.writeFile("animation.webp", Buffer.from(animatedWebp));
 画像の読み込み中に表示する低解像度プレースホルダー用の ThumbHash ハッシュを直接算出できます。
 
 ```typescript
-const thumbhashBytes = await render({
+const thumbhashResult = await render({
   value: inputImage,
   width: 100,
   format: "thumbhash",
 });
 
-console.log("ThumbHash bytes:", thumbhashBytes);
+console.log("ThumbHash bytes:", thumbhashResult.data);
 ```
 
 ---
@@ -117,16 +126,18 @@ console.log("ThumbHash bytes:", thumbhashBytes);
 - **PDF 化**: 入力画像を 1 ページ等倍で配置したベクター PDF を生成。
 
 ```typescript
-// SVG 出力 (戻り値は string)
-const svgString = await render({
+// SVG 出力 (data は string)
+const svgResult = await render({
   value: inputImage,
   width: 600,
   format: "svg",
 });
+console.log(svgResult.data); // "<svg ...><image .../></svg>"
 
-// PDF 出力 (戻り値は Uint8Array)
-const pdfBuffer = await render({
+// PDF 出力 (data は Uint8Array)
+const pdfResult = await render({
   value: inputImage,
   format: "pdf",
 });
+await fs.writeFile("output.pdf", Buffer.from(pdfResult.data));
 ```

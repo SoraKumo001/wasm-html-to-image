@@ -85,7 +85,7 @@ const fetch = async (
     height: 630,
     format: "png",
   });
-  const response = new Response(png as BodyInit, {
+  const response = new Response(png.data as BodyInit, {
     headers: {
       "Content-Type": "image/png",
       "Cache-Control": "public, max-age=31536000, immutable",

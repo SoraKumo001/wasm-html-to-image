@@ -35,7 +35,7 @@ flowchart TD
 ```typescript
 import { render } from "wasm-html-to-image/single";
 
-const png = await render({
+const { data } = await render({
   value: `<div style="font-family: 'Noto Serif JP', serif;">
     日本語の明朝体テキスト
   </div>`,
@@ -60,7 +60,7 @@ import { render } from "wasm-html-to-image/single";
 
 const fontData = await fs.readFile("./fonts/MyCustomFont.ttf");
 
-const png = await render({
+const { data } = await render({
   value: "<h1>独自のカスタムフォント</h1>",
   width: 800,
   format: "png",
@@ -73,7 +73,7 @@ const png = await render({
 特定のフォント名と紐付けて事前登録します。
 
 ```typescript
-const png = await render({
+const { data } = await render({
   value: `<h1 style="font-family: 'MyBrandFont';">ブランドタイトル</h1>`,
   width: 800,
   format: "png",
@@ -98,7 +98,7 @@ HTML 内の `<img>` や CSS `background-image: url(...)` に指定された URL 
   特定のリソースに対して独自のフェッチ処理や認証ヘッダーの付加を行いたい場合に使用します。
 
 ```typescript
-const png = await render({
+const { data } = await render({
   value: `<img src="https://example.com/private/avatar.png" />`,
   width: 400,
   format: "png",

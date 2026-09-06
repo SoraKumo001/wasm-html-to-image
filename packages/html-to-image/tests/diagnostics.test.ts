@@ -46,7 +46,15 @@ const u32 = (n: number): Uint8Array =>
 const pendingBin = (url: string, type = 1): Uint8Array => {
   const ub = enc.encode(url);
   const nb = enc.encode("f");
-  const parts = [u32(1), new Uint8Array([type, 0]), u32(ub.length), ub, u32(nb.length), nb, u32(0)];
+  const parts = [
+    u32(1),
+    new Uint8Array([type, 0]),
+    u32(ub.length),
+    ub,
+    u32(nb.length),
+    nb,
+    u32(0),
+  ];
   const out = new Uint8Array(parts.reduce((a, p) => a + p.length, 0));
   let o = 0;
   for (const p of parts) {
@@ -56,7 +64,9 @@ const pendingBin = (url: string, type = 1): Uint8Array => {
   return out;
 };
 
-const baseOptions = (extra?: Partial<HtmlToImageOptions>): HtmlToImageOptions => ({
+const baseOptions = (
+  extra?: Partial<HtmlToImageOptions>,
+): HtmlToImageOptions => ({
   value: "<h1>hi</h1>",
   width: 800,
   height: 600,
@@ -77,7 +87,7 @@ describe("htmlToImage: diagnostics report shape", () => {
         },
       }),
     );
-    expect(out).toEqual(new Uint8Array([9, 9, 9]));
+    expect(out.data).toEqual(new Uint8Array([9, 9, 9]));
     expect(report).toBeDefined();
     const r = report as unknown as RenderDiagnostics;
     expect(r.version).toBe(1);
@@ -106,15 +116,19 @@ describe("htmlToImage: diagnostics report shape", () => {
 describe("htmlToImage: resolveResource hook", () => {
   it("routes discovery fetches through the hook and records them", async () => {
     const seen: string[] = [];
-    const hook = vi.fn(async (url: string, fallback: () => Promise<Uint8Array | null>) => {
-      seen.push(url);
-      expect(typeof fallback).toBe("function");
-      return new Uint8Array([5, 5]);
-    });
+    const hook = vi.fn(
+      async (url: string, fallback: () => Promise<Uint8Array | null>) => {
+        seen.push(url);
+        expect(typeof fallback).toBe("function");
+        return new Uint8Array([5, 5]);
+      },
+    );
     const { mod, calls } = stubModule({
       satoru_get_pending_resources: vi
         .fn(async () => null)
-        .mockResolvedValueOnce(pendingBin("https://example.com/f.woff2") as never),
+        .mockResolvedValueOnce(
+          pendingBin("https://example.com/f.woff2") as never,
+        ),
     });
     let report: RenderDiagnostics | undefined;
     await htmlToImage(
@@ -148,7 +162,9 @@ describe("htmlToImage: resolveResource hook", () => {
     const { mod, calls } = stubModule({
       satoru_get_pending_resources: vi
         .fn(async () => null)
-        .mockResolvedValueOnce(pendingBin("https://example.com/f.woff2") as never),
+        .mockResolvedValueOnce(
+          pendingBin("https://example.com/f.woff2") as never,
+        ),
     });
     let report: RenderDiagnostics | undefined;
     await htmlToImage(
@@ -164,7 +180,9 @@ describe("htmlToImage: resolveResource hook", () => {
     expect(calls.satoru_add_resource).not.toHaveBeenCalled();
     const r = report as unknown as RenderDiagnostics;
     expect(r.resources[0].status).toBe("failed");
-    expect(r.warnings.some((w) => w.code === DIAGNOSTIC_CODES.RESOURCE_FETCH_FAILED)).toBe(true);
+    expect(
+      r.warnings.some((w) => w.code === DIAGNOSTIC_CODES.RESOURCE_FETCH_FAILED),
+    ).toBe(true);
   });
 });
 
@@ -173,8 +191,14 @@ describe("htmlToImage: onLog gating", () => {
     const { mod } = stubModule();
     const onLog = vi.fn();
     await htmlToImage(mod, baseOptions({ logLevel: LogLevel.Info, onLog }));
-    expect(onLog).toHaveBeenCalledWith(LogLevel.Info, expect.stringContaining("render start"));
-    expect(onLog).toHaveBeenCalledWith(LogLevel.Info, expect.stringContaining("render done"));
+    expect(onLog).toHaveBeenCalledWith(
+      LogLevel.Info,
+      expect.stringContaining("render start"),
+    );
+    expect(onLog).toHaveBeenCalledWith(
+      LogLevel.Info,
+      expect.stringContaining("render done"),
+    );
     expect(mod.satoru_set_log_level).toHaveBeenCalledWith(LogLevel.Info);
   });
 
@@ -208,16 +232,18 @@ describe("htmlToImage: mediaType / textToPaths / css / fonts / limits / pdf", ()
       600,
       1,
     );
-    expect(calls.satoru_scan_css).toHaveBeenCalledWith({ tag: "satoru" }, "h1{color:red}");
+    expect(calls.satoru_scan_css).toHaveBeenCalledWith(
+      { tag: "satoru" },
+      "h1{color:red}",
+    );
     expect(calls.satoru_load_font).toHaveBeenCalledWith(
       { tag: "satoru" },
       "Pre",
       new Uint8Array([1]),
     );
-    const renderOpts = (calls.satoru_render.mock.calls[0] as unknown[])[5] as Record<
-      string,
-      unknown
-    >;
+    const renderOpts = (
+      calls.satoru_render.mock.calls[0] as unknown[]
+    )[5] as Record<string, unknown>;
     expect(renderOpts).toMatchObject({
       svgTextToPaths: false,
       mediaType: 1,
@@ -230,7 +256,9 @@ describe("htmlToImage: mediaType / textToPaths / css / fonts / limits / pdf", ()
     const { mod, calls } = stubModule({
       satoru_get_pending_resources: vi
         .fn(async () => null)
-        .mockResolvedValueOnce(pendingBin("https://blocked.example/f.woff2") as never),
+        .mockResolvedValueOnce(
+          pendingBin("https://blocked.example/f.woff2") as never,
+        ),
     });
     let report: RenderDiagnostics | undefined;
     await htmlToImage(

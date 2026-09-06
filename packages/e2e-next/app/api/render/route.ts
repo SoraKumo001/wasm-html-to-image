@@ -30,13 +30,19 @@ export async function GET(): Promise<Response> {
       width: 800,
       format: "png",
     });
-    const bytes = out instanceof Uint8Array ? out : new TextEncoder().encode(out);
+    const bytes =
+      out.data instanceof Uint8Array
+        ? out.data
+        : new TextEncoder().encode(out.data);
     return new Response(bytes as unknown as BodyInit, {
       headers: { "Content-Type": "image/png" },
     });
   } catch (e) {
-    return new Response(`backend render failed: ${String((e as Error)?.message ?? e)}`, {
-      status: 500,
-    });
+    return new Response(
+      `backend render failed: ${String((e as Error)?.message ?? e)}`,
+      {
+        status: 500,
+      },
+    );
   }
 }

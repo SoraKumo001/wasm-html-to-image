@@ -55,11 +55,15 @@ import { createHtmlToImageWorker } from "wasm-html-to-image/workers";
 // 4つのワーカーを持つインスタンスを作成
 const worker = createHtmlToImageWorker();
 
-const png = await worker.render({
+const result = await worker.render({
   value: "<h1>High Throughput</h1>",
   width: 1200,
   format: "png",
 });
+
+console.log(
+  `Rendered ${result.width}x${result.height}, bytes: ${result.data.length}`,
+);
 
 // 不要になったらワーカーを終了
 await worker.terminate();

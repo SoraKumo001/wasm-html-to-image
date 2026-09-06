@@ -33,13 +33,13 @@ const mod = await loadHtmlToImageModule();
 
 // 各リクエストハンドラ内で再利用
 app.get("/ogp", async (req, res) => {
-  const image = await htmlToImage(mod, {
+  const result = await htmlToImage(mod, {
     value: `<h1>${req.query.title}</h1>`,
     width: 1200,
     height: 630,
     format: "webp",
   });
-  res.type("image/webp").send(Buffer.from(image));
+  res.type("image/webp").send(Buffer.from(result.data));
 });
 ```
 
@@ -74,7 +74,7 @@ import { render } from "wasm-html-to-image/workerd";
 
 export default {
   async fetch(request: Request): Promise<Response> {
-    const png = await render({
+    const { data } = await render({
       value: `<div style="padding: 20px; font-family: sans-serif;">
         <h2>Cloudflare Workers OGP</h2>
       </div>`,
@@ -83,7 +83,7 @@ export default {
       format: "png",
     });
 
-    return new Response(png, {
+    return new Response(data, {
       headers: {
         "Content-Type": "image/png",
         "Cache-Control": "public, max-age=86400",
@@ -105,14 +105,14 @@ import { render } from "wasm-html-to-image/edge-light";
 export const runtime = "edge";
 
 export async function GET(request: Request) {
-  const webp = await render({
+  const { data } = await render({
     value: "<h1>Edge Runtime OGP</h1>",
     width: 1200,
     height: 630,
     format: "webp",
   });
 
-  return new Response(webp, {
+  return new Response(data, {
     headers: { "Content-Type": "image/webp" },
   });
 }
@@ -127,13 +127,13 @@ export async function GET(request: Request) {
 ```typescript
 import { render } from "wasm-html-to-image/single";
 
-const pngBuffer = await render({
+const result = await render({
   value: "<h1>Browser Client-side Rendering</h1>",
   width: 600,
   format: "png",
 });
 
-const blob = new Blob([pngBuffer], { type: "image/png" });
+const blob = new Blob([result.data], { type: "image/png" });
 const imgUrl = URL.createObjectURL(blob);
 document.querySelector("img")!.src = imgUrl;
 ```

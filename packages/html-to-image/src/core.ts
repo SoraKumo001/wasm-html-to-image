@@ -1,7 +1,12 @@
 import type { HtmlToImageModule } from "./loader.js";
 import { importNode } from "./loader.js";
 import { buildSatoruOptions, FIT_INT, FORMAT_INT } from "./encode-args.js";
-import { dataUrlToBytes, imageInputToBytes, isImageInput, toBytes } from "./input.js";
+import {
+  dataUrlToBytes,
+  imageInputToBytes,
+  isImageInput,
+  toBytes,
+} from "./input.js";
 import {
   DIAGNOSTIC_CODES,
   LogLevel,
@@ -49,6 +54,28 @@ export type OutputFormat =
   | "avif"
   | "raw"
   | "thumbhash";
+
+/** Result of rendering an HTML document or converting an image. */
+export interface RenderResult<T = Uint8Array | string> {
+  /** Output binary or text (string for svg, Uint8Array for all others). */
+  data: T;
+  /** Result image width in pixels. */
+  width: number;
+  /** Result image height in pixels. */
+  height: number;
+  /** Output format. */
+  format: OutputFormat;
+  /** Original input image width (image inputs only). */
+  originalWidth?: number;
+  /** Original input image height (image inputs only). */
+  originalHeight?: number;
+  /** Original input image format (image inputs only). */
+  originalFormat?: string;
+  /** Whether the original input image is animated (image inputs only). */
+  originalAnimation?: boolean;
+  /** Whether the output is animated. */
+  animation?: boolean;
+}
 
 /**
  * Render input (self-defined; no `satoru-render` dependency).
@@ -263,7 +290,8 @@ async function fetchResourceBytesInner(
     }
     if (isNodeRuntime()) {
       try {
-        const fs = await importNode<typeof import("node:fs/promises")>("fs/promises");
+        const fs =
+          await importNode<typeof import("node:fs/promises")>("fs/promises");
         const path = await importNode<typeof import("node:path")>("path");
         const joined = path.join(fileUrlToFsPath(baseUrl), url);
         const cached = resourceCache.get(joined);
@@ -282,7 +310,8 @@ async function fetchResourceBytesInner(
     try {
       const cached = resourceCache.get(url);
       if (cached) return cached;
-      const fs = await importNode<typeof import("node:fs/promises")>("fs/promises");
+      const fs =
+        await importNode<typeof import("node:fs/promises")>("fs/promises");
       // Keep an owning copy: fs Buffers may ride a shared pool.
       const bytes = new Uint8Array(await fs.readFile(url));
       resourceCache.set(url, bytes);
@@ -301,7 +330,9 @@ interface PendingResource {
 }
 
 /** Parse the `get_pending_resources` binary form (see loader.ts). */
-function parsePendingResources(bin: Uint8Array | null | undefined): PendingResource[] {
+function parsePendingResources(
+  bin: Uint8Array | null | undefined,
+): PendingResource[] {
   if (!bin || bin.length < 4) return [];
   const view = new DataView(bin.buffer, bin.byteOffset, bin.byteLength);
   const dec = new TextDecoder();
@@ -372,8 +403,15 @@ interface ResolveContext {
  * Protocol/host allow-list check. Returns a block reason, or `null` when
  * allowed. Relative URLs skip the check (satoru parity).
  */
-function checkResourceAllowed(url: string, limits: RenderLimits): string | null {
-  if (!limits.allowedProtocols && !limits.allowedHosts && !limits.blockedHosts) {
+function checkResourceAllowed(
+  url: string,
+  limits: RenderLimits,
+): string | null {
+  if (
+    !limits.allowedProtocols &&
+    !limits.allowedHosts &&
+    !limits.blockedHosts
+  ) {
     return null;
   }
   let parsed: URL | null = null;
@@ -382,7 +420,10 @@ function checkResourceAllowed(url: string, limits: RenderLimits): string | null 
   } catch {
     return null;
   }
-  if (limits.allowedProtocols && !limits.allowedProtocols.includes(parsed.protocol)) {
+  if (
+    limits.allowedProtocols &&
+    !limits.allowedProtocols.includes(parsed.protocol)
+  ) {
     return `Protocol ${parsed.protocol} is blocked`;
   }
   if (limits.allowedHosts && !limits.allowedHosts.includes(parsed.hostname)) {
@@ -396,7 +437,8 @@ function checkResourceAllowed(url: string, limits: RenderLimits): string | null 
 
 /** Limit-violation code for a block reason (satoru parity). */
 function limitCodeForReason(reason: string): string {
-  if (reason.startsWith("Protocol ")) return DIAGNOSTIC_CODES.LIMIT_PROTOCOL_BLOCKED;
+  if (reason.startsWith("Protocol "))
+    return DIAGNOSTIC_CODES.LIMIT_PROTOCOL_BLOCKED;
   return DIAGNOSTIC_CODES.LIMIT_HOST_BLOCKED;
 }
 
@@ -445,7 +487,12 @@ async function resolveHtmlResources(
             typeof entry === "string"
               ? entry.startsWith("data:")
                 ? dataUrlToBytes(entry)
-                : await fetchResourceBytes(entry, baseUrl, userAgent, ctx.resolveResource)
+                : await fetchResourceBytes(
+                    entry,
+                    baseUrl,
+                    userAgent,
+                    ctx.resolveResource,
+                  )
               : entry instanceof Uint8Array
                 ? entry
                 : new Uint8Array(entry);
@@ -473,7 +520,11 @@ async function resolveHtmlResources(
       for (const f of ctx.fonts) {
         try {
           (await loadFont(satoruInst, f.name, f.data)) as unknown;
-          ctx.diag?.fonts.push({ family: f.name, status: "loaded", source: "fonts option" });
+          ctx.diag?.fonts.push({
+            family: f.name,
+            status: "loaded",
+            source: "fonts option",
+          });
         } catch (e) {
           ctx.diag?.warnings.push({
             code: DIAGNOSTIC_CODES.RESOURCE_FETCH_FAILED,
@@ -515,7 +566,13 @@ async function resolveHtmlResources(
     ctx.checkTimeout();
     let progressed = false;
     for (const html of list) {
-      (await collect(satoruInst, html, width, height ?? 0, ctx.mediaTypeInt)) as unknown;
+      (await collect(
+        satoruInst,
+        html,
+        width,
+        height ?? 0,
+        ctx.mediaTypeInt,
+      )) as unknown;
       const bin = (await getPending(satoruInst)) as
         | Uint8Array
         | null
@@ -529,7 +586,12 @@ async function resolveHtmlResources(
         pending.map(async (r) => {
           const diag = ctx.diag;
           const entry: ResourceDiagnostic | undefined = diag
-            ? { type: r.type, url: r.url, name: r.name || undefined, status: "pending" }
+            ? {
+                type: r.type,
+                url: r.url,
+                name: r.name || undefined,
+                status: "pending",
+              }
             : undefined;
           if (diag && entry) diag.resources.push(entry);
           const settle = (
@@ -567,7 +629,12 @@ async function resolveHtmlResources(
               skipWithError(limitCodeForReason(blocked), blocked);
               return;
             }
-            const bytes = await fetchResourceBytes(r.url, baseUrl, userAgent, ctx.resolveResource);
+            const bytes = await fetchResourceBytes(
+              r.url,
+              baseUrl,
+              userAgent,
+              ctx.resolveResource,
+            );
             if (!bytes) {
               settle("failed");
               const message = `Failed to fetch resource: ${r.url}`;
@@ -592,10 +659,10 @@ async function resolveHtmlResources(
             if (
               ctx.limits.maxTotalResourceBytes !== undefined &&
               diag &&
-              diag.totalResourceBytes + bytes.length > ctx.limits.maxTotalResourceBytes
+              diag.totalResourceBytes + bytes.length >
+                ctx.limits.maxTotalResourceBytes
             ) {
-              const message =
-                `Total resource size exceeds limit (${ctx.limits.maxTotalResourceBytes})`;
+              const message = `Total resource size exceeds limit (${ctx.limits.maxTotalResourceBytes})`;
               skipWithError(DIAGNOSTIC_CODES.LIMIT_TOTAL_SIZE, message);
               return;
             }
@@ -637,10 +704,9 @@ async function resolveHtmlResources(
     const getProfile = module.satoru_get_collect_profile;
     if (typeof getProfile === "function") {
       try {
-        const parsed = JSON.parse((await getProfile(satoruInst)) as string) as Record<
-          string,
-          number
-        >;
+        const parsed = JSON.parse(
+          (await getProfile(satoruInst)) as string,
+        ) as Record<string, number>;
         for (const [key, value] of Object.entries(parsed)) {
           if (typeof value === "number") {
             ctx.addTime(key, value);
@@ -662,15 +728,15 @@ async function resolveHtmlResources(
 export async function htmlToImage(
   module: HtmlToImageModule,
   options: HtmlToImageOptions & { format: "svg" },
-): Promise<string>;
+): Promise<RenderResult<string>>;
 export async function htmlToImage(
   module: HtmlToImageModule,
   options: HtmlToImageOptions,
-): Promise<Uint8Array | string>;
+): Promise<RenderResult<Uint8Array | string>>;
 export async function htmlToImage(
   module: HtmlToImageModule,
   options: HtmlToImageOptions,
-): Promise<Uint8Array | string> {
+): Promise<RenderResult<Uint8Array | string>> {
   const {
     format = "png",
     quality = 85,
@@ -749,7 +815,7 @@ export async function htmlToImage(
     if (limits.timeoutMs !== undefined && now() - t0 >= limits.timeoutMs) {
       const message = `Render timed out after ${limits.timeoutMs}ms`;
       diag?.errors.push({ code: DIAGNOSTIC_CODES.LIMIT_TIMEOUT, message });
- throw logged(message);
+      throw logged(message);
     }
   };
   /** Deliver the diagnostics report on success (satoru parity). */
@@ -807,6 +873,12 @@ export async function htmlToImage(
           "wasm-html-to-image: failed to load image input (unsupported or corrupt)",
         );
       }
+      const originalWidth = module.converter_get_original_width?.(inst) ?? 0;
+      const originalHeight = module.converter_get_original_height?.(inst) ?? 0;
+      const originalFormat = module.converter_get_original_format?.(inst) ?? "";
+      const originalAnimation =
+        module.converter_is_original_animation?.(inst) ?? false;
+
       if (crop) {
         module.converter_crop(inst, crop.x, crop.y, crop.width, crop.height);
       }
@@ -818,6 +890,14 @@ export async function htmlToImage(
           FIT_INT[fit ?? "contain"],
         );
       }
+      const outWidth =
+        module.converter_get_width?.(inst) ?? width ?? originalWidth;
+      const outHeight =
+        module.converter_get_height?.(inst) ?? height ?? originalHeight;
+      const outAnimation = module.converter_is_animation?.(inst) ?? animation;
+      const outFormat =
+        (module.converter_get_format?.(inst) as OutputFormat) || format;
+
       if (format === "svg") {
         const svgBinding = module.converter_encode_svg;
         if (typeof svgBinding !== "function")
@@ -826,32 +906,51 @@ export async function htmlToImage(
         const svg = (await svgBinding(inst)) as string;
         addTime("encode", now() - encodeStart);
         if (!svg) {
- throw logged("wasm-html-to-image: failed to encode image to svg");
+          throw logged("wasm-html-to-image: failed to encode image to svg");
         }
         addTime("total", now() - t0);
         emitLog(LogLevel.Info, "render done (image input, svg)");
         deliverReport();
-        return svg;
+        return {
+          data: svg,
+          width: outWidth,
+          height: outHeight,
+          format: "svg",
+          originalWidth,
+          originalHeight,
+          originalFormat,
+          originalAnimation,
+          animation: false,
+        };
       }
       if (format === "pdf") {
         const pdfBinding = module.converter_encode_pdf;
         if (typeof pdfBinding !== "function")
           throw loggedBinding("converter_encode_pdf");
         const encodeStart = now();
-        const out = (await pdfBinding(inst)) as
-          | Uint8Array
-          | null
-          | undefined;
+        const out = (await pdfBinding(inst)) as Uint8Array | null | undefined;
         addTime("encode", now() - encodeStart);
         if (out == null) {
- throw logged("wasm-html-to-image: failed to encode image to pdf");
+          throw logged("wasm-html-to-image: failed to encode image to pdf");
         }
         addTime("total", now() - t0);
         emitLog(LogLevel.Info, "render done (image input, pdf)");
         deliverReport();
-        return new Uint8Array(
-          out instanceof Uint8Array ? out : new Uint8Array(out as ArrayBuffer),
-        );
+        return {
+          data: new Uint8Array(
+            out instanceof Uint8Array
+              ? out
+              : new Uint8Array(out as ArrayBuffer),
+          ),
+          width: outWidth,
+          height: outHeight,
+          format: "pdf",
+          originalWidth,
+          originalHeight,
+          originalFormat,
+          originalAnimation,
+          animation: false,
+        };
       }
       const encodeBinding = module.converter_encode;
       if (typeof encodeBinding !== "function")
@@ -866,14 +965,24 @@ export async function htmlToImage(
       )) as Uint8Array | null | undefined;
       addTime("encode", now() - encodeStart);
       if (out == null) {
- throw logged("wasm-html-to-image: failed to encode image");
+        throw logged("wasm-html-to-image: failed to encode image");
       }
       addTime("total", now() - t0);
-      emitLog(LogLevel.Info, "render done (image input)");
+      emitLog(LogLevel.Info, `render done (image input, ${format})`);
       deliverReport();
-      return new Uint8Array(
-        out instanceof Uint8Array ? out : new Uint8Array(out as ArrayBuffer),
-      );
+      return {
+        data: new Uint8Array(
+          out instanceof Uint8Array ? out : new Uint8Array(out as ArrayBuffer),
+        ),
+        width: outWidth,
+        height: outHeight,
+        format: outFormat,
+        originalWidth,
+        originalHeight,
+        originalFormat,
+        originalAnimation,
+        animation: outAnimation,
+      };
     } finally {
       module.converter_destroy_instance(inst);
     }
@@ -912,7 +1021,9 @@ export async function htmlToImage(
     }
     addTime("fetchHtml", now() - fetchStart);
   } else {
-    throw logged("wasm-html-to-image: either 'value' or 'url' must be provided.");
+    throw logged(
+      "wasm-html-to-image: either 'value' or 'url' must be provided.",
+    );
   }
   const satoruOpts: Record<string, unknown> = {
     ...buildSatoruOptions(crop, fit),
@@ -979,7 +1090,28 @@ export async function htmlToImage(
         addTime("total", now() - t0);
         emitLog(LogLevel.Info, `render done: format=${format}`);
         deliverReport();
-        return format === "svg" ? new TextDecoder().decode(bytes) : bytes;
+        if (format === "svg") {
+          const svgStr = new TextDecoder().decode(bytes);
+          let outHeight = height ?? 0;
+          if (outHeight === 0) {
+            const matchH = svgStr.match(/height="(\d+(?:\.\d+)?)"/);
+            if (matchH) {
+              outHeight = Math.round(parseFloat(matchH[1]));
+            }
+          }
+          return {
+            data: svgStr,
+            width,
+            height: outHeight,
+            format: "svg",
+          };
+        }
+        return {
+          data: bytes,
+          width,
+          height: height ?? 0,
+          format: "pdf",
+        };
       }
 
       const renderStart = now();
@@ -1000,6 +1132,13 @@ export async function htmlToImage(
         if (!loadImage(cInst, png)) {
           throw logged("wasm-html-to-image: failed to load render output");
         }
+        const outWidth = module.converter_get_width?.(cInst) ?? width;
+        const outHeight = module.converter_get_height?.(cInst) ?? height ?? 0;
+        const outAnimation =
+          module.converter_is_animation?.(cInst) ?? animation;
+        const outFormat =
+          (module.converter_get_format?.(cInst) as OutputFormat) || format;
+
         const encodeStart = now();
         const out = (await encodeBinding(
           cInst,
@@ -1015,9 +1154,17 @@ export async function htmlToImage(
         addTime("total", now() - t0);
         emitLog(LogLevel.Info, `render done: format=${format}`);
         deliverReport();
-        return new Uint8Array(
-          out instanceof Uint8Array ? out : new Uint8Array(out as ArrayBuffer),
-        );
+        return {
+          data: new Uint8Array(
+            out instanceof Uint8Array
+              ? out
+              : new Uint8Array(out as ArrayBuffer),
+          ),
+          width: outWidth,
+          height: outHeight,
+          format: outFormat,
+          animation: outAnimation,
+        };
       } finally {
         module.converter_destroy_instance(cInst);
       }
@@ -1048,7 +1195,12 @@ export async function htmlToImage(
     addTime("total", now() - t0);
     emitLog(LogLevel.Info, `render done (legacy): format=${format}`);
     deliverReport();
-    return format === "svg" ? new TextDecoder().decode(bytes) : bytes;
+    return {
+      data: format === "svg" ? new TextDecoder().decode(bytes) : bytes,
+      width,
+      height: height ?? 0,
+      format,
+    };
   }
   throw loggedBinding("satoru_render");
 }

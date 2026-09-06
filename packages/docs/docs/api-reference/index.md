@@ -40,4 +40,14 @@ export type RenderInput =
   | string[] // HTML文字列の配列（複数ページPDF用）
   | Uint8Array // 画像バイナリバッファ
   | ArrayBuffer;
+
+export interface RenderResult<T = Uint8Array | string> {
+  data: T;
+  width?: number;
+  height?: number;
+  originalWidth?: number;
+  originalHeight?: number;
+  format?: ImageFormat;
+  isAnimated?: boolean;
+}
 ```

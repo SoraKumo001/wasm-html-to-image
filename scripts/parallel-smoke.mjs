@@ -10,9 +10,19 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const repoRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+);
 const distDir = path.join(repoRoot, "packages", "html-to-image", "dist");
-const defaultImg = path.join(repoRoot, "packages", "visual-test", "assets", "images", "image01.jpg");
+const defaultImg = path.join(
+  repoRoot,
+  "packages",
+  "visual-test",
+  "assets",
+  "images",
+  "image01.jpg",
+);
 const imgPath = process.argv[2] ?? defaultImg;
 const jpg = fs.readFileSync(imgPath);
 
@@ -45,13 +55,18 @@ const checkMagic = (out, format) => {
   }
 };
 
-const { render: singleRender } = await import(pathToFileURL(path.join(distDir, "single.js")).href);
-const { createHtmlToImageWorker } = await import(pathToFileURL(path.join(distDir, "workers.js")).href);
+const { render: singleRender } = await import(
+  pathToFileURL(path.join(distDir, "single.js")).href
+);
+const { createHtmlToImageWorker } = await import(
+  pathToFileURL(path.join(distDir, "workers.js")).href
+);
 
 // Sequential baseline (single connection).
 const tSeqStart = Date.now();
 for (const job of makeJobs()) {
-  checkMagic(await singleRender(job), job.format);
+  const res = await singleRender(job);
+  checkMagic(res.data, job.format);
 }
 const seqMs = Date.now() - tSeqStart;
 
@@ -60,8 +75,8 @@ const pool = createHtmlToImageWorker({ maxParallel: MAX_PARALLEL });
 const tParStart = Date.now();
 const outputs = await Promise.all(makeJobs().map((job) => pool.render(job)));
 const parMs = Date.now() - tParStart;
-for (const [i, out] of outputs.entries()) {
-  checkMagic(out, i < N_HTML ? "png" : "webp");
+for (const [i, res] of outputs.entries()) {
+  checkMagic(res.data, i < N_HTML ? "png" : "webp");
 }
 const stats = pool.getStats();
 await pool.waitAll();
@@ -70,11 +85,21 @@ pool.close();
 const jobsOk = stats.completedJobs === N_HTML + N_IMG && stats.failedJobs === 0;
 const faster = parMs < seqMs;
 if (jobsOk && !faster) {
-  console.log(`WARNING: parallel (${parMs}ms) not faster than sequential (${seqMs}ms); timing is environment-dependent, not a failure.`);
+  console.log(
+    `WARNING: parallel (${parMs}ms) not faster than sequential (${seqMs}ms); timing is environment-dependent, not a failure.`,
+  );
 }
 const pass = jobsOk;
-console.log(JSON.stringify({ jobs: N_HTML + N_IMG, maxParallel: MAX_PARALLEL, seqMs, parMs, stats }, null, 2));
+console.log(
+  JSON.stringify(
+    { jobs: N_HTML + N_IMG, maxParallel: MAX_PARALLEL, seqMs, parMs, stats },
+    null,
+    2,
+  ),
+);
 console.log(`sequential: ${seqMs}ms, parallel(x${MAX_PARALLEL}): ${parMs}ms`);
-console.log(`stats: completed=${stats.completedJobs} failed=${stats.failedJobs} avg=${Math.round(stats.avgJobTimeMs)}ms`);
+console.log(
+  `stats: completed=${stats.completedJobs} failed=${stats.failedJobs} avg=${Math.round(stats.avgJobTimeMs)}ms`,
+);
 console.log(pass ? "PARALLEL SMOKE: PASS" : "PARALLEL SMOKE: FAIL");
 process.exit(pass ? 0 : 1);

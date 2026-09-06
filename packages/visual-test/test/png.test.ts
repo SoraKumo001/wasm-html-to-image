@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,12 +22,34 @@ const FILES = fs
   .sort();
 
 describe("PNG Visual Tests (current engine)", () => {
-  const baselines: Record<string, { fill: number; outline: number }> = {};
+  let baselines: Record<string, { fill: number; outline: number }> = {};
 
   beforeAll(() => {
     [DIFF_DIR, TEMP_DIR].forEach(
       (dir) => !fs.existsSync(dir) && fs.mkdirSync(dir, { recursive: true }),
     );
+    if (fs.existsSync(BASELINE_PATH)) {
+      baselines = JSON.parse(fs.readFileSync(BASELINE_PATH, "utf8"));
+    }
+  });
+
+  afterAll(() => {
+    if (process.env.UPDATE_SNAPSHOTS) {
+      const current = fs.existsSync(BASELINE_PATH)
+        ? JSON.parse(fs.readFileSync(BASELINE_PATH, "utf8"))
+        : {};
+
+      for (const file in baselines) {
+        current[file] = baselines[file];
+      }
+
+      const dir = path.dirname(BASELINE_PATH);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+
+      fs.writeFileSync(BASELINE_PATH, JSON.stringify(current, null, 2));
+    }
   });
 
   for (const file of FILES) {
@@ -35,12 +57,12 @@ describe("PNG Visual Tests (current engine)", () => {
       const refPath = path.join(REFERENCE_DIR, file.replace(".html", ".png"));
       const html = fs.readFileSync(path.join(ASSETS_DIR, file), "utf8");
 
-      const pngData = (await render({
+      const { data: pngData } = await render({
         value: html,
         width: 800,
         format: "png",
         baseUrl: ASSETS_DIR,
-      })) as Uint8Array;
+      });
 
       fs.writeFileSync(
         path.join(TEMP_DIR, file.replace(".html", ".png")),
@@ -68,8 +90,4 @@ describe("PNG Visual Tests (current engine)", () => {
       expect(result.fill).toBeLessThan(30);
     });
   }
-
-  it("writes baselines", () => {
-    fs.writeFileSync(BASELINE_PATH, JSON.stringify(baselines, null, 2));
-  });
 });

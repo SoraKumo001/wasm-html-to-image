@@ -10,8 +10,15 @@ declare global {
 // (never full bytes — keeps CDP payloads tiny).
 (async () => {
   try {
-    const out = await render({ value: "<h1>e2e vite</h1>", width: 800, format: "png" });
-    const bytes = out instanceof Uint8Array ? out : new TextEncoder().encode(out);
+    const res = await render({
+      value: "<h1>e2e vite</h1>",
+      width: 800,
+      format: "png",
+    });
+    const bytes =
+      res.data instanceof Uint8Array
+        ? res.data
+        : new TextEncoder().encode(res.data);
     window.__e2e = {
       ok: true,
       len: bytes.length,

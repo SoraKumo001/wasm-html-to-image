@@ -41,8 +41,8 @@ The easiest way to get started. WASM is embedded and loaded automatically:
 ```typescript
 import { render } from "wasm-html-to-image/single";
 
-// 1. Render HTML to PNG
-const png = await render({
+// 1. Render HTML to PNG (returns RenderResult with .data and dimensions)
+const result = await render({
   value: `<div style="background: linear-gradient(135deg, #667eea, #764ba2); padding: 40px; color: white; border-radius: 16px; font-family: sans-serif;">
     <h1 style="margin: 0; font-size: 32px;">Hello wasm-html-to-image</h1>
     <p style="margin-top: 8px; opacity: 0.9;">High-performance serverless rendering</p>
@@ -51,13 +51,19 @@ const png = await render({
   format: "png",
 });
 
+console.log(result.data); // Uint8Array
+console.log(result.width, result.height); // 800, 600
+
 // 2. Convert and resize image with the same render() function
 const webp = await render({
-  value: png, // Pass raw image buffer (Uint8Array / Buffer) directly
+  value: result.data, // Pass raw image buffer directly
   width: 400, // Target resized width
   format: "webp",
   quality: 80,
 });
+
+console.log(webp.originalWidth, webp.originalHeight); // Original image dimensions
+console.log(webp.width, webp.height); // Output image dimensions
 ```
 
 ---
@@ -66,7 +72,7 @@ const webp = await render({
 
 `wasm-html-to-image` is not only an HTML renderer — it also serves as a high-speed, self-contained **image-to-image converter, resizer, and compressor** without requiring heavy native libraries like Sharp or ImageMagick.
 
-Simply pass raw image bytes (`Uint8Array` or `Buffer`) or a `data:image/...` URL to `render()`. It automatically identifies input magic bytes, skips the HTML layout pass, and routes straight into the native Skia image pipeline:
+Simply pass raw image bytes (`Uint8Array` or `Buffer`) or a `data:image/...` URL to `render()`. It automatically identifies input magic bytes, skips the HTML layout pass, and routes straight into the native Skia image pipeline. Every call returns rich metadata (`width`, `height`, `originalWidth`, `originalHeight`, `format`, `isAnimated`) along with the output data in `.data`:
 
 ```typescript
 import fs from "node:fs/promises";
@@ -82,6 +88,7 @@ const avif = await render({
   quality: 75,
   speed: 6, // 0 (best quality) - 10 (fastest)
 });
+await fs.writeFile("photo.avif", Buffer.from(avif.data));
 
 // 2. Crop & Resize -> PNG
 const cropped = await render({
@@ -91,6 +98,7 @@ const cropped = await render({
   height: 150,
   format: "png",
 });
+await fs.writeFile("cropped.png", Buffer.from(cropped.data));
 
 // 3. Generate ThumbHash Blur Placeholder
 const thumbhash = await render({
@@ -98,12 +106,14 @@ const thumbhash = await render({
   width: 100,
   format: "thumbhash",
 });
+console.log("ThumbHash bytes:", thumbhash.data);
 
 // 4. Convert Image -> Single-Page Vector PDF
 const pdf = await render({
   value: imageBuffer,
   format: "pdf",
 });
+await fs.writeFile("photo.pdf", Buffer.from(pdf.data));
 
 // 5. Convert Animated GIF -> Animated WebP
 const animatedWebp = await render({
@@ -111,6 +121,7 @@ const animatedWebp = await render({
   format: "webp",
   animation: true,
 });
+await fs.writeFile("animation.webp", Buffer.from(animatedWebp.data));
 ```
 
 ---
@@ -129,16 +140,18 @@ const animatedWebp = await render({
 
 ### Outputs (`format`)
 
-| Format      | Return Type  | HTML Input                                     | Image Input                   |
-| ----------- | ------------ | ---------------------------------------------- | ----------------------------- |
-| `png`       | `Uint8Array` | Skia render → PNG encode                       | Decodes and converts to PNG   |
-| `jpeg`      | `Uint8Array` | Skia render → JPEG encode (`quality`)          | Decodes and compresses JPEG   |
-| `webp`      | `Uint8Array` | Skia render → WebP encode (`quality`)          | Decodes and compresses WebP   |
-| `avif`      | `Uint8Array` | Skia render → AVIF encode (`quality`, `speed`) | Decodes and compresses AVIF   |
-| `raw`       | `Uint8Array` | Uncompressed RGBA pixel bytes                  | Uncompressed RGBA pixel bytes |
-| `thumbhash` | `Uint8Array` | Computes ThumbHash from render                 | Computes ThumbHash from image |
-| `svg`       | `string`     | Skia vector drawing stream                     | Single `<image>` wrapper SVG  |
-| `pdf`       | `Uint8Array` | SkPDFDocument vector PDF                       | Single-page centered PDF      |
+All formats return a `RenderResult<T>` object containing `.data` (`Uint8Array` or `string` for SVG) and metadata (`width`, `height`, `originalWidth`, `originalHeight`, `format`, `isAnimated`):
+
+| Format      | `result.data` Type | HTML Input                                     | Image Input                   |
+| ----------- | ------------------ | ---------------------------------------------- | ----------------------------- |
+| `png`       | `Uint8Array`       | Skia render → PNG encode                       | Decodes and converts to PNG   |
+| `jpeg`      | `Uint8Array`       | Skia render → JPEG encode (`quality`)          | Decodes and compresses JPEG   |
+| `webp`      | `Uint8Array`       | Skia render → WebP encode (`quality`)          | Decodes and compresses WebP   |
+| `avif`      | `Uint8Array`       | Skia render → AVIF encode (`quality`, `speed`) | Decodes and compresses AVIF   |
+| `raw`       | `Uint8Array`       | Uncompressed RGBA pixel bytes                  | Uncompressed RGBA pixel bytes |
+| `thumbhash` | `Uint8Array`       | Computes ThumbHash from render                 | Computes ThumbHash from image |
+| `svg`       | `string`           | Skia vector drawing stream                     | Single `<image>` wrapper SVG  |
+| `pdf`       | `Uint8Array`       | SkPDFDocument vector PDF                       | Single-page centered PDF      |
 
 ---
 
@@ -173,7 +186,7 @@ const app = express();
 const mod = await loadHtmlToImageModule(); // Load once at startup
 
 app.get("/ogp", async (req, res) => {
-  const image = await htmlToImage(mod, {
+  const result = await htmlToImage(mod, {
     value: `<h1>${req.query.title}</h1>`,
     width: 1200,
     height: 630,
@@ -181,7 +194,7 @@ app.get("/ogp", async (req, res) => {
     quality: 85,
   });
 
-  res.type("image/webp").send(Buffer.from(image));
+  res.type("image/webp").send(Buffer.from(result.data));
 });
 
 app.listen(3000);
@@ -199,7 +212,7 @@ import { render } from "wasm-html-to-image/workerd";
 
 export default {
   async fetch(request: Request): Promise<Response> {
-    const png = await render({
+    const result = await render({
       value: `<div style="padding: 40px; font-family: sans-serif; background: #0f172a; color: white;">
         <h1>Edge OGP Generator</h1>
       </div>`,
@@ -208,7 +221,7 @@ export default {
       format: "png",
     });
 
-    return new Response(png, {
+    return new Response(result.data, {
       headers: {
         "Content-Type": "image/png",
         "Cache-Control": "public, max-age=86400",

@@ -48,14 +48,14 @@ app.get("/ogp", async (c) => {
     </div>
   `;
 
-  const image = await render({
+  const { data } = await render({
     value: html,
     width: 1200,
     height: 630,
     format: "png",
   });
 
-  return new Response(image, {
+  return new Response(data, {
     headers: {
       "Content-Type": "image/png",
       "Cache-Control": "public, max-age=86400, s-maxage=604800",

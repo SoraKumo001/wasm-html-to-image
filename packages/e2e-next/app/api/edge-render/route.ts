@@ -27,11 +27,17 @@ export async function GET(req: Request): Promise<Response> {
       { value: "<h1>e2e edge</h1>", width: 800, format: "png" },
       await getWasmModule(baseUrl),
     );
-    const bytes = out instanceof Uint8Array ? out : new TextEncoder().encode(out);
+    const bytes =
+      out.data instanceof Uint8Array
+        ? out.data
+        : new TextEncoder().encode(out.data);
     return new Response(bytes as unknown as BodyInit, {
       headers: { "Content-Type": "image/png" },
     });
   } catch (e) {
-    return new Response(`edge render failed: ${String((e as Error)?.message ?? e)}`, { status: 500 });
+    return new Response(
+      `edge render failed: ${String((e as Error)?.message ?? e)}`,
+      { status: 500 },
+    );
   }
 }

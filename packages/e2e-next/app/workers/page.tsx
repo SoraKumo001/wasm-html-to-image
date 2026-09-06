@@ -16,13 +16,15 @@ declare global {
 async function run(): Promise<unknown> {
   const pool = createHtmlToImageWorker({ maxParallel: 2 });
   try {
-    const out = await pool.render({
+    const res = await pool.render({
       value: "<h1>e2e workers</h1>",
       width: 800,
       format: "png",
     });
     const bytes =
-      out instanceof Uint8Array ? out : new TextEncoder().encode(out);
+      res.data instanceof Uint8Array
+        ? res.data
+        : new TextEncoder().encode(res.data);
     return {
       ok: true,
       len: bytes.length,

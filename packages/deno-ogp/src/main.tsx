@@ -19,9 +19,7 @@ Deno.serve(async (request) => {
 
   const isDev =
     Deno.env.get("DENO_ENV") === "development" || url.hostname === "localhost";
-  const cache = hasCache
-    ? await caches.open("html-to-image-ogp")
-    : undefined;
+  const cache = hasCache ? await caches.open("html-to-image-ogp") : undefined;
   const cacheKey = new Request(url.toString());
 
   if (!isDev && cache) {
@@ -56,16 +54,12 @@ Deno.serve(async (request) => {
             />
           )}
           <div>
-            <div
-              className="text-[80px] font-bold [text-shadow:0_8px_16px_rgba(0,0,0,0.6)] drop-shadow-[0_4px_8px_rgba(0,0,0,0.8)] backdrop-blur-[5px] z-[1] line-clamp-3 overflow-hidden m-8 rounded-[32px] p-4"
-            >
+            <div className="text-[80px] font-bold [text-shadow:0_8px_16px_rgba(0,0,0,0.6)] drop-shadow-[0_4px_8px_rgba(0,0,0,0.8)] backdrop-blur-[5px] z-[1] line-clamp-3 overflow-hidden m-8 rounded-[32px] p-4">
               {title}
             </div>
           </div>
 
-          <div
-            className="absolute bottom-10 right-10 text-[24px] font-bold px-6 py-3 border border-white/20 drop-shadow-[0_4px_8px_rgba(0,0,0,0.8)] rounded-xl backdrop-blur-[4px] text-[#EE6688] z-[1]"
-          >
+          <div className="absolute bottom-10 right-10 text-[24px] font-bold px-6 py-3 border border-white/20 drop-shadow-[0_4px_8px_rgba(0,0,0,0.8)] rounded-xl backdrop-blur-[4px] text-[#EE6688] z-[1]">
             {name}
           </div>
         </div>
@@ -73,7 +67,7 @@ Deno.serve(async (request) => {
     </html>,
   );
   // Render to PNG with automatic font resolution
-  const png = await render({
+  const { data: png } = await render({
     value: html,
     width: 1200,
     height: 630,

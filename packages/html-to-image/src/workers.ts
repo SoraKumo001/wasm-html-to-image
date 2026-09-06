@@ -1,8 +1,8 @@
 import { loadWorkerLib } from "./worker-lib-loader.js";
 import type { HtmlToImageWorker } from "./child-workers.js";
 export type { HtmlToImageWorker } from "./child-workers.js";
-import { type HtmlToImageOptions } from "./core.js";
-export type { HtmlToImageOptions } from "./core.js";
+import { type HtmlToImageOptions, type RenderResult } from "./core.js";
+export type { HtmlToImageOptions, RenderResult } from "./core.js";
 // Playground parity: diagnostics surface is usable through the pool —
 // function-valued options (`onLog`/`onDiagnostics`/`resolveResource`) are
 // forwarded untouched by the `render` proxy below (worker-lib RPC).
@@ -211,9 +211,17 @@ export const close = (): void => {
   getDefaultWorker().close();
 };
 
-export const render = (
+export function render(
+  options: HtmlToImageOptions & { format: "svg" },
+): Promise<RenderResult<string>>;
+export function render(
   options: HtmlToImageOptions,
-): Promise<Uint8Array | string> => getDefaultWorker().render(options);
+): Promise<RenderResult<Uint8Array | string>>;
+export function render(
+  options: HtmlToImageOptions,
+): Promise<RenderResult<Uint8Array | string>> {
+  return getDefaultWorker().render(options as any) as any;
+}
 
 export const launchWorker = (): Promise<void[]> =>
   getDefaultWorker().launchWorker();

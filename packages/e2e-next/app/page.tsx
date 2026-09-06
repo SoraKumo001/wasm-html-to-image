@@ -23,7 +23,10 @@ async function run(): Promise<unknown> {
     width: 800,
     format: "png",
   });
-  const bytes = out instanceof Uint8Array ? out : new TextEncoder().encode(out);
+  const bytes =
+    out.data instanceof Uint8Array
+      ? out.data
+      : new TextEncoder().encode(out.data);
   return {
     ok: true,
     len: bytes.length,

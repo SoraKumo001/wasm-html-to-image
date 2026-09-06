@@ -31,7 +31,7 @@ export default {
     const title = url.searchParams.get("title") || "Default Title";
 
     // 2. 画像の生成
-    const image = await render({
+    const { data } = await render({
       value: `<div style="font-family: sans-serif; padding: 40px; background: #111; color: #fff; height: 100%;">
         <h1>${title}</h1>
       </div>`,
@@ -41,7 +41,7 @@ export default {
       quality: 85,
     });
 
-    const response = new Response(image, {
+    const response = new Response(data, {
       headers: {
         "Content-Type": "image/webp",
         "Cache-Control": "public, max-age=604800, stale-while-revalidate=86400",

@@ -43,8 +43,8 @@ npm install wasm-html-to-image
 ```typescript
 import { render } from "wasm-html-to-image/single";
 
-// HTML から PNG を生成
-const png = await render({
+// HTML から PNG を生成 (戻り値は RenderResult)
+const res = await render({
   value: `<div style="background: linear-gradient(135deg, #667eea, #764ba2); padding: 40px; color: white; border-radius: 16px; font-family: sans-serif;">
     <h1 style="margin: 0; font-size: 32px;">Hello wasm-html-to-image</h1>
     <p style="margin-top: 8px; opacity: 0.9;">High-performance serverless rendering</p>
@@ -53,13 +53,19 @@ const png = await render({
   format: "png",
 });
 
+console.log(res.data); // Uint8Array
+console.log(res.width, res.height); // 800, 600
+
 // 2. 画像から画像へのフォーマット変換・圧縮・リサイズも同じ render() 関数で実行可能
 const webp = await render({
-  value: png, // 画像バイト列 (Uint8Array / Buffer) を直接渡す
+  value: res.data, // 画像バイト列 (Uint8Array / Buffer) を直接渡す
   width: 400, // リサイズ後の幅
   format: "webp",
   quality: 80,
 });
+
+console.log(webp.originalWidth, webp.originalHeight); // 元画像サイズ: 800, 600
+console.log(webp.width, webp.height); // 出力画像サイズ: 400, ...
 ```
 
 ---

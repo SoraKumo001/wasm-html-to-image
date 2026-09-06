@@ -41,8 +41,8 @@ npm install wasm-html-to-image
 ```typescript
 import { render } from "wasm-html-to-image/single";
 
-// Generate PNG from HTML
-const png = await render({
+// 1. Generate PNG from HTML (returns RenderResult)
+const result = await render({
   value: `<div style="background: linear-gradient(135deg, #667eea, #764ba2); padding: 40px; color: white; border-radius: 16px; font-family: sans-serif;">
     <h1 style="margin: 0; font-size: 32px;">Hello wasm-html-to-image</h1>
     <p style="margin-top: 8px; opacity: 0.9;">High-performance serverless rendering</p>
@@ -51,13 +51,19 @@ const png = await render({
   format: "png",
 });
 
+console.log(result.data); // Uint8Array
+console.log(result.width, result.height); // 800, 600
+
 // 2. Convert and resize image with the same render() function
 const webp = await render({
-  value: png, // Pass raw image buffer (Uint8Array / Buffer) directly
+  value: result.data, // Pass raw image buffer directly
   width: 400, // Target resized width
   format: "webp",
   quality: 80,
 });
+
+console.log(webp.originalWidth, webp.originalHeight); // Original image dimensions
+console.log(webp.width, webp.height); // Output image dimensions
 ```
 
 ---

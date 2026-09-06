@@ -54,7 +54,9 @@ function stubModule(overrides: StubBindings = {}): {
     converter_resize: vi.fn(() => true),
     converter_encode: vi.fn(async () => new Uint8Array([9, 9, 9])),
     converter_encode_svg: vi.fn(async () => "<svg><image/></svg>"),
-    converter_encode_pdf: vi.fn(async () => new Uint8Array([0x25, 0x50, 0x44, 0x46])),
+    converter_encode_pdf: vi.fn(
+      async () => new Uint8Array([0x25, 0x50, 0x44, 0x46]),
+    ),
     satoru_render: vi.fn(async () => new Uint8Array([7, 7, 7])),
     html_to_image: vi.fn(async () => new Uint8Array([8, 8, 8])),
     ...overrides,
@@ -62,7 +64,9 @@ function stubModule(overrides: StubBindings = {}): {
   return { mod: calls as unknown as HtmlToImageModule, calls };
 }
 
-const baseOptions = (extra?: Partial<HtmlToImageOptions>): HtmlToImageOptions => ({
+const baseOptions = (
+  extra?: Partial<HtmlToImageOptions>,
+): HtmlToImageOptions => ({
   value: "<h1>hi</h1>",
   width: 800,
   height: 600,
@@ -82,7 +86,7 @@ describe("htmlToImage: HTML via unified binding (legacy fallback)", () => {
   it("calls html_to_image with positional args and returns bytes", async () => {
     const { mod, calls } = stubModule(noInstanceRender);
     const out = await htmlToImage(mod, baseOptions({ format: "webp" }));
-    expect(out).toEqual(new Uint8Array([8, 8, 8]));
+    expect(out.data).toEqual(new Uint8Array([8, 8, 8]));
     expect(calls.html_to_image).toHaveBeenCalledTimes(1);
     expect(calls.html_to_image).toHaveBeenCalledWith(
       "<h1>hi</h1>",
@@ -105,8 +109,8 @@ describe("htmlToImage: HTML via unified binding (legacy fallback)", () => {
       html_to_image: vi.fn(async () => svgBytes),
     });
     const out = await htmlToImage(mod, baseOptions({ format: "svg" }));
-    expect(typeof out).toBe("string");
-    expect(out).toBe("<svg></svg>");
+    expect(typeof out.data).toBe("string");
+    expect(out.data).toBe("<svg></svg>");
   });
 
   it("throws when the unified binding returns null", async () => {
@@ -120,7 +124,10 @@ describe("htmlToImage: HTML via unified binding (legacy fallback)", () => {
   });
 
   it("fetches HTML from url when value is missing", async () => {
-    const fetchMock = vi.fn(async () => ({ ok: true, text: async () => "<p>u</p>" }));
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      text: async () => "<p>u</p>",
+    }));
     vi.stubGlobal("fetch", fetchMock);
     const { mod, calls } = stubModule(noInstanceRender);
     await htmlToImage(mod, { width: 100, url: "https://example.com/" });
@@ -141,7 +148,10 @@ describe("htmlToImage: HTML via unified binding (legacy fallback)", () => {
   });
 
   it("throws when fetch fails", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 404 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: false, status: 404 })),
+    );
     const { mod } = stubModule();
     await expect(
       htmlToImage(mod, { width: 100, url: "https://example.com/" }),
@@ -162,7 +172,7 @@ describe("htmlToImage: HTML via 2-call fallback (no unified binding)", () => {
   it("renders svg/pdf directly with satoru_render", async () => {
     const { mod, calls } = stubModule(noUnified);
     const out = await htmlToImage(mod, baseOptions({ format: "svg" }));
-    expect(typeof out).toBe("string");
+    expect(typeof out.data).toBe("string");
     expect(calls.satoru_render).toHaveBeenCalledWith(
       { tag: "satoru" },
       "<h1>hi</h1>",
@@ -172,13 +182,15 @@ describe("htmlToImage: HTML via 2-call fallback (no unified binding)", () => {
       DEFAULT_SATORU_OPTS,
     );
     expect(calls.converter_encode).not.toHaveBeenCalled();
-    expect(calls.satoru_destroy_instance).toHaveBeenCalledWith({ tag: "satoru" });
+    expect(calls.satoru_destroy_instance).toHaveBeenCalledWith({
+      tag: "satoru",
+    });
   });
 
   it("renders raster via satoru PNG intermediate + converter_encode", async () => {
     const { mod, calls } = stubModule(noUnified);
     const out = await htmlToImage(mod, baseOptions({ format: "webp" }));
-    expect(out).toEqual(new Uint8Array([9, 9, 9]));
+    expect(out.data).toEqual(new Uint8Array([9, 9, 9]));
     expect(calls.satoru_render).toHaveBeenCalledWith(
       { tag: "satoru" },
       "<h1>hi</h1>",
@@ -233,7 +245,13 @@ describe("htmlToImage: resource discovery loop", () => {
     const parts: Uint8Array[] = [u32(entries.length)];
     for (const e of entries) {
       const ub = enc.encode(e.url);
-      parts.push(new Uint8Array([e.type, 0]), u32(ub.length), ub, u32(0), u32(0));
+      parts.push(
+        new Uint8Array([e.type, 0]),
+        u32(ub.length),
+        ub,
+        u32(0),
+        u32(0),
+      );
     }
     const out = new Uint8Array(parts.reduce((a, p) => a + p.length, 0));
     let o = 0;
@@ -244,7 +262,9 @@ describe("htmlToImage: resource discovery loop", () => {
     return out;
   };
 
-  const withDiscovery = (extra: Record<string, ReturnType<typeof vi.fn>> = {}) =>
+  const withDiscovery = (
+    extra: Record<string, ReturnType<typeof vi.fn>> = {},
+  ) =>
     stubModule({
       satoru_collect_resources: vi.fn(),
       satoru_get_pending_resources: vi.fn(async () => null),
@@ -256,7 +276,10 @@ describe("htmlToImage: resource discovery loop", () => {
     const imgBytes = new Uint8Array([1, 2, 3, 4]);
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => ({ ok: true, arrayBuffer: async () => imgBytes.buffer })),
+      vi.fn(async () => ({
+        ok: true,
+        arrayBuffer: async () => imgBytes.buffer,
+      })),
     );
     const bin = pendingBin([{ type: 2, url: "https://example.com/a.jpg" }]);
     const { mod, calls } = withDiscovery({
@@ -266,9 +289,12 @@ describe("htmlToImage: resource discovery loop", () => {
     });
     const out = await htmlToImage(
       mod,
-      baseOptions({ value: "<img src='https://example.com/a.jpg'>", format: "png" }),
+      baseOptions({
+        value: "<img src='https://example.com/a.jpg'>",
+        format: "png",
+      }),
     );
-    expect(out).toEqual(new Uint8Array([9, 9, 9]));
+    expect(out.data).toEqual(new Uint8Array([9, 9, 9]));
     expect(calls.satoru_collect_resources).toHaveBeenCalledWith(
       { tag: "satoru" },
       "<img src='https://example.com/a.jpg'>",
@@ -334,7 +360,7 @@ describe("htmlToImage: resource discovery loop", () => {
         .mockResolvedValueOnce(bin as never),
     });
     const out = await htmlToImage(mod, baseOptions({ format: "png" }));
-    expect(out).toEqual(new Uint8Array([9, 9, 9]));
+    expect(out.data).toEqual(new Uint8Array([9, 9, 9]));
     expect(calls.satoru_add_resource).not.toHaveBeenCalled();
   });
 });
@@ -347,8 +373,20 @@ describe("htmlToImage: default fontMap resolution", () => {
     const bins = fontUrls.map((url) => {
       const ub = new TextEncoder().encode(url);
       const u32 = (n: number): Uint8Array =>
-        new Uint8Array([n & 255, (n >> 8) & 255, (n >> 16) & 255, (n >> 24) & 255]);
-      const parts = [u32(1), new Uint8Array([1, 0]), u32(ub.length), ub, u32(0), u32(0)];
+        new Uint8Array([
+          n & 255,
+          (n >> 8) & 255,
+          (n >> 16) & 255,
+          (n >> 24) & 255,
+        ]);
+      const parts = [
+        u32(1),
+        new Uint8Array([1, 0]),
+        u32(ub.length),
+        ub,
+        u32(0),
+        u32(0),
+      ];
       const out = new Uint8Array(parts.reduce((a, p) => a + p.length, 0));
       let o = 0;
       for (const p of parts) {
@@ -423,7 +461,10 @@ describe("htmlToImage: fallbackFonts injection", () => {
   it("applies byte fallbacks before discovery", async () => {
     const bytes = new Uint8Array([10, 20, 30]);
     const { mod, calls } = withFallbackDiscovery();
-    await htmlToImage(mod, baseOptions({ format: "png", fallbackFonts: [bytes] }));
+    await htmlToImage(
+      mod,
+      baseOptions({ format: "png", fallbackFonts: [bytes] }),
+    );
     expect(calls.satoru_load_fallback_font).toHaveBeenCalledWith(
       { tag: "satoru" },
       bytes,
@@ -437,7 +478,10 @@ describe("htmlToImage: fallbackFonts injection", () => {
     const fontBytes = new Uint8Array([7, 8, 9]);
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => ({ ok: true, arrayBuffer: async () => fontBytes.buffer })),
+      vi.fn(async () => ({
+        ok: true,
+        arrayBuffer: async () => fontBytes.buffer,
+      })),
     );
     const { mod, calls } = withFallbackDiscovery();
     await htmlToImage(
@@ -461,7 +505,7 @@ describe("htmlToImage: fallbackFonts injection", () => {
       mod,
       baseOptions({ format: "png", fallbackFonts: [new Uint8Array([1])] }),
     );
-    expect(out).toEqual(new Uint8Array([9, 9, 9]));
+    expect(out.data).toEqual(new Uint8Array([9, 9, 9]));
     expect(calls.satoru_render).toHaveBeenCalled();
   });
 });
@@ -473,7 +517,7 @@ describe("htmlToImage: image input goes straight to converter_*", () => {
       mod,
       baseOptions({ value: PNG_BYTES, format: "webp" }),
     );
-    expect(out).toEqual(new Uint8Array([9, 9, 9]));
+    expect(out.data).toEqual(new Uint8Array([9, 9, 9]));
     expect(calls.html_to_image).not.toHaveBeenCalled();
     expect(calls.satoru_render).not.toHaveBeenCalled();
     expect(calls.converter_load_image).toHaveBeenCalledWith(
@@ -537,12 +581,22 @@ describe("htmlToImage: image input goes straight to converter_*", () => {
 
   it("routes image input to converter_encode_svg/pdf", async () => {
     const { mod, calls } = stubModule();
-    const svg = await htmlToImage(mod, baseOptions({ value: PNG_BYTES, format: "svg" }));
-    expect(svg).toBe("<svg><image/></svg>");
-    expect(calls.converter_encode_svg).toHaveBeenCalledWith({ tag: "converter" });
-    const pdf = await htmlToImage(mod, baseOptions({ value: PNG_BYTES, format: "pdf" }));
-    expect(pdf).toEqual(new Uint8Array([0x25, 0x50, 0x44, 0x46]));
-    expect(calls.converter_encode_pdf).toHaveBeenCalledWith({ tag: "converter" });
+    const svg = await htmlToImage(
+      mod,
+      baseOptions({ value: PNG_BYTES, format: "svg" }),
+    );
+    expect(svg.data).toBe("<svg><image/></svg>");
+    expect(calls.converter_encode_svg).toHaveBeenCalledWith({
+      tag: "converter",
+    });
+    const pdf = await htmlToImage(
+      mod,
+      baseOptions({ value: PNG_BYTES, format: "pdf" }),
+    );
+    expect(pdf.data).toEqual(new Uint8Array([0x25, 0x50, 0x44, 0x46]));
+    expect(calls.converter_encode_pdf).toHaveBeenCalledWith({
+      tag: "converter",
+    });
   });
 
   it("throws when converter bindings are unregistered", async () => {
@@ -573,14 +627,21 @@ describe("htmlToImage: image input goes straight to converter_*", () => {
       htmlToImage(badLoad.mod, baseOptions({ value: PNG_BYTES })),
     ).rejects.toThrow(/failed to load image input/);
 
-    const nullEncode = stubModule({ converter_encode: vi.fn(async () => null) });
+    const nullEncode = stubModule({
+      converter_encode: vi.fn(async () => null),
+    });
     await expect(
       htmlToImage(nullEncode.mod, baseOptions({ value: PNG_BYTES })),
     ).rejects.toThrow(/failed to encode image/);
 
-    const emptySvg = stubModule({ converter_encode_svg: vi.fn(async () => "") });
+    const emptySvg = stubModule({
+      converter_encode_svg: vi.fn(async () => ""),
+    });
     await expect(
-      htmlToImage(emptySvg.mod, baseOptions({ value: PNG_BYTES, format: "svg" })),
+      htmlToImage(
+        emptySvg.mod,
+        baseOptions({ value: PNG_BYTES, format: "svg" }),
+      ),
     ).rejects.toThrow(/failed to encode image to svg/);
   });
 });
