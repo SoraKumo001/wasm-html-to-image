@@ -155,3 +155,17 @@ const result = await htmlToImage(mod, {
 | `wasm-html-to-image/react`      | React integration            | Direct rendering wrapper for React JSX nodes                           |
 | `wasm-html-to-image/preact`     | Preact integration           | Direct rendering wrapper for Preact JSX nodes                          |
 | `wasm-html-to-image/tailwind`   | Styling pipeline             | Inlines Tailwind CSS utility classes                                   |
+
+---
+
+## 💻 Sample Code & Projects
+
+Runnable sample projects and framework integrations are available in the official samples repository:
+
+👉 **[wasm-html-to-image-samples (GitHub)](https://github.com/SoraKumo001/wasm-html-to-image-samples)**
+
+- Next.js (App Router / Route Handlers)
+- Cloudflare Workers / Pages
+- Node.js Express / Fastify servers
+- Deno / Bun runtimes
+- React / Preact / Tailwind CSS styling

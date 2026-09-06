@@ -98,6 +98,11 @@ const config: Config = {
           position: "left",
         },
         {
+          href: "https://github.com/SoraKumo001/wasm-html-to-image-samples",
+          label: "Samples",
+          position: "left",
+        },
+        {
           href: "https://github.com/SoraKumo001/wasm-html-to-image",
           label: "GitHub",
           position: "right",
@@ -130,6 +135,10 @@ const config: Config = {
             {
               label: "Playground",
               href: "https://sorakumo001.github.io/wasm-html-to-image/master",
+            },
+            {
+              label: "サンプルコード (GitHub)",
+              href: "https://github.com/SoraKumo001/wasm-html-to-image-samples",
             },
             {
               label: "npm (wasm-html-to-image)",

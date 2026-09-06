@@ -172,3 +172,17 @@ const result = await htmlToImage(mod, {
 - **`packages/playground`**: ブラウザ上で動作する Web Playground。
 - **`packages/visual-test`**: 視覚回帰テストスイート。
 - **`src/cpp`**: C++ / Skia / litehtml コアエンジンおよび Emscripten バインディング。
+
+---
+
+## 💻 サンプルコード・プロジェクト
+
+実践的なフレームワーク連携やユースケースごとのサンプルコードは、公式サンプルリポジトリで公開されています：
+
+👉 **[wasm-html-to-image-samples (GitHub)](https://github.com/SoraKumo001/wasm-html-to-image-samples)**
+
+- Next.js (App Router / Route Handler)
+- Cloudflare Workers / Pages
+- Node.js Express / Fastify サーバー
+- Deno / Bun ランタイム
+- React / Preact / Tailwind 連携

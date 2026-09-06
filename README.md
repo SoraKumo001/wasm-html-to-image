@@ -4,7 +4,8 @@
 [![npm downloads](https://img.shields.io/npm/dw/wasm-html-to-image.svg)](https://www.npmjs.com/package/wasm-html-to-image)
 [![license](https://img.shields.io/npm/l/wasm-html-to-image.svg)](https://github.com/SoraKumo001/wasm-html-to-image/blob/master/LICENSE)
 [![Playground](https://img.shields.io/badge/Demo-Playground-blueviolet)](https://sorakumo001.github.io/wasm-html-to-image/master)
-[![Documentation](https://img.shields.io/badge/Docs-Docusaurus-blue)](https://sorakumo001.github.io/wasm-html-to-image/master/docs)
+[![Documentation](https://img.shields.io/badge/Docs-Docusaurus-blue)](https://sorakumo001.github.io/wasm-html-to-image/master/docs/)
+[![Samples](https://img.shields.io/badge/Examples-GitHub-green)](https://github.com/SoraKumo001/wasm-html-to-image-samples)
 
 A high-performance, WebAssembly-powered HTML-to-image renderer and image optimization engine. It consolidates HTML rendering (**Satoru** / **Skia** / **litehtml**) and native image encoding (**WebP / AVIF / JPEG**) into a single, unified WASM binary.
 
@@ -268,11 +269,12 @@ npx wasm-html-to-image photo.jpg -o photo.avif -w 800 -f avif -q 80
 
 ---
 
-## 📖 Documentation
+## 📖 Documentation & Examples
 
 For full guides, architecture deep-dives, font management, and advanced recipes:
 
-👉 **[Read the Official Documentation](https://sorakumo001.github.io/wasm-html-to-image/master/docs/)**
+👉 **[Read the Official Documentation](https://sorakumo001.github.io/wasm-html-to-image/master/docs/)**  
+👉 **[Sample Code & Projects (GitHub)](https://github.com/SoraKumo001/wasm-html-to-image-samples)**
 
 - [Overview & Getting Started](https://sorakumo001.github.io/wasm-html-to-image/master/docs/docs/overview)
 - [Architecture & Pipelines](https://sorakumo001.github.io/wasm-html-to-image/master/docs/docs/architecture)
