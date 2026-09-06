@@ -139,8 +139,19 @@ export const createHtmlToImageWorker = (params?: {
             });
           }
 
+          // Protect caller's buffer from being detached if worker-lib transfers TypedArrays
+          let execOptions = options;
+          if (options && typeof options === "object") {
+            if (options.value instanceof Uint8Array) {
+              execOptions = { ...options, value: options.value.slice() };
+            } else if (options.value instanceof ArrayBuffer) {
+              execOptions = { ...options, value: options.value.slice(0) };
+            }
+          }
+
           try {
-            const executePromise = target.execute("render", options as any);
+            const executePromise = target.execute("render", execOptions as any);
+
             const result = await (timeoutPromise
               ? Promise.race([executePromise, timeoutPromise])
               : executePromise);

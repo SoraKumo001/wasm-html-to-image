@@ -142,16 +142,17 @@ await fs.writeFile("animation.webp", Buffer.from(animatedWebp.data));
 
 All formats return a `RenderResult<T>` object containing `.data` (`Uint8Array` or `string` for SVG) and metadata (`width`, `height`, `originalWidth`, `originalHeight`, `format`, `isAnimated`):
 
-| Format      | `result.data` Type | HTML Input                                     | Image Input                   |
-| ----------- | ------------------ | ---------------------------------------------- | ----------------------------- |
-| `png`       | `Uint8Array`       | Skia render → PNG encode                       | Decodes and converts to PNG   |
-| `jpeg`      | `Uint8Array`       | Skia render → JPEG encode (`quality`)          | Decodes and compresses JPEG   |
-| `webp`      | `Uint8Array`       | Skia render → WebP encode (`quality`)          | Decodes and compresses WebP   |
-| `avif`      | `Uint8Array`       | Skia render → AVIF encode (`quality`, `speed`) | Decodes and compresses AVIF   |
-| `raw`       | `Uint8Array`       | Uncompressed RGBA pixel bytes                  | Uncompressed RGBA pixel bytes |
-| `thumbhash` | `Uint8Array`       | Computes ThumbHash from render                 | Computes ThumbHash from image |
-| `svg`       | `string`           | Skia vector drawing stream                     | Single `<image>` wrapper SVG  |
-| `pdf`       | `Uint8Array`       | SkPDFDocument vector PDF                       | Single-page centered PDF      |
+| Format      | `result.data` Type | HTML Input                                     | Image Input                                   |
+| ----------- | ------------------ | ---------------------------------------------- | --------------------------------------------- |
+| `png`       | `Uint8Array`       | Skia render → PNG encode                       | Decodes and converts to PNG                   |
+| `jpeg`      | `Uint8Array`       | Skia render → JPEG encode (`quality`)          | Decodes and compresses JPEG                   |
+| `webp`      | `Uint8Array`       | Skia render → WebP encode (`quality`)          | Decodes and compresses WebP                   |
+| `avif`      | `Uint8Array`       | Skia render → AVIF encode (`quality`, `speed`) | Decodes and compresses AVIF                   |
+| `raw`       | `Uint8Array`       | Uncompressed RGBA pixel bytes                  | Uncompressed RGBA pixel bytes                 |
+| `thumbhash` | `Uint8Array`       | Computes ThumbHash from render                 | Computes ThumbHash from image                 |
+| `svg`       | `string`           | Skia vector drawing stream                     | Single `<image>` wrapper SVG                  |
+| `pdf`       | `Uint8Array`       | SkPDFDocument vector PDF                       | Single-page centered PDF                      |
+| `none`      | `Uint8Array`       | N/A (throws error)                             | Passthrough original bytes + extract metadata |
 
 ---
 

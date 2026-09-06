@@ -53,7 +53,8 @@ export type OutputFormat =
   | "webp"
   | "avif"
   | "raw"
-  | "thumbhash";
+  | "thumbhash"
+  | "none";
 
 /** Result of rendering an HTML document or converting an image. */
 export interface RenderResult<T = Uint8Array | string> {
@@ -879,6 +880,23 @@ export async function htmlToImage(
       const originalAnimation =
         module.converter_is_original_animation?.(inst) ?? false;
 
+      if (format === "none") {
+        addTime("total", now() - t0);
+        emitLog(LogLevel.Info, "render done (image input, none/passthrough)");
+        deliverReport();
+        return {
+          data: bytes,
+          width: originalWidth,
+          height: originalHeight,
+          format: "none",
+          originalWidth,
+          originalHeight,
+          originalFormat,
+          originalAnimation,
+          animation: originalAnimation,
+        };
+      }
+
       if (crop) {
         module.converter_crop(inst, crop.x, crop.y, crop.width, crop.height);
       }
@@ -991,7 +1009,13 @@ export async function htmlToImage(
   // ---- HTML input: resolve resources on the instance, then render ----
   // (unified `html_to_image` builds its own instance internally and cannot
   // see pre-resolved fonts/images, so it is only a legacy fallback here).
+  if (format === "none") {
+    throw logged(
+      "wasm-html-to-image: 'none' format is only supported for image inputs",
+    );
+  }
   let htmls: string | string[];
+
   if (value !== undefined) {
     htmls = value as string | string[];
   } else if (typeof url === "string") {

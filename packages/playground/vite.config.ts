@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
@@ -34,7 +35,9 @@ export default defineConfig({
     exclude: ["wasm-html-to-image", "worker-lib"],
   },
   plugins: [
+    tailwindcss(),
     react(),
+
     {
       name: "handle-visual-test-assets",
       configureServer(server) {

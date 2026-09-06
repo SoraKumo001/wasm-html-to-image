@@ -18,6 +18,7 @@ const OUTPUT_FORMATS = [
   "avif",
   "raw",
   "thumbhash",
+  "none",
 ] as const;
 
 function isOutputFormat(value: string): value is OutputFormat {

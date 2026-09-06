@@ -4,7 +4,7 @@
 [![npm downloads](https://img.shields.io/npm/dw/wasm-html-to-image.svg)](https://www.npmjs.com/package/wasm-html-to-image)
 [![license](https://img.shields.io/npm/l/wasm-html-to-image.svg)](https://github.com/SoraKumo001/wasm-html-to-image/blob/master/LICENSE)
 [![Playground](https://img.shields.io/badge/Demo-Playground-blueviolet)](https://sorakumo001.github.io/wasm-html-to-image/master)
-[![Documentation](https://img.shields.io/badge/Docs-Docusaurus-blue)](https://sorakumo001.github.io/wasm-html-to-image/)
+[![Documentation](https://img.shields.io/badge/Docs-Docusaurus-blue)](https://sorakumo001.github.io/wasm-html-to-image/master/docs)
 
 A high-performance, WebAssembly-powered HTML-to-image renderer and image optimization engine. It consolidates HTML rendering (**Satoru** / **Skia** / **litehtml**) and native image encoding (**WebP / AVIF / JPEG**) into a single, unified WASM binary.
 

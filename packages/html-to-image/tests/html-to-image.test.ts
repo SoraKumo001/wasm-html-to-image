@@ -644,4 +644,32 @@ describe("htmlToImage: image input goes straight to converter_*", () => {
       ),
     ).rejects.toThrow(/failed to encode image to svg/);
   });
+
+  it("supports format: 'none' for image input (passthrough with metadata)", async () => {
+    const { mod, calls } = stubModule({
+      converter_get_original_width: vi.fn(() => 1024),
+      converter_get_original_height: vi.fn(() => 768),
+      converter_get_original_format: vi.fn(() => "png"),
+      converter_is_original_animation: vi.fn(() => false),
+    });
+    const out = await htmlToImage(
+      mod,
+      baseOptions({ value: PNG_BYTES, format: "none" }),
+    );
+    expect(out.format).toBe("none");
+    expect(out.data).toEqual(PNG_BYTES);
+    expect(out.width).toBe(1024);
+    expect(out.height).toBe(768);
+    expect(out.originalWidth).toBe(1024);
+    expect(out.originalHeight).toBe(768);
+    expect(out.originalFormat).toBe("png");
+    expect(calls.converter_encode).not.toHaveBeenCalled();
+  });
+
+  it("throws for format: 'none' when input is HTML", async () => {
+    const { mod } = stubModule();
+    await expect(
+      htmlToImage(mod, { value: "<h1>hi</h1>", format: "none", width: 800 }),
+    ).rejects.toThrow(/'none' format is only supported for image inputs/);
+  });
 });

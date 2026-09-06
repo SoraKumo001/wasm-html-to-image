@@ -14,6 +14,7 @@ export const FORMAT_INT: Record<OutputFormat, number> = {
   avif: 5,
   raw: 6,
   thumbhash: 7,
+  none: -1,
 };
 
 export const FIT_INT: Record<NonNullable<HtmlToImageOptions["fit"]>, number> = {
