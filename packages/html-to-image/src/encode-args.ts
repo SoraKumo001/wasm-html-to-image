@@ -12,6 +12,7 @@ export const FORMAT_INT: Record<OutputFormat, number> = {
   pdf: 3,
   jpeg: 4,
   avif: 5,
+  jxl: 8,
   raw: 6,
   thumbhash: 7,
   none: -1,

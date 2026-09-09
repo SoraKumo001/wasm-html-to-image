@@ -16,6 +16,7 @@ const OUTPUT_FORMATS = [
   "jpeg",
   "webp",
   "avif",
+  "jxl",
   "raw",
   "thumbhash",
   "none",
@@ -45,7 +46,7 @@ async function readInput(
 program
   .name("wasm-html-to-image")
   .description(
-    "HTML to image converter on the single unified WASM module (svg/pdf direct, png/jpeg/webp/avif/raw/thumbhash via encode or html_to_image)",
+    "HTML to image converter on the single unified WASM module (svg/pdf direct, png/jpeg/webp/avif/jxl/raw/thumbhash via encode or html_to_image)",
   )
   .version("0.1.0")
   .argument("<input>", "input HTML/image file path or URL")

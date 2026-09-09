@@ -1,5 +1,9 @@
 #include "skia_encode.h"
 
+#include <algorithm>
+#include <cstring>
+#include <jxl/encode.h>
+
 #include "skia_utils.h"
 #include "thumbhash.h"
 #include "avif/avif.h"
@@ -91,6 +95,102 @@ sk_sp<SkData> encode_raw(const SkBitmap& bitmap) {
     return SkData::MakeWithCopy(bitmap.getPixels(), bitmap.computeByteSize());
 }
 
+std::vector<uint8_t> encode_jxl(const SkBitmap& bitmap, int quality, int speed) {
+    const int width = bitmap.width();
+    const int height = bitmap.height();
+    const uint8_t* pixels = (const uint8_t*)bitmap.getPixels();
+    if (width <= 0 || height <= 0 || pixels == nullptr) return {};
+    // AVIF実装と同様にSkBitmapの画素をRGBA 8bit前提で取得する。
+    // JxlEncoderAddImageFrameは連続バッファを要求するためrowBytesの
+    // パディングを除去してtightなRGBAへ詰め直す。
+    const size_t src_row_bytes = (size_t)bitmap.rowBytes();
+    const size_t tight_row_bytes = (size_t)width * 4;
+    std::vector<uint8_t> rgba(tight_row_bytes * (size_t)height);
+    for (int y = 0; y < height; ++y) {
+        std::memcpy(rgba.data() + (size_t)y * tight_row_bytes,
+                    pixels + (size_t)y * src_row_bytes, tight_row_bytes);
+    }
+    const bool has_alpha = !bitmap.isOpaque();
+
+    JxlEncoder* enc = JxlEncoderCreate(nullptr);
+    if (enc == nullptr) return {};
+
+    auto fail = [&enc]() {
+        JxlEncoderDestroy(enc);
+        return std::vector<uint8_t>{};
+    };
+
+    JxlBasicInfo basic_info;
+    JxlEncoderInitBasicInfo(&basic_info);
+    basic_info.xsize = (uint32_t)width;
+    basic_info.ysize = (uint32_t)height;
+    basic_info.bits_per_sample = 8;
+    basic_info.exponent_bits_per_sample = 0;
+    basic_info.num_color_channels = 3;
+    basic_info.num_extra_channels = has_alpha ? 1 : 0;
+    basic_info.alpha_bits = has_alpha ? 8 : 0;
+    // libjxl requires uses_original_profile=true for lossless encoding
+    // (JxlEncoderSetFrameLossless errors out otherwise, see encode.cc).
+    const bool lossless = (quality >= 100);
+    basic_info.uses_original_profile = lossless ? JXL_TRUE : JXL_FALSE;
+    if (JxlEncoderSetBasicInfo(enc, &basic_info) != JXL_ENC_SUCCESS) return fail();
+
+    JxlColorEncoding color_encoding;
+    JxlColorEncodingSetToSRGB(&color_encoding, JXL_FALSE);
+    if (JxlEncoderSetColorEncoding(enc, &color_encoding) != JXL_ENC_SUCCESS) return fail();
+
+    JxlEncoderFrameSettings* frame_settings = JxlEncoderFrameSettingsCreate(enc, nullptr);
+    if (frame_settings == nullptr) return fail();
+    if (quality >= 100) {
+        if (JxlEncoderSetFrameLossless(frame_settings, JXL_TRUE) != JXL_ENC_SUCCESS) {
+            return fail();
+        }
+    } else {
+        const float distance =
+            std::clamp((100 - (float)quality) * 0.08f, 0.3f, 10.0f);
+        if (JxlEncoderSetFrameDistance(frame_settings, distance) != JXL_ENC_SUCCESS) {
+            return fail();
+        }
+    }
+    const int64_t effort = std::clamp(10 - (int64_t)speed, (int64_t)1, (int64_t)9);
+    if (JxlEncoderFrameSettingsSetOption(frame_settings, JXL_ENC_FRAME_SETTING_EFFORT,
+                                         effort) != JXL_ENC_SUCCESS) {
+        return fail();
+    }
+
+    JxlPixelFormat pixel_format;
+    pixel_format.num_channels = 4;
+    pixel_format.data_type = JXL_TYPE_UINT8;
+    pixel_format.endianness = JXL_NATIVE_ENDIAN;
+    pixel_format.align = 0;
+    if (JxlEncoderAddImageFrame(frame_settings, &pixel_format, rgba.data(), rgba.size()) !=
+        JXL_ENC_SUCCESS) {
+        return fail();
+    }
+    JxlEncoderCloseInput(enc);
+
+    // シングルスレッド (ParallelRunner不使用、WASM_THREADS=OFF前提)。
+    std::vector<uint8_t> output(64 * 1024);
+    uint8_t* next_out = output.data();
+    size_t avail_out = output.size();
+    while (true) {
+        JxlEncoderStatus status = JxlEncoderProcessOutput(enc, &next_out, &avail_out);
+        if (status == JXL_ENC_SUCCESS) break;
+        if (status != JXL_ENC_NEED_MORE_OUTPUT) return fail();
+        // avail_out>=32を保証しながら出力バッファを拡張する。
+        const size_t offset = (size_t)(next_out - output.data());
+        const size_t need = offset + 32;
+        size_t grown = output.size() * 2;
+        if (grown < need) grown = need;
+        output.resize(grown);
+        next_out = output.data() + offset;
+        avail_out = output.size() - offset;
+    }
+    output.resize((size_t)(next_out - output.data()));
+    JxlEncoderDestroy(enc);
+    return output;
+}
+
 sk_sp<SkData> encode_thumbhash(const SkBitmap& bitmap) {
     std::vector<uint8_t> hash =
         rgbaToThumbHash(bitmap.width(), bitmap.height(), (const uint8_t*)bitmap.getPixels());
@@ -162,6 +262,16 @@ EncodeResult encode_frames(const EncodeFrameView* frames, size_t count,
         case RenderFormat::AVIF: {
             out.format_name = "avif";
             out.data = encode_avif(first, (int)options.quality, options.speed);
+            return out;
+        }
+        case RenderFormat::JXL: {
+            out.format_name = "jxl";
+            // 単帧のみ (animation無視)。
+            std::vector<uint8_t> bytes =
+                encode_jxl(first, (int)options.quality, options.speed);
+            if (!bytes.empty()) {
+                out.data = SkData::MakeWithCopy(bytes.data(), bytes.size());
+            }
             return out;
         }
         case RenderFormat::PDF: {

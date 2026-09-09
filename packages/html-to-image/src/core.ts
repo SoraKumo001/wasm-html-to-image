@@ -52,6 +52,7 @@ export type OutputFormat =
   | "jpeg"
   | "webp"
   | "avif"
+  | "jxl"
   | "raw"
   | "thumbhash"
   | "none";

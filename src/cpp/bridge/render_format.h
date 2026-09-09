@@ -19,7 +19,8 @@ enum class RenderFormat {
     JPEG = 4,
     AVIF = 5,
     RAW = 6,
-    ThumbHash = 7
+    ThumbHash = 7,
+    JXL = 8
 };
 
 // image-opt版 FitMode を共通化 (satoru側 RenderOptions::fitType 0/1/2 と同義)

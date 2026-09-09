@@ -29,6 +29,8 @@ option(WASM_ENABLE_TEXT_SHAPING "Enable freetype+harfbuzz+skshaper" ON)
 option(WASM_ENABLE_PDF "Enable Skia PDF document support" ON)
 # SKSL: OFF既定 (image-optのみsrc/sksl+SkRuntimeBlenderを取り込んでいた分。必要時のみON)
 option(WASM_ENABLE_SKSL "Enable Skia SkSL sources" OFF)
+# JXL: ON既定 (libjxl FetchContentで取得。JPEG XL encode/decode用)
+option(WASM_ENABLE_JXL "Enable JPEG XL" ON)
 
 # --- Enable ccache ---
 find_program(CCACHE_PROGRAM ccache)
@@ -133,6 +135,49 @@ if(WASM_AVIF_BACKEND STREQUAL "AOM" AND TARGET avif_obj)
         ${libaom_BINARY_DIR}
         ${libaom_SOURCE_DIR}/aom
     )
+endif()
+
+# --- JXL (libjxl FetchContent) ---
+if(WASM_ENABLE_JXL)
+    set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    set(JPEGXL_ENABLE_TOOLS OFF CACHE BOOL "" FORCE)
+    set(JPEGXL_ENABLE_BENCHMARK OFF CACHE BOOL "" FORCE)
+    set(JPEGXL_ENABLE_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(JPEGXL_ENABLE_MANPAGES OFF CACHE BOOL "" FORCE)
+    set(JPEGXL_ENABLE_DOXYGEN OFF CACHE BOOL "" FORCE)
+    set(JPEGXL_ENABLE_PLUGINS OFF CACHE BOOL "" FORCE)
+    set(JPEGXL_ENABLE_VIEWERS OFF CACHE BOOL "" FORCE)
+    set(JPEGXL_ENABLE_DEVTOOLS OFF CACHE BOOL "" FORCE)
+    set(JPEGXL_ENABLE_JNI OFF CACHE BOOL "" FORCE)
+    set(JPEGXL_ENABLE_FUZZERS OFF CACHE BOOL "" FORCE)
+    set(JPEGXL_ENABLE_SJPEG OFF CACHE BOOL "" FORCE)
+    set(JPEGXL_ENABLE_OPENEXR OFF CACHE BOOL "" FORCE)
+    set(JPEGXL_ENABLE_TRANSCODE_JPEG OFF CACHE BOOL "" FORCE)
+    set(JPEGXL_ENABLE_BOXES OFF CACHE BOOL "" FORCE)
+    set(JPEGXL_ENABLE_WASM_THREADS OFF CACHE BOOL "" FORCE)
+    set(JPEGXL_BUNDLE_LIBPNG OFF CACHE BOOL "" FORCE)
+    set(JPEGXL_ENABLE_LTO OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(
+        libjxl
+        GIT_REPOSITORY https://github.com/libjxl/libjxl.git
+        GIT_TAG        v0.11.1
+        GIT_SHALLOW    TRUE
+        GIT_SUBMODULES_RECURSE TRUE
+    )
+    set(CMAKE_SKIP_INSTALL_RULES ON)
+    FetchContent_GetProperties(libjxl)
+    if(NOT libjxl_POPULATED)
+        FetchContent_Populate(libjxl)
+        set(OLD_CMAKE_C_FLAGS ${CMAKE_C_FLAGS})
+        set(OLD_CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -w")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
+        add_subdirectory(${libjxl_SOURCE_DIR} ${libjxl_BINARY_DIR} EXCLUDE_FROM_ALL)
+        set(CMAKE_C_FLAGS ${OLD_CMAKE_C_FLAGS})
+        set(CMAKE_CXX_FLAGS ${OLD_CMAKE_CXX_FLAGS})
+    endif()
+    set(CMAKE_SKIP_INSTALL_RULES OFF)
 endif()
 
 # --- wuffs (両リポ共通) ---
@@ -448,10 +493,28 @@ target_include_directories(html_to_image_core PRIVATE
 target_link_libraries(html_to_image_core PUBLIC litehtml skia_lib)
 target_compile_options(html_to_image_core PRIVATE ${COMMON_COMPILE_OPTIONS})
 target_compile_definitions(html_to_image_core PRIVATE SK_USER_CONFIG_HEADER="SkUserConfig.h")
+if(WASM_ENABLE_JXL)
+    target_compile_definitions(html_to_image_core PRIVATE JXL_ENABLED)
+    # lib/jxl.cmake 公開ターゲット: `jxl` 優先、なければ `jxl_enc`
+    # NOTE: OBJECT ライブラリのため $<TARGET_OBJECTS:...> 形式では最終リンクに伝播しない。
+    # 実行ファイル側への PRIVATE リンクが必須（下記 Executables 参照）。ここは将来の直接リンクに備え PUBLIC。
+    if(TARGET jxl)
+        target_link_libraries(html_to_image_core PUBLIC jxl)
+    elseif(TARGET jxl_enc)
+        target_link_libraries(html_to_image_core PUBLIC jxl_enc)
+    endif()
+endif()
 
 # --- Executables ---
 add_executable(html_to_image $<TARGET_OBJECTS:html_to_image_core>)
 target_link_libraries(html_to_image PRIVATE litehtml skia_lib)
+if(WASM_ENABLE_JXL)
+    if(TARGET jxl)
+        target_link_libraries(html_to_image PRIVATE jxl)
+    elseif(TARGET jxl_enc)
+        target_link_libraries(html_to_image PRIVATE jxl_enc)
+    endif()
+endif()
 target_link_options(html_to_image PRIVATE ${COMMON_LINK_OPTIONS})
 set_target_properties(html_to_image PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/packages/html-to-image/dist"
@@ -461,6 +524,13 @@ set_target_properties(html_to_image PROPERTIES
 
 add_executable(html_to_image_single $<TARGET_OBJECTS:html_to_image_core>)
 target_link_libraries(html_to_image_single PRIVATE litehtml skia_lib)
+if(WASM_ENABLE_JXL)
+    if(TARGET jxl)
+        target_link_libraries(html_to_image_single PRIVATE jxl)
+    elseif(TARGET jxl_enc)
+        target_link_libraries(html_to_image_single PRIVATE jxl_enc)
+    endif()
+endif()
 # SINGLE派生のみ +SINGLE_FILE と ENVIRONMENT=web,worker,node許容 (COMMON/SINGLE差分)
 target_link_options(html_to_image_single PRIVATE ${COMMON_LINK_OPTIONS} "-sSINGLE_FILE=1" "-sENVIRONMENT=web,worker,node")
 set_target_properties(html_to_image_single PROPERTIES
