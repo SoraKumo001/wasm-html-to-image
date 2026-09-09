@@ -5,12 +5,13 @@ import {
   DEFAULT_FONT_MAP,
   type RenderDiagnostics,
 } from "wasm-html-to-image/workers";
+import { useJxlSupport } from "./useJxlSupport";
 
 type Params = {
   asset?: string;
   width: number;
   height?: number;
-  format: "svg" | "png" | "webp" | "avif" | "pdf";
+  format: "svg" | "png" | "webp" | "avif" | "jxl" | "pdf";
   textToPaths: boolean;
   value?: string | null;
   mediaType: "screen" | "print";
@@ -38,7 +39,7 @@ const App: React.FC = () => {
       width: w ? parseInt(w) : 588,
       height: h ? parseInt(h) : undefined,
       format:
-        f && ["svg", "png", "webp", "avif", "pdf"].includes(f)
+        f && ["svg", "png", "webp", "avif", "jxl", "pdf"].includes(f)
           ? (f as any)
           : "svg",
       textToPaths: t !== null ? t === "true" : true,
@@ -74,6 +75,7 @@ const App: React.FC = () => {
   const [renderTime, setRenderTime] = useState<number | null>(null);
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const jxlSupport = useJxlSupport();
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const latestRenderId = useRef<number>(0);
@@ -97,7 +99,7 @@ const App: React.FC = () => {
         width: w ? parseInt(w) : 588,
         height: h ? parseInt(h) : undefined,
         format:
-          f && ["svg", "png", "webp", "avif", "pdf"].includes(f)
+          f && ["svg", "png", "webp", "avif", "jxl", "pdf"].includes(f)
             ? (f as any)
             : "svg",
         textToPaths: t !== null ? t === "true" : true,
@@ -138,7 +140,7 @@ const App: React.FC = () => {
       width: w ? parseInt(w) : 588,
       height: h ? parseInt(h) : undefined,
       format:
-        f && ["svg", "png", "webp", "avif", "pdf"].includes(f)
+        f && ["svg", "png", "webp", "avif", "jxl", "pdf"].includes(f)
           ? (f as any)
           : "svg",
       textToPaths: t !== null ? t === "true" : true,
@@ -351,7 +353,9 @@ const App: React.FC = () => {
               ? "image/webp"
               : format === "avif"
                 ? "image/avif"
-                : "application/pdf";
+                : format === "jxl"
+                  ? "image/jxl"
+                  : "application/pdf";
         const blob = new Blob([result.data.slice()], { type: mimeType });
         setObjectUrl(URL.createObjectURL(blob));
       }
@@ -391,7 +395,9 @@ const App: React.FC = () => {
             ? "image/webp"
             : format === "avif"
               ? "image/avif"
-              : "application/pdf";
+              : format === "jxl"
+                ? "image/jxl"
+                : "application/pdf";
     const content =
       typeof renderResult === "string" ? renderResult : renderResult.slice();
     const blob = new Blob([content as BlobPart], { type: mimeType });
@@ -507,6 +513,7 @@ const App: React.FC = () => {
                 <option value="png">PNG (Raster)</option>
                 <option value="webp">WebP (Raster)</option>
                 <option value="avif">AVIF (Raster)</option>
+                <option value="jxl">JXL (Raster)</option>
                 <option value="pdf">PDF (Document)</option>
               </select>
             </label>
@@ -775,7 +782,8 @@ const App: React.FC = () => {
             {objectUrl &&
               (params.format === "png" ||
                 params.format === "webp" ||
-                params.format === "avif") && (
+                params.format === "avif" ||
+                (params.format === "jxl" && jxlSupport !== false)) && (
                 <div>
                   <img
                     src={objectUrl}
@@ -784,6 +792,20 @@ const App: React.FC = () => {
                       boxShadow: "0 2px 10px rgba(0,0,0,0.1)",
                     }}
                   />
+                </div>
+              )}
+            {objectUrl &&
+              params.format === "jxl" &&
+              jxlSupport === false && (
+                <div
+                  style={{
+                    color: "#999",
+                    marginTop: "200px",
+                    textAlign: "center",
+                    width: "100%",
+                  }}
+                >
+                  このブラウザはJXLのプレビューに未対応です（Safariでは表示できます）。ダウンロードボタンからファイルを取得してご確認ください。
                 </div>
               )}
             {objectUrl && params.format === "pdf" && (

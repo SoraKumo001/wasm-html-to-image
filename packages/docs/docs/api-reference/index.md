@@ -31,6 +31,7 @@ export type ImageFormat =
   | "jpeg"
   | "webp"
   | "avif"
+  | "jxl"
   | "raw"
   | "thumbhash"
   | "svg"

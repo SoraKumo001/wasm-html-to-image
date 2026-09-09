@@ -26,7 +26,7 @@ flowchart TB
         subgraph PipelineB["Pipeline B: Image Conversion Path"]
             Decoder["Image Decoder (PNG/JPEG/WebP/AVIF/etc.)"]
             Transform["Resize / Crop / Fit"]
-            Encoder["Image Encoder (WebP/AVIF/JPEG/RAW/ThumbHash)"]
+            Encoder["Image Encoder (WebP/AVIF/JXL/JPEG/RAW/ThumbHash)"]
         end
 
         Direct["Direct Bitmap Memory Link"]
@@ -65,4 +65,4 @@ When given image buffers or data URLs:
 
 1. **Direct Decoding**: Bypasses the HTML layout engine completely.
 2. **Transformations**: Applies `width`, `height`, `fit`, and `crop` directly in the image pipeline.
-3. **Encoding**: Compresses to WebP, AVIF, JPEG, RAW pixels, or ThumbHash.
+3. **Encoding**: Compresses to WebP, AVIF, JXL, JPEG, RAW pixels, or ThumbHash.

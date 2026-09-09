@@ -20,7 +20,7 @@ npx wasm-html-to-image <input> [options]
 | `--output <path>`    | `-o` | Input based | Target output path                                                       |
 | `--width <number>`   | `-w` |    `800`    | Viewport width                                                           |
 | `--height <number>`  | `-h` |   `auto`    | Viewport height                                                          |
-| `--format <format>`  | `-f` |    `png`    | Format (`svg`, `png`, `pdf`, `jpeg`, `webp`, `avif`, `raw`, `thumbhash`) |
+| `--format <format>`  | `-f` |    `png`    | Format (`svg`, `png`, `pdf`, `jpeg`, `webp`, `avif`, `jxl`, `raw`, `thumbhash`) |
 | `--quality <number>` | `-q` |    `85`     | Encode quality 0–100                                                     |
 
 ## Examples

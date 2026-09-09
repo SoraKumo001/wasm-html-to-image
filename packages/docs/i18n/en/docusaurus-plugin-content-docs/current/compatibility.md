@@ -27,6 +27,7 @@ Supported input types, output formats, CSS properties, and runtime environments.
 | `jpeg`      | `Uint8Array` | Skia render → JPEG encode (`quality`)          | Decodes and compresses JPEG   |
 | `webp`      | `Uint8Array` | Skia render → WebP encode (`quality`)          | Decodes and compresses WebP   |
 | `avif`      | `Uint8Array` | Skia render → AVIF encode (`quality`, `speed`) | Decodes and compresses AVIF   |
+| `jxl`       | `Uint8Array` | Skia render → JXL encode (`quality`, `speed`)  | Decodes and compresses JXL (output-only; JXL input decoding is not supported) |
 | `raw`       | `Uint8Array` | Uncompressed RGBA pixels                       | Uncompressed RGBA pixels      |
 | `thumbhash` | `Uint8Array` | Computes ThumbHash from render                 | Computes ThumbHash from image |
 | `svg`       | `string`     | Skia vector stream                             | Wraps in `<image>` SVG        |

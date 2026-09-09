@@ -7,6 +7,8 @@
  * imports without reshaping reports.
  */
 
+import type { OutputFormat } from "./core.js";
+
 /** Log severity, shared with the WASM `set_log_level` binding. */
 export enum LogLevel {
   None = 0,
@@ -52,7 +54,7 @@ export interface DiagnosticMessage {
 /** Full render diagnostics report (satoru-compatible). */
 export interface RenderDiagnostics {
   version: 1;
-  format: "svg" | "png" | "webp" | "pdf";
+  format: OutputFormat;
   width: number;
   height?: number;
   mediaType: "screen" | "print";

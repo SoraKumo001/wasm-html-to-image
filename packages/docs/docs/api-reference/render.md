@@ -53,7 +53,7 @@ export interface RenderResult<T = Uint8Array | string> {
 ```
 
 :::note 戻り値の型
-出力データ本体は `result.data` に格納されます。フォーマットが `svg` の場合は `string`（SVG マークアップ文字列）、それ以外のすべての形式（`png`, `jpeg`, `webp`, `avif`, `pdf`, `raw`, `thumbhash`）では `Uint8Array` となります。
+出力データ本体は `result.data` に格納されます。フォーマットが `svg` の場合は `string`（SVG マークアップ文字列）、それ以外のすべての形式（`png`, `jpeg`, `webp`, `avif`, `jxl`, `pdf`, `raw`, `thumbhash`）では `Uint8Array` となります。
 :::
 
 ---
@@ -69,7 +69,7 @@ export interface RenderResult<T = Uint8Array | string> {
 | `baseUrl`  | `string`                                          |    -     | 相対パスのリソース解決に使用するベース URL                                 |
 | `width`    | `number`                                          | **必須** | ビューポート幅（HTML 時）、または出力幅（画像リサイズ時）                  |
 | `height`   | `number`                                          |  `auto`  | ビューポート高さ（HTML 時）、または出力高さ（画像リサイズ時）              |
-| `format`   | `OutputFormat`                                    | `"png"`  | 出力形式 (`png`, `jpeg`, `webp`, `avif`, `raw`, `thumbhash`, `svg`, `pdf`) |
+| `format`   | `OutputFormat`                                    | `"png"`  | 出力形式 (`png`, `jpeg`, `webp`, `avif`, `jxl`, `raw`, `thumbhash`, `svg`, `pdf`) |
 
 ### エンコード & リサイズ
 

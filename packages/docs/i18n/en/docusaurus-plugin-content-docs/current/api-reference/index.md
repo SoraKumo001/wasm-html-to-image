@@ -19,3 +19,36 @@ title: API Overview
 | `wasm-html-to-image/react`      | `render(options)`                                         | Wrapper for React JSX elements                         |
 | `wasm-html-to-image/preact`     | `render(options)`                                         | Wrapper for Preact JSX elements                        |
 | `wasm-html-to-image/tailwind`   | `inlineTailwind(html)`                                    | Inlines Tailwind utility classes                       |
+
+---
+
+## Basic Type Definitions
+
+```typescript
+export type ImageFormat =
+  | "png"
+  | "jpeg"
+  | "webp"
+  | "avif"
+  | "jxl"
+  | "raw"
+  | "thumbhash"
+  | "svg"
+  | "pdf";
+
+export type RenderInput =
+  | string // HTML string, URL, or Data URL
+  | string[] // Array of HTML strings (for multi-page PDF)
+  | Uint8Array // Image binary buffer
+  | ArrayBuffer;
+
+export interface RenderResult<T = Uint8Array | string> {
+  data: T;
+  width?: number;
+  height?: number;
+  originalWidth?: number;
+  originalHeight?: number;
+  format?: ImageFormat;
+  isAnimated?: boolean;
+}
+```

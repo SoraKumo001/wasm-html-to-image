@@ -29,6 +29,8 @@
     "screenshot",
     "ogp",
     "avif",
+    "jxl",
+    "jpeg-xl",
     "webp",
     "pdf",
     "thumbhash",

@@ -17,7 +17,7 @@ No headless browsers (Chromium, Puppeteer, or Playwright) required. Runs seamles
 
 - ⚡ **Single Unified WASM Binary**: HTML parsing, CSS layout, vector painting, and image encoding execute entirely inside WebAssembly without copying intermediate framebuffers across JS boundaries.
 - 🎨 **Versatile Inputs**: Renders HTML strings, remote Web URLs, multi-page HTML arrays, or raw image buffers (PNG, JPEG, WebP, GIF, AVIF, BMP, Data URLs).
-- 📦 **Rich Output Formats**: Direct SVG vector streams, high-quality PNG, JPEG, WebP, AVIF, uncompressed RAW pixels, ThumbHash placeholders, and multi-page vector PDFs.
+- 📦 **Rich Output Formats**: Direct SVG vector streams, high-quality PNG, JPEG, WebP, AVIF, JXL, uncompressed RAW pixels, ThumbHash placeholders, and multi-page vector PDFs.
 - 🚀 **Zero-Config Single Bundle**: Use `wasm-html-to-image/single` to call `render()` immediately without manual WASM loading or build setup.
 - 🌐 **Edge & Serverless Native**: Dedicated subpaths (`/workerd` for Cloudflare Workers, `/edge-light` for Vercel Edge) tailored for strict serverless constraints.
 - 🧵 **Multi-Threaded Worker Pool**: Process thousands of images in parallel using `wasm-html-to-image/workers` (Node.js worker threads / Web Workers).
@@ -149,6 +149,7 @@ All formats return a `RenderResult<T>` object containing `.data` (`Uint8Array` o
 | `jpeg`      | `Uint8Array`       | Skia render → JPEG encode (`quality`)          | Decodes and compresses JPEG   |
 | `webp`      | `Uint8Array`       | Skia render → WebP encode (`quality`)          | Decodes and compresses WebP   |
 | `avif`      | `Uint8Array`       | Skia render → AVIF encode (`quality`, `speed`) | Decodes and compresses AVIF   |
+| `jxl`       | `Uint8Array`       | Skia render → JXL encode (`quality`, `speed`)  | Decodes and compresses JXL    |
 | `raw`       | `Uint8Array`       | Uncompressed RGBA pixel bytes                  | Uncompressed RGBA pixel bytes |
 | `thumbhash` | `Uint8Array`       | Computes ThumbHash from render                 | Computes ThumbHash from image |
 | `svg`       | `string`           | Skia vector drawing stream                     | Single `<image>` wrapper SVG  |

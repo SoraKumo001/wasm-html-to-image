@@ -6,6 +6,7 @@ import {
   waitReady,
   type RenderResult,
 } from "wasm-html-to-image/workers";
+import { useJxlSupport } from "./useJxlSupport";
 
 const Time = () => {
   const [time, setTime] = useState(0);
@@ -97,7 +98,7 @@ const ImageInput: FC<{ onFiles: (files: File[]) => void }> = ({ onFiles }) => {
   );
 };
 
-const formats = ["none", "avif", "webp", "jpeg", "png"] as const;
+const formats = ["none", "avif", "jxl", "webp", "jpeg", "png"] as const;
 const fits = ["contain", "cover", "fill"] as const;
 
 export type ImageResult = RenderResult<Uint8Array | string>;
@@ -115,6 +116,8 @@ function getImageMimeType(filename: string, fallbackType?: string): string {
       return "image/webp";
     case "avif":
       return "image/avif";
+    case "jxl":
+      return "image/jxl";
     case "gif":
       return "image/gif";
     case "svg":
@@ -158,6 +161,7 @@ const AsyncImage: FC<{
   const [time, setTime] = useState<number>();
   const [image, setImage] = useState<ImageResult | null | undefined>(null);
   const [src, setSrc] = useState<string | null>(null);
+  const jxlSupport = useJxlSupport();
   const property = useRef<{ isInit?: boolean }>({}).current;
 
   if (!property.isInit) {
@@ -246,11 +250,17 @@ const AsyncImage: FC<{
             href={src}
             className="flex-1 w-full h-full flex items-center justify-center bg-checkered p-2 overflow-hidden"
           >
-            <img
-              className="max-w-full max-h-full object-contain block transition-transform group-hover:scale-105"
-              src={src}
-              alt=""
-            />
+            {format === "jxl" && jxlSupport === false ? (
+              <span className="text-xs text-gray-400 text-center px-4">
+                このブラウザはJXLのプレビューに未対応です（Safariでは表示できます）。ダウンロードボタンからファイルを取得してご確認ください。
+              </span>
+            ) : (
+              <img
+                className="max-w-full max-h-full object-contain block transition-transform group-hover:scale-105"
+                src={src}
+                alt=""
+              />
+            )}
           </a>
           <div className="bg-white/95 backdrop-blur-xs w-full z-10 p-2.5 border-t border-gray-100 text-xs absolute bottom-0 shadow-xs">
             <div

@@ -27,6 +27,7 @@ title: 互換性と仕様
 | `jpeg`       | `Uint8Array` | Skia 描画 → JPEG 圧縮 (`quality`)          | 画像をデコードして JPEG 圧縮      |
 | `webp`       | `Uint8Array` | Skia 描画 → WebP 圧縮 (`quality`)          | 画像をデコードして WebP 圧縮      |
 | `avif`       | `Uint8Array` | Skia 描画 → AVIF 圧縮 (`quality`, `speed`) | 画像をデコードして AVIF 圧縮      |
+| `jxl`        | `Uint8Array` | Skia 描画 → JXL 圧縮 (`quality`, `speed`)  | 画像をデコードして JXL 圧縮（出力のみ。JXL 入力のデコードは未対応） |
 | `raw`        | `Uint8Array` | RGBA 非圧縮ピクセルデータ                  | RGBA 非圧縮ピクセルデータ         |
 | `thumbhash`  | `Uint8Array` | 描画結果から ThumbHash を生成              | 画像から ThumbHash を生成         |
 | `svg`        | `string`     | Skia ベクター描画ストリーム                | `<image>` タグでラップした SVG    |

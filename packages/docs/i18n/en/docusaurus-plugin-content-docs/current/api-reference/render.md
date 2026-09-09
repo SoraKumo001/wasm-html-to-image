@@ -23,7 +23,7 @@ export function htmlToImage(
 ```
 
 :::note Return Type
-Returns a `string` for `svg` format, and `Uint8Array` for all other formats (`png`, `jpeg`, `webp`, `avif`, `pdf`, `raw`, `thumbhash`).
+Returns a `string` for `svg` format, and `Uint8Array` for all other formats (`png`, `jpeg`, `webp`, `avif`, `jxl`, `pdf`, `raw`, `thumbhash`).
 :::
 
 ---
@@ -39,7 +39,7 @@ Returns a `string` for `svg` format, and `Uint8Array` for all other formats (`pn
 | `baseUrl` | `string`                                          |      -       | Base URL for resolving relative assets                                   |
 | `width`   | `number`                                          | **Required** | Viewport width (HTML) or target output width (image)                     |
 | `height`  | `number`                                          |    `auto`    | Viewport height (HTML) or target output height (image)                   |
-| `format`  | `OutputFormat`                                    |   `"png"`    | Target output format                                                     |
+| `format`  | `OutputFormat`                                    |   `"png"`    | Target output format (`png`, `jpeg`, `webp`, `avif`, `jxl`, `raw`, `thumbhash`, `svg`, `pdf`) |
 
 ### Encoding & Resizing
 

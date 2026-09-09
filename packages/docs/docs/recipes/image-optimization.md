@@ -17,12 +17,12 @@ title: 画像相互変換・最適化 & ThumbHash
 
 | 入力形式 (自動判別)          | 変換可能な出力フォーマット                                      |
 | ---------------------------- | --------------------------------------------------------------- |
-| **PNG**                      | `webp`, `avif`, `jpeg`, `png`, `raw`, `thumbhash`, `svg`, `pdf` |
-| **JPEG**                     | `webp`, `avif`, `jpeg`, `png`, `raw`, `thumbhash`, `svg`, `pdf` |
-| **WebP**                     | `avif`, `webp`, `jpeg`, `png`, `raw`, `thumbhash`, `svg`, `pdf` |
-| **GIF** (アニメーション含む) | `webp` (アニメーション保持可), `png`, `jpeg`, `avif`, etc.      |
-| **AVIF**                     | `webp`, `jpeg`, `png`, `raw`, `thumbhash`, `svg`, `pdf`         |
-| **BMP**                      | `webp`, `avif`, `jpeg`, `png`, `raw`, `thumbhash`, `svg`, `pdf` |
+| **PNG**                      | `webp`, `avif`, `jxl`, `jpeg`, `png`, `raw`, `thumbhash`, `svg`, `pdf` |
+| **JPEG**                     | `webp`, `avif`, `jxl`, `jpeg`, `png`, `raw`, `thumbhash`, `svg`, `pdf` |
+| **WebP**                     | `avif`, `jxl`, `webp`, `jpeg`, `png`, `raw`, `thumbhash`, `svg`, `pdf` |
+| **GIF** (アニメーション含む) | `webp` (アニメーション保持可), `png`, `jpeg`, `avif`, `jxl`, etc.      |
+| **AVIF**                     | `webp`, `jxl`, `jpeg`, `png`, `raw`, `thumbhash`, `svg`, `pdf`         |
+| **BMP**                      | `webp`, `avif`, `jxl`, `jpeg`, `png`, `raw`, `thumbhash`, `svg`, `pdf` |
 
 ---
 

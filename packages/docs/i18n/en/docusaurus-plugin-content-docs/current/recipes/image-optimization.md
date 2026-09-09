@@ -17,12 +17,12 @@ Input image buffers (`Uint8Array` or `Buffer`) are automatically detected via ma
 
 | Input Format (Auto-detected) | Available Output Formats                                        |
 | ---------------------------- | --------------------------------------------------------------- |
-| **PNG**                      | `webp`, `avif`, `jpeg`, `png`, `raw`, `thumbhash`, `svg`, `pdf` |
-| **JPEG**                     | `webp`, `avif`, `jpeg`, `png`, `raw`, `thumbhash`, `svg`, `pdf` |
-| **WebP**                     | `avif`, `webp`, `jpeg`, `png`, `raw`, `thumbhash`, `svg`, `pdf` |
-| **GIF** (including animated) | `webp` (with animation), `png`, `jpeg`, `avif`, etc.            |
-| **AVIF**                     | `webp`, `jpeg`, `png`, `raw`, `thumbhash`, `svg`, `pdf`         |
-| **BMP**                      | `webp`, `avif`, `jpeg`, `png`, `raw`, `thumbhash`, `svg`, `pdf` |
+| **PNG**                      | `webp`, `avif`, `jxl`, `jpeg`, `png`, `raw`, `thumbhash`, `svg`, `pdf` |
+| **JPEG**                     | `webp`, `avif`, `jxl`, `jpeg`, `png`, `raw`, `thumbhash`, `svg`, `pdf` |
+| **WebP**                     | `avif`, `jxl`, `webp`, `jpeg`, `png`, `raw`, `thumbhash`, `svg`, `pdf` |
+| **GIF** (including animated) | `webp` (with animation), `png`, `jpeg`, `avif`, `jxl`, etc.            |
+| **AVIF**                     | `webp`, `jxl`, `jpeg`, `png`, `raw`, `thumbhash`, `svg`, `pdf`         |
+| **BMP**                      | `webp`, `avif`, `jxl`, `jpeg`, `png`, `raw`, `thumbhash`, `svg`, `pdf` |
 
 ---
 
