@@ -1,5 +1,10 @@
 #include "text_renderer.h"
 
+// P2b: 本ファイル(約504行)の責務: 描画のみ (振る舞い不変)。
+// shaping/layout は TextLayout、装飾線は TextDecorationRenderer、
+// 座標は TextGeometry、Unicode判定は UnicodeService に委譲する。
+// 本ファイルに shaping/layout ロジックの複製を持ち込まない。
+
 #include <algorithm>
 #include <cstring>
 

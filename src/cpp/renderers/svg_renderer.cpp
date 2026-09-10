@@ -1,14 +1,29 @@
 #include "svg_renderer.h"
 
+// P2b: 本ファイル(約1756行)の責務分割マップ (振る舞い不変・段階移行用)。
+//   svg_path     : has_radius / path_from_rrect / get_adjusted_radius (rrect→SVG path)
+//   svg_element  : FastTag / SvgScanner / serializeFastTag (タグ走査・再出力)
+//   svg_text     : processTextDraw / TextClipBounds (テキスト描画情報のSVG化)
+//   svg_filter   : generateDefs (shadow/filter/mask/gradient の <defs> 生成)
+//   svg_serialize: finalizeSvg (タグ注入・defs差し込み) + render*ToSvg (公開入口)
+// 将来の物理分割時は上記単位で svg_<name>.cpp へ切り出す。共通SVG互換パッチは
+// common/svg_patch.cpp (patch_svg_data: decode経路用) が担当し、
+// 本ファイルの finalizeSvg (描画タグ注入経路) とは重複させない。
+
+// --- Includes: grouping (order unchanged) ---
+// [1] litehtml publicly-exposed headers
 #include <litehtml/master_css.h>
 #include <litehtml/render_item.h>
 
+// [2] C++ stdlib
 #include <cstdio>
 #include <memory>
 #include <sstream>
 #include <string>
 #include <string_view>
 #include <vector>
+
+// [3] project + Skia (order unchanged below)
 
 #include "api/satoru_api.h"
 #include "bridge/magic_tags.h"
@@ -35,10 +50,12 @@ std::vector<css_token_vector> parse_comma_separated_list(const css_token_vector&
 }
 
 namespace {
-static std::string bitmapToDataUrl(const SkBitmap& bitmap) {
-    // 寄せ: common/skia_encode の encode_png_data_url と等価のため委譲。
-    return html_to_image::encode_png_data_url(bitmap);
-}
+// P1: bitmapToDataUrl wrapper を除去し common/skia_encode::encode_png_data_url の直接呼び出しへ
+// (旧wrapperは等価委譲のみだったため振る舞い不変。新規throwなし)。
+
+// ============================================================================
+// Section svg_path: rrect→SVG path 変換ヘルパー (将来 svg_path.cpp)
+// ============================================================================
 
 static bool has_radius(const litehtml::border_radiuses& r) {
     return r.top_left_x > 0 || r.top_left_y > 0 || r.top_right_x > 0 || r.top_right_y > 0 ||
@@ -58,6 +75,10 @@ static std::string path_from_rrect(const litehtml::position& pos,
 
     return std::string(svgPath.c_str());
 }
+
+// ============================================================================
+// Section svg_element: 高速タグ走査 (FastTag/SvgScanner) (将来 svg_element.cpp)
+// ============================================================================
 
 struct TagAttr {
     std::string_view name;
@@ -123,7 +144,14 @@ struct FastTag {
                 int g = std::stoi(std::string(colorVal.substr(3, 2)), nullptr, 16);
                 int b = std::stoi(std::string(colorVal.substr(5, 2)), nullptr, 16);
                 return satoru::decode_magic_color((uint8_t)r, (uint8_t)g, (uint8_t)b);
+            } catch (const std::exception& e) {
+                // P0: 黙殺せず js_logger 経由で可視化。振る舞いは不変 ({} を返して継続)。
+                // "[CODE] ..." 形式は TS diagnostics.ts の DiagnosticMessage {code,message} に集約される想定。
+                SATORU_LOG_WARN("[MAGIC_COLOR_PARSE_FAILED] invalid magic color '%s': %s",
+                                std::string(colorVal).c_str(), e.what());
             } catch (...) {
+                SATORU_LOG_WARN(
+                    "[MAGIC_COLOR_PARSE_FAILED] invalid magic color (unknown error)");
             }
         } else if (colorVal.find("rgb(") == 0) {
             int r, g, b;
@@ -216,6 +244,7 @@ class SvgScanner {
     size_t getPos() const { return pos; }
 };
 
+// --- svg_path (続き): 背景レイヤーのクリップ補正 (serialize 直前配置は維持) ---
 static litehtml::border_radiuses get_adjusted_radius(const litehtml::background_layer& layer) {
     litehtml::position intersect_box = layer.border_box.intersect(layer.clip_box);
     if (intersect_box.width <= 0 || intersect_box.height <= 0) {
@@ -240,6 +269,10 @@ static litehtml::border_radiuses get_adjusted_radius(const litehtml::background_
 
     return rad;
 }
+
+// ============================================================================
+// Section svg_text: テキスト描画タグの再出力 (将来 svg_text.cpp)
+// ============================================================================
 
 static void serializeFastTag(std::string& out, const FastTag& tag) {
     out.append("<");
@@ -341,6 +374,10 @@ static void processTextDraw(FastTag& info, std::string& out, const text_draw_inf
     if (info.selfClosing) out.append(" /");
     out.append(">");
 }
+
+// ============================================================================
+// Section svg_filter: <defs> 生成 (shadow/filter/mask/gradient) (将来 svg_filter.cpp)
+// ============================================================================
 
 static std::string generateDefs(const container_skia& render_container,
                                 const SatoruContext& context, const SatoruRenderOptions& options) {
@@ -469,7 +506,7 @@ static std::string generateDefs(const container_skia& render_container,
                                           it->second.skImage->height());
                     SkCanvas bitmapCanvas(bitmap);
                     bitmapCanvas.drawImage(it->second.skImage, 0, 0);
-                    dataUrl = bitmapToDataUrl(bitmap);
+                    dataUrl = html_to_image::encode_png_data_url(bitmap);
                 }
 
                 float pW = (float)draw.layer.origin_box.width;
@@ -859,7 +896,7 @@ static std::string generateDefs(const container_skia& render_container,
                                                           it->second.skImage->height());
                                     SkCanvas bitmapCanvas(bitmap);
                                     bitmapCanvas.drawImage(it->second.skImage, 0, 0);
-                                    dataUrl = bitmapToDataUrl(bitmap);
+                                    dataUrl = html_to_image::encode_png_data_url(bitmap);
                                 }
                                 defs << "<image x=\"" << m.pos.x << "\" y=\"" << m.pos.y
                                      << "\" width=\"" << m.pos.width << "\" height=\""
@@ -931,6 +968,12 @@ static std::string generateDefs(const container_skia& render_container,
 
     return defs.str();
 }
+
+// ============================================================================
+// Section svg_serialize: 最終シリアライズ (タグ注入・defs差し込み) (将来 svg_serialize.cpp)
+// 注: 互換パッチ (feDropShadow/pattern/xlink) は common/svg_patch.cpp の
+// patch_svg_data (decode経路) が担当。ここでは再実装せず注入処理のみ行う。
+// ============================================================================
 
 static std::string finalizeSvg(std::string_view svg, SatoruContext& context,
                                const container_skia& container, const SatoruRenderOptions& options) {
@@ -1193,7 +1236,7 @@ static std::string finalizeSvg(std::string_view svg, SatoruContext& context,
                                                           it->second.skImage->height());
                                     SkCanvas bitmapCanvas(bitmap);
                                     bitmapCanvas.drawImage(it->second.skImage, 0, 0);
-                                    dataUrl = bitmapToDataUrl(bitmap);
+                                    dataUrl = html_to_image::encode_png_data_url(bitmap);
                                 }
                                 if (draw.layer.repeat == litehtml::background_repeat_no_repeat) {
                                     std::string preserveAspectRatio = "none";
@@ -1277,7 +1320,7 @@ static std::string finalizeSvg(std::string_view svg, SatoruContext& context,
                                               "\" height=\"" +
                                               std::to_string(info.draw_pos.height) +
                                               "\" preserveAspectRatio=\"none\" href=\"" +
-                                              bitmapToDataUrl(bitmap) + "\"");
+                                              html_to_image::encode_png_data_url(bitmap) + "\"");
                                 if (info.opacity < 1.0f)
                                     result.append(" opacity=\"" + std::to_string(info.opacity) +
                                                   "\"");
@@ -1565,7 +1608,7 @@ static std::string finalizeSvg(std::string_view svg, SatoruContext& context,
                                           std::to_string(border_box.width) + "\" height=\"" +
                                           std::to_string(border_box.height) +
                                           "\" preserveAspectRatio=\"none\" href=\"" +
-                                          bitmapToDataUrl(bitmap) + "\"");
+                                          html_to_image::encode_png_data_url(bitmap) + "\"");
                             if (opacity < 1.0f)
                                 result.append(" opacity=\"" + std::to_string(opacity) + "\"");
                             result.append(" clip-path=\"url(#clip-gradient-" +
@@ -1622,6 +1665,10 @@ static std::string finalizeSvg(std::string_view svg, SatoruContext& context,
     return result;
 }
 }  // namespace
+
+// ============================================================================
+// Section svg_serialize (公開入口): SkSVGCanvas 描画→finalizeSvg へ委譲
+// ============================================================================
 
 std::string renderDocumentToSvg(SatoruInstance* inst, int width, int height,
                                 const SatoruRenderOptions& options) {

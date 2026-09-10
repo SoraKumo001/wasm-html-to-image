@@ -21,70 +21,87 @@
 #include "utils/logging.h"
 
 class container_skia : public litehtml::document_container {
-    SkCanvas *m_canvas;
-    int m_width;
-    int m_height;
-    SatoruContext &m_context;
-    ResourceManager *m_resourceManager;
-
-    std::vector<shadow_info> m_usedShadows;
-    std::vector<text_shadow_info> m_usedTextShadows;
-    std::vector<image_draw_info> m_usedImageDraws;
-    std::vector<conic_gradient_info> m_usedConicGradients;
-    std::vector<radial_gradient_info> m_usedRadialGradients;
-    std::vector<linear_gradient_info> m_usedLinearGradients;
-    std::vector<text_draw_info> m_usedTextDraws;
-    std::vector<filter_info> m_usedFilters;
-    std::vector<backdrop_filter_info> m_usedBackdropFilters;
-    std::vector<mask_info> m_usedMasks;
-    std::vector<border_image_info> m_usedBorderImages;
-
-    std::set<char32_t> m_usedCodepoints;
-    std::set<font_request> m_requestedFontAttributes;
-
-    std::set<font_request> m_missingFonts;
-    int m_last_bidi_level = -1;
-    int m_last_base_level = -1;
-
-    std::vector<bool> m_asciiUsed;
-
-    std::vector<std::pair<litehtml::position, litehtml::border_radiuses>> m_clips;
-    std::vector<float> m_opacity_stack;
-
-    bool m_tagging;
-    bool m_textToPaths = false;
-
-    std::vector<std::string> m_usedInlineSvgs;
-    std::vector<litehtml::position> m_inlineSvgPositions;
-    std::vector<clip_info> m_usedClips;
-    std::vector<clip_path_info> m_usedClipPaths;
-    std::vector<std::pair<litehtml::css_token_vector, litehtml::position>> m_mask_stack;
-    std::vector<SkPath> m_usedGlyphs;
-    std::vector<glyph_draw_info> m_usedGlyphDraws;
-
+    // ── P2a: 共有状態の責務別分離 ──
+    // 5分割ファイルと対応: paint→container_skia.cpp (draw_*系)+helpers(無状態純粋関数),
+    // clip(+mask)→container_skia_clip.cpp, filter→container_skia_filters.cpp,
+    // transform(+layer)→container_skia_transforms.cpp, text→container_skia.cpp
+    // (create_font/draw_text系)。振る舞い・公開getter・litehtml I/Fは不変。
+    // 例外: m_usedGlyphs / m_usedGlyphDraws は core/text/tagging_context.h が
+    // 参照束縛するためクラス直下に残す (scope外ファイルに触れないため)。
     // Pending text-clip gradients for PNG background-clip: text support
     struct pending_text_clip {
         litehtml::background_layer layer;
         litehtml::background_layer::linear_gradient gradient;
     };
-    std::vector<pending_text_clip> m_pending_text_clips;
+    struct PaintState {
+        std::vector<shadow_info> shadows;
+        std::vector<text_shadow_info> textShadows;
+        std::vector<image_draw_info> imageDraws;
+        std::vector<conic_gradient_info> conicGradients;
+        std::vector<radial_gradient_info> radialGradients;
+        std::vector<linear_gradient_info> linearGradients;
+        std::vector<text_draw_info> textDraws;
+        std::vector<border_image_info> borderImages;
+        std::vector<std::string> inlineSvgs;
+        std::vector<litehtml::position> inlineSvgPositions;
+        std::vector<pending_text_clip> pendingTextClips;
+        std::vector<float> opacityStack;
+    };
+    struct ClipState {
+        std::vector<std::pair<litehtml::position, litehtml::border_radiuses>> clips;
+        std::vector<clip_info> usedClips;
+        std::vector<clip_path_info> usedClipPaths;
+        std::vector<std::pair<litehtml::css_token_vector, litehtml::position>> maskStack;
+        std::vector<mask_info> usedMasks;
+        int clipPathDepth = 0;
+        int maskDepth = 0;
+        mutable std::vector<bool> svgClipActive;
+    };
+    struct FilterState {
+        std::vector<filter_info> filters;
+        std::vector<backdrop_filter_info> backdropFilters;
+        int depth = 0;
+    };
+    struct TransformState {
+        int depth = 0;
+    };
+    struct TextState {
+        std::set<char32_t> usedCodepoints;
+        std::set<font_request> requestedAttrs;
+        std::set<font_request> missingFonts;
+        int lastBidiLevel = -1;
+        int lastBaseLevel = -1;
+        std::vector<bool> asciiUsed;
+        std::map<font_request, std::vector<font_info*>> createdFonts;
+        std::map<font_request, std::set<char32_t>> measuredCodepoints;
+        satoru::TextBatcher* batcher = nullptr;
+    };
 
-    int m_filter_stack_depth = 0;
-    int m_transform_stack_depth = 0;
-    int m_clip_path_stack_depth = 0;
-    int m_mask_stack_depth = 0;
-    mutable std::vector<bool> m_svg_clip_active_stack;
+    SkCanvas* m_canvas;
+    int m_width;
+    int m_height;
+    SatoruContext& m_context;
+    ResourceManager* m_resourceManager;
+
+    PaintState m_paint;
+    ClipState m_clip;
+    FilterState m_filter;
+    TransformState m_transform;
+    TextState m_text;
+
+    std::vector<SkPath> m_usedGlyphs;
+    std::vector<glyph_draw_info> m_usedGlyphDraws;
+
+    bool m_tagging;
+    bool m_textToPaths = false;
+
     litehtml::media_type m_media_type;
 
-    satoru::TextBatcher *m_textBatcher = nullptr;
-
-    std::map<font_request, std::vector<font_info *>> m_createdFonts;
-    std::map<font_request, std::set<char32_t>> m_measuredFontCodepoints;
     const litehtml::document *m_doc = nullptr;
 
     float get_current_opacity() const {
         float opacity = 1.0f;
-        for (float o : m_opacity_stack) {
+        for (float o : m_paint.opacityStack) {
             opacity *= o;
         }
         return opacity;
@@ -98,11 +115,11 @@ class container_skia : public litehtml::document_container {
 
     void set_canvas(SkCanvas *canvas) {
         m_canvas = canvas;
-        if (m_textBatcher) {
-            m_textBatcher->flush();
-            delete m_textBatcher;
+        if (m_text.batcher) {
+            m_text.batcher->flush();
+            delete m_text.batcher;
         }
-        m_textBatcher = new satoru::TextBatcher(&m_context, m_canvas);
+        m_text.batcher = new satoru::TextBatcher(&m_context, m_canvas);
     }
     void set_height(int h) { m_height = h; }
     void set_document(const litehtml::document *doc) { m_doc = doc; }
@@ -111,34 +128,38 @@ class container_skia : public litehtml::document_container {
     litehtml::media_type get_media_type() const { return m_media_type; }
     void set_text_to_paths(bool to_paths) { m_textToPaths = to_paths; }
     void flush() {
-        if (m_textBatcher && m_textBatcher->isActive()) {
-            m_textBatcher->flush();
+        if (m_text.batcher && m_text.batcher->isActive()) {
+            m_text.batcher->flush();
         }
     }
     void reset() {
-        if (m_textBatcher) m_textBatcher->flush();
-        m_usedShadows.clear();
-        m_usedTextShadows.clear();
-        m_usedImageDraws.clear();
-        m_usedConicGradients.clear();
-        m_usedRadialGradients.clear();
-        m_usedLinearGradients.clear();
-        m_usedTextDraws.clear();
-        m_usedInlineSvgs.clear();
-        m_usedFilters.clear();
-        m_usedBackdropFilters.clear();
-        m_usedBorderImages.clear();
-        m_usedClips.clear();
-        m_usedClipPaths.clear();
-        m_usedMasks.clear();
-        m_mask_stack.clear();
+        // P2a: struct分離後も clear 対象は旧 reset() と完全一致させる (振る舞い不変)。
+        // clear しないもの: m_text.* (codepoints/要求families/createdFonts/measured/
+        // asciiUsed/bidi level)/m_clip.clips rect stack/m_paint.opacityStack/
+        // m_paint.inlineSvgPositions/m_clip.svgClipActive。
+        if (m_text.batcher) m_text.batcher->flush();
+        m_paint.shadows.clear();
+        m_paint.textShadows.clear();
+        m_paint.imageDraws.clear();
+        m_paint.conicGradients.clear();
+        m_paint.radialGradients.clear();
+        m_paint.linearGradients.clear();
+        m_paint.textDraws.clear();
+        m_paint.inlineSvgs.clear();
+        m_filter.filters.clear();
+        m_filter.backdropFilters.clear();
+        m_paint.borderImages.clear();
+        m_clip.usedClips.clear();
+        m_clip.usedClipPaths.clear();
+        m_clip.usedMasks.clear();
+        m_clip.maskStack.clear();
         m_usedGlyphs.clear();
         m_usedGlyphDraws.clear();
-        m_filter_stack_depth = 0;
-        m_transform_stack_depth = 0;
-        m_clip_path_stack_depth = 0;
-        m_mask_stack_depth = 0;
-        m_pending_text_clips.clear();
+        m_filter.depth = 0;
+        m_transform.depth = 0;
+        m_clip.clipPathDepth = 0;
+        m_clip.maskDepth = 0;
+        m_paint.pendingTextClips.clear();
     }
 
     SkCanvas *get_canvas() const { return m_canvas; }
@@ -147,43 +168,43 @@ class container_skia : public litehtml::document_container {
     ResourceManager *get_resource_manager() const { return m_resourceManager; }
 
     int add_inline_svg(const std::string &xml, const litehtml::position &pos) {
-        m_usedInlineSvgs.push_back(xml);
-        m_inlineSvgPositions.push_back(pos);
-        return (int)m_usedInlineSvgs.size();
+        m_paint.inlineSvgs.push_back(xml);
+        m_paint.inlineSvgPositions.push_back(pos);
+        return (int)m_paint.inlineSvgs.size();
     }
 
-    const std::vector<std::string> &get_used_inline_svgs() const { return m_usedInlineSvgs; }
+    const std::vector<std::string> &get_used_inline_svgs() const { return m_paint.inlineSvgs; }
 
-    const std::vector<image_draw_info> &get_used_image_draws() const { return m_usedImageDraws; }
+    const std::vector<image_draw_info> &get_used_image_draws() const { return m_paint.imageDraws; }
     const std::vector<conic_gradient_info> &get_used_conic_gradients() const {
-        return m_usedConicGradients;
+        return m_paint.conicGradients;
     }
     const std::vector<radial_gradient_info> &get_used_radial_gradients() const {
-        return m_usedRadialGradients;
+        return m_paint.radialGradients;
     }
     const std::vector<linear_gradient_info> &get_used_linear_gradients() const {
-        return m_usedLinearGradients;
+        return m_paint.linearGradients;
     }
-    const std::vector<shadow_info> &get_used_shadows() const { return m_usedShadows; }
-    const std::vector<text_shadow_info> &get_used_text_shadows() const { return m_usedTextShadows; }
-    const std::vector<text_draw_info> &get_used_text_draws() const { return m_usedTextDraws; }
-    const std::vector<filter_info> &get_used_filters() const { return m_usedFilters; }
+    const std::vector<shadow_info> &get_used_shadows() const { return m_paint.shadows; }
+    const std::vector<text_shadow_info> &get_used_text_shadows() const { return m_paint.textShadows; }
+    const std::vector<text_draw_info> &get_used_text_draws() const { return m_paint.textDraws; }
+    const std::vector<filter_info> &get_used_filters() const { return m_filter.filters; }
     const std::vector<backdrop_filter_info> &get_used_backdrop_filters() const {
-        return m_usedBackdropFilters;
+        return m_filter.backdropFilters;
     }
     const std::vector<border_image_info> &get_used_border_images() const {
-        return m_usedBorderImages;
+        return m_paint.borderImages;
     }
-    const std::vector<clip_info> &get_used_clips() const { return m_usedClips; }
-    void push_svg_clip_active(bool active) const { m_svg_clip_active_stack.push_back(active); }
+    const std::vector<clip_info> &get_used_clips() const { return m_clip.usedClips; }
+    void push_svg_clip_active(bool active) const { m_clip.svgClipActive.push_back(active); }
     bool pop_svg_clip_active() const {
-        if (m_svg_clip_active_stack.empty()) return false;
-        bool active = m_svg_clip_active_stack.back();
-        m_svg_clip_active_stack.pop_back();
+        if (m_clip.svgClipActive.empty()) return false;
+        bool active = m_clip.svgClipActive.back();
+        m_clip.svgClipActive.pop_back();
         return active;
     }
-    const std::vector<clip_path_info> &get_used_clip_paths() const { return m_usedClipPaths; }
-    const std::vector<mask_info> &get_used_masks() const { return m_usedMasks; }
+    const std::vector<clip_path_info> &get_used_clip_paths() const { return m_clip.usedClipPaths; }
+    const std::vector<mask_info> &get_used_masks() const { return m_clip.usedMasks; }
     const std::vector<SkPath> &get_used_glyphs() const { return m_usedGlyphs; }
     const std::vector<glyph_draw_info> &get_used_glyph_draws() const { return m_usedGlyphDraws; }
 
@@ -200,12 +221,12 @@ class container_skia : public litehtml::document_container {
         return (int)m_usedGlyphDraws.size();
     }
 
-    const std::set<char32_t> &get_used_codepoints() const { return m_usedCodepoints; }
+    const std::set<char32_t> &get_used_codepoints() const { return m_text.usedCodepoints; }
     const std::set<font_request> &get_requested_font_attributes() const {
-        return m_requestedFontAttributes;
+        return m_text.requestedAttrs;
     }
 
-    const std::set<font_request> &get_missing_fonts() const { return m_missingFonts; }
+    const std::set<font_request> &get_missing_fonts() const { return m_text.missingFonts; }
 
     void collect_used_font_characters(const font_request &req, std::vector<char32_t> &out) const;
     void collect_measured_font_characters(const font_request &req,

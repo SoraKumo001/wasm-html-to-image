@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "api/js_logger.h"
+#include "common/string_utils.h"
 #include "core/container_skia.h"
 #include "core/master_css.h"
 #include "core/resource_manager.h"
@@ -27,27 +28,14 @@
 // --- Global Logger (for legacy SATORU_LOG_* macros) ---
 static satoru::JsLogger g_js_logger;
 
-// --- Helpers ---
-namespace {
-std::string json_escape(const std::string& s) {
-    std::string result;
-    result.reserve(s.size() + 16);
-    for (unsigned char c : s) {
-        if (c == '"')
-            result += "\\\"";
-        else if (c == '\\')
-            result += "\\\\";
-        else if (c <= 0x1f) {
-            char buf[7];
-            snprintf(buf, sizeof(buf), "\\u%04x", c);
-            result += buf;
-        } else {
-            result += (char)c;
-        }
-    }
-    return result;
-}
+// P1: 共有JsLoggerアクセサ (宣言は satoru_api.h)。converter側の log level 集約用。
+// 追加シンボルのみで既存ABI不変。
+satoru::JsLogger* satoru_api_get_js_logger() { return &g_js_logger; }
 
+// --- Helpers ---
+// P1: 汎用文字列処理 (json_escape / codepoints_to_utf8) は common/string_utils.h に寄せた。
+// 下記は satoru 固有のヘルパーのみ残す。返却値・throw 挙動は不変。
+namespace {
 typedef sk_sp<SkData> SkDataPtr;
 
 template <typename F>
@@ -62,31 +50,6 @@ const uint8_t* render_and_store(SatoruInstance* inst, F render_func,
     const uint8_t* bytes = data->bytes();
     (inst->context.*setter)(std::move(data));
     return bytes;
-}
-
-std::string codepoints_to_utf8(std::vector<char32_t>& cps) {
-    std::sort(cps.begin(), cps.end());
-    cps.erase(std::unique(cps.begin(), cps.end()), cps.end());
-    std::string res;
-    res.reserve(cps.size() * 3);
-    for (char32_t cp : cps) {
-        if (cp <= 0x7F) {
-            res += (char)cp;
-        } else if (cp <= 0x7FF) {
-            res += (char)(0xC0 | (cp >> 6));
-            res += (char)(0x80 | (cp & 0x3F));
-        } else if (cp <= 0xFFFF) {
-            res += (char)(0xE0 | (cp >> 12));
-            res += (char)(0x80 | ((cp >> 6) & 0x3F));
-            res += (char)(0x80 | (cp & 0x3F));
-        } else if (cp <= 0x10FFFF) {
-            res += (char)(0xF0 | (cp >> 18));
-            res += (char)(0x80 | ((cp >> 12) & 0x3F));
-            res += (char)(0x80 | ((cp >> 6) & 0x3F));
-            res += (char)(0x80 | (cp & 0x3F));
-        }
-    }
-    return res;
 }
 }  // namespace
 
@@ -267,12 +230,16 @@ void SatoruInstance::collect_resources(const std::string& html, int width, int h
             }
         }
     } catch (const std::exception& e) {
+        // P0: ログにエラーコード prefix を付与 (TS diagnostics.ts の DiagnosticMessage.code に集約される想定)。
+        // 振る舞いは不変 (ログ後に再 throw。ABI/bindings 変更なし)。
         if (auto* logger = context.getLogger())
-            logger->logf(LogLevel::Error, "Exception in collect_resources: %s", e.what());
+            logger->logf(LogLevel::Error, "[COLLECT_RESOURCES_FAILED] Exception in collect_resources: %s",
+                         e.what());
         throw;
     } catch (...) {
         if (auto* logger = context.getLogger())
-            logger->log(LogLevel::Error, "Unknown exception in collect_resources");
+            logger->log(LogLevel::Error,
+                        "[COLLECT_RESOURCES_FAILED] Unknown exception in collect_resources");
         throw;
     }
 
@@ -306,7 +273,7 @@ void SatoruInstance::collect_resources(const std::string& html, int width, int h
             usedFontCharacters.empty() ? render_container->get_measured_font_codepoints(req)
                                        : nullptr;
         if (!usedFontCharacters.empty()) {
-            charactersStr = codepoints_to_utf8(usedFontCharacters);
+            charactersStr = html_to_image::codepoints_to_utf8(usedFontCharacters);
         }
         if (collect_profile_enabled) {
             profile_font_character_count += (int)usedFontCharacters.size();

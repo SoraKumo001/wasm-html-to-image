@@ -1,5 +1,11 @@
 #include "text_layout.h"
 
+// P2b: 本ファイル(約802行)の責務: shaping + layout (描画は text_renderer.cpp)。
+//   shaping: SkShaper 経路 (shapeText/shapeAnalyzedText/shapePreparedText)
+//   layout : analyze/measure/ellipsize/split/balance (計測・分割)
+// decoration/geometry/unicode へは委譲のみ (再実装禁止)。
+// skia_stubs (SkShaper スタブ) は本ファイルから直接呼ばず SkShaper API 越しに利用する。
+
 #include <linebreak.h>
 
 #include <algorithm>

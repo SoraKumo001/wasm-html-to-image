@@ -1,6 +1,9 @@
 #ifndef SATORU_TEXT_DECORATION_RENDERER_H
 #define SATORU_TEXT_DECORATION_RENDERER_H
 
+// P2b: decoration 担当 (下線/上線/取消線)。計測・ shaping は行わない。
+// TextRenderer::drawText からのみ呼ばれる想定。
+
 #include "bridge/bridge_types.h"
 #include "include/core/SkCanvas.h"
 #include "libs/litehtml/include/litehtml.h"

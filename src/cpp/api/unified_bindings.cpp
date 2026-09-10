@@ -15,7 +15,7 @@ using namespace emscripten;
 // JS公開形として HTML入力→C++内部で完結する unified (satoru描画→encode) とする:
 //  - SVG/PDF: satoru_api_render 直出力 (satoruネイティブ形式)
 //  - ラスタ: satoru_api_render でPNG中間 (C++内) → ImageDecoder::decode →
-//    html_to_image::render_bitmap_to_encoded (= encode_single_bitmap) で最終encode。
+//    html_to_image::render_bitmap_to_encoded (= encode_frames 単帧直呼び) で最終encode。
 // PNG中間はC++内に閉じ込め、JSへの受渡しは最終バイト列のみ (Bitmap直結方針)。
 // 戻りviewのlifetime保持用 (tempインスタンス破棄後も有効化するためコピー保持)。
 std::vector<uint8_t> g_last_unified_bytes;
@@ -54,8 +54,8 @@ val html_to_image_val(val htmls, int width, int height, int format, val options_
     enc_options.speed = speed;
     enc_options.animation = animation;
     html_to_image::EncodeFrameView view{&decoded.frames[0].bitmap, decoded.frames[0].duration_ms};
-    // render_bitmap_to_encoded 相当 (単帧のため encode_single_bitmap と等価。複数帧拡張時は
-    // encode_frames(views...) に切替え。animated WebPは現 unified 単帧形では単帧扱い)。
+    // render_bitmap_to_encoded 相当 (単帧のため encode_frames 1要素view直呼びと等価。
+    // 複数帧拡張時は views を複数要素化。animated WebPは現 unified 単帧形では単帧扱い)。
     html_to_image::EncodeResult result =
         html_to_image::render_bitmap_to_encoded(*view.bitmap, enc_options);
     if (!result.success()) return val::null();

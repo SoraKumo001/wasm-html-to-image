@@ -49,7 +49,7 @@ struct EncodeResult {
 sk_sp<SkData> encode_png(const SkPixmap& pixmap);
 
 // PNG encode + base64 `data:image/png` URL. Shared implementation behind
-// `svg_renderer.cpp` `bitmapToDataUrl` and `encode_image_to_svg` below.
+// `encode_image_to_svg` and direct `encode_png_data_url` callers (e.g. svg_renderer.cpp).
 // Returns "" when the bitmap cannot be encoded.
 std::string encode_png_data_url(const SkBitmap& bitmap);
 sk_sp<SkData> encode_webp_single(const SkPixmap& pixmap, float quality);
@@ -64,6 +64,9 @@ sk_sp<SkData> encode_thumbhash(const SkBitmap& bitmap);
 
 // --- 分岐dispatcher (image-opt encode() switchの移植) ---
 //
+// P1: `encode_frames` が唯一入口。`encode_single_bitmap` は単帧用 overload
+// (1要素view化して `encode_frames` へ委譲する薄い層) として残すが、新規呼び出しは
+// `encode_frames` へ寄せる (converter_api.cpp / unified_api.cpp は直呼び済み)。
 // frames[0] を単帧encoder入力とする点、None→raw_passthrough素通し、
 // RAW/ThumbHashの即時return相当を含め、元switchの挙動を維持する。
 // 文脈保持 (context.set_last_output等) は呼び出し側の責務とし、ここでは行わない。
@@ -71,7 +74,7 @@ EncodeResult encode_frames(const EncodeFrameView* frames, size_t count,
                            const ConverterEncodeOptions& options,
                            sk_sp<SkData> raw_passthrough = nullptr);
 
-// 単体bitmap用 overload。
+// 単体bitmap用 overload (P1: encode_frames への薄い委譲。新規呼び出しは encode_frames 直呼びを推奨)。
 EncodeResult encode_single_bitmap(const SkBitmap& bitmap, const ConverterEncodeOptions& options,
                                   sk_sp<SkData> raw_passthrough = nullptr);
 

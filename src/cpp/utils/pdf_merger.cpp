@@ -5,6 +5,8 @@
 #include <qpdf/QPDFPageDocumentHelper.hh>
 #include <qpdf/QPDFWriter.hh>
 
+#include "utils/logging.h"
+
 namespace satoru {
 
 std::vector<uint8_t> merge_pdf_binaries(const std::vector<const uint8_t*>& data_ptrs,
@@ -49,7 +51,11 @@ std::vector<uint8_t> merge_pdf_binaries(const std::vector<const uint8_t*>& data_
         return result;
 
     } catch (const std::exception& e) {
-        // In a real production app, we might want to log this error via SATORU_LOG_ERROR
+        // P0: 黙殺せず js_logger 経由で可視化。振る舞いは不変 (空 vector を返して継続)。
+        SATORU_LOG_ERROR("[PDF_MERGE_FAILED] merge_pdf_binaries failed: %s", e.what());
+        return {};
+    } catch (...) {
+        SATORU_LOG_ERROR("[PDF_MERGE_FAILED] merge_pdf_binaries failed: unknown error");
         return {};
     }
 }

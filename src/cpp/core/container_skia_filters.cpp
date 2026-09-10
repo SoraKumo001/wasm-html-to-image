@@ -1,3 +1,4 @@
+// P2a責務: filter + backdrop-filter (詳細は下記 責務 ブロック)。
 #include "bridge/magic_tags.h"
 #include "container_skia.h"
 #include "container_skia_helpers.h"
@@ -8,6 +9,10 @@
 #include "litehtml/render_item.h"
 #include "utils/skia_utils.h"
 
+// ────────────────────────────────────────────────────────────────────────────
+// 責務 (P2a): filter + backdrop-filter (状態は m_filter へ分離済み)
+// チェーン構築の純粋計算は container_skia_helpers.h の build_*_chain を使用。
+// 振る舞い不変・新規throwなし。
 // ────────────────────────────────────────────────────────────────────────────
 // Backdrop filter
 // ────────────────────────────────────────────────────────────────────────────
@@ -33,8 +38,8 @@ void container_skia::push_backdrop_filter(litehtml::uint_ptr hdc,
             info.box_pos.width, info.box_pos.height);
         info.opacity = get_current_opacity();
 
-        m_usedBackdropFilters.push_back(info);
-        int index = (int)m_usedBackdropFilters.size();
+        m_filter.backdropFilters.push_back(info);
+        int index = (int)m_filter.backdropFilters.size();
 
         SkPaint p;
         p.setColor(make_magic_color(satoru::MagicTag::BackdropFilterPush, index));
@@ -98,23 +103,23 @@ void container_skia::push_filter(litehtml::uint_ptr hdc, const litehtml::css_tok
         filter_info info;
         info.tokens = filter;
         info.opacity = get_current_opacity();
-        m_usedFilters.push_back(info);
-        int index = (int)m_usedFilters.size();
+        m_filter.filters.push_back(info);
+        int index = (int)m_filter.filters.size();
 
         SkPaint p;
         p.setColor(make_magic_color(satoru::MagicTag::FilterPush, index));
 
         SkRect rect;
-        if (!m_clips.empty()) {
-            rect = SkRect::MakeXYWH((float)m_clips.back().first.x, (float)m_clips.back().first.y,
-                                    (float)m_clips.back().first.width,
-                                    (float)m_clips.back().first.height);
+        if (!m_clip.clips.empty()) {
+            rect = SkRect::MakeXYWH((float)m_clip.clips.back().first.x, (float)m_clip.clips.back().first.y,
+                                    (float)m_clip.clips.back().first.width,
+                                    (float)m_clip.clips.back().first.height);
         } else {
             rect = SkRect::MakeWH((float)m_width, (float)m_height);
         }
 
         m_canvas->drawRect(rect, p);
-        m_filter_stack_depth++;
+        m_filter.depth++;
         return;
     }
 
@@ -124,16 +129,16 @@ void container_skia::push_filter(litehtml::uint_ptr hdc, const litehtml::css_tok
         SkPaint paint;
         paint.setImageFilter(last_filter);
         m_canvas->saveLayer(nullptr, &paint);
-        m_filter_stack_depth++;
+        m_filter.depth++;
     } else {
         m_canvas->save();
-        m_filter_stack_depth++;
+        m_filter.depth++;
     }
 }
 
 void container_skia::pop_filter(litehtml::uint_ptr hdc) {
-    if (m_filter_stack_depth <= 0) return;
-    m_filter_stack_depth--;
+    if (m_filter.depth <= 0) return;
+    m_filter.depth--;
 
     if (m_canvas) {
         flush();
@@ -141,10 +146,10 @@ void container_skia::pop_filter(litehtml::uint_ptr hdc) {
             SkPaint p;
             p.setColor(make_magic_color(satoru::MagicTag::FilterPop));
             SkRect rect;
-            if (!m_clips.empty()) {
+            if (!m_clip.clips.empty()) {
                 rect = SkRect::MakeXYWH(
-                    (float)m_clips.back().first.x, (float)m_clips.back().first.y,
-                    (float)m_clips.back().first.width, (float)m_clips.back().first.height);
+                    (float)m_clip.clips.back().first.x, (float)m_clip.clips.back().first.y,
+                    (float)m_clip.clips.back().first.width, (float)m_clip.clips.back().first.height);
             } else {
                 rect = SkRect::MakeWH((float)m_width, (float)m_height);
             }

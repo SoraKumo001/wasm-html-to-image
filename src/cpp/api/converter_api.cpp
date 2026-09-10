@@ -8,6 +8,8 @@
 // AVIF直書き・thumbhash直呼びはすべて dispatcher 配下に移譲した。
 #include "../common/image_decoder.h"
 #include "../common/skia_encode.h"
+#include "api/js_logger.h"
+#include "satoru_api.h"
 #include "unified_api.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkData.h"
@@ -268,7 +270,8 @@ std::string converter_api_get_format(ImageConverterInstance* inst) {
 }
 
 void converter_api_set_log_level(int level) {
-    // 正本は g_log_level 静的変数のみ (実出力は EM_JS js_on_log)。
-    // 統一ビルドでは共通ログへ転送する。EM_JS バインディングは main.cpp 側の責務。
-    html_to_image_log((LogLevel)level, "converter log level changed");
+    // P1: 未定義 `html_to_image_log` (宣言のみで定義なし) への参照を廃止し、
+    // satoru側と同一の共有JsLogger (satoru_api.cpp の g_js_logger) へ集約。
+    // 公開シンボル・bindings登録 (main.cpp)・正常系は不変。新規throwなし。
+    if (auto* logger = satoru_api_get_js_logger()) logger->setLogLevel((LogLevel)level);
 }

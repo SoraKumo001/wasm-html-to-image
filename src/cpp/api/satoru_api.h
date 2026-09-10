@@ -14,6 +14,14 @@
 #include "core/resource_manager.h"
 #include "core/satoru_context.h"
 
+// P1: 共有JsLoggerの唯一所有者は satoru_api.cpp の g_js_logger。
+// converter_api_set_log_level からも同一インスタンスへ集約するための
+// 追加アクセサ (既存シンボルのシグネチャ変更なし・bindings登録不変)。
+namespace satoru {
+class JsLogger;
+}
+satoru::JsLogger* satoru_api_get_js_logger();
+
 class SatoruInstance {
    public:
     SatoruContext context;

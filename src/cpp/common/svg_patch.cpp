@@ -10,6 +10,13 @@
 
 namespace html_to_image {
 
+// P2b: 本ファイル(約187行)の責務: SkData デコード経路のSVG互換パッチ (振る舞い不変)。
+//   Step1 feDropShadow展開 / Step2 pattern内linearGradient救済 / Step3 href→xlink:href
+// renderers/svg_renderer.cpp::finalizeSvg (描画タグ注入経路) とは役割分担し重複させない:
+//   - patch_svg_data: image_decoder 経由の外部SVGデコード前に適用 (raw SkData→SkData)
+//   - finalizeSvg   : SkSVGCanvas 出力に対する defs/タグ注入 (std::string 組立)
+// 3ステップの適用順序は互換性に影響するため変更禁止。新規throw禁止。
+
 // 移植元: image_converter_api.cpp:408-563 の static patch_svg_data を
 // html_to_image::patch_svg_data としてそのまま移設 (static を外したのみ)。
 // satoru側の no-op 版は不採用。差分は svg_patch.h のコメント参照。
@@ -19,6 +26,7 @@ sk_sp<SkData> patch_svg_data(const sk_sp<SkData>& data) {
     std::string patched_svg;
     bool changed = false;
 
+    // Step1 (svg_patch/feDropShadow): feDropShadow→Blur/Offset/Flood/Composite/Merge 展開
     // 1. Patch feDropShadow
     {
         std::string result;
@@ -74,6 +82,7 @@ sk_sp<SkData> patch_svg_data(const sk_sp<SkData>& data) {
         }
     }
 
+    // Step2 (svg_patch/pattern): pattern内linearGradient救済 (参照url(#)書換含む)
     // 2. Patch pattern containing linearGradient (Satori workaround)
     {
         std::string result;
@@ -145,6 +154,7 @@ sk_sp<SkData> patch_svg_data(const sk_sp<SkData>& data) {
         }
     }
 
+    // Step3 (svg_patch/xlink): data: href→xlink:href + xmlns:xlink 付与
     // 3. Patch href to xlink:href for embedded images and add xlink namespace if needed
     {
         std::string result;

@@ -14,11 +14,12 @@
 namespace html_to_image {
 
 // Satoru描画結果 SkBitmap → Converter encode への直接受渡しの薄い実装。
-// `common/skia_encode` の dispatcher (`encode_single_bitmap`) を呼ぶのみ。
-// 文脈保持 (context.set_last_output 等) は呼び出し側の責務 (ヘッダの lifetime注意参照)。
+// dispatcher唯一入口 `common/skia_encode::encode_frames` を直呼びする
+// (旧 `encode_single_bitmap` 経由と等価。文脈保持は呼び出し側の責務)。
 EncodeResult render_bitmap_to_encoded(const SkBitmap& bitmap,
                                       const ConverterEncodeOptions& options) {
-    return encode_single_bitmap(bitmap, options);
+    EncodeFrameView view{&bitmap, 0};
+    return encode_frames(&view, 1, options);
 }
 
 std::string encode_image_to_svg(const SkBitmap& bitmap) {

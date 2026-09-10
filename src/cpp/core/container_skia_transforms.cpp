@@ -1,3 +1,4 @@
+// P2a責務: transform + layer(opacity/blend) (詳細は下記 責務 ブロック)。
 #include "bridge/magic_tags.h"
 #include "container_skia.h"
 #include "container_skia_helpers.h"
@@ -5,11 +6,15 @@
 #include "include/core/SkRect.h"
 
 // ────────────────────────────────────────────────────────────────────────────
+// 責務 (P2a): transform + layer(opacity/blend) (状態は m_transform/m_paint へ分離済み)
+// 行列の単関数計算は container_skia_helpers.h の compute_transform_matrix を参照。
+// 振る舞い不変・新規throwなし。
+// ────────────────────────────────────────────────────────────────────────────
 // Layer (opacity + blend mode)
 // ────────────────────────────────────────────────────────────────────────────
 
 void container_skia::push_layer(litehtml::uint_ptr hdc, float opacity, litehtml::blend_mode bm) {
-    m_opacity_stack.push_back(opacity);
+    m_paint.opacityStack.push_back(opacity);
     if (m_canvas) {
         flush();
 
@@ -25,10 +30,10 @@ void container_skia::push_layer(litehtml::uint_ptr hdc, float opacity, litehtml:
                 p.setColor(make_magic_color(satoru::MagicTag::LayerPushBlend, packed));
             }
             SkRect rect;
-            if (!m_clips.empty()) {
+            if (!m_clip.clips.empty()) {
                 rect = SkRect::MakeXYWH(
-                    (float)m_clips.back().first.x, (float)m_clips.back().first.y,
-                    (float)m_clips.back().first.width, (float)m_clips.back().first.height);
+                    (float)m_clip.clips.back().first.x, (float)m_clip.clips.back().first.y,
+                    (float)m_clip.clips.back().first.width, (float)m_clip.clips.back().first.height);
             } else {
                 rect = SkRect::MakeWH((float)m_width, (float)m_height);
             }
@@ -45,9 +50,9 @@ void container_skia::push_layer(litehtml::uint_ptr hdc, float opacity, litehtml:
 }
 
 void container_skia::pop_layer(litehtml::uint_ptr hdc) {
-    if (m_opacity_stack.empty()) return;
-    float opacity = m_opacity_stack.back();
-    m_opacity_stack.pop_back();
+    if (m_paint.opacityStack.empty()) return;
+    float opacity = m_paint.opacityStack.back();
+    m_paint.opacityStack.pop_back();
 
     if (m_canvas) {
         flush();
@@ -55,10 +60,10 @@ void container_skia::pop_layer(litehtml::uint_ptr hdc) {
             SkPaint p;
             p.setColor(make_magic_color(satoru::MagicTag::LayerPop));
             SkRect rect;
-            if (!m_clips.empty()) {
+            if (!m_clip.clips.empty()) {
                 rect = SkRect::MakeXYWH(
-                    (float)m_clips.back().first.x, (float)m_clips.back().first.y,
-                    (float)m_clips.back().first.width, (float)m_clips.back().first.height);
+                    (float)m_clip.clips.back().first.x, (float)m_clip.clips.back().first.y,
+                    (float)m_clip.clips.back().first.width, (float)m_clip.clips.back().first.height);
             } else {
                 rect = SkRect::MakeWH((float)m_width, (float)m_height);
             }
@@ -81,7 +86,7 @@ void container_skia::push_transform(litehtml::uint_ptr hdc,
     flush();
 
     m_canvas->save();
-    m_transform_stack_depth++;
+    m_transform.depth++;
 
     float ox = pos.x + pos.width * 0.5f;
     float oy = pos.y + pos.height * 0.5f;
@@ -168,8 +173,8 @@ void container_skia::push_transform(litehtml::uint_ptr hdc,
 }
 
 void container_skia::pop_transform(litehtml::uint_ptr hdc) {
-    if (m_transform_stack_depth <= 0) return;
-    m_transform_stack_depth--;
+    if (m_transform.depth <= 0) return;
+    m_transform.depth--;
 
     if (m_canvas) {
         flush();

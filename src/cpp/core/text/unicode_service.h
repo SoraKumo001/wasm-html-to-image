@@ -1,6 +1,10 @@
 #ifndef SATORU_UNICODE_SERVICE_H
 #define SATORU_UNICODE_SERVICE_H
 
+// P2b: unicode 担当 (SkUnicode/libunibreak の窓口)。
+// skunicode_satoru (SkUnicode実装) の直接利用は本クラス経由に限定し、
+// shaping/layout/renderer からの分散参照を防ぐ。振る舞い不変。
+
 #include <memory>
 #include <string>
 #include <unordered_map>

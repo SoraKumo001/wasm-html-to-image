@@ -1,3 +1,4 @@
+// P2a責務: 無状態の純粋論理ヘルパーのみ (詳細は下記 責務 ブロック)。
 #include "container_skia_helpers.h"
 
 #include <algorithm>
@@ -13,6 +14,12 @@
 #include "include/effects/SkImageFilters.h"
 #include "libs/litehtml/include/litehtml/css_length.h"
 #include "libs/litehtml/include/litehtml/html.h"
+
+// ============================================================================
+// 責務 (P2a): 無状態の純粋論理ヘルパーのみ (インスタンス状態に依存しない)。
+// メンバ関数は置かない。paint/text の各メソッドから呼ばれる共通計算を集約する。
+// container_skia::to_skia_blend_mode は本ファイルの to_skia_blend_mode へ委譲する。
+// ============================================================================
 
 // ============================================================================
 // Internal helpers (not exported)

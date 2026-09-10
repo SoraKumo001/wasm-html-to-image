@@ -1,15 +1,16 @@
 #ifndef HTML_TO_IMAGE_UNIFIED_API_H
 #define HTML_TO_IMAGE_UNIFIED_API_H
 
-// api/unified_api: Satoru描画結果 → Converter encode の受渡し設計 (ヘッダのみ・実装なし)。
+// api/unified_api: Satoru描画結果 → Converter encode の受渡し dispatcher。
 //
 // 方針: Satoru側が描画した SkBitmap をPNG等の*中間バイト列なし*で直接
-// `common/skia_encode` の dispatcher へ渡す。シリアライズ/デシリアライズ往復を避け、
-// SkBitmap のピクセルをそのまま encoder 入力とする。
+// `common/skia_encode` の dispatcher 唯一入口 `encode_frames` へ渡す。
+// シリアライズ/デシリアライズ往復を避け、SkBitmap のピクセルをそのまま encoder 入力とする。
 //
-// 宣言のみの薄い設計ヘッダ。実装 (.cpp) は Phase2 の api/*.cpp 移植時に提供する。
-// 本ファイルは型宣言 + 呼び出し方針コメントのみを持ち、関数定義・Embind登録は含まない
-// (mangle/登録名衝突を避けるため。実登録は src/cpp/main.cpp の satoru_*/converter_* で行う)。
+// P1整理: satoru_*/converter_* 公開シンボルは main.cpp EMSCRIPTEN_BINDINGS (+C export)
+// のため薄いラッパとして維持する (文字通りの内部関数化はABI/bindings破壊のため行わない)。
+// 新規API・dispatcher追加は本ファイルに集約し、satoru_/converter_ 側への重複実装は避ける。
+// 宣言の追加のみ可。既存シグネチャ変更・新規throwは禁止。
 
 #include <cstddef>
 
@@ -25,9 +26,9 @@ namespace html_to_image {
 //   EncodeResult render_bitmap_to_encoded(const SkBitmap& bitmap,
 //                                         const ConverterEncodeOptions& options);
 //
-// 想定実装 (Phase2): `encode_single_bitmap(bitmap, options)` (複数フレーム時は
-// `encode_frames(views, count, options)`) を `common/skia_encode` 経由で呼ぶだけの
-// 薄いラッパ。`context.set_last_output` 等の文脈保持は呼び出し側
+// dispatcher唯一入口 `encode_frames` (単帧時は1要素view) を呼ぶだけの薄いラッパ。
+// `encode_single_bitmap` は同等処理の overload として残すが、新規呼び出しは
+// `encode_frames` へ寄せる。`context.set_last_output` 等の文脈保持は呼び出し側
 // (SatoruInstance / ImageConverterInstance 側) の責務とし、ここでは行わない
 // (skia_encode.h の dispatcher 設計に準拠)。
 EncodeResult render_bitmap_to_encoded(const SkBitmap& bitmap,
@@ -36,7 +37,7 @@ EncodeResult render_bitmap_to_encoded(const SkBitmap& bitmap,
 // --- Decoded-image -> vector wrappers (image-input svg/pdf path) ---
 //
 // SVG: bitmap を PNG encode → base64 data URL 化し、`<image>` 一枚で包む
-// (svg_renderer.cpp の bitmapToDataUrl と等価。テキストはパス化しない)。
+// (common/skia_encode::encode_png_data_url を直接利用。テキストはパス化しない)。
 // PDF: bitmap 一枚を 1 ページに等倍配置 (`drawImage`) した単頁PDF。
 // いずれも所有権は呼び出し側の bitmap が保持する (同期実行のみ)。
 std::string encode_image_to_svg(const SkBitmap& bitmap);

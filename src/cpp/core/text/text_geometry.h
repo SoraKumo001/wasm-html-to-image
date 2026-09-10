@@ -1,6 +1,8 @@
 #ifndef SATORU_TEXT_GEOMETRY_H
 #define SATORU_TEXT_GEOMETRY_H
 
+// P2b: geometry 担当 (論理→物理座標変換のみ)。shaping/描画は行わない。
+
 #include "bridge/bridge_types.h"
 #include "core/logical_geometry.h"
 #include "include/core/SkFont.h"

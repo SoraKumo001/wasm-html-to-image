@@ -2,6 +2,8 @@
 #ifndef SATORU_TEXT_TYPES_H
 #define SATORU_TEXT_TYPES_H
 
+// P2b: types 担当 (text/ 共有型のみ。ロジック禁止)。
+
 #include <algorithm>
 #include <cstdint>
 #include <string>

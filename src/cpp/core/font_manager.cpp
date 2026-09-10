@@ -1,5 +1,15 @@
 #include "font_manager.h"
 
+// P2b: 本ファイル(約812行)の責務整理マップ (振る舞い不変)。
+//   font_load    : SatoruFontManager ctor / loadFont / clear (登録・破棄)
+//   font_fallback: scanFontFaces / getFontUrls / getFontUrl / hasFontFaceSource /
+//                  matchFonts / getMatchedWeight / getMatchedSlant / selectFont (代替選択)
+//   font_cache   : g_* グローバルレジストリ / createSkFont (可変フォント複製cache含む)
+//   font_css     : cleanName / parseUnicodeRange / checkUnicodeRange / generateFontFaceCSS
+//                (SVG <defs> へ出す @font-face 生成は generateFontFaceCSS のみ)
+// 将来の物理分割時は上記単位で font_<name>.cpp へ切り出す。正常系不変・新規throwなし。
+// P0/P1 log規約: 本ファイルは SATORU_LOG_* のみ使用 (printf/puts 等の直接出力禁止)。
+
 #include <algorithm>
 #include <charconv>
 #include <memory>
@@ -37,6 +47,10 @@ std::string_view trim_view(std::string_view s) {
     auto end = s.find_last_not_of(" \t\r\n'\"");
     return s.substr(start, end - start + 1);
 }
+
+// ============================================================================
+// Section font_cache (global registries): インスタンス生成コスト削減用
+// ============================================================================
 
 // Global font registries to minimize instantiation overhead
 std::mutex g_font_mutex;
@@ -140,6 +154,10 @@ bool parse_weight_range(std::string_view s, int& start, int& end) {
 }
 }  // namespace
 
+// ============================================================================
+// Section font_load: 登録・破棄 (将来 font_load.cpp)
+// ============================================================================
+
 SatoruFontManager::SatoruFontManager() { m_fontMgr = get_global_font_mgr(); }
 
 bool SatoruFontManager::loadFont(const char* name, const uint8_t* data, int size, const char* url) {
@@ -239,6 +257,10 @@ void SatoruFontManager::clear() {
     m_fallbackTypefaces.clear();
     m_defaultTypeface = nullptr;
 }
+
+// ============================================================================
+// Section font_fallback (1/2): @font-face 走査・URL解決 (将来 font_fallback.cpp)
+// ============================================================================
 
 void SatoruFontManager::scanFontFaces(const std::string& css) {
     std::string_view css_sv = css;
@@ -467,6 +489,10 @@ bool SatoruFontManager::hasFontFaceSource(const std::string& family, const std::
     return false;
 }
 
+// ============================================================================
+// Section font_fallback (2/2): 最適マッチ選択 (将来 font_fallback.cpp)
+// ============================================================================
+
 std::vector<sk_sp<SkTypeface>> SatoruFontManager::matchFonts(const std::string& family, int weight,
                                                              SkFontStyle::Slant slant) {
     std::string cleanFamily = cleanName(family);
@@ -533,6 +559,10 @@ int SatoruFontManager::getMatchedSlant(sk_sp<SkTypeface> typeface, const std::st
     }
     return typeface->fontStyle().slant();
 }
+
+// ============================================================================
+// Section font_cache: SkFont 生成・可変フォント複製cache (将来 font_cache.cpp)
+// ============================================================================
 
 SkFont* SatoruFontManager::createSkFont(sk_sp<SkTypeface> typeface, float size, int weight) {
     if (!typeface) return nullptr;
@@ -603,6 +633,10 @@ SkFont* SatoruFontManager::createSkFont(sk_sp<SkTypeface> typeface, float size, 
     return font;
 }
 
+// ============================================================================
+// Section font_css: 名前正規化・unicode-range・@font-face CSS出力 (将来 font_cache.cpp)
+// ============================================================================
+
 std::string SatoruFontManager::cleanName(std::string_view name) const {
     std::string res;
     res.reserve(name.length());
@@ -651,7 +685,14 @@ void SatoruFontManager::parseUnicodeRange(
                 end = start;
             }
             outRanges.push_back({start, end});
+        } catch (const std::exception& e) {
+            // P0: 黙殺せず js_logger 経由で可視化。振る舞いは不変 (当該 segment を skip して継続)。
+            // "[CODE] ..." 形式は TS diagnostics.ts の DiagnosticMessage {code,message} に集約される想定。
+            SATORU_LOG_WARN("[FONT_UNICODE_RANGE_PARSE_FAILED] skip segment '%s': %s",
+                            segment.c_str(), e.what());
         } catch (...) {
+            SATORU_LOG_WARN("[FONT_UNICODE_RANGE_PARSE_FAILED] skip segment '%s': unknown error",
+                            segment.c_str());
         }
     }
 }

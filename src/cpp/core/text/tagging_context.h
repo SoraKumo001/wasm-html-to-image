@@ -1,6 +1,8 @@
 #ifndef SATORU_TAGGING_CONTEXT_H
 #define SATORU_TAGGING_CONTEXT_H
 
+// P2b: tagging 担当 (magic color 埋め込み)。TextRenderer 内部利用のみ。
+
 #include <set>
 #include <vector>
 

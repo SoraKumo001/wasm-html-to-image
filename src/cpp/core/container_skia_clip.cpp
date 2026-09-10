@@ -1,3 +1,4 @@
+// P2a責務: clip + clip-path + mask (詳細は下記 責務 ブロック)。
 #include <cmath>
 
 #include "bridge/magic_tags.h"
@@ -13,8 +14,16 @@ vector<css_token_vector> parse_comma_separated_list(const css_token_vector& toke
 #include "include/core/SkPathBuilder.h"
 #include "include/core/SkRRect.h"
 #include "include/core/SkRect.h"
+#include "include/core/SkSamplingOptions.h"
 #include "libs/litehtml/include/litehtml/css_length.h"
 #include "utils/skia_utils.h"
+
+// ────────────────────────────────────────────────────────────────────────────
+// 責務: clip + clip-path + mask (P2a)
+// container_skia.cpp から push_mask / pop_mask を移動 (mask は clip 系)。
+// paint 系 draw_* (draw_linear/radial/conic_gradient) の呼出しは残るが所有は
+// container_skia.cpp 側 (paint責務)。振る舞い不変・新規throwなし。
+// ────────────────────────────────────────────────────────────────────────────
 
 // ────────────────────────────────────────────────────────────────────────────
 // Internal helpers
@@ -51,10 +60,10 @@ void container_skia::set_clip(const litehtml::position& pos,
         clip_info info;
         info.pos = pos;
         info.radius = bdr_radius;
-        m_usedClips.push_back(info);
+        m_clip.usedClips.push_back(info);
 
         SkPaint p;
-        p.setColor(make_magic_color(satoru::MagicTag::ClipPush, (int)m_usedClips.size()));
+        p.setColor(make_magic_color(satoru::MagicTag::ClipPush, (int)m_clip.usedClips.size()));
         m_canvas->drawRect(SkRect::MakeXYWH(0, 0, 0.001f, 0.001f), p);
     } else {
         m_canvas->save();
@@ -62,11 +71,11 @@ void container_skia::set_clip(const litehtml::position& pos,
             m_canvas->clipRRect(make_rrect(pos, bdr_radius), true);
         }
     }
-    m_clips.push_back({pos, bdr_radius});
+    m_clip.clips.push_back({pos, bdr_radius});
 }
 
 void container_skia::del_clip() {
-    if (m_clips.empty()) return;
+    if (m_clip.clips.empty()) return;
     if (m_canvas) {
         flush();
         if (m_tagging) {
@@ -77,7 +86,7 @@ void container_skia::del_clip() {
             m_canvas->restore();
         }
     }
-    m_clips.pop_back();
+    m_clip.clips.pop_back();
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -297,23 +306,23 @@ void container_skia::push_clip_path(litehtml::uint_ptr hdc,
         clip_path_info info;
         info.tokens = clip_path;
         info.pos = pos;
-        m_usedClipPaths.push_back(info);
-        int index = (int)m_usedClipPaths.size();
+        m_clip.usedClipPaths.push_back(info);
+        int index = (int)m_clip.usedClipPaths.size();
 
         SkPaint p;
         p.setColor(make_magic_color(satoru::MagicTag::ClipPathPush, index));
 
         SkRect rect;
-        if (!m_clips.empty()) {
-            rect = SkRect::MakeXYWH((float)m_clips.back().first.x, (float)m_clips.back().first.y,
-                                    (float)m_clips.back().first.width,
-                                    (float)m_clips.back().first.height);
+        if (!m_clip.clips.empty()) {
+            rect = SkRect::MakeXYWH((float)m_clip.clips.back().first.x, (float)m_clip.clips.back().first.y,
+                                    (float)m_clip.clips.back().first.width,
+                                    (float)m_clip.clips.back().first.height);
         } else {
             rect = SkRect::MakeWH((float)m_width, (float)m_height);
         }
 
         m_canvas->drawRect(rect, p);
-        m_clip_path_stack_depth++;
+        m_clip.clipPathDepth++;
         return;
     }
 
@@ -321,16 +330,16 @@ void container_skia::push_clip_path(litehtml::uint_ptr hdc,
     if (!path.isEmpty()) {
         m_canvas->save();
         m_canvas->clipPath(path, true);
-        m_clip_path_stack_depth++;
+        m_clip.clipPathDepth++;
     } else {
         m_canvas->save();
-        m_clip_path_stack_depth++;
+        m_clip.clipPathDepth++;
     }
 }
 
 void container_skia::pop_clip_path(litehtml::uint_ptr hdc) {
-    if (m_clip_path_stack_depth <= 0) return;
-    m_clip_path_stack_depth--;
+    if (m_clip.clipPathDepth <= 0) return;
+    m_clip.clipPathDepth--;
 
     if (m_canvas) {
         flush();
@@ -338,10 +347,10 @@ void container_skia::pop_clip_path(litehtml::uint_ptr hdc) {
             SkPaint p;
             p.setColor(make_magic_color(satoru::MagicTag::ClipPathPop));
             SkRect rect;
-            if (!m_clips.empty()) {
+            if (!m_clip.clips.empty()) {
                 rect = SkRect::MakeXYWH(
-                    (float)m_clips.back().first.x, (float)m_clips.back().first.y,
-                    (float)m_clips.back().first.width, (float)m_clips.back().first.height);
+                    (float)m_clip.clips.back().first.x, (float)m_clip.clips.back().first.y,
+                    (float)m_clip.clips.back().first.width, (float)m_clip.clips.back().first.height);
             } else {
                 rect = SkRect::MakeWH((float)m_width, (float)m_height);
             }
@@ -352,7 +361,132 @@ void container_skia::pop_clip_path(litehtml::uint_ptr hdc) {
     }
 }
 
-// CSS mask, unknown property → container_skia.cpp (core)
+// ────────────────────────────────────────────────────────────────────────────
+// CSS mask (P2a: container_skia.cpp から移動。状態は m_clip へ分離済み)
+// ────────────────────────────────────────────────────────────────────────────
+
+void container_skia::push_mask(litehtml::uint_ptr hdc, const litehtml::css_token_vector& mask,
+                               const litehtml::position& pos) {
+    if (!m_canvas || mask.empty()) return;
+    flush();
+
+    if (m_tagging) {
+        mask_info info;
+        info.tokens = mask;
+        info.pos = pos;
+        m_clip.usedMasks.push_back(info);
+        int index = (int)m_clip.usedMasks.size();
+
+        SkPaint p;
+        p.setColor(make_magic_color(satoru::MagicTag::MaskPush, index));
+
+        SkRect rect;
+        if (!m_clip.clips.empty()) {
+            rect = SkRect::MakeXYWH((float)m_clip.clips.back().first.x,
+                                    (float)m_clip.clips.back().first.y,
+                                    (float)m_clip.clips.back().first.width,
+                                    (float)m_clip.clips.back().first.height);
+        } else {
+            rect = SkRect::MakeWH((float)m_width, (float)m_height);
+        }
+
+        m_canvas->drawRect(rect, p);
+        m_clip.maskDepth++;
+        return;
+    }
+
+    m_clip.maskStack.push_back({mask, pos});
+    m_canvas->saveLayer(
+        SkRect::MakeXYWH((float)pos.x, (float)pos.y, (float)pos.width, (float)pos.height), nullptr);
+    m_clip.maskDepth++;
+}
+
+void container_skia::pop_mask(litehtml::uint_ptr hdc) {
+    if (m_clip.maskDepth <= 0) return;
+    m_clip.maskDepth--;
+
+    if (m_canvas) {
+        flush();
+        if (m_tagging) {
+            SkPaint p;
+            p.setColor(make_magic_color(satoru::MagicTag::MaskPop));
+            SkRect rect;
+            if (!m_clip.clips.empty()) {
+                rect = SkRect::MakeXYWH(
+                    (float)m_clip.clips.back().first.x, (float)m_clip.clips.back().first.y,
+                    (float)m_clip.clips.back().first.width,
+                    (float)m_clip.clips.back().first.height);
+            } else {
+                rect = SkRect::MakeWH((float)m_width, (float)m_height);
+            }
+            m_canvas->drawRect(rect, p);
+            return;
+        }
+
+        auto mask_data = m_clip.maskStack.back();
+        m_clip.maskStack.pop_back();
+
+        const auto& mask_tokens = mask_data.first;
+        const auto& pos = mask_data.second;
+
+        // Start mask composite layer
+        SkPaint mask_composite_paint;
+        mask_composite_paint.setBlendMode(SkBlendMode::kDstIn);
+        m_canvas->saveLayer(nullptr, &mask_composite_paint);
+
+        auto layers = litehtml::parse_comma_separated_list(mask_tokens);
+
+        for (const auto& layer_tokens : layers) {
+            for (const auto& tok : layer_tokens) {
+                if (tok.type == litehtml::CV_FUNCTION) {
+                    std::string name = litehtml::lowcase(tok.name);
+                    if (name == "url") {
+                        if (!tok.value.empty()) {
+                            std::string url = tok.value.front().str;
+                            auto it = m_context.imageCache.find(url);
+                            if (it != m_context.imageCache.end() && it->second.skImage) {
+                                SkPaint p;
+                                p.setAntiAlias(true);
+                                m_canvas->drawImageRect(
+                                    it->second.skImage,
+                                    SkRect::MakeXYWH((float)pos.x, (float)pos.y, (float)pos.width,
+                                                     (float)pos.height),
+                                    SkSamplingOptions(SkFilterMode::kLinear), &p);
+                            }
+                        }
+                    } else if (name == "linear-gradient" || name == "repeating-linear-gradient" ||
+                               name == "radial-gradient" || name == "repeating-radial-gradient" ||
+                               name == "conic-gradient" || name == "repeating-conic-gradient") {
+                        litehtml::gradient g;
+                        if (litehtml::parse_gradient(tok, g, nullptr)) {
+                            litehtml::background_layer layer;
+                            layer.origin_box = pos;
+                            layer.border_box = pos;
+                            layer.clip_box = pos;
+
+                            if (name.find("linear") != std::string::npos) {
+                                auto grad = litehtml::background::get_linear_gradient(g, pos);
+                                if (grad) draw_linear_gradient(0, layer, *grad);
+                            } else if (name.find("radial") != std::string::npos) {
+                                auto grad = litehtml::background::get_radial_gradient(g, pos);
+                                if (grad) draw_radial_gradient(0, layer, *grad);
+                            } else {
+                                auto grad = litehtml::background::get_conic_gradient(g, pos);
+                                if (grad) draw_conic_gradient(0, layer, *grad);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        m_canvas->restore();  // composite mask into content
+        m_canvas->restore();  // composite content into main canvas
+    }
+}
+
+// on_unknown_property は本ファイル所属 (下記)。旧末尾コメントの
+// 「→ container_skia.cpp」は陳腐化のため削除 (P2a)。
 
 void container_skia::on_unknown_property(const litehtml::string& name,
                                          const litehtml::css_token_vector& value) {

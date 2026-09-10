@@ -1,6 +1,11 @@
 ﻿#ifndef SATORU_TEXT_RENDERER_H
 #define SATORU_TEXT_RENDERER_H
 
+// P2b: TextRenderer/TextBatcher は描画担当 (振る舞い不変)。
+// shaping/layout は TextLayout、装飾線は TextDecorationRenderer、
+// 座標変換は TextGeometry、Unicode判定は UnicodeService に委譲する。
+// 本ヘッダに新規ロジックは持たせない (責務の逆流防止)。
+
 #include <set>
 #include <vector>
 
