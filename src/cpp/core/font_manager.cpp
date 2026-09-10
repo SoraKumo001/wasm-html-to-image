@@ -738,7 +738,7 @@ SkFont SatoruFontManager::selectFont(char32_t u, font_info* fi, SkFont* lastSele
 }
 
 SkFont SatoruFontManager::selectFont(char32_t u, font_info* fi, SkFont* lastSelectedFont,
-                                     const satoru::UnicodeService& unicode, bool is_emoji,
+                                     const satoru::UnicodeService& /*unicode*/, bool is_emoji,
                                      bool is_mark) {
     SkFont* selected_font = nullptr;
 

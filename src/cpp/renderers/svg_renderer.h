@@ -5,7 +5,7 @@
 
 #include "core/satoru_context.h"
 
-struct SatoruInstance;
+class SatoruInstance;
 std::string renderDocumentToSvg(SatoruInstance* inst, int width, int height,
                                 const SatoruRenderOptions& options);
 

@@ -4,7 +4,7 @@
 #include "core/satoru_context.h"
 #include "include/core/SkData.h"
 
-struct SatoruInstance;
+class SatoruInstance;
 sk_sp<SkData> renderDocumentToWebp(SatoruInstance* inst, int width, int height,
                                    const SatoruRenderOptions& options);
 

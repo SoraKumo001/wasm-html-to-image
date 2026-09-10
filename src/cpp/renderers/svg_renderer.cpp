@@ -1,7 +1,7 @@
 #include "svg_renderer.h"
 
 // P2b: 本ファイル(約1756行)の責務分割マップ (振る舞い不変・段階移行用)。
-//   svg_path     : has_radius / path_from_rrect / get_adjusted_radius (rrect→SVG path)
+//   svg_path     : path_from_rrect / get_adjusted_radius (rrect→SVG path)
 //   svg_element  : FastTag / SvgScanner / serializeFastTag (タグ走査・再出力)
 //   svg_text     : processTextDraw / TextClipBounds (テキスト描画情報のSVG化)
 //   svg_filter   : generateDefs (shadow/filter/mask/gradient の <defs> 生成)
@@ -56,12 +56,6 @@ namespace {
 // ============================================================================
 // Section svg_path: rrect→SVG path 変換ヘルパー (将来 svg_path.cpp)
 // ============================================================================
-
-static bool has_radius(const litehtml::border_radiuses& r) {
-    return r.top_left_x > 0 || r.top_left_y > 0 || r.top_right_x > 0 || r.top_right_y > 0 ||
-           r.bottom_right_x > 0 || r.bottom_right_y > 0 || r.bottom_left_x > 0 ||
-           r.bottom_left_y > 0;
-}
 
 static std::string path_from_rrect(const litehtml::position& pos,
                                    const litehtml::border_radiuses& r) {
@@ -305,15 +299,12 @@ static void processTextDraw(FastTag& info, std::string& out, const text_draw_inf
     if (drawInfo.color.alpha == 0 && !active_text_clips.empty()) {
         float x = 0;
         float y = 0;
-        bool foundPos = false;
         for (const auto& attr : info.attrs) {
             if (attr.name == "x") {
                 x = std::stof(std::string(attr.value));
-                foundPos = true;
             }
             if (attr.name == "y") {
                 y = std::stof(std::string(attr.value));
-                foundPos = true;
             }
             if (attr.name == "transform") {
                 std::string t(attr.value);
@@ -1000,10 +991,7 @@ static std::string finalizeSvg(std::string_view svg, SatoruContext& context,
         result.append(text);
         if (scanner.isAtEnd()) break;
 
-        size_t tagStart = scanner.getPos();
         FastTag tag = scanner.parseTag();
-        size_t tagEnd = scanner.getPos();
-        std::string_view rawTag = svg.substr(tagStart, tagEnd - tagStart);
 
         if (tag.name.empty() || tag.name[0] == '!' || tag.name[0] == '?') {
             serializeFastTag(result, tag);

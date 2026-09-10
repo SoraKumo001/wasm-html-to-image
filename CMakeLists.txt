@@ -73,7 +73,8 @@ target_compile_options(litehtml PRIVATE ${COMMON_COMPILE_OPTIONS} -w)
 # --- Target: html_to_image_core (satoru_core + image_converter_core 統合予定) ---
 # Phase2で satoru_core由来 (container_skia/renderers等) と image_converter_core由来
 # (image_converter_context/thumbhash等) のOBJECTをここへ集約する。現時点ではmain.cppのみ。
-# NOTE(P3a): P2b 物理分割は別途のため、ここでのソース登録の追加削除はしない。
+# NOTE(P3a/P4): P2b 物理分割は別途。P4 paint分離で container_skia_paint.cpp を1行追加済み。
+# 以降のソース登録の追加削除はP2b側で行う。
 add_library(html_to_image_core OBJECT)
 target_sources(html_to_image_core PRIVATE
     src/cpp/main.cpp

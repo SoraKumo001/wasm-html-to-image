@@ -43,7 +43,6 @@ class TextBatcher {
         }
         bool operator!=(const Style& other) const { return !(*this == other); }
     };
-    ;
 
     TextBatcher(SatoruContext* ctx, SkCanvas* canvas)
         : m_ctx(ctx), m_canvas(canvas), m_active(false) {

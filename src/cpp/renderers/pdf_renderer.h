@@ -7,7 +7,7 @@
 #include "core/satoru_context.h"
 #include "include/core/SkData.h"
 
-struct SatoruInstance;
+class SatoruInstance;
 sk_sp<SkData> renderDocumentToPdf(SatoruInstance* inst, int width, int height,
                                   const SatoruRenderOptions& options);
 
