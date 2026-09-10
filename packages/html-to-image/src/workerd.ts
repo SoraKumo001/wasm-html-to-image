@@ -19,8 +19,7 @@
 import createHtmlToImageModule from "../dist/html-to-image.js";
 import htmlToImageWasm from "../dist/html-to-image.wasm";
 import {
-  loadHtmlToImageModule,
-  type EmscriptenModuleArg,
+  loadPrecompiledModule,
   type HtmlToImageModule,
 } from "./loader.js";
 import {
@@ -50,32 +49,7 @@ export type {
   CreateHtmlToImageModule,
 } from "./loader.js";
 
-/** Build the Emscripten module args overriding WASM instantiation. */
-function workerdModuleArg(wasm: WebAssembly.Module): EmscriptenModuleArg {
-  return {
-    instantiateWasm: (imports: unknown, successCallback: unknown) => {
-      // Cloudflare Workers requires using the pre-compiled WebAssembly.Module
-      WebAssembly.instantiate(wasm, imports as WebAssembly.Imports)
-        .then((instance) => {
-          (successCallback as (inst: unknown, mod: unknown) => void)(
-            instance,
-            wasm,
-          );
-        })
-        .catch((e) => {
-          console.error(
-            "wasm-html-to-image [workerd]: Wasm instantiation failed:",
-            e,
-          );
-        });
-      return {}; // Return empty object as emscripten expects
-    },
-  };
-}
-
-/** Module instances keyed by WASM binary: a second call with a different
- * `wasm` must not silently reuse the first one (previous bug). Failed loads
- * are evicted so a later call can retry. */
+/** Module instances keyed by WASM binary (cache owned here, loading in loader). */
 const moduleByWasm = new Map<WebAssembly.Module, Promise<HtmlToImageModule>>();
 
 /**
@@ -85,18 +59,12 @@ const moduleByWasm = new Map<WebAssembly.Module, Promise<HtmlToImageModule>>();
 export function getDefaultModule(
   wasm: WebAssembly.Module = htmlToImageWasm,
 ): Promise<HtmlToImageModule> {
-  let pending = moduleByWasm.get(wasm);
-  if (!pending) {
-    pending = loadHtmlToImageModule({
-      factory: createHtmlToImageModule,
-      moduleArg: workerdModuleArg(wasm),
-    });
-    moduleByWasm.set(wasm, pending);
-    pending.catch(() => {
-      if (moduleByWasm.get(wasm) === pending) moduleByWasm.delete(wasm);
-    });
-  }
-  return pending;
+  return loadPrecompiledModule(
+    createHtmlToImageModule,
+    wasm,
+    moduleByWasm,
+    "workerd",
+  );
 }
 
 /**

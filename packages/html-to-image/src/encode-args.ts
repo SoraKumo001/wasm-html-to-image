@@ -39,3 +39,59 @@ export function buildSatoruOptions(
   if (fit) o.fitType = FIT_INT[fit];
   return o;
 }
+
+/** Full satoru render-option fields (text, media, PDF metadata). */
+export interface FullSatoruOptionsInput {
+  crop: HtmlToImageOptions["crop"];
+  fit: HtmlToImageOptions["fit"];
+  textToPaths?: boolean;
+  mediaTypeInt: number;
+  pdfTitle?: string;
+  pdfAuthor?: string;
+  pdfSubject?: string;
+  pdfKeywords?: string;
+  pdfCreator?: string;
+  pdfProducer?: string;
+  pdfMargin?: { top?: number; right?: number; bottom?: number; left?: number };
+  pdfHeader?: string;
+  pdfFooter?: string;
+}
+
+/**
+ * Canonical full satoru render-option builder (正本はここ).
+ * `core.ts` HTML パスはこの関数のみを使い、個別組み立てをしない。
+ */
+export function buildFullSatoruOptions(
+  input: FullSatoruOptionsInput,
+): Record<string, unknown> {
+  const {
+    textToPaths,
+    mediaTypeInt,
+    pdfTitle,
+    pdfAuthor,
+    pdfSubject,
+    pdfKeywords,
+    pdfCreator,
+    pdfProducer,
+    pdfMargin,
+    pdfHeader,
+    pdfFooter,
+  } = input;
+  return {
+    ...buildSatoruOptions(input.crop, input.fit),
+    svgTextToPaths: textToPaths ?? true,
+    mediaType: mediaTypeInt,
+    pdfTitle: pdfTitle ?? "",
+    pdfAuthor: pdfAuthor ?? "",
+    pdfSubject: pdfSubject ?? "",
+    pdfKeywords: pdfKeywords ?? "",
+    pdfCreator: pdfCreator ?? "",
+    pdfProducer: pdfProducer ?? "",
+    pdfMarginTop: pdfMargin?.top ?? 0,
+    pdfMarginRight: pdfMargin?.right ?? 0,
+    pdfMarginBottom: pdfMargin?.bottom ?? 0,
+    pdfMarginLeft: pdfMargin?.left ?? 0,
+    pdfHeader: pdfHeader ?? "",
+    pdfFooter: pdfFooter ?? "",
+  };
+}

@@ -31,6 +31,7 @@ const getModule = async () => {
  * (`dist/html-to-image-wasm.js`, restored via `DecompressionStream`) handed
  * to the regular glue as `wasmBinary`, so no `.wasm` fetch/`locateFile`
  * is needed.
+ * Canonical `HtmlToImageWorker` type lives in `./workers.js`.
  */
-const map = initWorker(createRenderActions(getModule));
-export type HtmlToImageWorker = typeof map;
+initWorker(createRenderActions(getModule));
+export type { HtmlToImageWorker } from "./workers.js";

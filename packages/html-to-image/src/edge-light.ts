@@ -25,8 +25,7 @@
 // @ts-expect-error — dist/html-to-image.js is generated at build time
 import createHtmlToImageModule from "./html-to-image.js";
 import {
-  loadHtmlToImageModule,
-  type EmscriptenModuleArg,
+  loadPrecompiledModule,
   type HtmlToImageModule,
 } from "./loader.js";
 import {
@@ -56,31 +55,7 @@ export type {
   CreateHtmlToImageModule,
 } from "./loader.js";
 
-/** Build the Emscripten module args overriding WASM instantiation. */
-function edgeModuleArg(wasm: WebAssembly.Module): EmscriptenModuleArg {
-  return {
-    instantiateWasm: (imports: unknown, successCallback: unknown) => {
-      WebAssembly.instantiate(wasm, imports as WebAssembly.Imports)
-        .then((instance) => {
-          (successCallback as (inst: unknown, mod: unknown) => void)(
-            instance,
-            wasm,
-          );
-        })
-        .catch((e) => {
-          console.error(
-            "wasm-html-to-image [edge-light]: Wasm instantiation failed:",
-            e,
-          );
-        });
-      return {}; // Return empty object as emscripten expects
-    },
-  };
-}
-
-/** Module instances keyed by WASM binary: a second call with a different
- * `wasm` must not silently reuse the first one. Failed loads are evicted
- * so a later call can retry. */
+/** Module instances keyed by WASM binary (cache owned here, loading in loader). */
 const moduleByWasm = new Map<WebAssembly.Module, Promise<HtmlToImageModule>>();
 
 /**
@@ -90,18 +65,12 @@ const moduleByWasm = new Map<WebAssembly.Module, Promise<HtmlToImageModule>>();
 export function getDefaultModule(
   wasm: WebAssembly.Module,
 ): Promise<HtmlToImageModule> {
-  let pending = moduleByWasm.get(wasm);
-  if (!pending) {
-    pending = loadHtmlToImageModule({
-      factory: createHtmlToImageModule,
-      moduleArg: edgeModuleArg(wasm),
-    });
-    moduleByWasm.set(wasm, pending);
-    pending.catch(() => {
-      if (moduleByWasm.get(wasm) === pending) moduleByWasm.delete(wasm);
-    });
-  }
-  return pending;
+  return loadPrecompiledModule(
+    createHtmlToImageModule,
+    wasm,
+    moduleByWasm,
+    "edge-light",
+  );
 }
 
 /**

@@ -75,7 +75,59 @@ export const DIAGNOSTIC_CODES = {
   LIMIT_HOST_BLOCKED: "LIMIT_HOST_BLOCKED",
   /** Extension: a resource fetch (or resolveResource hook) failed. */
   RESOURCE_FETCH_FAILED: "RESOURCE_FETCH_FAILED",
+  /** C++ `[CODE]` prefix family (see `src/cpp/utils/logging.h` convention). */
+  MAGIC_COLOR_PARSE_FAILED: "MAGIC_COLOR_PARSE_FAILED",
+  FONT_UNICODE_RANGE_PARSE_FAILED: "FONT_UNICODE_RANGE_PARSE_FAILED",
+  COLLECT_RESOURCES_FAILED: "COLLECT_RESOURCES_FAILED",
+  JS_LOG_FORWARD_FAILED: "JS_LOG_FORWARD_FAILED",
+  PDF_MERGE_FAILED: "PDF_MERGE_FAILED",
 } as const;
+
+/**
+ * C++ log convention (`src/cpp/utils/logging.h`): error/warning messages
+ * carry a `[CODE] human-readable detail` prefix where CODE maps to
+ * `DiagnosticMessage.code`. This thin layer parses that prefix back into
+ * `{code, message, source}` without touching C++ or message text.
+ */
+export const CPP_LOG_PREFIX_RE = /^\[([A-Z0-9_]+)\]\s*(.*)$/;
+
+/** Split a `[CODE] detail` string; `null` when no prefix is present. */
+export function parseBracketPrefix(text: string): {
+  code: string;
+  message: string;
+} | null {
+  const m = CPP_LOG_PREFIX_RE.exec(text);
+  if (!m) return null;
+  return { code: m[1], message: m[2] };
+}
+
+/**
+ * Parse a raw C++-style log line into a `DiagnosticMessage`.
+ * No-prefix input falls back to `fallbackCode` with the raw text intact.
+ */
+export function parseCppLogToDiagnostic(
+  raw: string,
+  fallbackCode: string,
+  source?: string,
+): DiagnosticMessage {
+  const parsed = parseBracketPrefix(raw);
+  if (!parsed) return { code: fallbackCode, message: raw, source };
+  return { code: parsed.code, message: parsed.message, source };
+}
+
+/**
+ * Normalize a caught value into a `DiagnosticMessage`, preserving C++
+ * `[CODE]` prefixes when present. Non-prefixed messages keep
+ * `fallbackCode`, so existing JS-only paths are byte-identical.
+ */
+export function errorToDiagnostic(
+  e: unknown,
+  fallbackCode: string,
+  source?: string,
+): DiagnosticMessage {
+  const raw = e instanceof Error ? e.message : String(e);
+  return parseCppLogToDiagnostic(raw, fallbackCode, source);
+}
 
 /** Safety/performance limits, enforced in JS around resource resolution. */
 export interface RenderLimits {

@@ -1,6 +1,11 @@
 import { loadWorkerLib } from "./worker-lib-loader.js";
-import type { HtmlToImageWorker } from "./child-workers.js";
-export type { HtmlToImageWorker } from "./child-workers.js";
+import type { createRenderActions } from "./worker-actions.js";
+/**
+ * Canonical worker action-table type (single source of truth).
+ * `child-workers.js` / `browser-workers.js` re-export this type;
+ * defined from `createRenderActions` (worker-lib `initWorker` is identity).
+ */
+export type HtmlToImageWorker = ReturnType<typeof createRenderActions>;
 import { type HtmlToImageOptions, type RenderResult } from "./core.js";
 export type { HtmlToImageOptions, RenderResult } from "./core.js";
 // Playground parity: diagnostics surface is usable through the pool —
@@ -36,6 +41,24 @@ export interface WorkerPoolStats {
 // worker-lib-loader.ts); top-level await keeps call sites sync-shaped.
 const { createWorker, Worker } = await loadWorkerLib();
 
+/** Worker factory result (`createWorker` builder shape). */
+type WorkerFactoryResult = Worker | string | URL;
+
+/**
+ * Narrow `unknown` to a usable worker value (cf. `isImageInput` in
+ * `./input.ts`: `unknown` in, type predicate out — no `any`).
+ */
+function isWorkerFactoryResult(value: unknown): value is WorkerFactoryResult {
+  if (typeof value === "string") return true;
+  if (value instanceof URL) return true;
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "postMessage" in value &&
+    typeof (value as { postMessage?: unknown }).postMessage === "function"
+  );
+}
+
 /**
  * Create a wasm-html-to-image worker pool using worker-lib.
  * The pooled action is the unified `render` (HTML and image inputs).
@@ -60,7 +83,7 @@ export const createHtmlToImageWorker = (params?: {
   const { worker, maxParallel = 4, timeoutMs } = params ?? {};
 
   const factory = () => {
-    let w: any;
+    let w: unknown;
     if (worker) {
       w = typeof worker === "function" ? worker() : worker;
     } else {
@@ -76,7 +99,8 @@ export const createHtmlToImageWorker = (params?: {
       }
     }
 
-    if (!w) throw new Error("Worker is not supported in this environment.");
+    if (!isWorkerFactoryResult(w))
+      throw new Error("Worker is not supported in this environment.");
 
     return w;
   };
@@ -126,7 +150,7 @@ export const createHtmlToImageWorker = (params?: {
           totalPendingJobs++;
           const startTime = Date.now();
 
-          let timeoutId: any;
+          let timeoutId: ReturnType<typeof setTimeout> | undefined;
           let timeoutPromise: Promise<never> | undefined;
 
           if (timeoutMs !== undefined && timeoutMs > 0) {
@@ -150,7 +174,7 @@ export const createHtmlToImageWorker = (params?: {
           }
 
           try {
-            const executePromise = target.execute("render", execOptions as any);
+            const executePromise = target.execute("render", execOptions);
 
             const result = await (timeoutPromise
               ? Promise.race([executePromise, timeoutPromise])
@@ -231,7 +255,7 @@ export function render(
 export function render(
   options: HtmlToImageOptions,
 ): Promise<RenderResult<Uint8Array | string>> {
-  return getDefaultWorker().render(options as any) as any;
+  return getDefaultWorker().render(options);
 }
 
 export const launchWorker = (): Promise<void[]> =>

@@ -358,3 +358,60 @@ export async function loadHtmlToImageModule(
 export function dropCachedModule(): void {
   moduleCache.clear();
 }
+
+/**
+ * Build Emscripten module args for a pre-compiled `WebAssembly.Module`.
+ * Shared adapter for workerd / edge-light entry points (behavior unchanged:
+ * `WebAssembly.instantiate` + success-callback override, empty object return
+ * for emscripten). The `label` only selects the console-error prefix.
+ */
+export function precompiledModuleArg(
+  wasm: WebAssembly.Module,
+  label: string,
+): EmscriptenModuleArg {
+  return {
+    instantiateWasm: (imports: unknown, successCallback: unknown) => {
+      WebAssembly.instantiate(wasm, imports as WebAssembly.Imports)
+        .then((instance) => {
+          (successCallback as (inst: unknown, mod: unknown) => void)(
+            instance,
+            wasm,
+          );
+        })
+        .catch((e) => {
+          console.error(
+            `wasm-html-to-image [${label}]: Wasm instantiation failed:`,
+            e,
+          );
+        });
+      return {}; // Return empty object as emscripten expects
+    },
+  };
+}
+
+/**
+ * Load (and reuse) the unified module for a pre-compiled `WebAssembly.Module`.
+ * Per-`wasm` cache with failure eviction (a second call with a different
+ * `wasm` must not reuse the first one; failed loads are evicted for retry).
+ * Thin adapter over {@link loadHtmlToImageModule} — environment differences
+ * between workerd / edge-light stay isolated here.
+ */
+export async function loadPrecompiledModule(
+  factory: CreateHtmlToImageModule,
+  wasm: WebAssembly.Module,
+  cache: Map<WebAssembly.Module, Promise<HtmlToImageModule>>,
+  label: string,
+): Promise<HtmlToImageModule> {
+  let pending = cache.get(wasm);
+  if (!pending) {
+    pending = loadHtmlToImageModule({
+      factory,
+      moduleArg: precompiledModuleArg(wasm, label),
+    });
+    cache.set(wasm, pending);
+    pending.catch(() => {
+      if (cache.get(wasm) === pending) cache.delete(wasm);
+    });
+  }
+  return pending;
+}

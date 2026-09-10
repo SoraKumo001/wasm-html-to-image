@@ -105,3 +105,24 @@ export function imageInputToBytes(
   if (typeof value === "string") return dataUrlToBytes(value);
   return toBytes(value);
 }
+
+/** Image-input value shape accepted by `imageInputToBytes`. */
+export type ImageInputValue = string | Uint8Array | ArrayBuffer;
+
+/**
+ * `unknown`-safe variant of {@link imageInputToBytes} for post-`isImageInput`
+ * paths: narrows with `instanceof`/`typeof` instead of `as` casts.
+ * Throws the same "unsupported input type" error for non-image shapes.
+ */
+export function imageBytesFromUnknown(value: unknown): Uint8Array {
+  if (
+    typeof value === "string" ||
+    value instanceof Uint8Array ||
+    value instanceof ArrayBuffer
+  ) {
+    return imageInputToBytes(value);
+  }
+  throw new Error(
+    "wasm-html-to-image: unsupported input type (expected HTML string, data URL, or image bytes)",
+  );
+}

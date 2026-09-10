@@ -20,6 +20,7 @@ const getModule = async () => {
  * Exposes the unified render (HTML and image inputs) via worker-lib.
  * Each worker thread loads its own module instance (modules cannot cross
  * thread boundaries, so nothing is shared with the parent).
+ * Canonical `HtmlToImageWorker` type lives in `./workers.js`.
  */
-const map = initWorker(createRenderActions(getModule));
-export type HtmlToImageWorker = typeof map;
+initWorker(createRenderActions(getModule));
+export type { HtmlToImageWorker } from "./workers.js";

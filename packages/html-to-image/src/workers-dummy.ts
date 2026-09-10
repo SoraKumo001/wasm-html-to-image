@@ -2,7 +2,7 @@
  * workerd fallback for `./workers`: no thread pool on Workers, so jobs run
  * directly on the workerd entry point instead of being pooled.
  */
-export type { HtmlToImageWorker } from "./child-workers.js";
+export type { HtmlToImageWorker } from "./workers.js";
 export type {
   HtmlToImageOptions,
   OutputFormat,
