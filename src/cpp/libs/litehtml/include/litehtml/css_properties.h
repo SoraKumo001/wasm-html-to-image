@@ -86,6 +86,8 @@ namespace litehtml
     text_transform m_text_transform;
     web_color m_color;
     web_color m_text_fill_color; // -webkit-text-fill-color, sentinel: alpha=1 means not set
+    css_length m_text_stroke_width;  // -webkit-text-stroke-width (px after compute_font)
+    web_color m_text_stroke_color = web_color::current_color;  // -webkit-text-stroke-color
     string m_cursor;
     string m_content;
     border_collapse m_border_collapse;
@@ -398,6 +400,11 @@ namespace litehtml
     bool has_text_fill_color() const;
     web_color get_text_fill_color() const;
     void set_text_fill_color(web_color color);
+
+    css_length get_text_stroke_width() const;
+    void set_text_stroke_width(css_length width);
+    web_color get_text_stroke_color() const;
+    void set_text_stroke_color(web_color color);
 
     const string &get_cursor() const;
     void set_cursor(const string &cursor);
@@ -969,6 +976,11 @@ namespace litehtml
   inline bool css_properties::has_text_fill_color() const { return m_text_fill_color.alpha != 1 || m_text_fill_color.red != 0 || m_text_fill_color.green != 0 || m_text_fill_color.blue != 0; }
   inline web_color css_properties::get_text_fill_color() const { return m_text_fill_color; }
   inline void css_properties::set_text_fill_color(web_color color) { m_text_fill_color = color; }
+
+  inline css_length css_properties::get_text_stroke_width() const { return m_text_stroke_width; }
+  inline void css_properties::set_text_stroke_width(css_length width) { m_text_stroke_width = width; }
+  inline web_color css_properties::get_text_stroke_color() const { return m_text_stroke_color; }
+  inline void css_properties::set_text_stroke_color(web_color color) { m_text_stroke_color = color; }
 
   inline const string &css_properties::get_cursor() const { return m_cursor; }
   inline void css_properties::set_cursor(const string &cursor) { m_cursor = cursor; }

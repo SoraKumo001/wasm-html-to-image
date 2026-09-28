@@ -130,6 +130,7 @@ namespace litehtml
 
           {_text_decoration_, {_text_decoration_color_, _text_decoration_line_, _text_decoration_style_, _text_decoration_thickness_}},
           {_text_emphasis_, {_text_emphasis_style_, _text_emphasis_color_}},
+          {__webkit_text_stroke_, {__webkit_text_stroke_width_, __webkit_text_stroke_color_}},
           {_container_, {_container_name_, _container_type_}},
           {_border_image_, {_border_image_source_, _border_image_slice_, _border_image_width_, _border_image_outset_, _border_image_repeat_}},
   };
@@ -444,6 +445,7 @@ namespace litehtml
     case _border_block_start_color_:
     case _border_block_end_color_:
     case __webkit_text_fill_color_:
+    case __webkit_text_stroke_color_:
       if (ident == "transparent")
       {
         web_color transparent_color(0, 0, 0, 0);
@@ -658,6 +660,10 @@ namespace litehtml
       parse_text_emphasis(value, important, container);
       break;
 
+    case __webkit_text_stroke_:
+      parse_text_stroke(value, important, container);
+      break;
+
     case _text_emphasis_style_:
       str = get_repr(value, 0, -1, true);
       add_parsed_property(name, property_value(str, important, false, m_layer, m_specificity));
@@ -727,6 +733,7 @@ namespace litehtml
 
     case _column_rule_width_:
     case _outline_width_:
+    case __webkit_text_stroke_width_:
       if (parse_border_width(val, *len))
         add_parsed_property(name, property_value(*len, important, false, m_layer, m_specificity));
       break;
@@ -1719,6 +1726,50 @@ namespace litehtml
       }
     }
     add_parsed_property(_text_decoration_line_, property_value(val, important, false, m_layer, m_specificity));
+  }
+
+  // -webkit-text-stroke: <line-width> || <color>
+  // Unspecified components are reset to their initial values (CSS shorthand
+  // semantics), matching Chromium. Usage of keywords thin/medium/thick is
+  // delegated to parse_border_width.
+  void style::parse_text_stroke(const css_token_vector &tokens, bool important, document_container *container)
+  {
+    bool width_found = false;
+    bool color_found = false;
+    size_t consumed = 0;
+    for (const auto &token : tokens)
+    {
+      if (!color_found)
+      {
+        web_color color;
+        if (parse_color(token, color, container))
+        {
+          add_parsed_property(__webkit_text_stroke_color_, property_value(color, important, false, m_layer, m_specificity));
+          color_found = true;
+          consumed++;
+          continue;
+        }
+      }
+      if (!width_found)
+      {
+        css_length width;
+        if (parse_border_width(token, width))
+        {
+          add_parsed_property(__webkit_text_stroke_width_, property_value(width, important, false, m_layer, m_specificity));
+          width_found = true;
+          consumed++;
+          continue;
+        }
+      }
+    }
+    // Unconsumed tokens mean the whole value is invalid: drop the declaration.
+    if (consumed != tokens.size())
+      return;
+    // Omitted components reset to their initial values (CSS shorthand semantics).
+    if (!width_found)
+      add_parsed_property(__webkit_text_stroke_width_, property_value(css_length::predef_value(0), important, false, m_layer, m_specificity));
+    if (!color_found)
+      add_parsed_property(__webkit_text_stroke_color_, property_value(web_color::current_color, important, false, m_layer, m_specificity));
   }
 
   void style::parse_aspect_ratio(const css_token_vector &tokens, bool important)

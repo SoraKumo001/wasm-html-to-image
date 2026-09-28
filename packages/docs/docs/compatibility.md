@@ -44,7 +44,7 @@ title: 互換性と仕様
 | **Grid**             | `grid-template-columns`, `grid-template-rows`, `gap`                    | 基本的なグリッド配置・トラック計算をサポート           |
 | **位置指定**         | `position: static / relative / absolute / fixed`                        | 包含ブロックに応じた正確な配置                         |
 | **タイポグラフィ**   | HarfBuzz テキストシェイピング, BiDi (双方向テキスト)                    | CJK (日中韓)、アラビア語、絵文字の混在・折り返しに対応 |
-| **装飾・エフェクト** | `box-shadow`, `border-radius`, `opacity`, `transform`                   | 角丸クリッピングやドロップシャドウの高速描画           |
+| **装飾・エフェクト** | `box-shadow`, `border-radius`, `opacity`, `transform`, `-webkit-text-stroke` | 角丸クリッピングやドロップシャドウ、テキスト縁取りの高速描画 |
 | **グラデーション**   | `linear-gradient`, `radial-gradient`                                    | 複雑なカラーストップとアングル指定に対応               |
 | **クリッピング**     | `clip-path: circle(), ellipse(), polygon(), path()`                     | Skia ネイティブパスによる自由形状クリッピング          |
 | **レスポンシブ**     | `@container` (コンテナクエリ), `@media print`                           | コンポーネント単位のサイズ適応                         |

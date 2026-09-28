@@ -207,4 +207,20 @@ describe("SVG (Chromium) Visual Tests", { timeout: 60000 }, () => {
       expect(result.fill).toBeLessThan(45);
     });
   }
+
+  it("emits -webkit-text-stroke as SVG stroke attributes", async () => {
+    const { data: svg } = await render({
+      value:
+        '<div style="font-size:40px;-webkit-text-stroke:2px red;' +
+        '-webkit-text-fill-color:transparent">X</div>',
+      width: 200,
+      format: "svg",
+    });
+
+    expect(svg).toContain('stroke="rgb(255,0,0)"');
+    expect(svg).toContain('stroke-width="2');
+    expect(svg).toContain("stroke-opacity=");
+    // WebKit paints the fill first and the stroke on top.
+    expect(svg).toContain('paint-order="fill stroke"');
+  });
 });

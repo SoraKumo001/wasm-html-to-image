@@ -726,8 +726,9 @@ std::string TextLayout::ellipsizeText(SatoruContext* ctx, const char* text, font
     MeasureResult full_res = measureText(ctx, text, fi, mode, maxWidth, usedCodepoints);
     if (full_res.fits) return std::string(text);
 
-    // Calculate ellipsis width
-    const char* ellipsis = "...";
+    // Calculate ellipsis width. Use the horizontal ellipsis character U+2026
+    // (the CSS text-overflow ellipsis glyph), not three ASCII dots.
+    const char* ellipsis = "\xE2\x80\xA6";  // U+2026 HORIZONTAL ELLIPSIS
     double ellipsis_width = measureText(ctx, ellipsis, fi, mode, -1.0, usedCodepoints).width;
 
     // Use a small epsilon to handle float precision issues

@@ -1,5 +1,6 @@
 #include "css_properties.h"
 
+#include <algorithm>
 #include <cmath>
 
 #include "css_tokenizer.h"
@@ -18,6 +19,16 @@ void litehtml::css_properties::compute(const element* el, const document::ptr& d
     m_color = el->get_property<web_color>(_color_, true, web_color::black, offset(m_color));
     m_text_fill_color = el->get_property<web_color>(
         __webkit_text_fill_color_, true, web_color(0, 0, 0, 1), offset(m_text_fill_color));
+
+    // -webkit-text-stroke is inherited. Width defaults to 0 (no stroke); color
+    // defaults to currentColor. Keep the raw value here (currentColor keyword is
+    // preserved) so inheritance propagates the keyword and each element resolves
+    // it against its own `color` later in compute_font.
+    m_text_stroke_width = el->get_property<css_length>(
+        __webkit_text_stroke_width_, true, css_length(), offset(m_text_stroke_width));
+    m_text_stroke_color = el->get_property<web_color>(
+        __webkit_text_stroke_color_, true, web_color::current_color,
+        offset(m_text_stroke_color));
 
     m_el_position = (element_position)el->get_property<int>(
         _position_, false, element_position_static, offset(m_el_position));
@@ -779,6 +790,25 @@ void litehtml::css_properties::compute_font(const element* el, const document::p
         m_text_emphasis_position |= el->parent()->css().get_text_emphasis_position();
     }
 
+    // -webkit-text-stroke-width: resolve to px, clamp negatives (calc can be < 0)
+    // and quantize to 1/64px so the font cache key stays stable. em/ex need the
+    // element's own font size, which m_font_metrics does not carry yet at this
+    // point, so supply a metrics copy with font_size filled in.
+    if (!m_text_stroke_width.is_predefined()) {
+        font_metrics stroke_metrics = m_font_metrics;
+        stroke_metrics.font_size = font_size;
+        stroke_metrics.x_height = font_size;
+        doc->cvt_units(m_text_stroke_width, stroke_metrics, font_size);
+    }
+    pixel_t text_stroke_width =
+        m_text_stroke_width.is_predefined() ? 0.0f : m_text_stroke_width.val();
+    if (text_stroke_width < 0.0f) text_stroke_width = 0.0f;
+    text_stroke_width = std::round(text_stroke_width * 64.0f) / 64.0f;
+
+    // currentColor resolves against this element's own `color`.
+    web_color text_stroke_color = m_text_stroke_color;
+    if (text_stroke_color.is_current_color) text_stroke_color = m_color;
+
     if (m_font_weight.is_predefined()) {
         switch (m_font_weight.predef()) {
             case font_weight_bold:
@@ -826,6 +856,8 @@ void litehtml::css_properties::compute_font(const element* el, const document::p
     descr.letter_spacing = m_letter_spacing.is_predefined() ? 0 : m_letter_spacing.val();
     descr.word_spacing = m_word_spacing.is_predefined() ? 0 : m_word_spacing.val();
     descr.text_shadow = m_text_shadow;
+    descr.text_stroke_width = text_stroke_width;
+    descr.text_stroke_color = text_stroke_color;
 
     m_font = doc->get_font(descr, &m_font_metrics);
 }

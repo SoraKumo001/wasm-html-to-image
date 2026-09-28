@@ -195,12 +195,25 @@ void TextRenderer::drawText(SatoruContext* ctx, SkCanvas* canvas, const char* te
     if (overflow == litehtml::text_overflow_ellipsis) {
         double available_size =
             (mode == litehtml::writing_mode_horizontal_tb) ? pos.width : pos.height;
+        // litehtml marks a forced ellipsis by collapsing the run to ~0 width.
+        // In that case the caller (container_skia) has already recovered the real
+        // available width from the clip box, so use it as the ellipsize budget.
         bool forced = (available_size < 1.0f);
-        double margin = forced ? 0.0f : 2.0f;
+        double margin = 2.0;
+        double budget = available_size;
+        if (forced && mode != litehtml::writing_mode_horizontal_tb) {
+            budget = pos.height;
+        }
+        if (budget < 1.0f) {
+            // No usable width at all: leave the text untouched rather than drawing
+            // a bare ellipsis (the previous behavior).
+            budget = 0.0;
+        }
 
-        if (forced || TextLayout::measureText(ctx, text, fi, mode, -1.0, nullptr).width >
-                          available_size + margin) {
-            ellipsized_text = TextLayout::ellipsizeText(ctx, text, fi, mode, (double)available_size,
+        if (budget > 0.0 &&
+            (forced || TextLayout::measureText(ctx, text, fi, mode, -1.0, nullptr).width >
+                           available_size + margin)) {
+            ellipsized_text = TextLayout::ellipsizeText(ctx, text, fi, mode, budget,
                                                         usedCodepoints);
             draw_text = ellipsized_text.c_str();
             draw_text_len = ellipsized_text.size();
@@ -210,6 +223,16 @@ void TextRenderer::drawText(SatoruContext* ctx, SkCanvas* canvas, const char* te
     SkPaint paint;
     paint.setAntiAlias(true);
 
+    // -webkit-text-stroke. WebKit paints the fill first and the centered stroke
+    // on top, so the stroke's inner half overlaps (and hides) the glyph body for
+    // an opaque stroke. stroke_color defaults to currentColor, which may resolve
+    // to the same color as the fill or to the element's `color`.
+    const bool has_stroke = fi->desc.text_stroke_width > 0.0f;
+    const float stroke_width = has_stroke ? fi->desc.text_stroke_width : 0.0f;
+    litehtml::web_color stroke_color = fi->desc.text_stroke_color;
+    // NOTE: web_color::operator== ignores is_current_color, so test the flag directly.
+    if (stroke_color.is_current_color) stroke_color = color;
+
     int styleIndex = -1;
     MagicTag styleTag = MagicTag::TextDraw;
 
@@ -218,6 +241,9 @@ void TextRenderer::drawText(SatoruContext* ctx, SkCanvas* canvas, const char* te
         info.shadows = fi->desc.text_shadow;
         info.text_color = color;
         info.opacity = currentOpacity;
+        info.has_stroke = has_stroke;
+        info.stroke_width = stroke_width;
+        info.stroke_color = stroke_color;
 
         styleTag = MagicTag::TextShadow;
         for (size_t i = 0; i < usedTextShadows.size(); ++i) {
@@ -239,6 +265,9 @@ void TextRenderer::drawText(SatoruContext* ctx, SkCanvas* canvas, const char* te
         info.italic = (fi->desc.style == litehtml::font_style_italic);
         info.color = color;
         info.opacity = currentOpacity;
+        info.has_stroke = has_stroke;
+        info.stroke_width = stroke_width;
+        info.stroke_color = stroke_color;
 
         styleTag = MagicTag::TextDraw;
         usedTextDraws.push_back(info);
@@ -260,15 +289,43 @@ void TextRenderer::drawText(SatoruContext* ctx, SkCanvas* canvas, const char* te
                 shadow_paint.setMaskFilter(
                     SkMaskFilter::MakeBlur(kNormal_SkBlurStyle, blur_std_dev));
 
+            if (has_stroke) {
+                // A single stroke+fill draw gives one coverage for the blur, so
+                // the stroke/fill overlap does not darken a translucent shadow.
+                shadow_paint.setStyle(SkPaint::kStrokeAndFill_Style);
+                shadow_paint.setStrokeWidth(stroke_width);
+                shadow_paint.setStrokeJoin(SkPaint::kRound_Join);
+                shadow_paint.setStrokeCap(SkPaint::kRound_Cap);
+            }
+
             drawTextInternal(ctx, canvas, draw_text, draw_text_len, fi, actual_pos, mode,
                              shadow_paint, false, usedTextDraws, usedGlyphs, usedGlyphDraws,
                              usedCodepoints, batcher);
         }
     }
 
+    // Unstroked text may still be buffered by the batcher; flush it before the
+    // stroked run so the stroke/fill are composited in the correct order.
+    if (has_stroke && !tagging && batcher) batcher->flush();
+
     double final_width = drawTextInternal(
         ctx, canvas, draw_text, draw_text_len, fi, actual_pos, mode, paint, tagging, usedTextDraws,
         usedGlyphs, usedGlyphDraws, usedCodepoints, batcher, (int)styleTag, styleIndex);
+
+    if (has_stroke && !tagging) {
+        // WebKit paints the centered stroke ON TOP of the fill, so its inner half
+        // overlaps the glyph body (an opaque stroke visually hides the fill).
+        SkPaint stroke_paint = paint;
+        stroke_paint.setColor(
+            SkColorSetARGB(stroke_color.alpha, stroke_color.red, stroke_color.green, stroke_color.blue));
+        stroke_paint.setStyle(SkPaint::kStroke_Style);
+        stroke_paint.setStrokeWidth(stroke_width);
+        stroke_paint.setStrokeJoin(SkPaint::kRound_Join);
+        stroke_paint.setStrokeCap(SkPaint::kRound_Cap);
+        drawTextInternal(ctx, canvas, draw_text, draw_text_len, fi, actual_pos, mode, stroke_paint,
+                         false, usedTextDraws, usedGlyphs, usedGlyphDraws, usedCodepoints, nullptr,
+                         (int)styleTag, styleIndex);
+    }
 
     if (fi->desc.decoration_line != litehtml::text_decoration_line_none) {
         TextDecorationRenderer::drawDecoration(canvas, fi, pos, color, final_width, mode);
@@ -387,7 +444,7 @@ double TextRenderer::drawTextInternal(SatoruContext* ctx, SkCanvas* canvas, cons
             canvas->restore();
         } else if (batcher && fi->desc.text_shadow.empty() &&
                    fi->desc.decoration_line == litehtml::text_decoration_line_none &&
-                   !is_run_combine) {
+                   fi->desc.text_stroke_width <= 0.0f && !is_run_combine) {
             TextBatcher::Style style;
             style.fi = fi;
             SkColor c = paint.getColor();

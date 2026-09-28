@@ -30,6 +30,8 @@ struct font_description {
     pixel_t letter_spacing = 0;
     pixel_t word_spacing = 0;
     shadow_vector text_shadow;
+    pixel_t text_stroke_width = 0;  // -webkit-text-stroke-width, in px
+    web_color text_stroke_color = web_color::current_color;  // -webkit-text-stroke-color
 
     std::string hash() const {
         std::string out;
@@ -52,6 +54,12 @@ struct font_description {
         for (const auto& s : text_shadow) {
             out += ":ts=" + std::to_string(s.x.val()) + "," + std::to_string(s.y.val()) + "," +
                    std::to_string(s.blur.val()) + "," + s.color.to_string();
+        }
+        // Only differentiate fonts when a stroke is actually painted, so ordinary
+        // text keeps sharing cached fonts regardless of its stroke color.
+        if (text_stroke_width > 0) {
+            out += ":tsw=" + std::to_string(text_stroke_width);
+            out += ":tsc=" + text_stroke_color.to_string();
         }
 
         return out;

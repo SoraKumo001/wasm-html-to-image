@@ -109,6 +109,9 @@ struct text_shadow_info {
     litehtml::shadow_vector shadows;
     litehtml::web_color text_color;
     float opacity;
+    bool has_stroke = false;
+    float stroke_width = 0.0f;
+    litehtml::web_color stroke_color;
 
     bool operator==(const text_shadow_info &other) const {
         if (shadows.size() != other.shadows.size()) return false;
@@ -125,7 +128,12 @@ struct text_shadow_info {
         return text_color.red == other.text_color.red &&
                text_color.green == other.text_color.green &&
                text_color.blue == other.text_color.blue &&
-               text_color.alpha == other.text_color.alpha && opacity == other.opacity;
+               text_color.alpha == other.text_color.alpha && opacity == other.opacity &&
+               has_stroke == other.has_stroke && stroke_width == other.stroke_width &&
+               stroke_color.red == other.stroke_color.red &&
+               stroke_color.green == other.stroke_color.green &&
+               stroke_color.blue == other.stroke_color.blue &&
+               stroke_color.alpha == other.stroke_color.alpha;
     }
 };
 
@@ -134,11 +142,19 @@ struct text_draw_info {
     bool italic;
     litehtml::web_color color;
     float opacity;
+    bool has_stroke = false;
+    float stroke_width = 0.0f;
+    litehtml::web_color stroke_color;
 
     bool operator==(const text_draw_info &other) const {
         return weight == other.weight && italic == other.italic && color.red == other.color.red &&
                color.green == other.color.green && color.blue == other.color.blue &&
-               color.alpha == other.color.alpha && opacity == other.opacity;
+               color.alpha == other.color.alpha && opacity == other.opacity &&
+               has_stroke == other.has_stroke && stroke_width == other.stroke_width &&
+               stroke_color.red == other.stroke_color.red &&
+               stroke_color.green == other.stroke_color.green &&
+               stroke_color.blue == other.stroke_color.blue &&
+               stroke_color.alpha == other.stroke_color.alpha;
     }
 };
 

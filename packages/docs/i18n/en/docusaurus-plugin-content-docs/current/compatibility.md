@@ -41,7 +41,7 @@ Supported input types, output formats, CSS properties, and runtime environments.
 - **Flexbox**: Multi-pass resolution conforming to W3C Flexbox specs.
 - **Grid Layout**: Basic grid tracks, placement, and gaps.
 - **Typography**: HarfBuzz shaping, bidirectional text (BiDi), line-breaking for CJK, Latin, Arabic, and Emoji.
-- **Effects**: Box shadows, border-radii, transforms, opacity, and clip paths (`circle`, `ellipse`, `polygon`, `path`).
+- **Effects**: Box shadows, border-radii, transforms, opacity, `-webkit-text-stroke`, and clip paths (`circle`, `ellipse`, `polygon`, `path`).
 - **Media & Containers**: `@media print` and container queries (`@container`).
 
 ---

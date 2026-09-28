@@ -369,9 +369,19 @@ void container_skia::draw_text(litehtml::uint_ptr hdc, const char* text, litehtm
     if (!fi || fi->fonts.empty()) return;
 
     litehtml::position actual_pos = pos;
-    if (overflow == litehtml::text_overflow_ellipsis && !m_clip.clips.empty()) {
-        actual_pos.width =
-            std::min(pos.width, (litehtml::pixel_t)(m_clip.clips.back().first.right() - pos.x));
+    if (overflow == litehtml::text_overflow_ellipsis) {
+        if (!m_clip.clips.empty()) {
+            // Clip right edge is the real available width for this line.
+            litehtml::pixel_t clip_right = m_clip.clips.back().first.right();
+            if (pos.width < 1.0f) {
+                // litehtml collapses a force-ellipsis run to width 0.1. Recover the
+                // real width from the clip box so the visible prefix is kept and
+                // only the ellipsis is appended (instead of drawing "..." alone).
+                actual_pos.width = std::max<litehtml::pixel_t>(clip_right - pos.x, 0.0f);
+            } else {
+                actual_pos.width = std::min(pos.width, clip_right - pos.x);
+            }
+        }
     }
 
     // background-clip: text support for PNG rendering

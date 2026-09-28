@@ -268,7 +268,7 @@ std::list< std::unique_ptr<litehtml::line_box_item> > litehtml::line_box::finish
 		{
 			if (item->get_type() == line_box_item::type_text_part)
 			{
-				ellipsis_width = item->get_el()->src_el()->get_document()->container()->text_width("...", item->get_el()->src_el()->css().get_font(), m_direction, m_writing_mode);
+				ellipsis_width = item->get_el()->src_el()->get_document()->container()->text_width("\xE2\x80\xA6", item->get_el()->src_el()->css().get_font(), m_direction, m_writing_mode);
 				break;
 			}
 		}
