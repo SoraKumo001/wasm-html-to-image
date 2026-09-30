@@ -39,19 +39,34 @@ title: 互換性と仕様
 
 | 機能カテゴリー       | 対応機能                                                                | 詳細・特記事項                                         |
 | -------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------ |
-| **ボックスモデル**   | Margin, Padding, Border, Box-sizing                                     | 論理プロパティ (`margin-inline` 等) も完全サポート     |
-| **Flexbox**          | `flex`, `flex-direction`, `justify-content`, `align-items`, `flex-wrap` | W3C 仕様準拠の多段レイアウト解決                       |
-| **Grid**             | `grid-template-columns`, `grid-template-rows`, `gap`                    | 基本的なグリッド配置・トラック計算をサポート           |
-| **位置指定**         | `position: static / relative / absolute / fixed`                        | 包含ブロックに応じた正確な配置                         |
-| **タイポグラフィ**   | HarfBuzz テキストシェイピング, BiDi (双方向テキスト)                    | CJK (日中韓)、アラビア語、絵文字の混在・折り返しに対応 |
-| **装飾・エフェクト** | `box-shadow`, `border-radius`, `opacity`, `transform`, `-webkit-text-stroke` | 角丸クリッピングやドロップシャドウ、テキスト縁取りの高速描画 |
-| **グラデーション**   | `linear-gradient`, `radial-gradient`                                    | 複雑なカラーストップとアングル指定に対応               |
-| **クリッピング**     | `clip-path: circle(), ellipse(), polygon(), path()`                     | Skia ネイティブパスによる自由形状クリッピング          |
-| **レスポンシブ**     | `@container` (コンテナクエリ), `@media print`                           | コンポーネント単位のサイズ適応                         |
+| **ボックスモデル**   | Margin, Padding, Border, Box-sizing, `aspect-ratio`                     | 論理プロパティ (`margin-inline` 等) も完全サポート     |
+| **Flexbox**          | `flex`, `flex-direction`, `justify-content`, `align-items`, `flex-wrap`, `gap` | W3C 仕様準拠の多段レイアウト解決                       |
+| **Grid**             | `grid-template-columns`, `grid-template-rows`, `grid-column`, `grid-row`, `gap`, `place-items` | 基本的なグリッド配置・トラック計算・自己配置をサポート |
+| **位置指定**         | `position: static / relative / absolute / fixed`, `top`, `right`, `bottom`, `left`, `inset`, `z-index` | 包含ブロックに応じた正確な配置                         |
+| **タイポグラフィ**   | HarfBuzz テキストシェイピング, BiDi (双方向テキスト), 縦書き (`writing-mode`) | CJK (日中韓)、アラビア語、絵文字、縦書き (`vertical-rl`)、文字縁取り (`-webkit-text-stroke`)、複数行省略 (`-webkit-line-clamp`) に対応 |
+| **装飾・エフェクト** | `box-shadow`, `border-radius`, `opacity`, `transform`, `filter`, `backdrop-filter` | 角丸クリッピング、複数ドロップシャドウ、ブラー、色調整、トランスフォーム対応 |
+| **グラデーション & 背景** | `linear-gradient`, `radial-gradient`, `conic-gradient`, `background-size`, `mix-blend-mode` | 複雑なカラーストップとアングル指定、ブレンドモードに対応 |
+| **クリッピング & マスク** | `clip-path: circle(), ellipse(), polygon(), path(), inset()`, `mask` | Skia ネイティブパスによる自由形状クリッピングとアルファマスク |
+| **インライン SVG**   | `<svg>`, `<path>`, `<circle>`, `<rect>`, `<g>`, `<linearGradient>` 等 | SkSVGDOM によるベクターグラフィックスの直接埋め込み描画 |
+| **モダン CSS 機能**  | `calc()`, `light-dark()`, CSS 変数 (`var(--...)`), `@layer`             | 数値計算やデザイントークンの活用                       |
+| **セレクタ**         | クラス, ID, 属性セレクタ, `:nth-child()`, `:not()`, `:is()`, `:where()`, `:has()`, `::before`, `::after` | 擬似クラス・擬似要素 (`content`) による高度なスタイリング |
+| **レスポンシブ**     | `@container` (コンテナクエリ), `@media print`, `@media screen`          | コンポーネント単位のサイズ適応                         |
 
 ---
 
-## 3. ランタイム互換性
+## 3. 非対応機能・制限事項 (AI コード生成時の注意点)
+
+ブラウザエンジン（Chromium/WebKit）ではなく、軽量な **litehtml + Skia** の静的レンダラーであるため、以下の機能は動作しません。HTML/CSS を設計する際はこれらを避けてください：
+
+1. **JavaScript の実行不可**: `<script>` タグやインラインイベントハンドラ (`onclick` など) は一切実行されません。静的な HTML/CSS マークアップのみ生成してください。
+2. **CSS アニメーション / トランジション**: `@keyframes` や `transition` はアニメーションしません（静止画スナップショットとして描画されます）。
+3. **HTML5 `<canvas>` スクリプト**: `canvas.getContext('2d')` による描画は行われません。図形描画にはインライン `<svg>` や CSS プロパティを使用してください。
+4. **動的インタラクション**: `:hover`, `:active`, `:focus` などの動的疑似クラスは反映されません。
+5. **ブラウザ専用 Web API**: `window`, `document`, `localStorage`, `IndexedDB` などの Web API は参照できません。
+
+---
+
+## 4. ランタイム互換性
 
 | ランタイム              | サポート | 推奨サブパス                                                                          | 備考                                                                             |
 | ----------------------- | :------: | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
