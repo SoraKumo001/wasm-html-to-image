@@ -202,6 +202,106 @@ Additional extension keys exist (e.g. `baseUrl`, `fit`, `animation`); see the ty
 
 ---
 
+## Supported HTML & CSS Capabilities (Styling Reference for AI)
+
+The rendering engine couples **litehtml** (HTML/CSS layout) and **Google Skia** (2D graphics engine). It supports a rich subset of modern CSS and HTML without a browser:
+
+### 1. Layout & Box Model
+- **Display Modes**: `block`, `inline`, `inline-block`, `flex`, `inline-flex`, `grid`, `inline-grid`, `table`, `table-row`, `table-cell`, `none`.
+- **Flexbox**:
+  - Container: `display: flex | inline-flex`, `flex-direction` (`row`, `column`, `row-reverse`, `column-reverse`), `flex-wrap` (`nowrap`, `wrap`, `wrap-reverse`), `flex-flow`, `justify-content` (`flex-start`, `flex-end`, `center`, `space-between`, `space-around`, `space-evenly`), `align-items` (`stretch`, `flex-start`, `flex-end`, `center`, `baseline`), `align-content`, `gap`, `row-gap`, `column-gap`.
+  - Items: `flex`, `flex-grow`, `flex-shrink`, `flex-basis`, `align-self`, `order`.
+- **Grid Layout**:
+  - Container: `display: grid | inline-grid`, `grid-template-columns`, `grid-template-rows`, `gap`, `row-gap`, `column-gap`, `place-items`, `place-content`, `justify-items`, `align-items`.
+  - Items: `grid-column`, `grid-row`, `grid-column-start`, `grid-column-end`, `grid-row-start`, `grid-row-end`, `place-self`, `justify-self`, `align-self`.
+- **Positioning**: `position: static | relative | absolute | fixed`, `top`, `right`, `bottom`, `left`, `inset`, `z-index`.
+- **Box Dimensions & Margins**: `width`, `height`, `min-width`, `min-height`, `max-width`, `max-height`, `aspect-ratio`, `box-sizing` (`border-box`, `content-box`), `margin`, `padding`.
+- **Logical Properties**: `margin-inline`, `margin-block`, `padding-inline`, `padding-block`, `inset-inline`, `inset-block`, `border-inline`, `border-block`.
+- **Floats & Clear**: `float: left | right | none`, `clear: left | right | both | none`.
+
+### 2. Typography & Text Shaping
+- **Fonts**: `font-family`, `font-size`, `font-weight` (100–900, `bold`, `normal`), `font-style` (`italic`, `normal`), `font-variant`, `line-height`, `letter-spacing`, `word-spacing`.
+- **Text Alignment & Flow**: `text-align` (`left`, `right`, `center`, `justify`), `vertical-align`, `text-transform` (`uppercase`, `lowercase`, `capitalize`, `none`).
+- **Wrapping & Breaking**: `white-space` (`normal`, `nowrap`, `pre`, `pre-wrap`, `pre-line`), `text-wrap` (`wrap`, `nowrap`, `balance`), `word-break` (`normal`, `break-all`, `keep-all`), `overflow-wrap` (`normal`, `break-word`, `anywhere`).
+- **Ellipsis & Multi-line Clamping**:
+  - Single-line: `overflow: hidden; text-overflow: ellipsis; white-space: nowrap;`
+  - Multi-line clamp: `-webkit-line-clamp: 2; -webkit-box-orient: vertical; display: -webkit-box; overflow: hidden;` (also supports standard `line-clamp`).
+- **Text Stroke & Shadow**:
+  - Stroke: `-webkit-text-stroke: <width> <color>` (also `-webkit-text-stroke-width`, `-webkit-text-stroke-color`, `-webkit-text-fill-color`).
+  - Text Shadow: `text-shadow: offset-x offset-y blur-radius color` (multiple comma-separated shadows supported).
+  - Text Decoration: `text-decoration` (`underline`, `line-through`, `none`, style, color, thickness, `text-underline-offset`).
+  - Text Emphasis: `text-emphasis` (`style`, `color`, `position`).
+- **Vertical Writing & Advanced Internationalization**:
+  - `writing-mode`: `horizontal-tb`, `vertical-rl`, `vertical-lr`.
+  - `text-orientation`: `mixed`, `upright`, `sideways`.
+  - `text-combine-upright`: `all`, `digits <2-4>`.
+  - HarfBuzz text shaping & BiDi engine: native ligatures, complex scripts (Arabic, Hebrew, Devanagari), CJK ideographs, and colored Emoji.
+
+### 3. Visual Styling & Skia Graphics
+- **Colors**: Hex (`#RRGGBB`, `#RRGGBBAA`), `rgb()`, `rgba()`, `hsl()`, `hsla()`, `transparent`, `currentColor`, `opacity` (0.0 to 1.0).
+- **Backgrounds**:
+  - `background-color`, `background-image` (supports URLs and gradients: `linear-gradient(...)`, `radial-gradient(...)`, `conic-gradient(...)`).
+  - `background-repeat`, `background-position`, `background-size` (`cover`, `contain`, lengths, percentages), `background-origin`, `background-clip` (including `-webkit-background-clip: text`).
+  - `mix-blend-mode`, `background-blend-mode`, `isolation`.
+- **Borders & Corners**:
+  - `border`, `border-width`, `border-style` (`solid`, `dashed`, `dotted`, `double`, etc.), `border-color`.
+  - `border-radius`: all four corners independently (`border-top-left-radius`, etc.), elliptical radii (`Xpx / Ypx`), logical corner properties (`border-start-start-radius`, etc.).
+  - `border-image`: `source`, `slice`, `width`, `outset`, `repeat`.
+  - `outline`, `outline-offset`, `outline-width`, `outline-style`, `outline-color`.
+- **Box Shadows**: `box-shadow: [inset] offset-x offset-y blur spread color` (supports multiple comma-separated shadows).
+- **Clipping**: `clip-path: circle(...) | ellipse(...) | polygon(...) | path("...") | inset(...)`.
+- **Transforms**: `transform: translate(...) rotate(...) scale(...) matrix(...)`, `translate`, `rotate`, `scale`, `transform-origin`.
+- **Filters**:
+  - `filter`: `blur(...)`, `drop-shadow(...)`.
+  - `backdrop-filter`: `blur(...)`, `brightness(...)`, `contrast(...)`, `grayscale(...)`, `sepia(...)`, `saturate(...)`, `hue-rotate(...)`, `invert(...)`, `opacity(...)`.
+- **Media Object Sizing**: `object-fit` (`fill`, `contain`, `cover`, `none`, `scale-down`), `object-position`.
+
+### 4. Modern CSS Features, Selectors & At-Rules
+- **Math & Custom Properties**: `calc(...)`, CSS Variables (`var(--name)`), `light-dark(...)`.
+- **Selectors**:
+  - Universal (`*`), type (`div`), class (`.card`), ID (`#main`).
+  - Attribute selectors (`[attr]`, `[attr="value"]`, `[attr^="prefix"]`, `[attr$="suffix"]`, `[attr*="sub"]`).
+  - Combinators: descendant (`A B`), child (`A > B`), adjacent sibling (`A + B`), general sibling (`A ~ B`).
+  - Pseudo-classes: `:first-child`, `:last-child`, `:only-child`, `:first-of-type`, `:last-of-type`, `:only-of-type`, `:nth-child(...)`, `:nth-last-child(...)`, `:nth-of-type(...)`, `:nth-last-of-type(...)`, `:not(...)`, `:is(...)`, `:where(...)`, `:has(...)`.
+  - Pseudo-elements: `::before`, `::after` with `content: "..."`.
+- **At-Rules**:
+  - `@media`: `@media screen`, `@media print`, media queries with `min-width`, `max-width`, etc.
+  - `@container`: Container queries (`@container (min-width: ...)` with `container-type: inline-size | size`).
+  - `@layer`: Cascade layers.
+  - `@font-face`: Custom font loading rules.
+
+### 5. Inline SVG Support
+- Direct inline `<svg>` rendering powered by **SkSVGDOM**.
+- Supported SVG tags: `<svg>`, `<g>`, `<path>`, `<rect>`, `<circle>`, `<ellipse>`, `<line>`, `<polyline>`, `<polygon>`, `<text>`, `<image>`, `<defs>`, `<linearGradient>`, `<radialGradient>`.
+- Supported SVG attributes: `fill`, `stroke`, `stroke-width`, `stroke-linecap`, `stroke-linejoin`, `viewBox`, `transform`, `d`, etc.
+- Seamlessly mix HTML text with inline SVG icons inside flex/grid containers.
+
+---
+
+## AI HTML/CSS Generation Guidelines (Best Practices)
+
+When prompting an AI agent to generate HTML/CSS templates for `wasm-html-to-image`:
+
+1. **Explicit Root Dimensions**: Always wrap the template in a root container with fixed pixel dimensions and `box-sizing: border-box;` (e.g. `width: 1200px; height: 630px;` for OGP).
+2. **Prioritize Flexbox or Grid**: Flexbox (`display: flex; flex-direction: column; justify-content: space-between;`) provides the most reliable and predictable visual layout.
+3. **Use Standard Google Fonts**: Simply set `font-family: 'Inter', sans-serif;` or `'Noto Sans JP', sans-serif;`. The library fetches and caches WOFF2 fonts automatically. For air-gapped or edge runtime execution, pass font buffers to `fallbackFonts`.
+4. **Use Inline SVGs for Icons**: Embed `<svg>` tags directly into HTML instead of using external icon fonts or canvas scripts.
+5. **Clean Text Truncation**: Use `-webkit-line-clamp: 2; -webkit-box-orient: vertical; display: -webkit-box; overflow: hidden;` for multi-line titles.
+6. **Images**: Remote `<img src="https://...">` works when network access is enabled. For offline, edge-isolated, or instant rendering, embed base64 Data URLs (`data:image/png;base64,...`).
+7. **Tailwind / UnoCSS Support**: When using utility classes, you can pre-compile them to inline CSS using `wasm-html-to-image/tailwind` (`createCSS()`).
+
+---
+
+## Limitations & Unsupported Features (Do NOT Use)
+
+1. **NO JavaScript Execution**: `<script>` tags, DOM events (`onclick`, `onload`), and DOM manipulations do NOT run. Always generate fully static HTML markup.
+2. **NO CSS Keyframe Animations or Transitions**: `@keyframes`, `animation`, and `transition` are not animated. The engine renders static snapshots.
+3. **NO HTML5 Canvas Scripting**: `<canvas>` with `canvas.getContext('2d')` does not execute JavaScript. Use `<svg>` or CSS shapes instead.
+4. **NO Interactive State Styling**: Dynamic states like `:hover`, `:active`, and `:focus` do not trigger.
+5. **NO Browser Web Storage**: `window`, `document`, `localStorage`, `sessionStorage`, and `IndexedDB` are unavailable.
+
+---
+
 ## Critical Rules for AI Agents (Anti-Patterns to AVOID)
 
 1. **NEVER use Puppeteer, Playwright, or Chromium with this package**: `wasm-html-to-image` compiles litehtml and Skia directly to WebAssembly. It operates entirely in-memory without browser processes.
