@@ -602,22 +602,39 @@ export async function tryRunHtmlInstance(
     }
 
     const renderStart = now();
-    const png = (await renderBinding(
-      sInst,
-      htmls,
-      width,
-      height ?? 0,
-      FORMAT_INT.png,
-      satoruOpts,
-    )) as Uint8Array | null | undefined;
-    addTime("render", now() - renderStart);
-    if (png == null) {
-      throw logged("wasm-html-to-image: satoru_render returned null");
-    }
     const cInst = module.converter_create_instance();
     try {
-      if (!loadImage(cInst, png)) {
-        throw logged("wasm-html-to-image: failed to load render output");
+      const renderToConverter = module.satoru_render_to_converter;
+      if (typeof renderToConverter === "function") {
+        // Bitmap goes straight into the converter: no PNG encode/decode.
+        const ok = await renderToConverter(
+          sInst,
+          cInst,
+          htmls,
+          width,
+          height ?? 0,
+          satoruOpts,
+        );
+        addTime("render", now() - renderStart);
+        if (!ok) {
+          throw logged("wasm-html-to-image: satoru_render returned null");
+        }
+      } else {
+        const png = (await renderBinding(
+          sInst,
+          htmls,
+          width,
+          height ?? 0,
+          FORMAT_INT.png,
+          satoruOpts,
+        )) as Uint8Array | null | undefined;
+        addTime("render", now() - renderStart);
+        if (png == null) {
+          throw logged("wasm-html-to-image: satoru_render returned null");
+        }
+        if (!loadImage(cInst, png)) {
+          throw logged("wasm-html-to-image: failed to load render output");
+        }
       }
       const outWidth = module.converter_get_width?.(cInst) ?? width;
       const outHeight = module.converter_get_height?.(cInst) ?? height ?? 0;

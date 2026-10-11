@@ -2,8 +2,8 @@
 
 #include <memory>
 
-#include "../common/image_decoder.h"
 #include "../common/skia_encode.h"
+#include "converter_api.h"
 #include "satoru_api.h"
 #include "satoru_bindings.h"
 #include "unified_api.h"
@@ -40,26 +40,48 @@ val html_to_image_val(val htmls, int width, int height, int format, val options_
         return val(typed_memory_view(g_last_unified_bytes.size(), g_last_unified_bytes.data()));
     }
 
-    // ラスタ系: PNG中間で描画 → ImageDecoder::decode →
-    // render_bitmap_to_encoded で最終encode。PNG中間はC++内に閉じる。
-    int png_size = 0;
-    const uint8_t* png_data = satoru_api_render(satoru.get(), html_vector, width, height,
-                                                RenderFormat::PNG, render_options, png_size);
-    if (!png_data || png_size == 0) return val::null();
-    auto decoded = html_to_image::ImageDecoder::decode(png_data, (size_t)png_size, nullptr);
-    if (!decoded.ok() || decoded.frames.empty()) return val::null();
+    // ラスタ系: 描画した SkBitmap をそのまま render_bitmap_to_encoded で最終encode
+    // (PNG中間のencode/decode往復なし)。
+    SkBitmap bitmap;
+    if (!satoru_api_html_to_bitmap(satoru.get(), html_vector[0].c_str(), width, height,
+                                   render_options, bitmap)) {
+        return val::null();
+    }
     ConverterEncodeOptions enc_options;
     enc_options.format = fmt;
     enc_options.quality = quality;
     enc_options.speed = speed;
     enc_options.animation = animation;
-    html_to_image::EncodeFrameView view{&decoded.frames[0].bitmap, decoded.frames[0].duration_ms};
-    // render_bitmap_to_encoded 相当 (単帧のため encode_frames 1要素view直呼びと等価。
-    // 複数帧拡張時は views を複数要素化。animated WebPは現 unified 単帧形では単帧扱い)。
     html_to_image::EncodeResult result =
-        html_to_image::render_bitmap_to_encoded(*view.bitmap, enc_options);
+        html_to_image::render_bitmap_to_encoded(bitmap, enc_options);
     if (!result.success()) return val::null();
     size_t n = result.data->size();
     g_last_unified_bytes.assign(result.data->bytes(), result.data->bytes() + n);
     return val(typed_memory_view(g_last_unified_bytes.size(), g_last_unified_bytes.data()));
+}
+
+bool satoru_render_to_converter_val(SatoruInstance* satoru, ImageConverterInstance* converter,
+                                    val htmls, int width, int height, val options_val) {
+    if (!satoru || !converter) return false;
+    std::vector<std::string> html_vector = val_to_html_vector(htmls);
+    if (html_vector.empty()) return false;
+    SatoruRenderOptions render_options;
+    parse_satoru_options(render_options, options_val);
+
+    SkBitmap bitmap;
+    if (!satoru_api_html_to_bitmap(satoru, html_vector[0].c_str(), width, height, render_options,
+                                   bitmap)) {
+        return false;
+    }
+    converter->frames.clear();
+    converter->raw_data = nullptr;
+    converter->original_data = nullptr;
+    converter->original_width = bitmap.width();
+    converter->original_height = bitmap.height();
+    converter->original_animation = false;
+    converter->original_format = "png";
+    ConverterImageFrame frame;
+    frame.bitmap = std::move(bitmap);
+    converter->frames.push_back(std::move(frame));
+    return true;
 }

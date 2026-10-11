@@ -13,6 +13,7 @@
 #include "core/container_skia.h"
 #include "core/resource_manager.h"
 #include "core/satoru_context.h"
+#include "include/core/SkBitmap.h"
 
 // P1: 共有JsLoggerの唯一所有者は satoru_api.cpp の g_js_logger。
 // converter_api_set_log_level からも同一インスタンスへ集約するための
@@ -90,6 +91,10 @@ void satoru_api_destroy_instance(SatoruInstance *inst);
 
 std::string satoru_api_html_to_svg(SatoruInstance *inst, const char *html, int width, int height,
                             const SatoruRenderOptions &options);
+// Render to a bitmap using the instance state (fonts/images/css), skipping any encode.
+bool satoru_api_html_to_bitmap(SatoruInstance *inst, const char *html, int width, int height,
+                               const SatoruRenderOptions &options, SkBitmap &out);
+
 const uint8_t *satoru_api_html_to_png(SatoruInstance *inst, const char *html, int width, int height,
                                const SatoruRenderOptions &options, int &out_size);
 const uint8_t *satoru_api_html_to_webp(SatoruInstance *inst, const char *html, int width, int height,

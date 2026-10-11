@@ -65,9 +65,9 @@ sk_sp<SkData> renderDocumentToPng(SatoruInstance* inst, int width, int height,
     return html_to_image::encode_png(bitmap.pixmap());
 }
 
-sk_sp<SkData> renderHtmlToPng(const char* html, int width, int height, SatoruContext& context,
-                              const char* master_css, const char* user_css,
-                              const SatoruRenderOptions& options) {
+bool renderHtmlToBitmap(const char* html, int width, int height, SatoruContext& context,
+                        const char* master_css, const char* user_css,
+                        const SatoruRenderOptions& options, SkBitmap& out) {
     int initial_height = (height > 0) ? height : 3000;
     litehtml::media_type media_type =
         (options.mediaType == 1) ? litehtml::media_type_print : litehtml::media_type_screen;
@@ -78,7 +78,7 @@ sk_sp<SkData> renderHtmlToPng(const char* html, int width, int height, SatoruCon
 
     litehtml::document::ptr doc =
         litehtml::document::createFromString(html, &container, css.c_str(), user_css);
-    if (!doc) return nullptr;
+    if (!doc) return false;
 
     doc->render(width);
 
@@ -111,7 +111,16 @@ sk_sp<SkData> renderHtmlToPng(const char* html, int width, int height, SatoruCon
     doc->draw(0, -src_x, -src_y, &clip);
     container.flush();
 
+    out = std::move(bitmap);
+    return true;
+}
+
+sk_sp<SkData> renderHtmlToPng(const char* html, int width, int height, SatoruContext& context,
+                              const char* master_css, const char* user_css,
+                              const SatoruRenderOptions& options) {
+    SkBitmap bitmap;
+    if (!renderHtmlToBitmap(html, width, height, context, master_css, user_css, options, bitmap))
+        return nullptr;
     // 寄せ: common/skia_encode の encode_png と等価。
     return html_to_image::encode_png(bitmap.pixmap());
-
 }

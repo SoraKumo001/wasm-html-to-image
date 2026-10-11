@@ -483,6 +483,13 @@ std::string satoru_api_html_to_svg(SatoruInstance* inst, const char* html, int w
                            inst->context.getExtraCss().c_str(), options);
 }
 
+bool satoru_api_html_to_bitmap(SatoruInstance* inst, const char* html, int width, int height,
+                               const SatoruRenderOptions& options, SkBitmap& out) {
+    return inst && renderHtmlToBitmap(html, width, height, inst->context,
+                                      inst->get_full_master_css().c_str(),
+                                      inst->context.getExtraCss().c_str(), options, out);
+}
+
 const uint8_t* satoru_api_html_to_png(SatoruInstance* inst, const char* html, int width, int height,
                                const SatoruRenderOptions& options, int& out_size) {
     return render_and_store(

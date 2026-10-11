@@ -116,4 +116,6 @@ EMSCRIPTEN_BINDINGS(html_to_image) {
     function("converter_is_animation", &converter_api_is_animation, allow_raw_pointers());
     function("converter_get_format", &converter_api_get_format, allow_raw_pointers());
     function("html_to_image", &html_to_image_val);
+    function("satoru_render_to_converter", &satoru_render_to_converter_val,
+             allow_raw_pointers());
 }

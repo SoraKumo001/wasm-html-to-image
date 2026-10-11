@@ -18,8 +18,18 @@
 
 #include "../bridge/bridge_types.h"
 
+class SatoruInstance;
+class ImageConverterInstance;
+
 emscripten::val html_to_image_val(emscripten::val htmls, int width, int height, int format,
                                   emscripten::val options_val, float quality, int speed,
                                   bool animation);
+
+// HTML -> bitmap -> converter instance, with no PNG round trip. Renders with the
+// satoru instance state (resolved fonts/images/css) and installs the bitmap as the
+// converter's single frame, ready for `converter_encode`. Returns false on failure.
+bool satoru_render_to_converter_val(SatoruInstance* satoru, ImageConverterInstance* converter,
+                                    emscripten::val htmls, int width, int height,
+                                    emscripten::val options_val);
 
 #endif  // HTML_TO_IMAGE_UNIFIED_BINDINGS_H

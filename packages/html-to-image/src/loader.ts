@@ -121,6 +121,12 @@ export interface HtmlToImageModule {
   ): unknown;
   /** HTML render wrapper (positional: instance, htmls, w, h, format, options). */
   satoru_render?: (...args: unknown[]) => unknown;
+  /**
+   * Render HTML straight into a converter instance's frame (no PNG round
+   * trip): `(satoruInst, converterInst, htmls, width, height, options)`.
+   * Returns false on failure. Probed at runtime; PNG path is the fallback.
+   */
+  satoru_render_to_converter?: (...args: unknown[]) => boolean;
   /** Image encode wrapper (positional: instance, format, quality, speed, animation). */
   converter_encode?: (...args: unknown[]) => unknown;
   /**
