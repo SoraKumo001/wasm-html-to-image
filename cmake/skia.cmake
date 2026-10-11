@@ -4,7 +4,7 @@
 # glob パターン・除外フィルタ・定義・インクルードの変更なし。
 # ソースファイルの追加削除なし (P2b 物理分割は別途。新規 cpp 登録はしない)。
 #
-# FetchContent バージョンは cmake/codecs.cmake 冒頭の固定表を正とする (skia: main, GIT_SHALLOW TRUE)。
+# FetchContent バージョンは cmake/codecs.cmake 冒頭の固定表を正とする (skia: コミット固定 / アーカイブ取得)。
 #
 # 前提:
 #  - include(FetchContent) 済み、LIBS_DIR / SKIA_CONFIG_DIR 定義済み (トップ)
@@ -13,12 +13,16 @@
 #  - cmake/fonts.cmake 適用済み (HTML_TO_IMAGE_LIBS)
 # 提供: skia_lib ターゲット
 
-# --- Skia (FetchContent main維持: 両リポ共通) ---
+# --- Skia (FetchContent: コミット固定) ---
+# main 追従だと同一ソースから別結果になり得るため、検証済みコミットに固定する。
+# GIT_SHALLOW + コミットハッシュは shallow clone に対象コミットが含まれず失敗するため、
+# 履歴を持たない GitHub アーカイブ (URL) で取得する。更新時は SKIA_COMMIT と
+# cmake/codecs.cmake の固定表を同時に更新すること。
+set(SKIA_COMMIT baf1231c43cc9c1613702698ea64b33ba5d9c9aa)
 FetchContent_Declare(
   skia
-  GIT_REPOSITORY https://github.com/google/skia.git
-  GIT_TAG        main
-  GIT_SHALLOW    TRUE
+  URL https://github.com/google/skia/archive/${SKIA_COMMIT}.tar.gz
+  DOWNLOAD_EXTRACT_TIMESTAMP TRUE
 )
 FetchContent_MakeAvailable(skia)
 

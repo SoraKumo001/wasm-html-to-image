@@ -80,7 +80,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: build/_deps/skia-src
-          key: skia-${{ hashFiles('CMakeLists.txt') }}
+          key: skia-${{ hashFiles('cmake/skia.cmake') }}
           restore-keys: |
             skia-
 

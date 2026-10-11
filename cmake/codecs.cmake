@@ -6,7 +6,7 @@
 # --- FetchContent バージョン固定表 (P3a) ---
 # | dep    | repository                                  | tag     | shallow | 備考                                    |
 # |--------|-----------------------------------------------|---------|---------|-----------------------------------------|
-# | skia   | https://github.com/google/skia.git            | main    | TRUE    | 両リポ共通。宣言のみここ参照、実体は cmake/skia.cmake |
+# | skia   | https://github.com/google/skia/archive/<sha>.tar.gz | baf1231 | -       | コミット固定 (URL取得)。実体は cmake/skia.cmake の SKIA_COMMIT |
 # | libavif| https://github.com/AOMediaCodec/libavif.git | v1.1.1  | (なし)  | SHALLOW指定なしのまま維持 (等価のため)  |
 # | libaom | https://aomedia.googlesource.com/aom          | v3.11.0 | TRUE    | WASM_AVIF_BACKEND=AOM 時のみ取得        |
 # | libjxl | https://github.com/libjxl/libjxl.git          | v0.11.1 | TRUE    | + GIT_SUBMODULES_RECURSE TRUE。WASM_ENABLE_JXL=ON時のみ |
