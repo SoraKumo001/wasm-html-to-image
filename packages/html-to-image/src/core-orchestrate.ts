@@ -10,6 +10,7 @@
  * here. `isImageInput` (`./input.ts`) is the single branch selector;
  * satoru option objects come from `./encode-args.ts` (canonical builder).
  */
+import { pdfFirstPageSize, svgRootHeight } from "./output-size.js";
 import type { HtmlToImageModule } from "./loader.js";
 import { FIT_INT, FORMAT_INT } from "./encode-args.js";
 import {
@@ -579,13 +580,7 @@ export async function tryRunHtmlInstance(
       deliverReport();
       if (format === "svg") {
         const svgStr = new TextDecoder().decode(bytes);
-        let outHeight = height ?? 0;
-        if (outHeight === 0) {
-          const matchH = svgStr.match(/height="(\d+(?:\.\d+)?)"/);
-          if (matchH) {
-            outHeight = Math.round(parseFloat(matchH[1]));
-          }
-        }
+        const outHeight = height || (svgRootHeight(svgStr) ?? 0);
         return {
           data: svgStr,
           width,
@@ -596,7 +591,7 @@ export async function tryRunHtmlInstance(
       return {
         data: bytes,
         width,
-        height: height ?? 0,
+        height: height || (pdfFirstPageSize(bytes)?.height ?? 0),
         format: "pdf",
       };
     }
