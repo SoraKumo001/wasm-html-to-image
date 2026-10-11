@@ -14,7 +14,7 @@ export default {
         width: 800,
         format: "png",
       });
-      return new Response(out as BodyInit, {
+      return new Response(out.data as BodyInit, {
         headers: { "Content-Type": "image/png" },
       });
     }
@@ -25,7 +25,7 @@ export default {
         width: 800,
         format: "svg",
       });
-      return new Response(out as string, {
+      return new Response(out.data, {
         headers: { "Content-Type": "image/svg+xml" },
       });
     }

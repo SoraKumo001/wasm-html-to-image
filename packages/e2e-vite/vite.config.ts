@@ -11,10 +11,10 @@ const wasmDist = path.dirname(
 
 async function renderPng(): Promise<Buffer> {
   const { render } = (await import("wasm-html-to-image/single")) as {
-    render: (o: unknown) => Promise<Uint8Array | string>;
+    render: (o: unknown) => Promise<{ data: Uint8Array | string }>;
   };
-  const out = await render({ value: "<h1>e2e backend</h1>", width: 800, format: "png" });
-  const bytes = out instanceof Uint8Array ? out : new TextEncoder().encode(out);
+  const { data } = await render({ value: "<h1>e2e backend</h1>", width: 800, format: "png" });
+  const bytes = data instanceof Uint8Array ? data : new TextEncoder().encode(data);
   return Buffer.from(bytes);
 }
 
