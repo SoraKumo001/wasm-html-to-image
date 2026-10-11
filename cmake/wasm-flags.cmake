@@ -9,10 +9,19 @@
 #    triplets/wasm32-emscripten-wasm-eh.cmake の COMMON_FLAGS との整合を確認すること。
 
 # -mbulk-memoryありに統一 (image-optのCOMMONには無かった分をsatoru側に合わせる)
+# --- 例外/longjmp の方式を全ターゲットで統一 ---
+# ネイティブ wasm 例外 (-fwasm-exceptions) + wasm SjLj。リンク時の方式と食い違う
+# オブジェクト (旧 JS 方式の invoke_*) が1つでも混ざるとリンクに失敗するため、
+# COMMON_COMPILE_OPTIONS の対象外 (FetchContent の libaom/libavif/libjxl 等) にも
+# CMAKE_C/CXX_FLAGS で行き渡らせる。vcpkg 側は triplets/emscripten-wasm-eh-toolchain.cmake。
+set(WASM_EH_FLAGS "-fwasm-exceptions -sSUPPORT_LONGJMP=wasm")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${WASM_EH_FLAGS}")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${WASM_EH_FLAGS}")
+
 set(COMMON_COMPILE_OPTIONS
     -Oz
     -g0
-    -fexceptions
+    -fwasm-exceptions
     -msimd128
     -flto=thin
     -mbulk-memory
@@ -21,13 +30,12 @@ set(COMMON_LINK_OPTIONS
     "--bind"
     "-O3"
     "-g0"
-    -fexceptions
+    -fwasm-exceptions
     -msimd128
     "-flto=thin"
     "-mbulk-memory"
     "-sWASM_BIGINT=1"
-    "-sSUPPORT_LONGJMP=emscripten"
-    "-sDISABLE_EXCEPTION_CATCHING=0"
+    "-sSUPPORT_LONGJMP=wasm"
     "-sDYNAMIC_EXECUTION=0"
     "-sASSERTIONS=0"
     "-sMODULARIZE=1"

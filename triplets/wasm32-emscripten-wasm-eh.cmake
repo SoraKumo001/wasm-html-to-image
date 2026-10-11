@@ -15,10 +15,12 @@ else()
    set(EMSCRIPTEN_ROOT "$ENV{EMSCRIPTEN_ROOT}")
 endif()
 
-set(VCPKG_CHAINLOAD_TOOLCHAIN_FILE "${EMSCRIPTEN_ROOT}/cmake/Modules/Platform/Emscripten.cmake")
+# Emscripten.cmake を包み、例外/longjmp フラグを CMAKE_*_FLAGS_INIT へ注入する。
+# (VCPKG_C_FLAGS は Emscripten の chainload では各ポートに適用されないため。)
+set(VCPKG_CHAINLOAD_TOOLCHAIN_FILE "${CMAKE_CURRENT_LIST_DIR}/emscripten-wasm-eh-toolchain.cmake")
 
 # NOTE: satoru版に統一。image-opt版との差分は末尾 -mbulk-memory の有無のみであり、こちら(あり)を正とする。
-set(COMMON_FLAGS "-fexceptions -sSUPPORT_LONGJMP=emscripten -g0 -O3 -msimd128 -flto=thin -mbulk-memory")
+set(COMMON_FLAGS "-fwasm-exceptions -sSUPPORT_LONGJMP=wasm -g0 -O3 -msimd128 -flto=thin -mbulk-memory")
 
 set(VCPKG_C_FLAGS "${COMMON_FLAGS}")
 set(VCPKG_CXX_FLAGS "${COMMON_FLAGS}")
