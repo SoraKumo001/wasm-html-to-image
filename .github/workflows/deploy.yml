@@ -27,6 +27,12 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Host C++ unit tests
+        run: |
+          cmake -S tests/cpp -B build-host-tests
+          cmake --build build-host-tests
+          ctest --test-dir build-host-tests -C Debug --output-on-failure
+
       - name: Cache vcpkg downloads
         uses: actions/cache@v6
         with:

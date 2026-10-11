@@ -23,3 +23,9 @@ target_include_directories(test_string_utils PRIVATE "${CMAKE_CURRENT_SOURCE_DIR
 target_compile_features(test_string_utils PRIVATE cxx_std_20)
 
 add_test(NAME string_utils COMMAND test_string_utils)
+
+add_executable(test_lru_cache test_lru_cache.cpp)
+target_include_directories(test_lru_cache PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp")
+target_compile_features(test_lru_cache PRIVATE cxx_std_20)
+
+add_test(NAME lru_cache COMMAND test_lru_cache)
