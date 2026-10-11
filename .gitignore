@@ -22,8 +22,8 @@ playwright-report/
 playwright/.cache/
 
 # ===== CMake / Ninja / Emscripten / vcpkg (WASM build) =====
-build/
-build-*/
+/build/
+/build-*/
 vcpkg_installed/
 CMakeFiles/
 CMakeCache.txt

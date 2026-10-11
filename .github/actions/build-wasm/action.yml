@@ -1,0 +1,101 @@
+name: Build wasm
+description: >-
+  Restore caches, set up Emscripten/pnpm/Node, install dependencies and build
+  the wasm module (shared by the deploy and release workflows). Run after
+  checkout; the calling job provides the VCPKG_* env variables.
+
+inputs:
+  emsdk-version:
+    description: Emscripten SDK version to install.
+    required: true
+  registry-url:
+    description: npm registry URL passed to actions/setup-node (empty = none).
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Cache vcpkg downloads
+      uses: actions/cache@v6
+      with:
+        path: ${{ github.workspace }}/vcpkg_downloads
+        key: vcpkg-downloads-${{ hashFiles('vcpkg.json') }}
+        restore-keys: |
+          vcpkg-downloads-
+
+    - name: Pre-download gumbo
+      shell: bash
+      run: |
+        mkdir -p ${{ github.workspace }}/vcpkg_downloads
+        if [ ! -f ${{ github.workspace }}/vcpkg_downloads/gumbo-0.12.3.tar.gz ]; then
+          curl -L --retry 5 --retry-delay 10 -o ${{ github.workspace }}/vcpkg_downloads/gumbo-0.12.3.tar.gz https://codeberg.org/gumbo-parser/gumbo-parser/archive/0.12.3.tar.gz
+        fi
+
+    - name: Cache vcpkg binaries
+      uses: actions/cache@v6
+      with:
+        path: ${{ github.workspace }}/vcpkg_cache
+        key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json', 'triplets/**') }}-${{ github.run_id }}
+        restore-keys: |
+          vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json', 'triplets/**') }}-
+          vcpkg-${{ runner.os }}-
+
+    - name: Setup ccache
+      uses: hendrikmuhs/ccache-action@v1.2.24
+      with:
+        key: ${{ runner.os }}-wasm
+        max-size: 2G
+
+    - name: Cache Emscripten
+      uses: actions/cache@v6
+      with:
+        path: emsdk-cache
+        key: ${{ runner.os }}-emsdk-${{ inputs.emsdk-version }}-${{ hashFiles('package.json') }}
+        restore-keys: |
+          ${{ runner.os }}-emsdk-${{ inputs.emsdk-version }}-
+
+    - name: Setup Emscripten
+      uses: emscripten-core/setup-emsdk@v16
+      with:
+        version: ${{ inputs.emsdk-version }}
+        actions-cache-folder: "emsdk-cache"
+
+    - name: Install pnpm
+      uses: pnpm/action-setup@v6
+      with:
+        version: 10
+
+    - name: Cache Skia Source
+      uses: actions/cache@v6
+      with:
+        path: build/_deps/skia-src
+        key: skia-${{ hashFiles('cmake/skia.cmake') }}
+        restore-keys: |
+          skia-
+
+    - name: Setup Node
+      uses: actions/setup-node@v7
+      with:
+        node-version: "22"
+        cache: "pnpm"
+        registry-url: ${{ inputs.registry-url }}
+
+    - name: Install dependencies
+      shell: bash
+      run: pnpm install --frozen-lockfile
+
+    - name: Wasm Configure
+      shell: bash
+      run: pnpm wasm:configure
+      env:
+        CMAKE_C_COMPILER_LAUNCHER: ccache
+        CMAKE_CXX_COMPILER_LAUNCHER: ccache
+
+    - name: Wasm Build
+      shell: bash
+      run: pnpm wasm:build
+
+    - name: ccache stats
+      shell: bash
+      run: ccache -s
