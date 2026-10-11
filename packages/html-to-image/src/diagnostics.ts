@@ -145,6 +145,12 @@ export interface RenderLimits {
   allowedHosts?: string[];
   /** Blocked hostnames. */
   blockedHosts?: string[];
+  /**
+   * Node only, opt-in. Restrict local file reads to files inside `baseUrl`
+   * (symlinks resolved): `../` escapes are refused, and with no `baseUrl`
+   * no local file is read at all. Enable it when rendering untrusted HTML.
+   */
+  confineFilesToBaseUrl?: boolean;
 }
 
 /**

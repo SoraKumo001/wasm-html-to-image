@@ -61,3 +61,35 @@ Returns a `string` for `svg` format, and `Uint8Array` for all other formats (`pn
 | `css`           | `string`                                  |         -          | Additional custom CSS string injected before discovery |
 | `mediaType`     | `"screen" \| "print"`                     |     `"screen"`     | Target media type for CSS `@media` rules               |
 | `textToPaths`   | `boolean`                                 |       `true`       | Outline text as SVG paths                              |
+
+### Rendering untrusted HTML (`limits`)
+
+When rendering user-supplied HTML, always restrict where it may fetch from and how much. By default any host is fetched, and on Node local files under `baseUrl` are read.
+
+| `limits` key            | Type       | Description                                                                                                                                                                |
+| ----------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `timeoutMs`             | `number`   | Timeout for the whole render. Each individual fetch is aborted by the remaining time                                                                                       |
+| `maxResourceCount`      | `number`   | Maximum number of resources to load                                                                                                                                        |
+| `maxResourceBytes`      | `number`   | Maximum bytes for a single resource                                                                                                                                        |
+| `maxTotalResourceBytes` | `number`   | Maximum total bytes for all resources                                                                                                                                      |
+| `allowedProtocols`      | `string[]` | Allowed URL protocols (e.g. `["https:"]`)                                                                                                                                  |
+| `allowedHosts`          | `string[]` | Allowed hostnames                                                                                                                                                          |
+| `blockedHosts`          | `string[]` | Blocked hostnames                                                                                                                                                          |
+| `confineFilesToBaseUrl` | `boolean`  | **Opt-in (Node only).** Restrict local file reads to files inside `baseUrl` (symlinks resolved). `../` escapes are refused, and with no `baseUrl` no local file is read at all |
+
+```ts
+await render({
+  value: untrustedHtml,
+  width: 1200,
+  baseUrl: "/srv/assets",
+  limits: {
+    timeoutMs: 10_000,
+    maxResourceCount: 20,
+    maxTotalResourceBytes: 10_000_000,
+    allowedProtocols: ["https:"],
+    confineFilesToBaseUrl: true,
+  },
+});
+```
+
+Fetched resources are cached in-process (up to 256 entries / 64 MiB, least-recently-used eviction, remote entries keyed per User-Agent). Call `clearResourceCache()` if the source files changed.

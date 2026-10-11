@@ -19,8 +19,58 @@ import {
   type ResourceDiagnostic,
 } from "./diagnostics.js";
 
-/** Process-wide fetched-bytes cache (upstream `resourceCache` parity). */
-const resourceCache = new Map<string, Uint8Array>();
+/** Cache bounds: a long-lived server must not grow without limit. */
+const CACHE_MAX_ENTRIES = 256;
+const CACHE_MAX_BYTES = 64 * 1024 * 1024;
+
+/**
+ * Process-wide fetched-bytes cache (upstream `resourceCache` parity),
+ * bounded by entry count and total bytes with least-recently-used eviction.
+ */
+class ResourceCache {
+  private readonly map = new Map<string, Uint8Array>();
+  private bytes = 0;
+
+  get(key: string): Uint8Array | undefined {
+    const hit = this.map.get(key);
+    if (hit) {
+      // Re-insert so Map order tracks recency (oldest first).
+      this.map.delete(key);
+      this.map.set(key, hit);
+    }
+    return hit;
+  }
+
+  set(key: string, value: Uint8Array): void {
+    if (value.length > CACHE_MAX_BYTES) return;
+    const old = this.map.get(key);
+    if (old) {
+      this.bytes -= old.length;
+      this.map.delete(key);
+    }
+    this.map.set(key, value);
+    this.bytes += value.length;
+    for (const [k, v] of this.map) {
+      if (this.map.size <= CACHE_MAX_ENTRIES && this.bytes <= CACHE_MAX_BYTES) {
+        break;
+      }
+      this.map.delete(k);
+      this.bytes -= v.length;
+    }
+  }
+
+  clear(): void {
+    this.map.clear();
+    this.bytes = 0;
+  }
+}
+
+const resourceCache = new ResourceCache();
+
+/** Drop every cached resource (e.g. after the source assets changed). */
+export function clearResourceCache(): void {
+  resourceCache.clear();
+}
 
 function isNodeRuntime(): boolean {
   const proc = (globalThis as { process?: { versions?: { node?: string } } })
@@ -46,10 +96,11 @@ export async function fetchResourceBytes(
   userAgent?: string,
   resolveResource?: ResolveResourceHook,
   timeoutMs?: number,
+  confineFiles?: boolean,
 ): Promise<Uint8Array | null> {
   if (url.startsWith("data:")) return null;
   const fallback = (): Promise<Uint8Array | null> =>
-    fetchResourceBytesInner(url, baseUrl, userAgent, timeoutMs);
+    fetchResourceBytesInner(url, baseUrl, userAgent, timeoutMs, confineFiles);
   if (resolveResource) {
     try {
       return await resolveResource(url, fallback);
@@ -60,19 +111,40 @@ export async function fetchResourceBytes(
   return fallback();
 }
 
+/** True when `target` resolves (symlinks included) inside `root`. */
+async function isInsideDir(
+  fs: typeof import("node:fs/promises"),
+  path: typeof import("node:path"),
+  root: string,
+  target: string,
+): Promise<boolean> {
+  try {
+    const realRoot = await fs.realpath(path.resolve(root));
+    const realTarget = await fs.realpath(path.resolve(target));
+    const rel = path.relative(realRoot, realTarget);
+    return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel);
+  } catch {
+    return false;
+  }
+}
+
 /** Built-in resolution behind the `resolveResource` hook (see above). */
 async function fetchResourceBytesInner(
   url: string,
   baseUrl?: string,
   userAgent?: string,
   timeoutMs?: number,
+  confineFiles?: boolean,
 ): Promise<Uint8Array | null> {
   const headers = userAgent ? { "User-Agent": userAgent } : undefined;
   // Abort hung connections so one stalled server cannot outlive `timeoutMs`.
   const signal =
     timeoutMs !== undefined ? AbortSignal.timeout(Math.max(1, timeoutMs)) : undefined;
   const fetchBytes = async (target: string): Promise<Uint8Array | null> => {
-    const cached = resourceCache.get(target);
+    // Servers may vary the body by User-Agent (e.g. woff2 vs ttf CSS).
+    const cacheKey = `${userAgent ?? ""}
+${target}`;
+    const cached = resourceCache.get(cacheKey);
     if (cached) return cached;
     try {
       const res = await fetch(target, {
@@ -81,7 +153,7 @@ async function fetchResourceBytesInner(
       });
       if (!res.ok) return null;
       const bytes = toBytes(await res.arrayBuffer());
-      resourceCache.set(target, bytes);
+      resourceCache.set(cacheKey, bytes);
       return bytes;
     } catch {
       return null;
@@ -103,7 +175,11 @@ async function fetchResourceBytesInner(
         const fs =
           await importNode<typeof import("node:fs/promises")>("fs/promises");
         const path = await importNode<typeof import("node:path")>("path");
-        const joined = path.join(fileUrlToFsPath(baseUrl), url);
+        const root = fileUrlToFsPath(baseUrl);
+        const joined = path.join(root, url);
+        if (confineFiles && !(await isInsideDir(fs, path, root, joined))) {
+          return null;
+        }
         const cached = resourceCache.get(joined);
         if (cached) return cached;
         // Keep an owning copy: fs Buffers may ride a shared pool.
@@ -116,7 +192,8 @@ async function fetchResourceBytesInner(
     }
     return null;
   }
-  if (isNodeRuntime()) {
+  // Without a baseUrl there is no directory to confine reads to.
+  if (isNodeRuntime() && !confineFiles) {
     try {
       const cached = resourceCache.get(url);
       if (cached) return cached;
@@ -315,6 +392,7 @@ export async function resolveHtmlResources(
                     userAgent,
                     ctx.resolveResource,
                     fetchTimeoutOf(ctx),
+                    ctx.limits.confineFilesToBaseUrl,
                   )
               : entry instanceof Uint8Array
                 ? entry
@@ -464,6 +542,7 @@ export async function resolveHtmlResources(
               userAgent,
               ctx.resolveResource,
               fetchTimeoutOf(ctx),
+              ctx.limits.confineFilesToBaseUrl,
             );
             if (!bytes) {
               ctx.usage.resourceCount--;

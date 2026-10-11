@@ -29,6 +29,7 @@ export type {
 } from "./core.js";
 export { DIAGNOSTIC_CODES, LogLevel, htmlToImage } from "./core.js";
 export { isImageInput };
+export { clearResourceCache } from "./core-resources.js";
 export type { HtmlToImageModule } from "./loader.js";
 export { dropCachedModule, loadHtmlToImageModule } from "./loader.js";
 

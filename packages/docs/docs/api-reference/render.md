@@ -103,6 +103,38 @@ export interface RenderResult<T = Uint8Array | string> {
 | `onDiagnostics`   | `(report: RenderDiagnostics) => void`          | 診断レポート受信用コールバック                                     |
 | `limits`          | `RenderLimits`                                 | 最大リソース数、最大メモリサイズなどの安全上限                     |
 
+### 信頼できない HTML を描画するとき (`limits`)
+
+ユーザー入力の HTML を描画する場合は、`limits` で取得先と量を必ず絞ってください。既定ではどのホストにも fetch し、Node では `baseUrl` 配下のローカルファイルも読み込みます。
+
+| `limits` のキー         | 型         | 説明                                                                                                             |
+| ----------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------- |
+| `timeoutMs`             | `number`   | 描画全体のタイムアウト。個々の fetch も残り時間で中断されます                                                    |
+| `maxResourceCount`      | `number`   | 取得するリソース数の上限                                                                                         |
+| `maxResourceBytes`      | `number`   | 1 リソースあたりの最大バイト数                                                                                   |
+| `maxTotalResourceBytes` | `number`   | 全リソースの合計バイト数の上限                                                                                   |
+| `allowedProtocols`      | `string[]` | 許可するプロトコル (例: `["https:"]`)                                                                            |
+| `allowedHosts`          | `string[]` | 許可するホスト名                                                                                                 |
+| `blockedHosts`          | `string[]` | 拒否するホスト名                                                                                                 |
+| `confineFilesToBaseUrl` | `boolean`  | **オプトイン (Node のみ)**。ローカルファイルの読み込みを `baseUrl` 配下（シンボリックリンク解決後）に限定します。`../` での脱出は拒否され、`baseUrl` がない場合はローカルファイルを一切読みません |
+
+```ts
+await render({
+  value: untrustedHtml,
+  width: 1200,
+  baseUrl: "/srv/assets",
+  limits: {
+    timeoutMs: 10_000,
+    maxResourceCount: 20,
+    maxTotalResourceBytes: 10_000_000,
+    allowedProtocols: ["https:"],
+    confineFilesToBaseUrl: true,
+  },
+});
+```
+
+取得したリソースはプロセス内にキャッシュされます（最大 256 件 / 64 MiB、古いものから破棄、リモート取得は User-Agent ごと）。元のファイルを差し替えた場合は `clearResourceCache()` で破棄できます。
+
 ### PDF メタデータ
 
 | オプション    | 型       | 説明                       |
