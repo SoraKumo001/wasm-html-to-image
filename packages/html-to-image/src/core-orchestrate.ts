@@ -176,8 +176,6 @@ export function createOrchestration(
         fonts: [],
         warnings: [],
         errors: [],
-        totalResourceBytes: 0,
-        resourceCount: 0,
       }
     : null;
   const timings: Record<string, number> = {};
@@ -218,6 +216,7 @@ export function createOrchestration(
     limits,
     resolveResource,
     diag,
+    usage: { resourceCount: 0, totalResourceBytes: 0 },
     t0,
     emitLog,
     addTime,

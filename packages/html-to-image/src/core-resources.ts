@@ -45,10 +45,11 @@ export async function fetchResourceBytes(
   baseUrl?: string,
   userAgent?: string,
   resolveResource?: ResolveResourceHook,
+  timeoutMs?: number,
 ): Promise<Uint8Array | null> {
   if (url.startsWith("data:")) return null;
   const fallback = (): Promise<Uint8Array | null> =>
-    fetchResourceBytesInner(url, baseUrl, userAgent);
+    fetchResourceBytesInner(url, baseUrl, userAgent, timeoutMs);
   if (resolveResource) {
     try {
       return await resolveResource(url, fallback);
@@ -64,13 +65,20 @@ async function fetchResourceBytesInner(
   url: string,
   baseUrl?: string,
   userAgent?: string,
+  timeoutMs?: number,
 ): Promise<Uint8Array | null> {
   const headers = userAgent ? { "User-Agent": userAgent } : undefined;
+  // Abort hung connections so one stalled server cannot outlive `timeoutMs`.
+  const signal =
+    timeoutMs !== undefined ? AbortSignal.timeout(Math.max(1, timeoutMs)) : undefined;
   const fetchBytes = async (target: string): Promise<Uint8Array | null> => {
     const cached = resourceCache.get(target);
     if (cached) return cached;
     try {
-      const res = await fetch(target, headers ? { headers } : undefined);
+      const res = await fetch(target, {
+        ...(headers ? { headers } : {}),
+        ...(signal ? { signal } : {}),
+      });
       if (!res.ok) return null;
       const bytes = toBytes(await res.arrayBuffer());
       resourceCache.set(target, bytes);
@@ -181,8 +189,12 @@ export interface DiagState {
   fonts: FontDiagnostic[];
   warnings: DiagnosticMessage[];
   errors: DiagnosticMessage[];
-  totalResourceBytes: number;
+}
+
+/** Resource usage counters enforced by `limits` (always tracked). */
+export interface ResourceUsage {
   resourceCount: number;
+  totalResourceBytes: number;
 }
 
 /** Resolution context threaded through HTML discovery (internal). */
@@ -193,6 +205,7 @@ export interface ResolveContext {
   limits: RenderLimits;
   resolveResource?: ResolveResourceHook;
   diag: DiagState | null;
+  usage: ResourceUsage;
   t0: number;
   emitLog: (level: LogLevel, message: string) => void;
   /** Accumulate a timing (no-op unless diagnostics are enabled). */
@@ -242,6 +255,13 @@ export function limitCodeForReason(reason: string): string {
   if (reason.startsWith("Protocol "))
     return DIAGNOSTIC_CODES.LIMIT_PROTOCOL_BLOCKED;
   return DIAGNOSTIC_CODES.LIMIT_HOST_BLOCKED;
+}
+
+/** Remaining `timeoutMs` budget for one fetch (undefined = unlimited). */
+function fetchTimeoutOf(ctx: ResolveContext): number | undefined {
+  return ctx.limits.timeoutMs === undefined
+    ? undefined
+    : ctx.limits.timeoutMs - (now() - ctx.t0);
 }
 
 /**
@@ -294,6 +314,7 @@ export async function resolveHtmlResources(
                     baseUrl,
                     userAgent,
                     ctx.resolveResource,
+                    fetchTimeoutOf(ctx),
                   )
               : entry instanceof Uint8Array
                 ? entry
@@ -421,27 +442,31 @@ export async function resolveHtmlResources(
               settle("skipped", undefined, "inline data URL (resolved in C++)");
               return;
             }
-            if (
-              ctx.limits.maxResourceCount !== undefined &&
-              diag &&
-              diag.resourceCount >= ctx.limits.maxResourceCount
-            ) {
-              const message = `Maximum resource count (${ctx.limits.maxResourceCount}) exceeded`;
-              skipWithError(DIAGNOSTIC_CODES.LIMIT_RESOURCE_COUNT, message);
-              return;
-            }
             const blocked = checkResourceAllowed(r.url, ctx.limits);
             if (blocked) {
               skipWithError(limitCodeForReason(blocked), blocked);
               return;
             }
+            // Reserve the slot before awaiting so parallel fetches cannot
+            // all pass the count check; released again if the fetch fails.
+            if (
+              ctx.limits.maxResourceCount !== undefined &&
+              ctx.usage.resourceCount >= ctx.limits.maxResourceCount
+            ) {
+              const message = `Maximum resource count (${ctx.limits.maxResourceCount}) exceeded`;
+              skipWithError(DIAGNOSTIC_CODES.LIMIT_RESOURCE_COUNT, message);
+              return;
+            }
+            ctx.usage.resourceCount++;
             const bytes = await fetchResourceBytes(
               r.url,
               baseUrl,
               userAgent,
               ctx.resolveResource,
+              fetchTimeoutOf(ctx),
             );
             if (!bytes) {
+              ctx.usage.resourceCount--;
               settle("failed");
               const message = `Failed to fetch resource: ${r.url}`;
               diag?.warnings.push({
@@ -459,23 +484,22 @@ export async function resolveHtmlResources(
               const message =
                 `Resource size (${bytes.length} bytes) exceeds limit ` +
                 `(${ctx.limits.maxResourceBytes})`;
+              ctx.usage.resourceCount--;
               skipWithError(DIAGNOSTIC_CODES.LIMIT_RESOURCE_SIZE, message);
               return;
             }
+            // Check-and-add without an intervening await keeps this atomic.
             if (
               ctx.limits.maxTotalResourceBytes !== undefined &&
-              diag &&
-              diag.totalResourceBytes + bytes.length >
+              ctx.usage.totalResourceBytes + bytes.length >
                 ctx.limits.maxTotalResourceBytes
             ) {
               const message = `Total resource size exceeds limit (${ctx.limits.maxTotalResourceBytes})`;
+              ctx.usage.resourceCount--;
               skipWithError(DIAGNOSTIC_CODES.LIMIT_TOTAL_SIZE, message);
               return;
             }
-            if (diag) {
-              diag.resourceCount++;
-              diag.totalResourceBytes += bytes.length;
-            }
+            ctx.usage.totalResourceBytes += bytes.length;
             settle("loaded", bytes.length);
             (await addRes(
               satoruInst,
