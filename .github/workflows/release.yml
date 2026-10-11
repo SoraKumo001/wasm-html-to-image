@@ -72,81 +72,11 @@ jobs:
           cmake --build build-host-tests
           ctest --test-dir build-host-tests -C Debug --output-on-failure
 
-      - name: Cache vcpkg downloads
-        uses: actions/cache@v6
+      - name: Build wasm
+        uses: ./.github/actions/build-wasm
         with:
-          path: ${{ github.workspace }}/vcpkg_downloads
-          key: vcpkg-downloads-${{ hashFiles('vcpkg.json') }}
-          restore-keys: |
-            vcpkg-downloads-
-
-      - name: Pre-download gumbo
-        run: |
-          mkdir -p ${{ github.workspace }}/vcpkg_downloads
-          if [ ! -f ${{ github.workspace }}/vcpkg_downloads/gumbo-0.12.3.tar.gz ]; then
-            curl -L --retry 5 --retry-delay 10 -o ${{ github.workspace }}/vcpkg_downloads/gumbo-0.12.3.tar.gz https://codeberg.org/gumbo-parser/gumbo-parser/archive/0.12.3.tar.gz
-          fi
-
-      - name: Cache vcpkg binaries
-        uses: actions/cache@v6
-        with:
-          path: ${{ github.workspace }}/vcpkg_cache
-          key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json', 'triplets/**') }}-${{ github.run_id }}
-          restore-keys: |
-            vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json', 'triplets/**') }}-
-            vcpkg-${{ runner.os }}-
-
-      - name: Setup ccache
-        uses: hendrikmuhs/ccache-action@v1.2.24
-        with:
-          key: ${{ runner.os }}-wasm
-          max-size: 2G
-
-      - name: Cache Emscripten
-        uses: actions/cache@v6
-        with:
-          path: emsdk-cache
-          key: ${{ runner.os }}-emsdk-${{ env.EMSDK_VERSION }}-${{ hashFiles('package.json') }}
-          restore-keys: |
-            ${{ runner.os }}-emsdk-${{ env.EMSDK_VERSION }}-
-
-      - name: Setup Emscripten
-        uses: emscripten-core/setup-emsdk@v16
-        with:
-          version: ${{ env.EMSDK_VERSION }}
-          actions-cache-folder: "emsdk-cache"
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v6
-        with:
-          version: 10
-
-      - name: Cache Skia Source
-        uses: actions/cache@v6
-        with:
-          path: build/_deps/skia-src
-          key: skia-${{ hashFiles('cmake/skia.cmake') }}
-          restore-keys: |
-            skia-
-
-      - name: Setup Node
-        uses: actions/setup-node@v7
-        with:
-          node-version: "22"
+          emsdk-version: ${{ env.EMSDK_VERSION }}
           registry-url: "https://registry.npmjs.org"
-          cache: "pnpm"
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Wasm Configure
-        run: pnpm wasm:configure
-        env:
-          CMAKE_C_COMPILER_LAUNCHER: ccache
-          CMAKE_CXX_COMPILER_LAUNCHER: ccache
-
-      - name: Wasm Build
-        run: pnpm wasm:build
 
       - name: Build JS Packages
         run: pnpm build:js
