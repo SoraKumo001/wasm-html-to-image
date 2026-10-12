@@ -47,6 +47,13 @@ runs:
         key: ${{ runner.os }}-wasm
         max-size: 2G
 
+    # ccache's default compiler_check=mtime identifies em++ by its file mtime. emsdk is
+    # unpacked from a cache on every run, so the mtime always changes and every object
+    # was a miss (2 hits / 1025 compiles). Identify the compiler by its version instead.
+    - name: Key ccache on the emsdk version, not file mtimes
+      shell: bash
+      run: ccache --set-config=compiler_check='string:emsdk-${{ inputs.emsdk-version }}'
+
     - name: Cache Emscripten
       uses: actions/cache@v6
       with:
@@ -98,4 +105,4 @@ runs:
 
     - name: ccache stats
       shell: bash
-      run: ccache -s
+      run: ccache -sv
