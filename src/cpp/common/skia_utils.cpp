@@ -30,7 +30,8 @@ std::string base64_encode(const uint8_t* data, size_t len) {
             valb -= 6;
         }
     }
-    if (valb > -6) out.push_back(chars[((val << (6 + valb)) & 0x3F)]);
+    // valb in {-4, -2} here: 2 or 4 leftover bits, left-aligned into the final sextet.
+    if (valb > -6) out.push_back(chars[(val << -valb) & 0x3F]);
     while (out.size() % 4) out.push_back('=');
     return out;
 }
