@@ -26,6 +26,10 @@ set(COMMON_COMPILE_OPTIONS
     -flto=thin
     -mbulk-memory
 )
+# STACK_SIZE: Emscripten's default is 64 KB and ASSERTIONS=0 does not detect an overflow,
+# which silently corrupts adjacent memory. libaom's slower encode paths (AVIF speed 4/5)
+# overflow it, so the next encode in the same module crashed ("memory access out of
+# bounds"). 256 KB is enough for every AVIF/JXL speed on large images; 1 MB keeps a 4x margin.
 set(COMMON_LINK_OPTIONS
     "--bind"
     "-O3"
@@ -38,6 +42,7 @@ set(COMMON_LINK_OPTIONS
     "-sSUPPORT_LONGJMP=wasm"
     "-sDYNAMIC_EXECUTION=0"
     "-sASSERTIONS=0"
+    "-sSTACK_SIZE=1048576"
     "-sMODULARIZE=1"
     "-sEXPORT_ES6=1"
     "-sEXPORT_NAME='${WASM_EXPORT_NAME}'"
