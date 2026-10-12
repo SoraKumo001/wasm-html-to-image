@@ -42,6 +42,11 @@ class SatoruInstance {
     bool image_sizes_scanned = false;
     bool needs_relayout = false;
     std::string last_font_face_scan_html;
+
+    // True when `doc` was built and laid out by collect_resources for exactly this
+    // input and nothing has changed since (mirrors collect_resources' rebuild/relayout
+    // conditions), so it can be drawn without parsing and laying out again.
+    bool document_ready_for(const std::string& html, int width, int height, int mediaType) const;
     std::string cached_full_master_css;
     std::vector<uint8_t> pending_resources_buffer;
     double profile_scan_font_faces_ms = 0.0;

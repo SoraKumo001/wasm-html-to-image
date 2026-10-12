@@ -95,6 +95,16 @@ static void scan_image_sizes(litehtml::element::ptr el, SatoruContext& context) 
     }
 }
 
+bool SatoruInstance::document_ready_for(const std::string& html, int width, int height,
+                                       int mediaType) const {
+    litehtml::media_type mt =
+        (mediaType == 1) ? litehtml::media_type_print : litehtml::media_type_screen;
+    return doc && render_container && html == last_parsed_html &&
+           context.getCssVersion() == last_css_version &&
+           context.getFontVersion() == last_font_version && (int)mt == last_media_type &&
+           width == last_width && height == last_height && !context.needsRelayout;
+}
+
 void SatoruInstance::collect_resources(const std::string& html, int width, int height,
                                        int mediaType) {
     auto elapsed_ms = [](const auto& start, const auto& end) {
@@ -479,15 +489,23 @@ void satoru_api_destroy_instance(SatoruInstance* inst) { delete inst; }
 
 std::string satoru_api_html_to_svg(SatoruInstance* inst, const char* html, int width, int height,
                             const SatoruRenderOptions& options) {
+    // Deliberately no document reuse here (unlike the bitmap path): the collect-phase
+    // container draws a different SVG (embedded @font-face etc.), so reusing it
+    // would change the output.
     return renderHtmlToSvg(html, width, height, inst->context, inst->get_full_master_css().c_str(),
                            inst->context.getExtraCss().c_str(), options);
 }
 
 bool satoru_api_html_to_bitmap(SatoruInstance* inst, const char* html, int width, int height,
                                const SatoruRenderOptions& options, SkBitmap& out) {
-    return inst && renderHtmlToBitmap(html, width, height, inst->context,
-                                      inst->get_full_master_css().c_str(),
-                                      inst->context.getExtraCss().c_str(), options, out);
+    if (!inst) return false;
+    // Reuse the document collect_resources already built when it is current.
+    if (inst->document_ready_for(html, width, height, options.mediaType)) {
+        return renderDocumentToBitmap(inst, width, height, options, out);
+    }
+    return renderHtmlToBitmap(html, width, height, inst->context,
+                              inst->get_full_master_css().c_str(),
+                              inst->context.getExtraCss().c_str(), options, out);
 }
 
 const uint8_t* satoru_api_html_to_png(SatoruInstance* inst, const char* html, int width, int height,

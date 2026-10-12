@@ -6,6 +6,9 @@
 #include "include/core/SkData.h"
 
 class SatoruInstance;
+// Draw the instance's already laid-out document (from collect_resources) to a bitmap.
+bool renderDocumentToBitmap(SatoruInstance* inst, int width, int height,
+                            const SatoruRenderOptions& options, SkBitmap& out);
 sk_sp<SkData> renderDocumentToPng(SatoruInstance* inst, int width, int height,
                                   const SatoruRenderOptions& options);
 

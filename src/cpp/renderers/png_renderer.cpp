@@ -14,11 +14,11 @@
 #include "render_utils.h"
 #include "utils/logging.h"
 
-sk_sp<SkData> renderDocumentToPng(SatoruInstance* inst, int width, int height,
-                                  const SatoruRenderOptions& options) {
+bool renderDocumentToBitmap(SatoruInstance* inst, int width, int height,
+                            const SatoruRenderOptions& options, SkBitmap& out) {
     if (!inst->doc || !inst->render_container) {
-        SATORU_LOG_ERROR("[Satoru] renderDocumentToPng FAILED: null doc/container");
-        return nullptr;
+        SATORU_LOG_ERROR("[Satoru] renderDocumentToBitmap FAILED: null doc/container");
+        return false;
     }
 
     int content_width = width;
@@ -61,6 +61,14 @@ sk_sp<SkData> renderDocumentToPng(SatoruInstance* inst, int width, int height,
     inst->doc->draw(0, -src_x, -src_y, &clip);
     inst->render_container->flush();
 
+    out = std::move(bitmap);
+    return true;
+}
+
+sk_sp<SkData> renderDocumentToPng(SatoruInstance* inst, int width, int height,
+                                  const SatoruRenderOptions& options) {
+    SkBitmap bitmap;
+    if (!renderDocumentToBitmap(inst, width, height, options, bitmap)) return nullptr;
     // 寄せ: common/skia_encode の encode_png と等価。
     return html_to_image::encode_png(bitmap.pixmap());
 }

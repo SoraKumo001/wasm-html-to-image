@@ -20,6 +20,10 @@ namespace html_to_image {
 sk_sp<SkData> encode_png(const SkPixmap& pixmap) {
     SkDynamicMemoryWStream stream;
     SkPngEncoder::Options options;
+    // Up filter only: trying all five filters per row (Skia default) cost 20-40%
+    // more encode time for output within ~4% of the size (photos: the same size).
+    // No filter is faster still on flat UI but more than doubles photo output.
+    options.fFilterFlags = SkPngEncoder::FilterFlag::kUp;
     if (!SkPngEncoder::Encode(&stream, pixmap, options)) return nullptr;
     return stream.detachAsData();
 }
