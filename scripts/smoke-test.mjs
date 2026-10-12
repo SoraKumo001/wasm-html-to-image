@@ -1,6 +1,6 @@
 // Single-WASM smoke test (reproducible).
 // Usage: node scripts/smoke-test.mjs [test-image-path]
-// Loads packages/html-to-image/dist/html-to-image-single.js and checks:
+// Loads packages/html-to-image/dist/html-to-image.js (+ .wasm) and checks:
 //   a. converter_encode (test image -> webp/png, magic RIFF/89PNG)
 //   b. satoru_render returns null without crashing (renderers unported)
 //   c. html_to_image responds without crashing
@@ -17,13 +17,9 @@ const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
 );
-const singleJs = path.join(
-  repoRoot,
-  "packages",
-  "html-to-image",
-  "dist",
-  "html-to-image-single.js",
-);
+const distDir = path.join(repoRoot, "packages", "html-to-image", "dist");
+const glueJs = path.join(distDir, "html-to-image.js");
+const wasmPath = path.join(distDir, "html-to-image.wasm");
 const defaultImg = path.join(
   repoRoot,
   "packages",
@@ -60,9 +56,11 @@ const results = {
 };
 const details = {};
 
-const mod = await (await import(pathToFileURL(singleJs).href)).default();
+const mod = await (
+  await import(pathToFileURL(glueJs).href)
+).default({ wasmBinary: fs.readFileSync(wasmPath) });
 console.log(
-  `loaded single.js keys: ${Object.keys(mod)
+  `loaded html-to-image.js keys: ${Object.keys(mod)
     .filter((k) => /satoru|converter|html_to_image/.test(k))
     .join(",")}`,
 );

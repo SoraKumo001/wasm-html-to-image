@@ -156,23 +156,6 @@ set_target_properties(html_to_image PROPERTIES
     SUFFIX ".js"
 )
 
-add_executable(html_to_image_single $<TARGET_OBJECTS:html_to_image_core>)
-target_link_libraries(html_to_image_single PRIVATE litehtml skia_lib)
-if(WASM_ENABLE_JXL)
-    if(TARGET jxl)
-        target_link_libraries(html_to_image_single PRIVATE jxl)
-    elseif(TARGET jxl_enc)
-        target_link_libraries(html_to_image_single PRIVATE jxl_enc)
-    endif()
-endif()
-# SINGLE派生のみ +SINGLE_FILE と ENVIRONMENT=web,worker,node許容 (COMMON/SINGLE差分。定義は cmake/wasm-flags.cmake)
-target_link_options(html_to_image_single PRIVATE ${COMMON_LINK_OPTIONS} ${SINGLE_EXTRA_LINK_OPTIONS})
-set_target_properties(html_to_image_single PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/packages/html-to-image/dist"
-    OUTPUT_NAME "html-to-image-single"
-    SUFFIX ".js"
-)
-
 # --- Host unit tests (P5) ---
 # WASM/EMSCRIPTEN ビルドに影響させないためホスト時のみ登録。既存ターゲット・フラグ・ソースリスト不変。
 # 単独実行も可: cmake -S tests/cpp -B build-host-tests (tests/cpp/CMakeLists.txt 参照)。

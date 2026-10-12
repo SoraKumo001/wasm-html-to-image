@@ -1,4 +1,4 @@
-# cmake/wasm-flags.cmake — wasm 共通コンパイル/リンクフラグ + SINGLE_FILE 差分
+# cmake/wasm-flags.cmake — wasm 共通コンパイル/リンクフラグ
 #
 # P3a 分割前: CMakeLists.txt の COMMON_COMPILE_OPTIONS / COMMON_LINK_OPTIONS ブロック
 # (および COMMON/SINGLE 差分メモ) を等価移動。値の変更なし。
@@ -53,13 +53,4 @@ set(COMMON_LINK_OPTIONS
     "-sERROR_ON_UNDEFINED_SYMBOLS=0"
     "-sWARN_ON_UNDEFINED_SYMBOLS=0"
     "-sALLOW_MEMORY_GROWTH=1"
-)
-
-# --- COMMON/SINGLE差分メモ ---
-# COMMON(通常): ENVIRONMENT=web,worker。SINGLE派生のみ -sSINGLE_FILE=1 を追加し
-#   ENVIRONMENT=web,worker,node を許容する (image-opt single正。satoru singleはweb,workerのみだった差分)。
-#   通常版とsingle版は同一OBJECTからリンクし、リンクオプションのみが異なる。
-set(SINGLE_EXTRA_LINK_OPTIONS
-    "-sSINGLE_FILE=1"
-    "-sENVIRONMENT=web,worker,node"
 )
