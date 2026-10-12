@@ -80,7 +80,7 @@ const avif = await render({
   width: 800,
   format: "avif",
   quality: 75,
-  speed: 6, // 0 (best quality) - 10 (fastest)
+  speed: 6, // 0 (best quality) - 10 (fastest). AVIF default is 8; 6 trades time for ~15-20% smaller files
 });
 
 // Crop and resize
@@ -191,7 +191,7 @@ app.get("/ogp", async (req, res) => {
 | `height` | `number` | auto / content | Target viewport / output height in pixels |
 | `format` | `string` | `"png"` | Output format: `"png"`, `"jpeg"`, `"webp"`, `"avif"`, `"jxl"`, `"svg"`, `"pdf"`, `"raw"`, `"thumbhash"`, `"none"` |
 | `quality` | `number` | `85` | Compression quality (0-100) for JPEG, WebP, and AVIF |
-| `speed` | `number` | `6` | CPU effort/speed (0=best quality/slowest, 10=fastest) for AVIF |
+| `speed` | `number` | `8` for AVIF, `6` otherwise | CPU effort/speed (0=best quality/slowest, 10=fastest) for AVIF and JXL. AVIF at 8 is several times faster than 6 for ~15-20% larger files; set `speed: 6` for the smallest output |
 | `scale` | `number` | `1.0` | Device pixel ratio / render scaling factor |
 | `crop` | `{ x, y, width, height }` | - | Rectangular cropping coordinates |
 | `fallbackFonts` | `(Uint8Array \| Buffer)[]` | - | Inlined custom font binaries for air-gapped / offline rendering |

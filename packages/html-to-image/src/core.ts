@@ -110,7 +110,7 @@ export interface RenderOptions {
 export interface HtmlToImageOptions extends RenderOptions {
   /** Encode quality 0-100 (encode stage only, default 85; ignored for svg/pdf). */
   quality?: number;
-  /** Encode speed 0-10, mainly for AVIF (encode stage only, default 6). */
+  /** Encode speed 0-10, mainly for AVIF (encode stage only; default 8 for AVIF, 6 otherwise). */
   speed?: number;
   /** Keep animation frames where supported (encode stage only). */
   animation?: boolean;

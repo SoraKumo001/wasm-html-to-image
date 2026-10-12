@@ -76,7 +76,7 @@ export interface RenderResult<T = Uint8Array | string> {
 | オプション  | 型                                                        | 既定値  | 説明                                                                         |
 | ----------- | --------------------------------------------------------- | :-----: | ---------------------------------------------------------------------------- |
 | `quality`   | `number`                                                  |  `85`   | 圧縮品質 (0〜100)。JPEG, WebP, AVIF のエンコード時に適用（SVG/PDF では無視） |
-| `speed`     | `number`                                                  |   `6`   | エンコード速度 (0〜10)。主に AVIF エンコード時に有効                         |
+| `speed`     | `number`                                                  | AVIF: `8` / その他: `6` | エンコード速度 (0〜10)。AVIF・JXL で有効。AVIF は 6 より数倍速く、ファイルは約 15〜20% 大きくなります。最小サイズが必要なら `speed: 6` を指定してください |
 | `fit`       | `"contain" \| "cover" \| "fill"`                          |    -    | リサイズ戦略                                                                 |
 | `crop`      | `{ x: number, y: number, width: number, height: number }` |    -    | 切り抜き矩形                                                                 |
 | `animation` | `boolean`                                                 | `false` | アニメーションフレームを保持するか（対応形式のみ）                           |

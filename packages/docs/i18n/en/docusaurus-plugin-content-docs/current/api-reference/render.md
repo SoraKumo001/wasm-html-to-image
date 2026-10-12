@@ -46,7 +46,7 @@ Returns a `string` for `svg` format, and `Uint8Array` for all other formats (`pn
 | Option      | Type                                                      | Default | Description                                  |
 | ----------- | --------------------------------------------------------- | :-----: | -------------------------------------------- |
 | `quality`   | `number`                                                  |  `85`   | Compression quality 0–100 (JPEG, WebP, AVIF) |
-| `speed`     | `number`                                                  |   `6`   | Encoding speed 0–10 (primarily for AVIF)     |
+| `speed`     | `number`                                                  | AVIF: `8` / other: `6` | Encoding speed 0–10 (AVIF and JXL). AVIF at 8 is several times faster than 6 for ~15–20% larger files; pass `speed: 6` for the smallest output |
 | `fit`       | `"contain" \| "cover" \| "fill"`                          |    -    | Resize fit strategy                          |
 | `crop`      | `{ x: number, y: number, width: number, height: number }` |    -    | Cropping bounding rectangle                  |
 | `animation` | `boolean`                                                 | `false` | Preserve animation frames where supported    |

@@ -106,6 +106,20 @@ export interface Orchestration {
   resolveCtx: ResolveContext;
 }
 
+/** Default `speed` for formats other than AVIF (JXL maps it to effort 10 - speed). */
+export const DEFAULT_SPEED = 6;
+
+/**
+ * Default AVIF `speed`. At 6, a typical 800px page takes 1.4-3 s; at 8 it takes
+ * 0.3-0.4 s for ~15-20% larger files. JXL is already fast at 6, so it keeps it.
+ */
+export const DEFAULT_AVIF_SPEED = 8;
+
+/** Default `speed` for an output format when the caller does not set one. */
+export function defaultSpeed(format: string): number {
+  return format === "avif" ? DEFAULT_AVIF_SPEED : DEFAULT_SPEED;
+}
+
 /** Build per-call orchestration state (log gate, timings, diag, resolve ctx). */
 export function createOrchestration(
   module: HtmlToImageModule,
@@ -114,7 +128,7 @@ export function createOrchestration(
   const {
     format = "png",
     quality = 85,
-    speed = 6,
+    speed: speedOption,
     animation = false,
     width,
     height,
@@ -146,6 +160,7 @@ export function createOrchestration(
     pdfHeader,
     pdfFooter,
   } = options;
+  const speed = speedOption ?? defaultSpeed(format);
   const fmtInt = FORMAT_INT[format];
   const mediaTypeInt = mediaType === "print" ? 1 : 0;
 

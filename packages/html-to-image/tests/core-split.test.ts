@@ -311,3 +311,22 @@ describe("core-split: orchestration basics", () => {
     );
   });
 });
+
+describe("core-split: default encode speed", () => {
+  const speedOf = (options: Record<string, unknown>): number =>
+    createOrchestration(stubMod, { value: "<p/>", width: 10, ...options }).speed;
+
+  it("defaults AVIF to 8 and every other format to 6", () => {
+    expect(speedOf({ format: "avif" })).toBe(8);
+    for (const format of ["png", "jpeg", "webp", "jxl", "svg", "pdf"]) {
+      expect(speedOf({ format })).toBe(6);
+    }
+    expect(speedOf({})).toBe(6); // png by default
+  });
+
+  it("keeps an explicit speed, including 6 and 0, for AVIF", () => {
+    expect(speedOf({ format: "avif", speed: 6 })).toBe(6);
+    expect(speedOf({ format: "avif", speed: 0 })).toBe(0);
+    expect(speedOf({ format: "avif", speed: 10 })).toBe(10);
+  });
+});

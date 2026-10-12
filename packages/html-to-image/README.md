@@ -87,7 +87,7 @@ const avif = await render({
   width: 800,
   format: "avif",
   quality: 75,
-  speed: 6, // 0 (best quality) - 10 (fastest)
+  speed: 6, // 0 (best quality) - 10 (fastest). AVIF default is 8; 6 trades time for ~15-20% smaller files
 });
 await fs.writeFile("photo.avif", Buffer.from(avif.data));
 
