@@ -79,7 +79,8 @@ export interface HtmlToImageModule {
    */
   satoru_collect_resources?(
     inst: WasmInstancePtr,
-    html: string,
+    /** One page, or an array with one entry per page (all collected in this call). */
+    html: string | string[],
     width: number,
     height: number,
     mediaType: number,

@@ -149,10 +149,11 @@ void satoru_set_font_map_val(SatoruInstance* inst, val fontMap) {
 // Bodies (collect/add/pending/load_font) are fully ported in api/satoru_api.cpp;
 // only the Embind registrations were missing, so externally referenced fonts
 // and images could never be resolved (data: URLs resolve inline in request()).
-void satoru_collect_resources_val(SatoruInstance* inst, std::string html, int width, int height,
+void satoru_collect_resources_val(SatoruInstance* inst, val htmls, int width, int height,
                                   int mediaType) {
     if (!inst) return;
-    satoru_api_collect_resources(inst, html, width, height, mediaType);
+    // One call covers all pages: JS no longer loops page by page across the wasm boundary.
+    satoru_api_collect_resources_pages(inst, val_to_html_vector(htmls), width, height, mediaType);
 }
 val satoru_get_pending_resources_val(SatoruInstance* inst) {
     if (!inst) return val::null();

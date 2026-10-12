@@ -117,6 +117,12 @@ int satoru_api_get_last_pdf_size(SatoruInstance *inst);
 int satoru_api_get_last_svg_size(SatoruInstance *inst);
 void satoru_api_collect_resources(SatoruInstance *inst, const std::string &html, int width, int height,
                            int mediaType = 0);
+// Collect every page in one call. Requests accumulate in the instance's ResourceManager
+// (deduplicated by URL), so one get_pending_resources afterwards yields the union for all
+// pages. Pages are laid out one after another on the same instance; when this returns the
+// instance holds the document of the LAST page.
+void satoru_api_collect_resources_pages(SatoruInstance *inst, const std::vector<std::string> &htmls,
+                                        int width, int height, int mediaType = 0);
 std::string satoru_api_get_collect_profile(SatoruInstance *inst);
 void satoru_api_set_collect_profile_enabled(SatoruInstance *inst, bool enabled);
 void satoru_api_add_resource(SatoruInstance *inst, const std::string &url, int type,

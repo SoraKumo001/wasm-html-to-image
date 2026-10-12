@@ -139,7 +139,9 @@ async function fetchResourceBytesInner(
   const headers = userAgent ? { "User-Agent": userAgent } : undefined;
   // Abort hung connections so one stalled server cannot outlive `timeoutMs`.
   const signal =
-    timeoutMs !== undefined ? AbortSignal.timeout(Math.max(1, timeoutMs)) : undefined;
+    timeoutMs !== undefined
+      ? AbortSignal.timeout(Math.max(1, timeoutMs))
+      : undefined;
   const fetchBytes = async (target: string): Promise<Uint8Array | null> => {
     // Servers may vary the body by User-Agent (e.g. woff2 vs ttf CSS).
     const cacheKey = `${userAgent ?? ""}
@@ -334,6 +336,27 @@ export function limitCodeForReason(reason: string): string {
   return DIAGNOSTIC_CODES.LIMIT_HOST_BLOCKED;
 }
 
+/**
+ * Max resource fetches in flight at once. All pages of a document are discovered
+ * together, so this bounds the connection burst for many-page documents.
+ */
+export const FETCH_CONCURRENCY = 16;
+
+/** Run `fn` over `items` with at most `limit` calls in flight (`fn` must not reject). */
+export async function mapWithLimit<T>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T) => Promise<void>,
+): Promise<void> {
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    while (next < items.length) await fn(items[next++]);
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, worker),
+  );
+}
+
 /** Remaining `timeoutMs` budget for one fetch (undefined = unlimited). */
 function fetchTimeoutOf(ctx: ResolveContext): number | undefined {
   return ctx.limits.timeoutMs === undefined
@@ -466,147 +489,139 @@ export async function resolveHtmlResources(
       // Non-fatal; timings simply miss the C++ breakdown.
     }
   }
-  const list = Array.isArray(htmls) ? htmls : [htmls];
   for (let round = 0; round < 10; round++) {
     ctx.checkTimeout();
-    let progressed = false;
-    for (const html of list) {
-      (await collect(
-        satoruInst,
-        html,
-        width,
-        height ?? 0,
-        ctx.mediaTypeInt,
-      )) as unknown;
-      const bin = (await getPending(satoruInst)) as
-        | Uint8Array
-        | null
-        | undefined;
-      const pending = parsePendingResources(
-        bin instanceof Uint8Array ? bin : undefined,
-      );
-      if (pending.length === 0) continue;
-      progressed = true;
-      await Promise.all(
-        pending.map(async (r) => {
-          const diag = ctx.diag;
-          const entry: ResourceDiagnostic | undefined = diag
-            ? {
-                type: r.type,
-                url: r.url,
-                name: r.name || undefined,
-                status: "pending",
-              }
-            : undefined;
-          if (diag && entry) diag.resources.push(entry);
-          const settle = (
-            status: ResourceDiagnostic["status"],
-            bytes?: number,
-            reason?: string,
-          ): void => {
-            if (!entry) return;
-            entry.status = status;
-            if (bytes !== undefined) entry.bytes = bytes;
-            if (reason !== undefined) entry.reason = reason;
-          };
-          const skipWithError = (code: string, message: string): void => {
-            settle("skipped", undefined, message);
-            diag?.errors.push({ code, message, source: r.url });
-            ctx.emitLog(LogLevel.Warning, `${message} (${r.url})`);
-          };
-          try {
-            if (r.url.startsWith("data:")) {
-              // Inline data: URLs resolve inside C++; nothing to fetch.
-              settle("skipped", undefined, "inline data URL (resolved in C++)");
-              return;
-            }
-            const blocked = checkResourceAllowed(r.url, ctx.limits);
-            if (blocked) {
-              skipWithError(limitCodeForReason(blocked), blocked);
-              return;
-            }
-            // Reserve the slot before awaiting so parallel fetches cannot
-            // all pass the count check; released again if the fetch fails.
-            if (
-              ctx.limits.maxResourceCount !== undefined &&
-              ctx.usage.resourceCount >= ctx.limits.maxResourceCount
-            ) {
-              const message = `Maximum resource count (${ctx.limits.maxResourceCount}) exceeded`;
-              skipWithError(DIAGNOSTIC_CODES.LIMIT_RESOURCE_COUNT, message);
-              return;
-            }
-            ctx.usage.resourceCount++;
-            const bytes = await fetchResourceBytes(
-              r.url,
-              baseUrl,
-              userAgent,
-              ctx.resolveResource,
-              fetchTimeoutOf(ctx),
-              ctx.limits.confineFilesToBaseUrl,
-            );
-            if (!bytes) {
-              ctx.usage.resourceCount--;
-              settle("failed");
-              const message = `Failed to fetch resource: ${r.url}`;
-              diag?.warnings.push({
-                code: DIAGNOSTIC_CODES.RESOURCE_FETCH_FAILED,
-                message,
-                source: r.url,
-              });
-              ctx.emitLog(LogLevel.Warning, message);
-              return;
-            }
-            if (
-              ctx.limits.maxResourceBytes !== undefined &&
-              bytes.length > ctx.limits.maxResourceBytes
-            ) {
-              const message =
-                `Resource size (${bytes.length} bytes) exceeds limit ` +
-                `(${ctx.limits.maxResourceBytes})`;
-              ctx.usage.resourceCount--;
-              skipWithError(DIAGNOSTIC_CODES.LIMIT_RESOURCE_SIZE, message);
-              return;
-            }
-            // Check-and-add without an intervening await keeps this atomic.
-            if (
-              ctx.limits.maxTotalResourceBytes !== undefined &&
-              ctx.usage.totalResourceBytes + bytes.length >
-                ctx.limits.maxTotalResourceBytes
-            ) {
-              const message = `Total resource size exceeds limit (${ctx.limits.maxTotalResourceBytes})`;
-              ctx.usage.resourceCount--;
-              skipWithError(DIAGNOSTIC_CODES.LIMIT_TOTAL_SIZE, message);
-              return;
-            }
-            ctx.usage.totalResourceBytes += bytes.length;
-            settle("loaded", bytes.length);
-            (await addRes(
-              satoruInst,
-              r.url,
-              r.type === "image" ? 2 : r.type === "css" ? 3 : 1,
-              bytes,
-            )) as unknown;
-            if (r.type === "font") {
-              diag?.fonts.push({
-                family: r.name || r.url,
-                status: "loaded",
-                source: r.url,
-              });
-            }
-          } catch (e) {
-            // Per-resource failure is non-fatal; render proceeds regardless.
-            const d = errorToDiagnostic(
-              e,
-              DIAGNOSTIC_CODES.RESOURCE_FETCH_FAILED,
-              r.url,
-            );
-            settle("failed", undefined, d.message);
-            diag?.warnings.push(d);
+    // One wasm call covers every page: the C++ side lays each page out in turn and
+    // accumulates its requests, so a single read returns the union for all pages and
+    // their fetches run in parallel (previously: collect, fetch, repeat per page).
+    (await collect(
+      satoruInst,
+      htmls,
+      width,
+      height ?? 0,
+      ctx.mediaTypeInt,
+    )) as unknown;
+    const bin = (await getPending(satoruInst)) as Uint8Array | null | undefined;
+    const pending = parsePendingResources(
+      bin instanceof Uint8Array ? bin : undefined,
+    );
+    if (pending.length === 0) break;
+    await mapWithLimit(pending, FETCH_CONCURRENCY, async (r) => {
+      const diag = ctx.diag;
+      const entry: ResourceDiagnostic | undefined = diag
+        ? {
+            type: r.type,
+            url: r.url,
+            name: r.name || undefined,
+            status: "pending",
           }
-        }),
-      );
-    }
-    if (!progressed) break;
+        : undefined;
+      if (diag && entry) diag.resources.push(entry);
+      const settle = (
+        status: ResourceDiagnostic["status"],
+        bytes?: number,
+        reason?: string,
+      ): void => {
+        if (!entry) return;
+        entry.status = status;
+        if (bytes !== undefined) entry.bytes = bytes;
+        if (reason !== undefined) entry.reason = reason;
+      };
+      const skipWithError = (code: string, message: string): void => {
+        settle("skipped", undefined, message);
+        diag?.errors.push({ code, message, source: r.url });
+        ctx.emitLog(LogLevel.Warning, `${message} (${r.url})`);
+      };
+      try {
+        if (r.url.startsWith("data:")) {
+          // Inline data: URLs resolve inside C++; nothing to fetch.
+          settle("skipped", undefined, "inline data URL (resolved in C++)");
+          return;
+        }
+        const blocked = checkResourceAllowed(r.url, ctx.limits);
+        if (blocked) {
+          skipWithError(limitCodeForReason(blocked), blocked);
+          return;
+        }
+        // Reserve the slot before awaiting so parallel fetches cannot
+        // all pass the count check; released again if the fetch fails.
+        if (
+          ctx.limits.maxResourceCount !== undefined &&
+          ctx.usage.resourceCount >= ctx.limits.maxResourceCount
+        ) {
+          const message = `Maximum resource count (${ctx.limits.maxResourceCount}) exceeded`;
+          skipWithError(DIAGNOSTIC_CODES.LIMIT_RESOURCE_COUNT, message);
+          return;
+        }
+        ctx.usage.resourceCount++;
+        const bytes = await fetchResourceBytes(
+          r.url,
+          baseUrl,
+          userAgent,
+          ctx.resolveResource,
+          fetchTimeoutOf(ctx),
+          ctx.limits.confineFilesToBaseUrl,
+        );
+        if (!bytes) {
+          ctx.usage.resourceCount--;
+          settle("failed");
+          const message = `Failed to fetch resource: ${r.url}`;
+          diag?.warnings.push({
+            code: DIAGNOSTIC_CODES.RESOURCE_FETCH_FAILED,
+            message,
+            source: r.url,
+          });
+          ctx.emitLog(LogLevel.Warning, message);
+          return;
+        }
+        if (
+          ctx.limits.maxResourceBytes !== undefined &&
+          bytes.length > ctx.limits.maxResourceBytes
+        ) {
+          const message =
+            `Resource size (${bytes.length} bytes) exceeds limit ` +
+            `(${ctx.limits.maxResourceBytes})`;
+          ctx.usage.resourceCount--;
+          skipWithError(DIAGNOSTIC_CODES.LIMIT_RESOURCE_SIZE, message);
+          return;
+        }
+        // Check-and-add without an intervening await keeps this atomic.
+        if (
+          ctx.limits.maxTotalResourceBytes !== undefined &&
+          ctx.usage.totalResourceBytes + bytes.length >
+            ctx.limits.maxTotalResourceBytes
+        ) {
+          const message = `Total resource size exceeds limit (${ctx.limits.maxTotalResourceBytes})`;
+          ctx.usage.resourceCount--;
+          skipWithError(DIAGNOSTIC_CODES.LIMIT_TOTAL_SIZE, message);
+          return;
+        }
+        ctx.usage.totalResourceBytes += bytes.length;
+        settle("loaded", bytes.length);
+        (await addRes(
+          satoruInst,
+          r.url,
+          r.type === "image" ? 2 : r.type === "css" ? 3 : 1,
+          bytes,
+        )) as unknown;
+        if (r.type === "font") {
+          diag?.fonts.push({
+            family: r.name || r.url,
+            status: "loaded",
+            source: r.url,
+          });
+        }
+      } catch (e) {
+        // Per-resource failure is non-fatal; render proceeds regardless.
+        const d = errorToDiagnostic(
+          e,
+          DIAGNOSTIC_CODES.RESOURCE_FETCH_FAILED,
+          r.url,
+        );
+        settle("failed", undefined, d.message);
+        diag?.warnings.push(d);
+      }
+    });
   }
   // Merge the C++ collect-phase breakdown into the JS timings.
   if (profileEnabled && ctx.diag) {

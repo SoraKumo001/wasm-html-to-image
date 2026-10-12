@@ -601,6 +601,13 @@ void satoru_api_collect_resources(SatoruInstance* inst, const std::string& html,
     inst->collect_resources(html, width, height, mediaType);
 }
 
+void satoru_api_collect_resources_pages(SatoruInstance* inst, const std::vector<std::string>& htmls,
+                                        int width, int height, int mediaType) {
+    for (const auto& html : htmls) {
+        inst->collect_resources(html, width, height, mediaType);
+    }
+}
+
 std::string satoru_api_get_collect_profile(SatoruInstance* inst) {
     return inst ? inst->get_collect_profile_json() : "{}";
 }

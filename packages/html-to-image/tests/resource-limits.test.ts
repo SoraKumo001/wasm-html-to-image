@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  FETCH_CONCURRENCY,
   fetchResourceBytes,
+  mapWithLimit,
   resolveHtmlResources,
   type ResolveContext,
 } from "../src/core-resources.js";
@@ -169,5 +171,86 @@ describe("per-fetch timeout", () => {
     );
     await fetchResourceBytes("https://nosignal.example/x");
     expect(init?.signal).toBeUndefined();
+  });
+});
+
+describe("multi-page discovery", () => {
+  /** Module whose collect binding records its calls and reports pending per round. */
+  function pagedModule(pendingRounds: string[][]) {
+    const collectCalls: unknown[] = [];
+    let round = 0;
+    const module = {
+      satoru_collect_resources: (_i: unknown, html: unknown) => {
+        collectCalls.push(html);
+      },
+      satoru_get_pending_resources: () => {
+        const urls = pendingRounds[round++] ?? [];
+        return urls.length ? pendingBin(urls) : new Uint8Array(0);
+      },
+      satoru_add_resource: () => undefined,
+    } as unknown as HtmlToImageModule;
+    return { module, collectCalls };
+  }
+
+  const baseCtx = (resolve: ResolveContext["resolveResource"]): ResolveContext => ({
+    mediaTypeInt: 0,
+    limits: {},
+    diag: null,
+    usage: { resourceCount: 0, totalResourceBytes: 0 },
+    t0: performance.now(),
+    emitLog: () => undefined,
+    addTime: () => undefined,
+    checkTimeout: () => undefined,
+    resolveResource: resolve,
+  });
+
+  it("collects all pages in a single call per round", async () => {
+    const pages = ["<p>1</p>", "<p>2</p>", "<p>3</p>"];
+    const { module, collectCalls } = pagedModule([uniqueUrls(4), []]);
+    await resolveHtmlResources(
+      module, {}, pages, 100, undefined, undefined, undefined, undefined, undefined,
+      baseCtx(async () => new Uint8Array(1)),
+    );
+    // round 1 found resources, round 2 found none -> two collect calls, each with ALL pages
+    expect(collectCalls).toEqual([pages, pages]);
+  });
+
+  it("fetches every page's resources in parallel, capped at FETCH_CONCURRENCY", async () => {
+    let live = 0;
+    let peak = 0;
+    const total = FETCH_CONCURRENCY * 3;
+    const { module } = pagedModule([uniqueUrls(total), []]);
+    await resolveHtmlResources(
+      module, {}, ["<p/>", "<p/>"], 100, undefined, undefined, undefined, undefined, undefined,
+      baseCtx(async () => {
+        live++;
+        peak = Math.max(peak, live);
+        await new Promise((r) => setTimeout(r, 5));
+        live--;
+        return new Uint8Array(1);
+      }),
+    );
+    expect(peak).toBe(FETCH_CONCURRENCY);
+  });
+});
+
+describe("mapWithLimit", () => {
+  it("runs every item once and never exceeds the limit", async () => {
+    let live = 0;
+    let peak = 0;
+    const seen: number[] = [];
+    await mapWithLimit([1, 2, 3, 4, 5, 6, 7], 3, async (n) => {
+      live++;
+      peak = Math.max(peak, live);
+      await new Promise((r) => setTimeout(r, 2));
+      seen.push(n);
+      live--;
+    });
+    expect(seen.sort()).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(peak).toBe(3);
+  });
+
+  it("handles an empty list", async () => {
+    await expect(mapWithLimit([], 4, async () => undefined)).resolves.toBeUndefined();
   });
 });

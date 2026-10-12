@@ -25,8 +25,9 @@ std::vector<std::string> val_to_html_vector(emscripten::val htmls);
 emscripten::val satoru_render_val(SatoruInstance* inst, emscripten::val htmls, int width,
                                   int height, int format, emscripten::val options_val);
 void satoru_set_font_map_val(SatoruInstance* inst, emscripten::val fontMap);
-void satoru_collect_resources_val(SatoruInstance* inst, std::string html, int width, int height,
-                                  int mediaType);
+// `htmls` is a string (one page) or an array of strings (one entry per page).
+void satoru_collect_resources_val(SatoruInstance* inst, emscripten::val htmls, int width,
+                                  int height, int mediaType);
 emscripten::val satoru_get_pending_resources_val(SatoruInstance* inst);
 void satoru_add_resource_val(SatoruInstance* inst, std::string url, int type,
                              emscripten::val data);
