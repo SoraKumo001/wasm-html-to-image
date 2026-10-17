@@ -146,6 +146,14 @@ class WidthProxyRunHandler : public SkShaper::RunHandler {
                 fCurrentBuffer.positions[i].fX = i * (font_size + fLetterSpacing);
                 fCurrentBuffer.positions[i].fY = 0;
             }
+        } else if (fLetterSpacing != 0 && fCurrentBuffer.positions) {
+            // The run advances do not include letter-spacing, so spread the glyphs here. The
+            // spacing added by earlier runs is carried over because the blob handler places runs
+            // by their plain advances.
+            for (size_t i = 0; i < info.glyphCount; ++i) {
+                fCurrentBuffer.positions[i].fX += fExtraSpacing + (float)i * fLetterSpacing;
+            }
+            fExtraSpacing += (float)info.glyphCount * fLetterSpacing;
         }
 
         if (fInner) {
@@ -175,6 +183,7 @@ class WidthProxyRunHandler : public SkShaper::RunHandler {
     mutable size_t fLastIsUprightIdx = 0;
 
    private:
+    float fExtraSpacing = 0;
     SkShaper::RunHandler* fInner;
     ShapedResult& fResult;
     litehtml::writing_mode fMode;

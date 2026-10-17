@@ -838,6 +838,21 @@ void litehtml::css_properties::compute_font(const element* el, const document::p
         }
     }
 
+    // The font description below needs the spacing, but compute() resolves it only after
+    // compute_font() has run, so resolve it here first.
+    m_letter_spacing =
+        el->get_property<css_length>(_letter_spacing_, true, css_length::predef_value(0), offset(m_letter_spacing));
+    m_word_spacing =
+        el->get_property<css_length>(_word_spacing_, true, css_length::predef_value(0), offset(m_word_spacing));
+    // m_font_metrics is not up to date yet, so resolve em units against the font size directly
+    for (css_length* spacing : {&m_letter_spacing, &m_word_spacing}) {
+        if (!spacing->is_predefined() && spacing->units() == css_units_em) {
+            spacing->set_value(spacing->val() * font_size, css_units_px);
+        }
+    }
+    doc->cvt_units(m_letter_spacing, m_font_metrics, font_size);
+    doc->cvt_units(m_word_spacing, m_font_metrics, font_size);
+
     font_description descr;
     descr.family = m_font_family;
     descr.size = std::round(font_size);
