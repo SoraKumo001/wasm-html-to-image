@@ -1624,6 +1624,13 @@ litehtml::containing_block_context litehtml::render_item::calculate_containing_b
     ret.width = ret.render_width;
     ret.height = ret.render_height;
 
+    // A vertical box with a definite height (inline size) gives its children that size to fill,
+    // so the shrink-to-fit mode inherited from the document root must not reach them.
+    if (ret.mode != writing_mode_horizontal_tb &&
+        ret.height.type == containing_block_context::cbc_value_type_absolute) {
+        ret.size_mode &= ~containing_block_context::size_mode_content;
+    }
+
     return ret;
 }
 

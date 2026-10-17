@@ -45,7 +45,8 @@ SVG 出力は PNG と一致 (差分 < 1%)、PDF 出力も縦書きのまま 1 �
 | 14 | `writing-mode: sideways-rl` (vertical-rl + `text-orientation: sideways` へ折り畳み) | 66: sideways-rl は一致 |
 | 5 | リストマーカー `cjk-ideographic` / `hiragana` / `katakana` (末尾は 、)。マーカー文字をレイアウト時に計測してグリフ収集へ登録 | 20/64a |
 | 1 | 縦書き table の caption (`caption-side: top` はブロック開始側、`bottom` は終端側) | 74a/74b |
-| 13 | `body` の縦書きをルートへ伝播し、右端基準で配置 | 60: outline 11.5%→2.1% (`html` 指定の 61 は右端が約 10px ずれる) |
+| 13 | `html` 直接指定の縦書き: 縦書きで高さが確定した要素の子に shrink-to-fit を引き継がない | 61: outline 4.0%→1.1%、61i: 72.8%→0.2% |
+| 13 | `body` の縦書きをルートへ伝播し、右端基準で配置 | 60: outline 11.5%→2.1% |
 | 8 | `text-combine-upright:all` (結合ランを横書きで再整形して 1em に圧縮) | 06/94: Chromium と同等 |
 | 7 | `letter-spacing` (横書き・縦書きとも。font description 生成前に解決、グリフ間隔を加算) | 99/16。`word-spacing` は未検証 |
 | - | 縦書きブロックを BFC 化 (float の高さ漏れ) | 30/77: ページ高さ 320→266px で一致 |
