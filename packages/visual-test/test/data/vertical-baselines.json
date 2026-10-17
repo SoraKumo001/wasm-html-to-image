@@ -228,8 +228,8 @@
     "height": 286
   },
   "39-vertical-align.html": {
-    "fill": 0.5113636363636364,
-    "outline": 0.8138111888111887,
+    "fill": 0.5638111888111889,
+    "outline": 0.7993881118881118,
     "width": 800,
     "height": 286
   },
@@ -574,5 +574,11 @@
     "outline": 3.370614035087719,
     "width": 800,
     "height": 112
+  },
+  "63a-super-horizontal.html": {
+    "fill": 2.1885593220338984,
+    "outline": 2.235169491525424,
+    "width": 800,
+    "height": 50
   }
 }

@@ -273,6 +273,10 @@ litehtml::uint_ptr container_skia::create_font(const litehtml::font_description&
         fm->descent = descent;
         fm->height = css_line_height;
         fm->x_height = skfm.fXHeight;
+        // Same baseline shifts as Blink: superscripts rise by a third of the font size and
+        // subscripts drop by a fifth.
+        fm->super_shift = (float)desc.size / 3.0f + 1.0f;
+        fm->sub_shift = (float)desc.size / 5.0f + 1.0f;
         fm->ch_width = (litehtml::pixel_t)fi->fonts[0]->measureText("0", 1, SkTextEncoding::kUTF8);
     }
     float css_line_height = ascent + descent + leading;
