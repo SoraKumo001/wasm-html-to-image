@@ -1,0 +1,524 @@
+{
+  "01-basic-rl.html": {
+    "fill": 1.458479020979021,
+    "outline": 1.1289335664335665,
+    "width": 800,
+    "height": 286
+  },
+  "02-basic-lr.html": {
+    "fill": 1.521416083916084,
+    "outline": 1.201923076923077,
+    "width": 800,
+    "height": 286
+  },
+  "03-punct.html": {
+    "fill": 2.037576687116564,
+    "outline": 2.8025306748466257,
+    "width": 800,
+    "height": 326
+  },
+  "04-latin-mixed.html": {
+    "fill": 0.6326687116564417,
+    "outline": 0.46472392638036814,
+    "width": 800,
+    "height": 326
+  },
+  "05-orientation.html": {
+    "fill": 0.911504424778761,
+    "outline": 0.9988938053097345,
+    "width": 800,
+    "height": 226
+  },
+  "06-tcy.html": {
+    "fill": 0.375,
+    "outline": 0.48863636363636365,
+    "width": 800,
+    "height": 286
+  },
+  "07-ruby.html": {
+    "fill": 1.4248251748251748,
+    "outline": 3.0179195804195804,
+    "width": 800,
+    "height": 286
+  },
+  "08-multicolumn-wrap.html": {
+    "fill": 4.61760752688172,
+    "outline": 3.5766129032258065,
+    "width": 800,
+    "height": 186
+  },
+  "09-shrink-width.html": {
+    "fill": 3.9054203539823007,
+    "outline": 3.258849557522124,
+    "width": 800,
+    "height": 226
+  },
+  "10-box-model.html": {
+    "fill": 1.673996913580247,
+    "outline": 1.248456790123457,
+    "width": 800,
+    "height": 324
+  },
+  "11-fixed-size.html": {
+    "fill": 1.6089601769911503,
+    "outline": 1.2765486725663715,
+    "width": 800,
+    "height": 226
+  },
+  "12-text-align.html": {
+    "fill": 4.259402654867257,
+    "outline": 4.52433628318584,
+    "width": 800,
+    "height": 226
+  },
+  "13-indent.html": {
+    "fill": 1.8246951219512193,
+    "outline": 1.4151422764227641,
+    "width": 800,
+    "height": 246
+  },
+  "14-decoration.html": {
+    "fill": 2.1084070796460175,
+    "outline": 5.293694690265487,
+    "width": 800,
+    "height": 226
+  },
+  "15-inline-bg.html": {
+    "fill": 5.101835664335665,
+    "outline": 5.640734265734266,
+    "width": 800,
+    "height": 286
+  },
+  "16-spacing.html": {
+    "fill": 1.9064685314685315,
+    "outline": 3.173076923076923,
+    "width": 800,
+    "height": 286
+  },
+  "17-kinsoku.html": {
+    "fill": 4.970535714285714,
+    "outline": 5.623214285714286,
+    "width": 800,
+    "height": 140
+  },
+  "18-inline-block.html": {
+    "fill": 0.9549825174825175,
+    "outline": 1.8798076923076925,
+    "width": 800,
+    "height": 286
+  },
+  "19-images.html": {
+    "fill": 1.3850524475524475,
+    "outline": 1.7679195804195806,
+    "width": 800,
+    "height": 286
+  },
+  "20-list.html": {
+    "fill": 2.5166083916083917,
+    "outline": 7.527534965034965,
+    "width": 800,
+    "height": 286
+  },
+  "21-headings-blocks.html": {
+    "fill": 1.8558526011560692,
+    "outline": 1.6972543352601157,
+    "width": 800,
+    "height": 346
+  },
+  "22-table.html": {
+    "fill": 1.3722587719298245,
+    "outline": 2.1929824561403506,
+    "width": 800,
+    "height": 456
+  },
+  "23-flex-in-vertical.html": {
+    "fill": 3.16209349593496,
+    "outline": 2.7245934959349594,
+    "width": 800,
+    "height": 246
+  },
+  "24-flex-column-vertical.html": {
+    "fill": 1.6643356643356644,
+    "outline": 1.5935314685314685,
+    "width": 800,
+    "height": 286
+  },
+  "25-flex-center.html": {
+    "fill": 0.15996503496503497,
+    "outline": 0.17395104895104896,
+    "width": 800,
+    "height": 286
+  },
+  "26-horizontal-in-vertical.html": {
+    "fill": 0.9305981595092024,
+    "outline": 0.5601993865030676,
+    "width": 800,
+    "height": 326
+  },
+  "27-vertical-in-horizontal.html": {
+    "fill": 1.8693181818181817,
+    "outline": 1.0454545454545454,
+    "width": 800,
+    "height": 153
+  },
+  "28-nested-vertical.html": {
+    "fill": 3.2242132867132867,
+    "outline": 2.445804195804196,
+    "width": 800,
+    "height": 286
+  },
+  "29-abs-pos.html": {
+    "fill": 2.8143796992481205,
+    "outline": 2.0568609022556394,
+    "width": 800,
+    "height": 266
+  },
+  "30-float.html": {
+    "fill": 4.868421052631579,
+    "outline": 5.927631578947368,
+    "width": 800,
+    "height": 266
+  },
+  "31-br-pre-nowrap.html": {
+    "fill": 0.7551020408163266,
+    "outline": 0.7723922902494331,
+    "width": 800,
+    "height": 441
+  },
+  "32-overflow-wrap.html": {
+    "fill": 1.4509943181818181,
+    "outline": 1.2329545454545454,
+    "width": 800,
+    "height": 176
+  },
+  "33-bg-radius-shadow.html": {
+    "fill": 3.5363372093023253,
+    "outline": 2.0125968992248064,
+    "width": 800,
+    "height": 258
+  },
+  "34-transform.html": {
+    "fill": 1.6551573426573425,
+    "outline": 1.132867132867133,
+    "width": 800,
+    "height": 286
+  },
+  "35-opacity-clip.html": {
+    "fill": 1.0521844660194175,
+    "outline": 1.6152912621359223,
+    "width": 800,
+    "height": 206
+  },
+  "36-stroke-shadow.html": {
+    "fill": 1.6875,
+    "outline": 0.791083916083916,
+    "width": 800,
+    "height": 286
+  },
+  "37-line-clamp.html": {
+    "fill": 1.366150442477876,
+    "outline": 0.9518805309734514,
+    "width": 800,
+    "height": 226
+  },
+  "38-font-sizes.html": {
+    "fill": 2.9676573426573425,
+    "outline": 2.484702797202797,
+    "width": 800,
+    "height": 286
+  },
+  "39-vertical-align.html": {
+    "fill": 0.5113636363636364,
+    "outline": 0.8138111888111887,
+    "width": 800,
+    "height": 286
+  },
+  "40-logical-props.html": {
+    "fill": 2.5695422535211265,
+    "outline": 6.94850352112676,
+    "width": 800,
+    "height": 284
+  },
+  "41-min-max-size.html": {
+    "fill": 1.886061946902655,
+    "outline": 1.4491150442477876,
+    "width": 800,
+    "height": 226
+  },
+  "42-percent-height.html": {
+    "fill": 1.282793209876543,
+    "outline": 0.9880401234567902,
+    "width": 800,
+    "height": 324
+  },
+  "43-inline-elements.html": {
+    "fill": 0.6594076655052264,
+    "outline": 0.8453832752613241,
+    "width": 800,
+    "height": 287
+  },
+  "44-full-article.html": {
+    "fill": 3.3415271966527196,
+    "outline": 2.5826359832635983,
+    "width": 800,
+    "height": 478
+  },
+  "50-deco-underline-only.html": {
+    "fill": 0.3329646017699115,
+    "outline": 0.5851769911504424,
+    "width": 800,
+    "height": 226
+  },
+  "51-deco-linethrough-only.html": {
+    "fill": 0.3285398230088496,
+    "outline": 0.2051991150442478,
+    "width": 800,
+    "height": 226
+  },
+  "52-deco-block-level.html": {
+    "fill": 3.670907079646018,
+    "outline": 6.404867256637169,
+    "width": 800,
+    "height": 226
+  },
+  "53-deco-br.html": {
+    "fill": 0.3932522123893806,
+    "outline": 0.5757743362831859,
+    "width": 800,
+    "height": 226
+  },
+  "54-inline-block-simple.html": {
+    "fill": 0.497787610619469,
+    "outline": 1.0741150442477876,
+    "width": 800,
+    "height": 226
+  },
+  "55-inline-block-nofixed.html": {
+    "fill": 0.08517699115044249,
+    "outline": 0.03595132743362832,
+    "width": 800,
+    "height": 226
+  },
+  "56-indent-block-p.html": {
+    "fill": 2.0564159292035398,
+    "outline": 1.5608407079646018,
+    "width": 800,
+    "height": 226
+  },
+  "57-tcy-two-digits.html": {
+    "fill": 0.10508849557522124,
+    "outline": 0.3036504424778761,
+    "width": 800,
+    "height": 226
+  },
+  "58-letter-spacing-latin.html": {
+    "fill": 0.7228982300884956,
+    "outline": 2.082411504424779,
+    "width": 800,
+    "height": 226
+  },
+  "60-body-vertical.html": {
+    "fill": 4.140817901234568,
+    "outline": 11.546682098765432,
+    "width": 800,
+    "height": 324
+  },
+  "61-html-vertical.html": {
+    "fill": 2.0883333333333334,
+    "outline": 6.628333333333333,
+    "width": 800,
+    "height": 300
+  },
+  "62-pseudo.html": {
+    "fill": 1.2696678321678323,
+    "outline": 2.7167832167832167,
+    "width": 800,
+    "height": 286
+  },
+  "63-grid.html": {
+    "fill": 3.0103383458646618,
+    "outline": 2.5032894736842106,
+    "width": 800,
+    "height": 266
+  },
+  "64-emoji-symbols.html": {
+    "fill": 0.5817307692307692,
+    "outline": 1.0716783216783217,
+    "width": 800,
+    "height": 286
+  },
+  "65-direction-rtl.html": {
+    "fill": 2.1602443609022557,
+    "outline": 2.4915413533834583,
+    "width": 800,
+    "height": 266
+  },
+  "66-sideways.html": {
+    "fill": 1.3473451327433628,
+    "outline": 2.614491150442478,
+    "width": 800,
+    "height": 226
+  },
+  "67-split-inline-border.html": {
+    "fill": 5.857142857142858,
+    "outline": 8.837301587301587,
+    "width": 800,
+    "height": 126
+  },
+  "68-text-orientation-upright-cjk.html": {
+    "fill": 2.0578007518796992,
+    "outline": 1.5888157894736843,
+    "width": 800,
+    "height": 266
+  },
+  "69-overflow-scroll-clip.html": {
+    "fill": 1.253968253968254,
+    "outline": 0.9246031746031746,
+    "width": 800,
+    "height": 126
+  },
+  "70-very-long-latin.html": {
+    "fill": 0.12806748466257667,
+    "outline": 0.0705521472392638,
+    "width": 800,
+    "height": 489
+  },
+  "71-bg-clip-text.html": {
+    "fill": 0.27208646616541354,
+    "outline": 0.36654135338345867,
+    "width": 800,
+    "height": 266
+  },
+  "72-ellipsis.html": {
+    "fill": 0.5547945205479452,
+    "outline": 0.3809931506849315,
+    "width": 800,
+    "height": 146
+  },
+  "73-lh-mixed-fonts.html": {
+    "fill": 0.7906468531468532,
+    "outline": 1.395104895104895,
+    "width": 800,
+    "height": 286
+  },
+  "74-table-vertical-only.html": {
+    "fill": 0.6015625,
+    "outline": 1.1886160714285714,
+    "width": 800,
+    "height": 224
+  },
+  "75-table-horizontal-cells-vertical.html": {
+    "fill": 1.6593959731543624,
+    "outline": 4.22734899328859,
+    "width": 800,
+    "height": 149
+  },
+  "76-float-horizontal-control.html": {
+    "fill": 6.923507462686568,
+    "outline": 9.949004975124378,
+    "width": 800,
+    "height": 201
+  },
+  "77-float-left-vertical.html": {
+    "fill": 3.649436090225564,
+    "outline": 3.2147556390977448,
+    "width": 800,
+    "height": 266
+  },
+  "78-ul-marker-inside.html": {
+    "fill": 0.4130639097744361,
+    "outline": 1.4163533834586466,
+    "width": 800,
+    "height": 266
+  },
+  "79-ruby-horizontal-control.html": {
+    "fill": 2.8992537313432836,
+    "outline": 5.684701492537314,
+    "width": 800,
+    "height": 66
+  },
+  "80-justify-last-line.html": {
+    "fill": 2.6366150442477876,
+    "outline": 2.7228982300884956,
+    "width": 800,
+    "height": 226
+  },
+  "81-deco-overline.html": {
+    "fill": 0.2936946902654867,
+    "outline": 0.48340707964601765,
+    "width": 800,
+    "height": 226
+  },
+  "82-deco-wavy.html": {
+    "fill": 0.3019911504424779,
+    "outline": 0.3888274336283186,
+    "width": 800,
+    "height": 226
+  },
+  "83-deco-dotted.html": {
+    "fill": 0.2853982300884956,
+    "outline": 0.40929203539823006,
+    "width": 800,
+    "height": 226
+  },
+  "84-deco-three-br.html": {
+    "fill": 0.9485619469026549,
+    "outline": 1.178650442477876,
+    "width": 800,
+    "height": 226
+  },
+  "85-ib-valign-top.html": {
+    "fill": 0.08517699115044249,
+    "outline": 0.03595132743362832,
+    "width": 800,
+    "height": 226
+  },
+  "86-ib-two-boxes.html": {
+    "fill": 0.09126106194690266,
+    "outline": 0.046460176991150445,
+    "width": 800,
+    "height": 226
+  },
+  "87-ib-text-then-box.html": {
+    "fill": 1.0884955752212389,
+    "outline": 2.2339601769911503,
+    "width": 800,
+    "height": 226
+  },
+  "90-ib-text-before.html": {
+    "fill": 0.5326327433628318,
+    "outline": 1.1449115044247786,
+    "width": 800,
+    "height": 226
+  },
+  "91-ib-text-after.html": {
+    "fill": 0.5868362831858407,
+    "outline": 1.1482300884955752,
+    "width": 800,
+    "height": 226
+  },
+  "92-ib-text-both.html": {
+    "fill": 0.6216814159292036,
+    "outline": 1.2190265486725664,
+    "width": 800,
+    "height": 226
+  },
+  "93-ib-box-both.html": {
+    "fill": 0.06028761061946902,
+    "outline": 0.029867256637168143,
+    "width": 800,
+    "height": 226
+  },
+  "94-tcy-lens.html": {
+    "fill": 0.5740030674846626,
+    "outline": 1.0694018404907975,
+    "width": 800,
+    "height": 326
+  },
+  "99-ls.html": {
+    "fill": 1.4081858407079646,
+    "outline": 2.3589601769911503,
+    "width": 800,
+    "height": 226
+  }
+}
