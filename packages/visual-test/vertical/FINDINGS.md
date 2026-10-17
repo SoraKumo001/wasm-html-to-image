@@ -39,6 +39,7 @@ SVG 出力は PNG と一致 (差分 < 1%)、PDF 出力も縦書きのまま 1 �
 | 5 | リストマーカー (ul/ol を各列の先頭へ) | 20: 箇条書き・番号が Chromium と同じ位置 |
 | 9 | justify が最終行を均等割付しない | 12/80 |
 | 10 | `inline-size` / `block-size` / min・max 版を書字方向に応じて物理サイズへ対応付け (横書きも) | 40: outline 6.9%→1.1% |
+| - | 横書き table 内の縦書きセル: 列幅に block size を使う | 22/75: セル幅が Chromium と同等 (75 の長文セルは高さ制約での折返し未対応) |
 | 13 | `body` の縦書きをルートへ伝播し、右端基準で配置 | 60: outline 11.5%→2.1% (`html` 指定の 61 は右端が約 10px ずれる) |
 | 8 | `text-combine-upright:all` (結合ランを横書きで再整形して 1em に圧縮) | 06/94: Chromium と同等 |
 | 7 | `letter-spacing` (横書き・縦書きとも。font description 生成前に解決、グリフ間隔を加算) | 99/16。`word-spacing` は未検証 |
@@ -46,7 +47,8 @@ SVG 出力は PNG と一致 (差分 < 1%)、PDF 出力も縦書きのまま 1 �
 
 既存の横書きビジュアルテスト 26 アセットは基準値から ±0.3% 以内で回帰なし。
 未対応・既知の制限:
-- 縦書き table の caption、table セルの縦横混在 (75)
+- 縦書き table の caption
+- 横書き table 内の縦書きセルに高さ指定がある場合の折返し (75)
 - `list-style-type: cjk-ideographic` のマーカー未対応 (20)
 
 ## 不具合 (縦書き固有) — 修正前の一覧

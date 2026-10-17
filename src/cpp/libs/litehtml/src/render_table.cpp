@@ -3,6 +3,14 @@
 #include "iterators.h"
 
 
+// Width a cell needs in a horizontal table. A cell in an orthogonal (vertical) writing mode
+// reports its inline size (physical height) from measure(), but the column needs its block size.
+static litehtml::pixel_t measure_cell_width(const std::shared_ptr<litehtml::render_item>& el, const litehtml::containing_block_context& cb, litehtml::formatting_context* fmt_ctx)
+{
+    litehtml::pixel_t inline_size = el->measure(cb, fmt_ctx);
+    return el->css().get_writing_mode() == litehtml::writing_mode_horizontal_tb ? inline_size : el->width();
+}
+
 litehtml::render_item_table::render_item_table(std::shared_ptr<element> _src_el) :
         render_item(std::move(_src_el)),
         m_border_spacing_x(0),
@@ -55,10 +63,10 @@ litehtml::pixel_t litehtml::render_item_table::layout_table(pixel_t x, pixel_t y
             {
 				if (containing_block_size.size_mode & containing_block_context::size_mode_measure)
 				{
-					cell->min_width = cell->max_width = cell->el->measure(self_size.new_width(self_size.render_width - table_width_spacing), fmt_ctx);
+					cell->min_width = cell->max_width = measure_cell_width(cell->el, self_size.new_width(self_size.render_width - table_width_spacing), fmt_ctx);
 				} else
 				{
-					cell->min_width = cell->max_width = cell->el->measure(self_size.new_width(self_size.render_width - table_width_spacing), fmt_ctx);
+					cell->min_width = cell->max_width = measure_cell_width(cell->el, self_size.new_width(self_size.render_width - table_width_spacing), fmt_ctx);
 					cell->el->place(0, 0, self_size.new_width(self_size.render_width - table_width_spacing), fmt_ctx);
 				}
                 cell->el->pos().width = cell->min_width - cell->el->content_offset_left() -
@@ -90,10 +98,10 @@ litehtml::pixel_t litehtml::render_item_table::layout_table(pixel_t x, pixel_t y
 						pixel_t el_w = 0;
 						if (containing_block_size.size_mode & containing_block_context::size_mode_measure)
 						{
-							el_w = cell->el->measure(self_size.new_width(css_w), fmt_ctx);
+							el_w = measure_cell_width(cell->el, self_size.new_width(css_w), fmt_ctx);
 						} else
 						{
-							el_w = cell->el->measure(self_size.new_width(css_w), fmt_ctx);
+							el_w = measure_cell_width(cell->el, self_size.new_width(css_w), fmt_ctx);
 							cell->el->place(0, 0, self_size.new_width(css_w), fmt_ctx);
 						}
                         cell->min_width = cell->max_width = std::max(css_w, el_w);
@@ -105,15 +113,15 @@ litehtml::pixel_t litehtml::render_item_table::layout_table(pixel_t x, pixel_t y
                         // calculate minimum content width
 						if (containing_block_size.size_mode & containing_block_context::size_mode_measure)
 						{
-							cell->min_width = cell->el->measure(self_size.new_width(cell->el->content_offset_width()), fmt_ctx);
+							cell->min_width = measure_cell_width(cell->el, self_size.new_width(cell->el->content_offset_width()), fmt_ctx);
 							// calculate maximum content width
-							cell->max_width = cell->el->measure(self_size.new_width(self_size.render_width - table_width_spacing), fmt_ctx);
+							cell->max_width = measure_cell_width(cell->el, self_size.new_width(self_size.render_width - table_width_spacing), fmt_ctx);
 						} else
 						{
-							cell->min_width = cell->el->measure(self_size.new_width(cell->el->content_offset_width()), fmt_ctx);
+							cell->min_width = measure_cell_width(cell->el, self_size.new_width(cell->el->content_offset_width()), fmt_ctx);
 							cell->el->place(0, 0, self_size.new_width(cell->el->content_offset_width()), fmt_ctx);
 							
-							cell->max_width = cell->el->measure(self_size.new_width(self_size.render_width - table_width_spacing), fmt_ctx);
+							cell->max_width = measure_cell_width(cell->el, self_size.new_width(self_size.render_width - table_width_spacing), fmt_ctx);
 							cell->el->place(0, 0, self_size.new_width(self_size.render_width - table_width_spacing), fmt_ctx);
 						}
                     }
