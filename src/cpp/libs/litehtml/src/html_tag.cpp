@@ -1100,6 +1100,56 @@ bool litehtml::html_tag::is_break() const
         return false;
 }
 
+// Borders and radii of one fragment of an inline box that was split over several lines. The
+// first and last fragments carry the start/end edge and their corners; the other edges repeat
+// on every fragment. In vertical writing the inline axis runs top to bottom, so the roles of
+// the physical sides are transposed.
+static litehtml::css_borders inline_fragment_borders(const litehtml::css_borders& src, bool vertical, bool first, bool last)
+{
+        litehtml::css_borders bdr;
+        if(vertical)
+        {
+                if(first)
+                {
+                        bdr.radius.top_left_x           = src.radius.top_left_x;
+                        bdr.radius.top_left_y           = src.radius.top_left_y;
+                        bdr.radius.top_right_x          = src.radius.top_right_x;
+                        bdr.radius.top_right_y          = src.radius.top_right_y;
+                        bdr.top                         = src.top;
+                }
+                if(last)
+                {
+                        bdr.radius.bottom_left_x        = src.radius.bottom_left_x;
+                        bdr.radius.bottom_left_y        = src.radius.bottom_left_y;
+                        bdr.radius.bottom_right_x       = src.radius.bottom_right_x;
+                        bdr.radius.bottom_right_y       = src.radius.bottom_right_y;
+                        bdr.bottom                      = src.bottom;
+                }
+                bdr.left = src.left;
+                bdr.right = src.right;
+                return bdr;
+        }
+        if(first)
+        {
+                bdr.radius.bottom_left_x        = src.radius.bottom_left_x;
+                bdr.radius.bottom_left_y        = src.radius.bottom_left_y;
+                bdr.radius.top_left_x           = src.radius.top_left_x;
+                bdr.radius.top_left_y           = src.radius.top_left_y;
+                bdr.left                        = src.left;
+        }
+        if(last)
+        {
+                bdr.radius.bottom_right_x       = src.radius.bottom_right_x;
+                bdr.radius.bottom_right_y       = src.radius.bottom_right_y;
+                bdr.radius.top_right_x          = src.radius.top_right_x;
+                bdr.radius.top_right_y          = src.radius.top_right_y;
+                bdr.right                       = src.right;
+        }
+        bdr.top = src.top;
+        bdr.bottom = src.bottom;
+        return bdr;
+}
+
 void litehtml::html_tag::draw_background(uint_ptr hdc, pixel_t x, pixel_t y, const position *clip,   
                                                                                  const std::shared_ptr<render_item> &ri)
 {
@@ -1176,37 +1226,8 @@ void litehtml::html_tag::draw_background(uint_ptr hdc, pixel_t x, pixel_t y, con
                                 content_box -= ri->get_borders();
                                 content_box -= ri->get_paddings();
 
-                                css_borders bdr;
-
-                                // set left borders radius for the first box
-                                if(box == boxes.begin())
-                                {
-                                        bdr.radius.bottom_left_x        = m_css.get_borders().radius.bottom_left_x;
-                                        bdr.radius.bottom_left_y        = m_css.get_borders().radius.bottom_left_y;
-                                        bdr.radius.top_left_x           = m_css.get_borders().radius.top_left_x;
-                                        bdr.radius.top_left_y           = m_css.get_borders().radius.top_left_y;
-                                }
-
-                                // set right borders radius for the last box
-                                if(box == boxes.end() - 1)
-                                {
-                                        bdr.radius.bottom_right_x       = m_css.get_borders().radius.bottom_right_x;
-                                        bdr.radius.bottom_right_y       = m_css.get_borders().radius.bottom_right_y;
-                                        bdr.radius.top_right_x          = m_css.get_borders().radius.top_right_x;
-                                        bdr.radius.top_right_y          = m_css.get_borders().radius.top_right_y;
-                                }
-
-
-                                bdr.top         = m_css.get_borders().top;
-                                bdr.bottom      = m_css.get_borders().bottom;
-                                if(box == boxes.begin())
-                                {
-                                        bdr.left        = m_css.get_borders().left;
-                                }
-                                if(box == boxes.end() - 1)
-                                {
-                                        bdr.right       = m_css.get_borders().right;
-                                }
+                                css_borders bdr = inline_fragment_borders(m_css.get_borders(), m_css.get_writing_mode() != writing_mode_horizontal_tb,
+                                        box == boxes.begin(), box == boxes.end() - 1);
 
                                 if(bg)
                                 {
@@ -1280,37 +1301,8 @@ void litehtml::html_tag::draw_borders(uint_ptr hdc, pixel_t x, pixel_t y, const 
 
                         if(box->does_intersect(clip))
                         {
-                                css_borders bdr;
-
-                                // set left borders radius for the first box
-                                if(box == boxes.begin())
-                                {
-                                        bdr.radius.bottom_left_x        = m_css.get_borders().radius.bottom_left_x;
-                                        bdr.radius.bottom_left_y        = m_css.get_borders().radius.bottom_left_y;
-                                        bdr.radius.top_left_x           = m_css.get_borders().radius.top_left_x;
-                                        bdr.radius.top_left_y           = m_css.get_borders().radius.top_left_y;
-                                }
-
-                                // set right borders radius for the last box
-                                if(box == boxes.end() - 1)
-                                {
-                                        bdr.radius.bottom_right_x       = m_css.get_borders().radius.bottom_right_x;
-                                        bdr.radius.bottom_right_y       = m_css.get_borders().radius.bottom_right_y;
-                                        bdr.radius.top_right_x          = m_css.get_borders().radius.top_right_x;
-                                        bdr.radius.top_right_y          = m_css.get_borders().radius.top_right_y;
-                                }
-
-
-                                bdr.top         = m_css.get_borders().top;
-                                bdr.bottom      = m_css.get_borders().bottom;
-                                if(box == boxes.begin())
-                                {
-                                        bdr.left        = m_css.get_borders().left;
-                                }
-                                if(box == boxes.end() - 1)
-                                {
-                                        bdr.right       = m_css.get_borders().right;
-                                }
+                                css_borders bdr = inline_fragment_borders(m_css.get_borders(), m_css.get_writing_mode() != writing_mode_horizontal_tb,
+                                        box == boxes.begin(), box == boxes.end() - 1);
 
                                 if(m_css.get_border_image().is_valid())
                                 {

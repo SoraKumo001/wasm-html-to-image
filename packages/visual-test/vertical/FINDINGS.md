@@ -41,6 +41,7 @@ SVG 出力は PNG と一致 (差分 < 1%)、PDF 出力も縦書きのまま 1 �
 | 10 | `inline-size` / `block-size` / min・max 版を書字方向に応じて物理サイズへ対応付け (横書きも) | 40: outline 6.9%→1.1% |
 | - | 横書き table 内の縦書きセル: 列幅に block size を使う | 22/75: セル幅が Chromium と同等 (75 の長文セルは高さ制約での折返し未対応) |
 | 11 | `vertical-align: super/sub` (フォントメトリクスの super_shift/sub_shift が未設定だった。横書きも同様) | 39/63a |
+| 12 | 列をまたぐインラインの枠線・角丸 (縦書きでは左右の辺を各断片に、上下の辺を先頭・末尾にだけ描く) | 67: 辺の描画は一致。断片のサイズ・折返し位置には差が残る |
 | 13 | `body` の縦書きをルートへ伝播し、右端基準で配置 | 60: outline 11.5%→2.1% (`html` 指定の 61 は右端が約 10px ずれる) |
 | 8 | `text-combine-upright:all` (結合ランを横書きで再整形して 1em に圧縮) | 06/94: Chromium と同等 |
 | 7 | `letter-spacing` (横書き・縦書きとも。font description 生成前に解決、グリフ間隔を加算) | 99/16。`word-spacing` は未検証 |
