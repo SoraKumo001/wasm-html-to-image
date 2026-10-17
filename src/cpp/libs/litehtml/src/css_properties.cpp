@@ -38,6 +38,13 @@ void litehtml::css_properties::compute(const element* el, const document::ptr& d
         _writing_mode_, true, writing_mode_horizontal_tb, offset(m_writing_mode));
     m_text_orientation = (text_orientation)el->get_property<int>(
         _text_orientation_, true, text_orientation_mixed, offset(m_text_orientation));
+    // sideways-rl/lr are vertical flows whose glyphs are all rotated sideways. Fold them into the
+    // vertical modes the layout code understands so the two cannot drift apart.
+    if (m_writing_mode == writing_mode_sideways_rl || m_writing_mode == writing_mode_sideways_lr) {
+        m_writing_mode = m_writing_mode == writing_mode_sideways_rl ? writing_mode_vertical_rl
+                                                                    : writing_mode_vertical_lr;
+        m_text_orientation = text_orientation_sideways;
+    }
     m_text_combine_upright = (text_combine_upright)el->get_property<int>(
         _text_combine_upright_, true, text_combine_upright_none, offset(m_text_combine_upright));
 
