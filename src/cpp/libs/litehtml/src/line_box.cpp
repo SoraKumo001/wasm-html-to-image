@@ -443,7 +443,8 @@ std::list< std::unique_ptr<litehtml::line_box_item> > litehtml::line_box::finish
                 }
                 break;
             case text_align_justify:
-                if (m_inline_size < (m_inline_end - m_inline_pos))
+                // the last line of a block is not justified
+                if (!last_box && m_inline_size < (m_inline_end - m_inline_pos))
                 {
                     shift_x = 0;
                     spacing_x = (m_inline_end - m_inline_pos) - m_inline_size;
