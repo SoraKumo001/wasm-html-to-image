@@ -392,6 +392,25 @@ double TextRenderer::drawTextInternal(SatoruContext* ctx, SkCanvas* canvas, cons
             continue;
         }
 
+        // A text-combine-upright run is drawn horizontally and squeezed into one em, so it needs
+        // the natural advances, not the one-em-per-glyph spacing of upright vertical text.
+        float natural_dy = 0.0f;  // horizontal shaping puts the baseline one ascent below the origin
+        if (is_vertical && is_upright &&
+            fi->desc.text_combine_upright_ == litehtml::text_combine_upright_all) {
+            TextAnalysis horizontal = TextLayout::analyzeText(
+                ctx, run_text, run_len, fi, litehtml::writing_mode_horizontal_tb, nullptr, false);
+            ShapedResult natural = TextLayout::shapePreparedText(
+                ctx, run_text, run_len, horizontal.substituted_text.c_str(),
+                horizontal.substituted_text.size(), fi, litehtml::writing_mode_horizontal_tb,
+                horizontal);
+            if (natural.blob) {
+                shaped = natural;
+                SkFontMetrics nm;
+                analysis.chars[start].font.getMetrics(&nm);
+                natural_dy = nm.fAscent;
+            }
+        }
+
         bool is_run_combine =
             (is_vertical && is_upright &&
              fi->desc.text_combine_upright_ == litehtml::text_combine_upright_all);
@@ -405,8 +424,8 @@ double TextRenderer::drawTextInternal(SatoruContext* ctx, SkCanvas* canvas, cons
             canvas->save();
             if (is_run_combine) {
                 float scale = 1.0f;
-                if (shaped.width > pos.width && pos.width > 0) {
-                    scale = (float)pos.width / (float)shaped.width;
+                if (shaped.width > fi->desc.size && fi->desc.size > 0) {
+                    scale = (float)fi->desc.size / (float)shaped.width;
                 }
                 float centerX = (float)pos.x + (float)pos.width / 2.0f;
                 float runY = (float)pos.y + (float)current_l_pos.inline_offset;
@@ -422,7 +441,7 @@ double TextRenderer::drawTextInternal(SatoruContext* ctx, SkCanvas* canvas, cons
                         font_size / 2.0f - (metrics.fAscent + metrics.fDescent) / 2.0f;
                     for (int i = 0; i < run.count; ++i) {
                         float px = -(float)shaped.width / 2.0f + run.positions[i].fX;
-                        float py = run_baselineY + run.positions[i].fY;
+                        float py = run_baselineY + natural_dy + run.positions[i].fY;
                         tagging_ctx.drawGlyph(run.font, run.glyphs[i], px, py, 0, paint);
                     }
                 }
@@ -472,8 +491,8 @@ double TextRenderer::drawTextInternal(SatoruContext* ctx, SkCanvas* canvas, cons
 
             if (is_run_combine) {
                 float scale = 1.0f;
-                if (shaped.width > pos.width && pos.width > 0) {
-                    scale = (float)pos.width / (float)shaped.width;
+                if (shaped.width > fi->desc.size && fi->desc.size > 0) {
+                    scale = (float)fi->desc.size / (float)shaped.width;
                 }
                 float centerX = (float)pos.x + (float)pos.width / 2.0f;
                 float runY = (float)pos.y + (float)current_l_pos.inline_offset;
@@ -488,7 +507,7 @@ double TextRenderer::drawTextInternal(SatoruContext* ctx, SkCanvas* canvas, cons
                     font_size / 2.0f - (metrics.fAscent + metrics.fDescent) / 2.0f;
                 SkPaint p_emoji = paint;
                 if (shaped.is_emoji) p_emoji.setColor(SK_ColorWHITE);
-                canvas->drawTextBlob(shaped.blob, -(float)shaped.width / 2.0f, run_baselineY,
+                canvas->drawTextBlob(shaped.blob, -(float)shaped.width / 2.0f, run_baselineY + natural_dy,
                                      p_emoji);
             } else if (is_vertical) {
                 TextGeometry geom(mode, pos, fi);
