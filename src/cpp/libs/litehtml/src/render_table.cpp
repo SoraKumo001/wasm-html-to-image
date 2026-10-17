@@ -722,6 +722,23 @@ litehtml::pixel_t litehtml::render_item_table::layout_table_vertical(pixel_t x, 
     }
     if (!collapse) table_block += block_spacing_unit;
 
+    // Captions sit on the block-start (caption-side: top) or block-end (bottom) side of the
+    // table and span its inline size, like blocks stacked next to the rows.
+    pixel_t top_captions = 0;
+    pixel_t bottom_captions = 0;
+    {
+        const containing_block_context caption_cb = cb_inline(table_inline + table_borders.left + table_borders.right);
+        for (auto& caption : m_grid->captions())
+        {
+            caption->measure(caption_cb, fmt_ctx);
+            if (caption->css().get_caption_side() == caption_side_top)
+                top_captions += caption->width();
+            else
+                bottom_captions += caption->width();
+        }
+    }
+    const pixel_t table_total_block = table_block + top_captions + bottom_captions;
+
     // 6. convert to physical coordinates
     for (int col = 0; col < m_grid->cols_count(); col++)
     {
@@ -748,7 +765,7 @@ litehtml::pixel_t litehtml::render_item_table::layout_table_vertical(pixel_t x, 
                         child->pos().x += shift;
                     }
                 }
-                pixel_t phys_left = rl ? table_block - block_end : block_begin;
+                pixel_t phys_left = rl ? table_total_block - (block_end + top_captions) : block_begin + top_captions;
                 cell->el->pos().x = phys_left + cell->el->content_offset_left();
                 cell->el->pos().y = m_grid->column(col).left + cell->el->content_offset_top();
             }
@@ -761,10 +778,26 @@ litehtml::pixel_t litehtml::render_item_table::layout_table_vertical(pixel_t x, 
         m_pos.move_to(x + content_offset_left(), y + content_offset_top());
     }
 
-    // Captions are not laid out in vertical writing modes yet.
+    if (!measure_only)
+    {
+        const containing_block_context caption_cb = cb_inline(table_inline + table_borders.left + table_borders.right);
+        pixel_t top_offset = -table_borders.top;   // block offset of the next block-start caption
+        pixel_t bottom_offset = table_block + top_captions;
+        for (auto& caption : m_grid->captions())
+        {
+            const bool is_top = caption->css().get_caption_side() == caption_side_top;
+            const pixel_t thickness = caption->width();
+            const pixel_t block_offset = is_top ? top_offset : bottom_offset;
+            (is_top ? top_offset : bottom_offset) += thickness;
+            const pixel_t phys_x = rl ? table_total_block - (block_offset + thickness) : block_offset;
+            caption->place(phys_x, -table_borders.left, caption_cb, fmt_ctx);
+        }
+    }
+
+    // The caption area is not part of the rows, so the table background offset stays 0.
     m_grid->top_captions_height(0);
 
-    m_pos.width = table_block;
+    m_pos.width = table_total_block;
     m_pos.height = table_inline;
 
     if (self_size.inline_size().type != containing_block_context::cbc_value_type_absolute)
