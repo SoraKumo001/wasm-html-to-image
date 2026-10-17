@@ -46,6 +46,7 @@ SVG 出力は PNG と一致 (差分 < 1%)、PDF 出力も縦書きのまま 1 �
 | 5 | リストマーカー `cjk-ideographic` / `hiragana` / `katakana` (末尾は 、)。マーカー文字をレイアウト時に計測してグリフ収集へ登録 | 20/64a |
 | 1 | 縦書き table の caption (`caption-side: top` はブロック開始側、`bottom` は終端側) | 74a/74b |
 | 13 | `html` 直接指定の縦書き: 縦書きで高さが確定した要素の子に shrink-to-fit を引き継がない | 61: outline 4.0%→1.1%、61i: 72.8%→0.2% |
+| - | table セルの `vertical-align` を縦書きではブロック軸 (横方向) に適用 (従来は物理的な縦方向にずれていた) | 75: outline 1.9%→0.6% |
 | 13 | `body` の縦書きをルートへ伝播し、右端基準で配置 | 60: outline 11.5%→2.1% |
 | 8 | `text-combine-upright:all` (結合ランを横書きで再整形して 1em に圧縮) | 06/94: Chromium と同等 |
 | 7 | `letter-spacing` (横書き・縦書きとも。font description 生成前に解決、グリフ間隔を加算) | 99/16。`word-spacing` は未検証 |
@@ -54,7 +55,6 @@ SVG 出力は PNG と一致 (差分 < 1%)、PDF 出力も縦書きのまま 1 �
 既存の横書きビジュアルテスト 26 アセットは基準値から ±0.3% 以内で回帰なし。
 未対応・既知の制限:
 - `sideways-lr` (行の読み順が下→上) と縦書き内の `direction:rtl` (65): 行を下端から詰める反転が必要。現状は上→下で描画
-- 横書き table 内の縦書きセルに高さ指定がある場合の折返し (75)
 - `hiragana-iroha` / `katakana-iroha` のマーカー未対応 (cjk-ideographic / hiragana / katakana は対応済み)
 
 ## 不具合 (縦書き固有) — 修正前の一覧

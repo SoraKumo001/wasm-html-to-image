@@ -525,13 +525,15 @@ void litehtml::render_item_block::apply_vertical_align()
 
     pixel_t shift = 0;
     vertical_align va = src_el()->css().get_vertical_align();
+    // the block axis is horizontal in vertical writing
+    const pixel_t block_extent = wm.is_vertical() ? m_pos.width : m_pos.height;
     if (va == va_middle)
     {
-        shift = (m_pos.height - content_block_end) / 2;
+        shift = (block_extent - content_block_end) / 2;
     }
     else if (va == va_bottom)
     {
-        shift = m_pos.height - content_block_end;
+        shift = block_extent - content_block_end;
     }
 
     if (shift > 0)

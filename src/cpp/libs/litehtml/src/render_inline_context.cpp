@@ -548,6 +548,33 @@ void litehtml::render_item_inline_context::place_inline(std::unique_ptr<line_box
 
 void litehtml::render_item_inline_context::apply_vertical_align()
 {
+    if(!m_line_boxes.empty() && get_wm_context().is_vertical())
+    {
+        // Cell alignment runs along the block axis, which is horizontal in vertical writing.
+        const bool from_right = css().get_writing_mode() == writing_mode_vertical_rl;
+        pixel_t content_thickness = from_right
+            ? m_line_boxes.front()->right() - m_line_boxes.back()->left()
+            : m_line_boxes.back()->right() - m_line_boxes.front()->left();
+        pixel_t extra = m_pos.width - content_thickness;
+        pixel_t add = 0;
+        if(extra > 0)
+        {
+            switch(src_el()->css().get_vertical_align())
+            {
+                case va_middle: add = extra / 2; break;
+                case va_bottom: add = extra; break;
+                default: break;
+            }
+        }
+        if(add != 0)
+        {
+            for(auto & box : m_line_boxes)
+            {
+                box->x_shift(from_right ? -add : add);
+            }
+        }
+        return;
+    }
     if(!m_line_boxes.empty())
     {
         pixel_t add = 0;
