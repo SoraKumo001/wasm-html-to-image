@@ -329,12 +329,18 @@ namespace litehtml
 
     case _width_:
     case _height_:
+    case _inline_size_:
+    case _block_size_:
     case _min_width_:
     case _min_height_:
+    case _min_inline_size_:
+    case _min_block_size_:
       return add_length_property(name, val, "auto", f_length_percentage | f_positive, important);
 
     case _max_width_:
     case _max_height_:
+    case _max_inline_size_:
+    case _max_block_size_:
       return add_length_property(name, val, "none", f_length_percentage | f_positive, important);
 
     case _letter_spacing_:

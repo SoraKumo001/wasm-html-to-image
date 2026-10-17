@@ -219,6 +219,31 @@ void litehtml::css_properties::compute(const element* el, const document::ptr& d
     m_css_max_height =
         el->get_property<css_length>(_max_height_, false, none, offset(m_css_max_height));
 
+    // Logical size properties map onto the physical ones according to the writing mode.
+    {
+        const bool vertical = m_writing_mode != writing_mode_horizontal_tb;
+        struct logical_size_prop {
+            string_id inline_id, block_id;
+            css_length* inline_target;
+            css_length* block_target;
+            bool none_default;
+        };
+        const logical_size_prop props[] = {
+            {_inline_size_, _block_size_, vertical ? &m_css_height : &m_css_width,
+             vertical ? &m_css_width : &m_css_height, false},
+            {_min_inline_size_, _min_block_size_, vertical ? &m_css_min_height : &m_css_min_width,
+             vertical ? &m_css_min_width : &m_css_min_height, false},
+            {_max_inline_size_, _max_block_size_, vertical ? &m_css_max_height : &m_css_max_width,
+             vertical ? &m_css_max_width : &m_css_max_height, true},
+        };
+        for (const auto& p : props) {
+            css_length is = el->get_property<css_length>(p.inline_id, false, _auto, 0);
+            if (!is.is_predefined()) *p.inline_target = is;
+            css_length bs = el->get_property<css_length>(p.block_id, false, _auto, 0);
+            if (!bs.is_predefined()) *p.block_target = bs;
+        }
+    }
+
     doc->cvt_units(m_css_width, m_font_metrics, 0);
     doc->cvt_units(m_css_height, m_font_metrics, 0);
 

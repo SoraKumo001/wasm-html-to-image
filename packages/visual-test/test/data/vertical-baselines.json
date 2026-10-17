@@ -234,8 +234,8 @@
     "height": 286
   },
   "40-logical-props.html": {
-    "fill": 2.5695422535211265,
-    "outline": 6.94850352112676,
+    "fill": 1.4375,
+    "outline": 1.0721830985915493,
     "width": 800,
     "height": 284
   },
@@ -568,5 +568,11 @@
     "outline": 0.11651234567901234,
     "width": 800,
     "height": 324
+  },
+  "62a-logical-horizontal.html": {
+    "fill": 2.322368421052632,
+    "outline": 3.370614035087719,
+    "width": 800,
+    "height": 112
   }
 }
