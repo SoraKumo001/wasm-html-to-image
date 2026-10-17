@@ -43,6 +43,7 @@ SVG 出力は PNG と一致 (差分 < 1%)、PDF 出力も縦書きのまま 1 �
 | 11 | `vertical-align: super/sub` (フォントメトリクスの super_shift/sub_shift が未設定だった。横書きも同様) | 39/63a |
 | 12 | 列をまたぐインラインの枠線・角丸 (縦書きでは左右の辺を各断片に、上下の辺を先頭・末尾にだけ描く) | 67: 辺の描画は一致。断片のサイズ・折返し位置には差が残る |
 | 14 | `writing-mode: sideways-rl` (vertical-rl + `text-orientation: sideways` へ折り畳み) | 66: sideways-rl は一致 |
+| 5 | リストマーカー `cjk-ideographic` / `hiragana` / `katakana` (末尾は 、)。マーカー文字をレイアウト時に計測してグリフ収集へ登録 | 20/64a |
 | 13 | `body` の縦書きをルートへ伝播し、右端基準で配置 | 60: outline 11.5%→2.1% (`html` 指定の 61 は右端が約 10px ずれる) |
 | 8 | `text-combine-upright:all` (結合ランを横書きで再整形して 1em に圧縮) | 06/94: Chromium と同等 |
 | 7 | `letter-spacing` (横書き・縦書きとも。font description 生成前に解決、グリフ間隔を加算) | 99/16。`word-spacing` は未検証 |
@@ -53,7 +54,7 @@ SVG 出力は PNG と一致 (差分 < 1%)、PDF 出力も縦書きのまま 1 �
 - `sideways-lr` (行の読み順が下→上) と縦書き内の `direction:rtl` (65): 行を下端から詰める反転が必要。現状は上→下で描画
 - 縦書き table の caption
 - 横書き table 内の縦書きセルに高さ指定がある場合の折返し (75)
-- `list-style-type: cjk-ideographic` のマーカー未対応 (20)
+- `hiragana-iroha` / `katakana-iroha` のマーカー未対応 (cjk-ideographic / hiragana / katakana は対応済み)
 
 ## 不具合 (縦書き固有) — 修正前の一覧
 

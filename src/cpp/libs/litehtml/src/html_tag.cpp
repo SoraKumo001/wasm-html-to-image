@@ -1396,6 +1396,58 @@ bool litehtml::html_tag::is_replaced() const
         return false;
 }
 
+// CJK list markers (cjk-ideographic and the kana systems). Counters past the end of a kana list
+// fall back to decimal, like browsers do when the alphabetic system runs out of symbols.
+static litehtml::string cjk_ideographic_number(int n)
+{
+        static const char* digits[] = {"", "一", "二", "三", "四", "五", "六", "七", "八", "九"};
+        static const char* units[] = {"", "十", "百", "千"};
+        if (n <= 0 || n > 9999) return std::to_string(n);
+        litehtml::string out;
+        const int place_values[] = {1000, 100, 10, 1};
+        const int place_units[] = {3, 2, 1, 0};
+        for (int i = 0; i < 4; i++)
+        {
+                int d = (n / place_values[i]) % 10;
+                if (d == 0) continue;
+                // 十 alone stands for ten, but 二十 keeps its digit
+                if (!(d == 1 && place_units[i] == 1 && out.empty())) out += digits[d];
+                out += units[place_units[i]];
+        }
+        return out;
+}
+
+static litehtml::string kana_number(const litehtml::string& symbols_utf8, int n)
+{
+        // split the UTF-8 symbol list into characters
+        std::vector<litehtml::string> chars;
+        for (size_t i = 0; i < symbols_utf8.size();)
+        {
+                size_t len = 1;
+                unsigned char c = (unsigned char) symbols_utf8[i];
+                if (c >= 0xF0) len = 4; else if (c >= 0xE0) len = 3; else if (c >= 0xC0) len = 2;
+                chars.push_back(symbols_utf8.substr(i, len));
+                i += len;
+        }
+        if (n < 1 || n > (int) chars.size()) return std::to_string(n);
+        return chars[n - 1];
+}
+
+static const char* list_marker_suffix(litehtml::list_style_type type)
+{
+        switch (type)
+        {
+        case litehtml::list_style_type_cjk_ideographic:
+        case litehtml::list_style_type_hiragana:
+        case litehtml::list_style_type_hiragana_iroha:
+        case litehtml::list_style_type_katakana:
+        case litehtml::list_style_type_katakana_iroha:
+                return "、";
+        default:
+                return ".";
+        }
+}
+
 void litehtml::html_tag::draw_list_marker( uint_ptr hdc, const position& pos, const std::shared_ptr<render_item> &ri )
 {
         list_marker lm;
@@ -1495,7 +1547,7 @@ void litehtml::html_tag::draw_list_marker( uint_ptr hdc, const position& pos, co
                 {
                         if(lm.font && vertical)
                         {
-                                marker_text += ".";
+                                marker_text += list_marker_suffix(m_css.get_list_style_type());
                                 auto tw = get_document()->container()->text_width(marker_text.c_str(), lm.font, get_direction(), wmode);
                                 auto tw_space = get_document()->container()->text_width(" ", lm.font, get_direction(), wmode);
                                 position text_pos;
@@ -1507,7 +1559,7 @@ void litehtml::html_tag::draw_list_marker( uint_ptr hdc, const position& pos, co
                         }
                         else if(lm.font)
                         {
-                                marker_text += ".";
+                                marker_text += list_marker_suffix(m_css.get_list_style_type());
                                 auto tw = get_document()->container()->text_width(marker_text.c_str(), lm.font, get_direction());
                                 auto text_pos = lm.pos;
                                 text_pos.move_to(text_pos.right() - tw, text_pos.y);
@@ -1521,6 +1573,21 @@ void litehtml::html_tag::draw_list_marker( uint_ptr hdc, const position& pos, co
         {
                 get_document()->container()->draw_list_marker(hdc, lm);
         }
+}
+
+void litehtml::html_tag::measure_list_marker(int index)
+{
+        if (m_css.get_list_style_type() < list_style_type_armenian || !m_css.get_font())
+        {
+                return;
+        }
+        auto marker_text = get_list_marker_text(index);
+        if (marker_text.empty())
+        {
+                return;
+        }
+        marker_text += list_marker_suffix(m_css.get_list_style_type());
+        get_document()->container()->text_width(marker_text.c_str(), m_css.get_font(), get_direction(), m_css.get_writing_mode());
 }
 
 litehtml::string litehtml::html_tag::get_list_marker_text(int index)
@@ -1550,6 +1617,12 @@ litehtml::string litehtml::html_tag::get_list_marker_text(int index)
                 return num_cvt::to_roman_lower(index);
         case litehtml::list_style_type_upper_roman:
                 return num_cvt::to_roman_upper(index);
+        case litehtml::list_style_type_cjk_ideographic:
+                return cjk_ideographic_number(index);
+        case litehtml::list_style_type_hiragana:
+                return kana_number("あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわゐゑをん", index);
+        case litehtml::list_style_type_katakana:
+                return kana_number("アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヰヱヲン", index);
         default:
                 return "";
 //      case litehtml::list_style_type_armenian:

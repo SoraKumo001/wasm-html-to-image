@@ -83,6 +83,10 @@ std::shared_ptr<litehtml::render_item> litehtml::render_item_block::init()
                 if (child == src_el())
                 {
                     src_el()->set_attr("list_index", std::to_string(val).c_str());
+                    if (auto tag = std::dynamic_pointer_cast<html_tag>(src_el()))
+                    {
+                        tag->measure_list_marker(val);
+                    }
                     break;
                 }
                 else if (child->css().get_display() == display_list_item)

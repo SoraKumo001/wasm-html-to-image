@@ -112,6 +112,9 @@ namespace litehtml
 
 		string				dump_get_name() override;
 
+		// Measures the text marker so its glyphs are collected during layout, before drawing.
+		void				measure_list_marker(int index);
+
 	protected:
 		void				draw_list_marker( uint_ptr hdc, const position &pos, const std::shared_ptr<render_item> &ri );
 		string				get_list_marker_text(int index);
