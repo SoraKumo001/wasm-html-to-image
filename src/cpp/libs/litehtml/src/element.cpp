@@ -298,6 +298,12 @@ bool element::is_block_formatting_context() const
 		{
 			return true;
 		}
+		// A block whose writing mode differs from its parent's is an orthogonal flow root and
+		// establishes its own formatting context, so its floats do not leak into the parent.
+		if(par && par->css().get_writing_mode() != m_css.get_writing_mode())
+		{
+			return true;
+		}
 	}
 	if(	m_css.get_display() == display_inline_block ||
 		   m_css.get_display() == display_table_cell ||
