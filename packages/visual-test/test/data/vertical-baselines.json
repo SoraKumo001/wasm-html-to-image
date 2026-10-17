@@ -36,8 +36,8 @@
     "height": 286
   },
   "07-ruby.html": {
-    "fill": 1.4248251748251748,
-    "outline": 3.0179195804195804,
+    "fill": 1.2954545454545454,
+    "outline": 2.521416083916084,
     "width": 800,
     "height": 286
   },
@@ -258,8 +258,8 @@
     "height": 287
   },
   "44-full-article.html": {
-    "fill": 3.3430962343096233,
-    "outline": 2.5847280334728033,
+    "fill": 3.55831589958159,
+    "outline": 5.1218619246861925,
     "width": 800,
     "height": 478
   },
@@ -432,10 +432,10 @@
     "height": 266
   },
   "79-ruby-horizontal-control.html": {
-    "fill": 2.8992537313432836,
-    "outline": 5.684701492537314,
+    "fill": 3.0456081081081083,
+    "outline": 6.503378378378379,
     "width": 800,
-    "height": 66
+    "height": 74
   },
   "80-justify-last-line.html": {
     "fill": 2.6366150442477876,
@@ -604,5 +604,11 @@
     "outline": 0.12583333333333332,
     "width": 800,
     "height": 300
+  },
+  "79a-ruby-horizontal-multi.html": {
+    "fill": 2.90625,
+    "outline": 6.387019230769231,
+    "width": 800,
+    "height": 104
   }
 }

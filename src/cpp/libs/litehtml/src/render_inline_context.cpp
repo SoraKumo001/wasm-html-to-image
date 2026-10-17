@@ -399,7 +399,9 @@ void litehtml::render_item_inline_context::place_inline(std::unique_ptr<line_box
     if (min_rendered_width < item->get_el()->inline_size() &&
     item->get_el()->src_el()->css().get_width().is_predefined())
     {
-    auto cb2 = self_size.new_inline_size(min_rendered_width, self_size.size_mode & containing_block_context::size_mode_content);
+    // Re-measure at the content's own size. A hair of slack keeps content that exactly fits
+    // from wrapping because of floating point rounding of the glyph advances.
+    auto cb2 = self_size.new_inline_size(min_rendered_width + 0.01f, self_size.size_mode & containing_block_context::size_mode_content);
     item->get_el()->measure(cb2, fmt_ctx);
     if (!(self_size.size_mode & containing_block_context::size_mode_measure))
     {

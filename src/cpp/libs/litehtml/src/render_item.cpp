@@ -42,7 +42,10 @@ litehtml::pixel_t litehtml::render_item::measure(
     }
 
     if (m_is_measured && m_cached_cb_context == containing_block_size) {
-        return m_pos.width + content_offset_width();
+        // Same value a fresh measure returns: the inline size, which is the height in vertical writing.
+        return css().get_writing_mode() == writing_mode_horizontal_tb
+                   ? m_pos.width + content_offset_width()
+                   : m_pos.height + content_offset_height();
     }
 
     m_cached_cb_context = containing_block_size;
