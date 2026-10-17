@@ -36,9 +36,17 @@ SVG 出力は PNG と一致 (差分 < 1%)、PDF 出力も縦書きのまま 1 �
 | 3 | inline-block: 縦書きでの shrink-to-fit 判定、中央ベースライン | 18/86/87: 4〜5%→0〜2% |
 | 4 | float: 縦書き行ボックスが float を避ける、rl での fmt_ctx オフセット補正 | 77: 5.3%→2.7%、30 も回り込み (高さ差 54px は未解決) |
 | 6 | text-indent (副次的に修正) | 13/56/44: outline 17%→2.6% |
+| 5 | リストマーカー (ul/ol を各列の先頭へ) | 20: 箇条書き・番号が Chromium と同じ位置 |
+| 9 | justify が最終行を均等割付しない | 12/80 |
+| - | 縦書きブロックを BFC 化 (float の高さ漏れ) | 30/77: ページ高さ 320→266px で一致 |
 
 既存の横書きビジュアルテスト 26 アセットは基準値から ±0.3% 以内で回帰なし。
-未対応: 縦書き table の caption、table セルの縦横混在 (75)、float の最終高さ差 (30/77)。
+未対応・既知の制限:
+- 縦書き table の caption、table セルの縦横混在 (75)
+- `text-combine-upright:all` の 2〜4 桁数字 (06/94): 結合ランが 1em 間隔で描かれる。
+  `WidthProxyRunHandler` の upright 位置上書きを無効化するだけでは行幅が崩れ、取り消した (レイアウト幅の算出経路を要調査)
+- `letter-spacing` / `word-spacing` は横書きでも効かない (99)
+- `list-style-type: cjk-ideographic` のマーカー未対応 (20)
 
 ## 不具合 (縦書き固有) — 修正前の一覧
 

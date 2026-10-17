@@ -1427,6 +1427,12 @@ void litehtml::html_tag::draw_list_marker( uint_ptr hdc, const position& pos, co
         lm.marker_type  = css().get_list_style_type();
         lm.font         = css().get_font();
 
+        // In vertical writing the marker sits at the inline-start (top) of each column.
+        const writing_mode wmode = css().get_writing_mode();
+        const bool vertical = wmode != writing_mode_horizontal_tb;
+        const bool block_from_right = wmode == writing_mode_vertical_rl || wmode == writing_mode_sideways_rl;
+        const pixel_t column_edge_x = block_from_right ? pos.x + pos.width - ln_height : pos.x;
+
         if (css().get_list_style_type() >= list_style_type_armenian)
         {
                 auto li_baseline = pos.y + ri->get_first_baseline() - ri->content_offset_top();      
@@ -1440,6 +1446,11 @@ void litehtml::html_tag::draw_list_marker( uint_ptr hdc, const position& pos, co
                 lm.pos.height = sz_font / 3;
                 lm.pos.y = pos.y + ln_height / 2 - lm.pos.height / 2;
                 lm.index = -1;
+                if (vertical)
+                {
+                        lm.pos.x = column_edge_x + ln_height / 2 - lm.pos.width / 2;
+                        lm.pos.y = pos.y;
+                }
         }
 
         if(img_size.width != 0 && img_size.height != 0)
@@ -1471,6 +1482,10 @@ void litehtml::html_tag::draw_list_marker( uint_ptr hdc, const position& pos, co
                                 lm.pos.width = 0;
                         }
                 }
+                else if (vertical)
+                {
+                        lm.pos.y -= sz_font;
+                }
                 else
                 {
                         lm.pos.x -= sz_font;
@@ -1486,7 +1501,19 @@ void litehtml::html_tag::draw_list_marker( uint_ptr hdc, const position& pos, co
                 }
                 else
                 {
-                        if(lm.font)
+                        if(lm.font && vertical)
+                        {
+                                marker_text += ".";
+                                auto tw = get_document()->container()->text_width(marker_text.c_str(), lm.font, get_direction(), wmode);
+                                auto tw_space = get_document()->container()->text_width(" ", lm.font, get_direction(), wmode);
+                                position text_pos;
+                                text_pos.x = column_edge_x;
+                                text_pos.width = ln_height;
+                                text_pos.height = tw;
+                                text_pos.y = m_css.get_list_style_position() == list_style_position_outside ? pos.y - tw - tw_space : pos.y;
+                                get_document()->container()->draw_text(hdc, marker_text.c_str(), lm.font, lm.color, text_pos, litehtml::text_overflow_clip, get_direction(), wmode);
+                        }
+                        else if(lm.font)
                         {
                                 marker_text += ".";
                                 auto tw = get_document()->container()->text_width(marker_text.c_str(), lm.font, get_direction());
