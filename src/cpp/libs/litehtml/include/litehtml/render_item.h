@@ -592,15 +592,29 @@ namespace litehtml
             m_cached_bidi_level = level;
         }
                 /**
+                 * Baseline of a box without line boxes of its own, measured from the block-start edge.
+                 * Horizontal: the bottom margin edge. Vertical: boxes sit on the central baseline,
+                 * i.e. they are centred on the glyphs of the line.
+                 */
+                pixel_t default_baseline()
+                {
+                    if (css().get_writing_mode() == writing_mode_horizontal_tb)
+                    {
+                        return height() - margin_bottom();
+                    }
+                    const font_metrics& fm = css().get_font_metrics();
+                    return width() / 2 + (fm.ascent - fm.descent) / 2;
+                }
+                /**
                  * Get first baseline position. Default position is element bottom without bottom margin.
                  * @returns offset of the first baseline from element top
                  */
-                virtual pixel_t get_first_baseline() { return height() - margin_bottom(); }
+                virtual pixel_t get_first_baseline() { return default_baseline(); }
                 /**
                  * Get the last baseline position.  The default position is element bottom without bottom margin.
                  * @returns offset of the last baseline from element top
                  */
-                virtual pixel_t get_last_baseline() { return height() - margin_bottom(); }
+                virtual pixel_t get_last_baseline() { return default_baseline(); }
 
         virtual std::shared_ptr<render_item> clone()
         {

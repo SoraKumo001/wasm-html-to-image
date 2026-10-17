@@ -14,6 +14,11 @@ litehtml::pixel_t litehtml::render_item_table::layout_table(pixel_t x, pixel_t y
 {
     if (!m_grid) return 0;
 
+    if (get_wm_context().is_vertical())
+    {
+        return layout_table_vertical(x, y, containing_block_size, fmt_ctx);
+    }
+
 	containing_block_context self_size = m_self_size;
 
     // Calculate table spacing
@@ -459,6 +464,308 @@ litehtml::pixel_t litehtml::render_item_table::layout_table(pixel_t x, pixel_t y
 	return table_width + content_offset_width();
 }
 
+// Table layout for vertical writing modes.
+//
+// The horizontal algorithm above works in physical axes. A table in vertical writing is its
+// transpose: columns run along the inline axis (physical y) and rows stack along the block axis
+// (physical x, from the right edge for vertical-rl). The table_grid column/row bookkeeping is
+// axis-agnostic, so column.* holds inline-axis data and row.* holds block-axis data here; only
+// the conversion to physical coordinates happens at the end.
+litehtml::pixel_t litehtml::render_item_table::layout_table_vertical(pixel_t x, pixel_t y, const containing_block_context &containing_block_size, formatting_context* fmt_ctx)
+{
+    if (!m_grid) return 0;
+
+    containing_block_context self_size = m_self_size;
+    const satoru::WritingModeContext wm = get_wm_context();
+    const bool rl = wm.mode() == writing_mode_vertical_rl;
+    const bool measure_only = (containing_block_size.size_mode & containing_block_context::size_mode_measure) != 0;
+    const bool collapse = src_el()->css().get_border_collapse() == border_collapse_collapse;
+    const bool is_fixed_layout = src_el()->css().get_table_layout() == table_layout_fixed;
+
+    // border-spacing is physical: horizontal spacing separates rows (block axis),
+    // vertical spacing separates columns (inline axis).
+    const pixel_t inline_spacing_unit = m_border_spacing_y;
+    const pixel_t block_spacing_unit = m_border_spacing_x;
+
+    // The table borders in logical terms: left/right = inline start/end, top/bottom = block start/end.
+    margins table_borders;
+    table_borders.left = wm.inline_start(m_borders);
+    table_borders.right = wm.inline_end(m_borders);
+    table_borders.top = wm.block_start(m_borders);
+    table_borders.bottom = wm.block_end(m_borders);
+
+    auto cb_inline = [&](pixel_t v) { return self_size.new_inline_size(v); };
+
+    pixel_t inline_spacing = 0;
+    if (!collapse)
+    {
+        inline_spacing = inline_spacing_unit * (m_grid->cols_count() + 1);
+    }
+    else
+    {
+        if (m_grid->cols_count())
+        {
+            inline_spacing -= std::max(table_borders.left, m_grid->column(0).border_left);
+            inline_spacing -= std::max(table_borders.right, m_grid->column(m_grid->cols_count() - 1).border_right);
+        }
+        for (int col = 1; col < m_grid->cols_count(); col++)
+        {
+            inline_spacing -= std::max(m_grid->column(col).border_left, m_grid->column(col - 1).border_right);
+        }
+    }
+
+    const pixel_t render_inline = self_size.render_inline_size();
+
+    // 1. min / max inline size of every cell
+    for (int row = 0; row < m_grid->rows_count(); row++)
+    {
+        for (int col = 0; col < m_grid->cols_count(); col++)
+        {
+            table_cell* cell = m_grid->cell(col, row);
+            if (!cell || !cell->el) continue;
+
+            if (is_fixed_layout && row > 0)
+            {
+                cell->min_width = cell->max_width = 0;
+                continue;
+            }
+
+            const pixel_t offset_inline = cell->el->content_offset_height();
+            if (m_grid->cols_count() == 1 && self_size.inline_size().type != containing_block_context::cbc_value_type_auto)
+            {
+                cell->min_width = cell->max_width = cell->el->measure(cb_inline(render_inline - inline_spacing), fmt_ctx);
+                if (!measure_only) cell->el->place(0, 0, cb_inline(render_inline - inline_spacing), fmt_ctx);
+            }
+            else if (!m_grid->column(col).css_width.is_predefined() && m_grid->column(col).css_width.units() != css_units_percentage)
+            {
+                pixel_t css_size = m_grid->column(col).css_width.calc_percent(self_size.inline_size());
+                pixel_t measured = cell->el->measure(cb_inline(css_size), fmt_ctx);
+                if (!measure_only) cell->el->place(0, 0, cb_inline(css_size), fmt_ctx);
+                cell->min_width = cell->max_width = std::max(css_size, measured);
+            }
+            else
+            {
+                cell->min_width = cell->el->measure(cb_inline(offset_inline), fmt_ctx);
+                if (!measure_only) cell->el->place(0, 0, cb_inline(offset_inline), fmt_ctx);
+                cell->max_width = cell->el->measure(cb_inline(render_inline - inline_spacing), fmt_ctx);
+                if (!measure_only) cell->el->place(0, 0, cb_inline(render_inline - inline_spacing), fmt_ctx);
+            }
+        }
+    }
+
+    // 2. min / max size of every column
+    for (int col = 0; col < m_grid->cols_count(); col++)
+    {
+        table_column& column = m_grid->column(col);
+        column.max_width = 0;
+        column.min_width = 0;
+        if (!column.css_width.is_predefined() && column.css_width.units() != css_units_percentage)
+        {
+            column.min_width = column.max_width = column.css_width.calc_percent(self_size.inline_size());
+        }
+        for (int row = 0; row < m_grid->rows_count(); row++)
+        {
+            if (is_fixed_layout && row > 0) break;
+            if (m_grid->cell(col, row)->colspan <= 1)
+            {
+                column.max_width = std::max(column.max_width, m_grid->cell(col, row)->max_width);
+                column.min_width = std::max(column.min_width, m_grid->cell(col, row)->min_width);
+            }
+        }
+    }
+
+    for (int col = 0; col < m_grid->cols_count(); col++)
+    {
+        for (int row = 0; row < m_grid->rows_count(); row++)
+        {
+            table_cell* cell = m_grid->cell(col, row);
+            if (cell->colspan > 1)
+            {
+                pixel_t max_total = m_grid->column(col).max_width;
+                pixel_t min_total = m_grid->column(col).min_width;
+                for (int col2 = col + 1; col2 < col + cell->colspan && col2 < m_grid->cols_count(); col2++)
+                {
+                    max_total += m_grid->column(col2).max_width;
+                    min_total += m_grid->column(col2).min_width;
+                }
+                if (min_total < cell->min_width)
+                {
+                    m_grid->distribute_min_width(cell->min_width - min_total, col, col + cell->colspan - 1);
+                }
+                if (max_total < cell->max_width)
+                {
+                    m_grid->distribute_max_width(cell->max_width - max_total, col, col + cell->colspan - 1);
+                }
+            }
+        }
+    }
+
+    // 3. table inline size
+    pixel_t min_table_inline = 0;
+    pixel_t max_table_inline = 0;
+    const bool inline_is_auto = self_size.inline_size().type == containing_block_context::cbc_value_type_auto;
+    pixel_t table_inline = m_grid->calc_table_width(render_inline - inline_spacing,
+        self_size.inline_size().type == containing_block_context::cbc_value_type_absolute ? false : inline_is_auto,
+        min_table_inline, max_table_inline);
+    min_table_inline += inline_spacing;
+    max_table_inline += inline_spacing;
+    table_inline += inline_spacing;
+    m_grid->calc_horizontal_positions(table_borders, src_el()->css().get_border_collapse(), inline_spacing_unit);
+
+    // 4. lay cells out with their final inline size and collect the block size of each row
+    bool row_span_found = false;
+    std::vector<pixel_t> placed_content_width((size_t)m_grid->rows_count() * (size_t)m_grid->cols_count(), 0);
+    for (int row = 0; row < m_grid->rows_count(); row++)
+    {
+        m_grid->row(row).height = 0;
+        for (int col = 0; col < m_grid->cols_count(); col++)
+        {
+            table_cell* cell = m_grid->cell(col, row);
+            if (!cell->el) continue;
+
+            int span_col = std::min(col + cell->colspan - 1, m_grid->cols_count() - 1);
+            pixel_t cell_inline = m_grid->column(span_col).right - m_grid->column(col).left;
+
+            cell->el->measure(cb_inline(cell_inline), fmt_ctx);
+            if (!measure_only) cell->el->place(0, 0, cb_inline(cell_inline), fmt_ctx);
+            placed_content_width[(size_t)row * m_grid->cols_count() + col] = cell->el->pos().width;
+            cell->el->pos().height = cell_inline - cell->el->content_offset_height();
+
+            if (cell->rowspan <= 1)
+            {
+                m_grid->row(row).height = std::max(m_grid->row(row).height, cell->el->block_size(wm));
+            }
+            else
+            {
+                row_span_found = true;
+            }
+        }
+    }
+
+    if (row_span_found)
+    {
+        for (int col = 0; col < m_grid->cols_count(); col++)
+        {
+            for (int row = 0; row < m_grid->rows_count(); row++)
+            {
+                table_cell* cell = m_grid->cell(col, row);
+                if (!cell->el) continue;
+                int span_row = std::min(row + cell->rowspan - 1, m_grid->rows_count() - 1);
+                if (span_row != row)
+                {
+                    pixel_t h = 0;
+                    for (int i = row; i <= span_row; i++) h += m_grid->row(i).height;
+                    if (h < cell->el->block_size(wm))
+                    {
+                        m_grid->row(span_row).height += cell->el->block_size(wm) - h;
+                    }
+                }
+            }
+        }
+    }
+
+    // 5. rows along the block axis
+    pixel_t block_spacing = 0;
+    if (!collapse)
+    {
+        block_spacing = block_spacing_unit * (m_grid->rows_count() + 1);
+    }
+    else
+    {
+        if (m_grid->rows_count())
+        {
+            block_spacing -= std::max(table_borders.top, m_grid->row(0).border_top);
+            block_spacing -= std::max(table_borders.bottom, m_grid->row(m_grid->rows_count() - 1).border_bottom);
+        }
+        for (int row = 1; row < m_grid->rows_count(); row++)
+        {
+            block_spacing -= std::max(m_grid->row(row).border_top, m_grid->row(row - 1).border_bottom);
+        }
+    }
+
+    pixel_t css_block = 0;
+    if (self_size.block_size().type != containing_block_context::cbc_value_type_auto && self_size.block_size() > 0)
+    {
+        css_block = self_size.block_size() - (m_padding.width() + m_borders.width());
+    }
+    pixel_t min_block = 0;
+    if (!src_el()->css().get_min_width().is_predefined() && src_el()->css().get_min_width().units() == css_units_percentage)
+    {
+        min_block = src_el()->css().get_min_width().calc_percent(containing_block_size.width);
+    }
+    else
+    {
+        min_block = (pixel_t)src_el()->css().get_min_width().val();
+    }
+
+    m_grid->calc_rows_height(std::max(css_block, min_block) - block_spacing, block_spacing_unit);
+    m_grid->calc_vertical_positions(table_borders, src_el()->css().get_border_collapse(), block_spacing_unit);
+
+    pixel_t table_block = 0;
+    for (int col = 0; col < m_grid->cols_count(); col++)
+    {
+        for (int row = 0; row < m_grid->rows_count(); row++)
+        {
+            table_cell* cell = m_grid->cell(col, row);
+            if (!cell->el) continue;
+            int span_row = std::min(row + cell->rowspan - 1, m_grid->rows_count() - 1);
+            table_block = std::max(table_block, m_grid->row(span_row).bottom);
+        }
+    }
+    if (!collapse) table_block += block_spacing_unit;
+
+    // 6. convert to physical coordinates
+    for (int col = 0; col < m_grid->cols_count(); col++)
+    {
+        for (int row = 0; row < m_grid->rows_count(); row++)
+        {
+            table_cell* cell = m_grid->cell(col, row);
+            if (!cell->el) continue;
+            int span_col = std::min(col + cell->colspan - 1, m_grid->cols_count() - 1);
+            int span_row = std::min(row + cell->rowspan - 1, m_grid->rows_count() - 1);
+
+            pixel_t block_begin = m_grid->row(row).top;
+            pixel_t block_end = m_grid->row(span_row).bottom;
+            pixel_t final_content_width = block_end - block_begin - cell->el->content_offset_width();
+
+            if (!measure_only)
+            {
+                // The cell was placed with its measured content width; children of a vertical-rl
+                // cell are anchored to the right edge, so follow the final width.
+                pixel_t shift = rl ? final_content_width - placed_content_width[(size_t)row * m_grid->cols_count() + col] : 0;
+                if (shift != 0)
+                {
+                    for (auto& child : cell->el->children())
+                    {
+                        child->pos().x += shift;
+                    }
+                }
+                pixel_t phys_left = rl ? table_block - block_end : block_begin;
+                cell->el->pos().x = phys_left + cell->el->content_offset_left();
+                cell->el->pos().y = m_grid->column(col).left + cell->el->content_offset_top();
+            }
+            cell->el->pos().width = final_content_width;
+            cell->el->pos().height = m_grid->column(span_col).right - m_grid->column(col).left - cell->el->content_offset_height();
+        }
+    }
+    if (!measure_only)
+    {
+        m_pos.move_to(x + content_offset_left(), y + content_offset_top());
+    }
+
+    // Captions are not laid out in vertical writing modes yet.
+    m_grid->top_captions_height(0);
+
+    m_pos.width = table_block;
+    m_pos.height = table_inline;
+
+    if (self_size.inline_size().type != containing_block_context::cbc_value_type_absolute)
+    {
+        return std::min(table_inline, max_table_inline) + content_offset_height();
+    }
+    return table_inline + content_offset_height();
+}
+
 litehtml::pixel_t litehtml::render_item_table::_measure(const containing_block_context &containing_block_size, formatting_context* fmt_ctx)
 {
 	// For tables, we use the original _render logic but with size_mode_measure
@@ -529,6 +836,7 @@ std::shared_ptr<litehtml::render_item> litehtml::render_item_table::init()
         }
     }
 
+    m_grid->set_writing_mode(css().get_writing_mode());
     m_grid->finish();
 
 	if(src_el()->css().get_border_collapse() == border_collapse_separate)

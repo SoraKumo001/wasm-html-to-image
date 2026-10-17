@@ -266,6 +266,29 @@ litehtml::pixel_t litehtml::render_item_inline_context::new_box(const std::uniqu
 	{
 		fmt_ctx->get_line_left_right(line_ctx.top, self_size.render_inline_size(), line_ctx.left, line_ctx.right);
 	}
+	else
+	{
+		// Floats live in logical coordinates. In vertical writing line_ctx.top is the inline
+		// start of the new column and line_ctx.left its physical block edge, so convert the
+		// edge to a logical block offset to find the inline range left free by floats.
+		bool block_from_right = self_size.mode == writing_mode_vertical_rl || self_size.mode == writing_mode_sideways_rl;
+		pixel_t block_offset = block_from_right ? self_size.render_block_size() - line_ctx.left : line_ctx.left;
+		pixel_t inline_start = 0;
+		pixel_t inline_end = self_size.render_inline_size();
+		fmt_ctx->get_line_left_right(block_offset, self_size.render_inline_size(), inline_start, inline_end);
+		// The column occupies a block range, so a float touching its far side narrows it too.
+		pixel_t column_thickness = css().line_height().computed_value;
+		if (column_thickness > 1)
+		{
+			pixel_t far_start = 0;
+			pixel_t far_end = self_size.render_inline_size();
+			fmt_ctx->get_line_left_right(block_offset + column_thickness - 1, self_size.render_inline_size(), far_start, far_end);
+			inline_start = std::max(inline_start, far_start);
+			inline_end = std::min(inline_end, far_end);
+		}
+		line_ctx.top = inline_start;
+		line_ctx.right = inline_end;
+	}
 
     if(el->get_el()->src_el()->is_inline() || el->get_el()->src_el()->is_block_formatting_context())
     {
@@ -297,9 +320,17 @@ litehtml::pixel_t litehtml::render_item_inline_context::new_box(const std::uniqu
         }
     }
 
+    // list marker and text-indent push the first line along the inline axis
+    pixel_t box_top = line_ctx.top;
+    pixel_t box_left = line_ctx.left;
+    if (self_size.mode == writing_mode_horizontal_tb)
+        box_left += first_line_margin + text_indent;
+    else
+        box_top += first_line_margin + text_indent;
+
     m_line_boxes.emplace_back(std::make_unique<line_box>(
-			line_ctx.top,
-			line_ctx.left + first_line_margin + text_indent, line_ctx.right,
+			box_top,
+			box_left, line_ctx.right,
 			css().line_height(),
 			css().get_font_metrics(),
 			css().get_text_align(),
@@ -365,7 +396,7 @@ void litehtml::render_item_inline_context::place_inline(std::unique_ptr<line_box
     item->get_el()->place(line_ctx.left, line_ctx.top, cb, fmt_ctx);
     }
 
-    if (min_rendered_width < item->get_el()->width() &&
+    if (min_rendered_width < item->get_el()->inline_size() &&
     item->get_el()->src_el()->css().get_width().is_predefined())
     {
     auto cb2 = self_size.new_inline_size(min_rendered_width, self_size.size_mode & containing_block_context::size_mode_content);
@@ -571,7 +602,7 @@ litehtml::pixel_t litehtml::render_item_inline_context::get_first_baseline()
         }
 	} else
 	{
-		bl = height() - margin_bottom();
+		bl = default_baseline();
 	}
 	return bl;
 }
@@ -599,7 +630,7 @@ litehtml::pixel_t litehtml::render_item_inline_context::get_last_baseline()
         }
 	} else
 	{
-		bl = height();
+		bl = get_wm_context().is_vertical() ? default_baseline() : height();
 	}
 	return bl;
 }

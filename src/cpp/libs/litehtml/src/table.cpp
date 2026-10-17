@@ -95,45 +95,30 @@ void litehtml::table_grid::finish()
 		{
 			if(cell(col, row)->el)
 			{
-				// find maximum left border width
-				if(m_columns[col].border_left != 0)
-				{
-					m_columns[col].border_left = std::max(m_columns[col].border_left, cell(col, row)->borders.left);
-				} else
-				{
-					m_columns[col].border_left = cell(col, row)->borders.left;
-				}
-				// find maximum right border width
-				if(m_columns[col].border_right != 0)
-				{
-					m_columns[col].border_right = std::max(m_columns[col].border_right, cell(col, row)->borders.right);
-				} else
-				{
-					m_columns[col].border_right = cell(col, row)->borders.right;
-				}
-				// find maximum top border width
-				if(m_rows[row].border_top != 0)
-				{
-					m_rows[row].border_top = std::max(m_rows[row].border_top, cell(col, row)->borders.top);
-				} else
-				{
-					m_rows[row].border_top = cell(col, row)->borders.top;
-				}
-				// find maximum bottom border width
-				if(m_rows[row].border_bottom != 0)
-				{
-					m_rows[row].border_bottom = std::max(m_rows[row].border_bottom, cell(col, row)->borders.bottom);
-				} else
-				{
-					m_rows[row].border_bottom = cell(col, row)->borders.bottom;
-				}
+				// Borders on the inline axis feed the columns and borders on the block axis
+				// feed the rows. In horizontal writing that is left/right and top/bottom; in
+				// vertical writing the axes are transposed (and flipped for vertical-rl).
+				const margins& cb = cell(col, row)->borders;
+				const bool vert = is_vertical();
+				const bool rl = m_mode == writing_mode_vertical_rl;
+				const pixel_t inline_start_border = vert ? cb.top : cb.left;
+				const pixel_t inline_end_border = vert ? cb.bottom : cb.right;
+				const pixel_t block_start_border = vert ? (rl ? cb.right : cb.left) : cb.top;
+				const pixel_t block_end_border = vert ? (rl ? cb.left : cb.right) : cb.bottom;
+
+				m_columns[col].border_left = m_columns[col].border_left != 0 ? std::max(m_columns[col].border_left, inline_start_border) : inline_start_border;
+				m_columns[col].border_right = m_columns[col].border_right != 0 ? std::max(m_columns[col].border_right, inline_end_border) : inline_end_border;
+				m_rows[row].border_top = m_rows[row].border_top != 0 ? std::max(m_rows[row].border_top, block_start_border) : block_start_border;
+				m_rows[row].border_bottom = m_rows[row].border_bottom != 0 ? std::max(m_rows[row].border_bottom, block_end_border) : block_end_border;
 			}
 
 			if(cell(col, row)->el && cell(col, row)->colspan <= 1)
 			{
-				if (!cell(col, row)->el->src_el()->css().get_width().is_predefined() && m_columns[col].css_width.is_predefined())
+				// the column size runs along the inline axis, i.e. 'height' in vertical writing
+				const css_length& cell_css_size = is_vertical() ? cell(col, row)->el->src_el()->css().get_height() : cell(col, row)->el->src_el()->css().get_width();
+				if (!cell_css_size.is_predefined() && m_columns[col].css_width.is_predefined())
 				{
-					m_columns[col].css_width = cell(col, row)->el->src_el()->css().get_width();
+					m_columns[col].css_width = cell_css_size;
 				}
 			}
 		}
@@ -143,9 +128,21 @@ void litehtml::table_grid::finish()
 	{
 		for(int row = 0; row < m_rows_count; row++)
 		{
-			if(cell(col, row)->el && cell(col, row)->colspan == 1)
+			if(!is_vertical() && cell(col, row)->el && cell(col, row)->colspan == 1)
 			{
 				cell(col, row)->el->src_el()->css_w().set_width(m_columns[col].css_width);
+			}
+		}
+	}
+
+	if(is_vertical())
+	{
+		// the row size runs along the block axis, i.e. 'width' in vertical writing
+		for(auto& r : m_rows)
+		{
+			if(r.el_row)
+			{
+				r.css_height = r.el_row->src_el()->css().get_width();
 			}
 		}
 	}

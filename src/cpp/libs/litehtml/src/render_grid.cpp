@@ -165,11 +165,18 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
 {
     m_grid_layout.clear();
 
+    // Grid columns run along the inline axis and rows along the block axis. In vertical writing
+    // that transposes the physical axes, so every "width" below is the inline size (physical
+    // height) and every "height" the block size (physical width).
+    const bool vert = css().get_writing_mode() != writing_mode_horizontal_tb;
+    const containing_block_context::typed_pixel& render_inline = vert ? self_size.render_height : self_size.render_width;
+    const containing_block_context::typed_pixel& render_block = vert ? self_size.render_width : self_size.render_height;
+
     const auto& columns_template_raw = css().get_grid_template_columns();
     const auto& rows_template_raw = css().get_grid_template_rows();
 
-    m_grid_layout.column_gap = css().get_column_gap().calc_percent(self_size.render_width);
-    m_grid_layout.row_gap = css().get_row_gap().calc_percent(self_size.render_height);
+    m_grid_layout.column_gap = css().get_column_gap().calc_percent(render_inline);
+    m_grid_layout.row_gap = css().get_row_gap().calc_percent(render_block);
 
     // Expand column template
     length_vector columns_template;
@@ -181,14 +188,14 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             for (const auto& op : len.get_operands())
             {
                 if (op.is_calc() && op.get_op() == css_length::op_minmax)
-                    total_min += op.get_operands()[0].calc_percent(self_size.render_width);
+                    total_min += op.get_operands()[0].calc_percent(render_inline);
                 else
-                    total_min += op.calc_percent(self_size.render_width);
+                    total_min += op.calc_percent(render_inline);
             }
             int repeats = 1;
-            if (total_min + m_grid_layout.column_gap > 0 && self_size.render_width > 0)
+            if (total_min + m_grid_layout.column_gap > 0 && render_inline > 0)
             {
-                repeats = (self_size.render_width + m_grid_layout.column_gap) / (total_min + m_grid_layout.column_gap);
+                repeats = (render_inline + m_grid_layout.column_gap) / (total_min + m_grid_layout.column_gap);
                 if (repeats < 1) repeats = 1;
             }
             for (int i = 0; i < repeats; i++)
@@ -239,7 +246,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             const auto& min_len = len.get_operands()[0];
             const auto& max_len = len.get_operands()[1];
             
-            m_grid_layout.column_widths[i] = min_len.calc_percent(self_size.render_width);
+            m_grid_layout.column_widths[i] = min_len.calc_percent(render_inline);
             fixed_width += m_grid_layout.column_widths[i];
 
             if (max_len.units() == css_units_fr)
@@ -249,7 +256,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         }
         else if (!len.is_predefined())
         {
-            m_grid_layout.column_widths[i] = len.calc_percent(self_size.render_width);
+            m_grid_layout.column_widths[i] = len.calc_percent(render_inline);
             fixed_width += m_grid_layout.column_widths[i];
         }
     }
@@ -259,7 +266,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
     // Distribute remaining space to fr columns
     if (total_fr > 0)
     {
-        pixel_t remaining_width = self_size.render_width - fixed_width;
+        pixel_t remaining_width = render_inline - fixed_width;
         if (remaining_width < 0) remaining_width = 0;
 
         for (int i = 0; i < num_columns; i++)
@@ -281,7 +288,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
     }
     else if (columns_template.empty())
     {
-        m_grid_layout.column_widths[0] = self_size.render_width;
+        m_grid_layout.column_widths[0] = render_inline;
     }
 
     // Determine placements and number of rows
@@ -472,16 +479,16 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         }
         else
         {
-            m_grid_layout.row_heights[i] = len.calc_percent(self_size.render_height);
+            m_grid_layout.row_heights[i] = len.calc_percent(render_block);
             fixed_height += m_grid_layout.row_heights[i];
         }
     }
     fixed_height += m_grid_layout.row_gap * (num_rows - 1);
 
     // Distribute remaining space to fr rows
-    if (total_row_fr > 0 && self_size.render_height.type != containing_block_context::cbc_value_type_auto)
+    if (total_row_fr > 0 && render_block.type != containing_block_context::cbc_value_type_auto)
     {
-        pixel_t remaining_height = self_size.render_height - fixed_height;
+        pixel_t remaining_height = render_block - fixed_height;
         if (remaining_height < 0) remaining_height = 0;
         for (int i = 0; i < (int)rows_template.size(); i++)
         {
@@ -505,9 +512,18 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
 
         containing_block_context cb = self_size;
         // content_offset_width() already includes margins, padding and borders
-        cb.render_width = cell_width - item.el->content_offset_width();
-        cb.width = cb.render_width;
-        cb.height = containing_block_context::cbc_value_type_auto;
+        if (vert)
+        {
+            cb.render_height = cell_width - item.el->content_offset_height();
+            cb.height = cb.render_height;
+            cb.width = containing_block_context::cbc_value_type_auto;
+        }
+        else
+        {
+            cb.render_width = cell_width - item.el->content_offset_width();
+            cb.width = cb.render_width;
+            cb.height = containing_block_context::cbc_value_type_auto;
+        }
         cb.size_mode |= containing_block_context::size_mode_measure;
 
         item.el->measure(cb, fmt_ctx);
@@ -521,10 +537,10 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             if (item.pos.row_span() != span) continue;
 
             // height() returns margin box height (m_pos.height + margins + padding + borders)
-            pixel_t total_h = item.el->height();
+            pixel_t total_h = vert ? item.el->width() : item.el->height();
             pixel_t min_content_h = item.el->src_el()->css().get_font_size() * 1.2f;
             // content_offset_height() already includes margins, padding, and borders
-            pixel_t min_h = min_content_h + item.el->content_offset_height();
+            pixel_t min_h = min_content_h + (vert ? item.el->content_offset_width() : item.el->content_offset_height());
             if (total_h < min_h) total_h = min_h;
 
             pixel_t current_total = 0;
@@ -565,26 +581,26 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
     pixel_t align_gap = m_grid_layout.row_gap;
 
     auto jc = css().get_flex_justify_content();
-    if (jc == flex_justify_content_center) extra_x = (self_size.render_width - m_grid_layout.total_grid_width) / 2;
-    else if (jc == flex_justify_content_end || jc == flex_justify_content_flex_end) extra_x = self_size.render_width - m_grid_layout.total_grid_width;
-    else if (jc == flex_justify_content_space_between && num_columns > 1) justify_gap += (self_size.render_width - m_grid_layout.total_grid_width) / (num_columns - 1);
+    if (jc == flex_justify_content_center) extra_x = (render_inline - m_grid_layout.total_grid_width) / 2;
+    else if (jc == flex_justify_content_end || jc == flex_justify_content_flex_end) extra_x = render_inline - m_grid_layout.total_grid_width;
+    else if (jc == flex_justify_content_space_between && num_columns > 1) justify_gap += (render_inline - m_grid_layout.total_grid_width) / (num_columns - 1);
     else if (jc == flex_justify_content_space_around && num_columns > 0)
     {
-        pixel_t diff = self_size.render_width - m_grid_layout.total_grid_width;
+        pixel_t diff = render_inline - m_grid_layout.total_grid_width;
         extra_x = diff / (num_columns * 2);
         justify_gap += diff / num_columns;
     }
     else if (jc == flex_justify_content_space_evenly && num_columns > 0)
     {
-        pixel_t diff = self_size.render_width - m_grid_layout.total_grid_width;
+        pixel_t diff = render_inline - m_grid_layout.total_grid_width;
         extra_x = diff / (num_columns + 1);
         justify_gap += diff / (num_columns + 1);
     }
 
     auto ac = css().get_flex_align_content();
-    if (self_size.render_height.type != containing_block_context::cbc_value_type_auto)
+    if (render_block.type != containing_block_context::cbc_value_type_auto)
     {
-        pixel_t container_h = self_size.render_height;
+        pixel_t container_h = render_block;
         pixel_t diff = container_h - m_grid_layout.total_grid_height;
         if (ac == flex_align_content_center) extra_y = diff / 2;
         else if (ac == flex_align_content_end || ac == flex_align_content_flex_end) extra_y = diff;
@@ -623,6 +639,10 @@ void litehtml::render_item_grid::place_grid_items(pixel_t x, pixel_t y, const co
     int num_columns = (int)m_grid_layout.column_widths.size();
     int num_rows = (int)m_grid_layout.row_heights.size();
 
+    const bool vert = css().get_writing_mode() != writing_mode_horizontal_tb;
+    // physical width of the grid container in vertical writing (the block extent rows stack in)
+    const pixel_t block_extent = (self_size.render_width.type != containing_block_context::cbc_value_type_auto) ? (pixel_t)self_size.render_width : m_grid_layout.total_grid_height;
+
     for (auto& item : m_grid_layout.items)
     {
         pixel_t item_rel_x = m_grid_layout.col_offsets[item.pos.col_start];
@@ -646,15 +666,29 @@ void litehtml::render_item_grid::place_grid_items(pixel_t x, pixel_t y, const co
         // With size_mode_exact_*, CBC applies box_sizing adjustment (padding+border
         // for border-box, 0 for content-box). We want final m_pos = cell - content_offset.
         // So: cb = cell - content_offset + box_sizing → CBC gives cell - content_offset.
-        cb.render_width = cell_width - item.el->content_offset_width() + item.el->box_sizing_width();
+        // Columns span the inline axis, rows the block axis: in vertical writing the cell
+        // width (columns) is the physical height and the cell height (rows) the physical width.
+        const pixel_t cell_w = vert ? cell_height : cell_width;
+        const pixel_t cell_h = vert ? cell_width : cell_height;
+        cb.render_width = cell_w - item.el->content_offset_width() + item.el->box_sizing_width();
         cb.width = cb.render_width;
-        cb.render_height = cell_height - item.el->content_offset_height() + item.el->box_sizing_height();
+        cb.render_height = cell_h - item.el->content_offset_height() + item.el->box_sizing_height();
         cb.height = cb.render_height;
         cb.size_mode |= containing_block_context::size_mode_exact_height;
         cb.size_mode |= containing_block_context::size_mode_exact_width;
 
+        pixel_t place_x = item_rel_x;
+        pixel_t place_y = item_rel_y;
+        if (vert)
+        {
+            // item_rel_x is the inline offset (physical y), item_rel_y the block offset which
+            // is measured from the right edge in vertical-rl.
+            place_y = item_rel_x;
+            place_x = css().get_writing_mode() == writing_mode_vertical_rl ? block_extent - item_rel_y - cell_w : item_rel_y;
+        }
+
         item.el->measure(cb, fmt_ctx);
-        item.el->place(x + item_rel_x, y + item_rel_y, cb, fmt_ctx);
+        item.el->place(x + place_x, y + place_y, cb, fmt_ctx);
     }
 }
 
@@ -666,8 +700,18 @@ pixel_t litehtml::render_item_grid::_render_content(pixel_t x, pixel_t y, bool /
         place_grid_items(0, 0, self_size, fmt_ctx);
     }
 
-    m_pos.width = self_size.render_width;
-    m_pos.height = (self_size.render_height.type != containing_block_context::cbc_value_type_auto) ? (pixel_t)self_size.render_height : m_grid_layout.total_grid_height;
+    if (css().get_writing_mode() != writing_mode_horizontal_tb)
+    {
+        // inline size (physical height) comes from the container, block size (physical width)
+        // from the explicit size or the stacked rows
+        m_pos.height = self_size.render_height;
+        m_pos.width = (self_size.render_width.type != containing_block_context::cbc_value_type_auto) ? (pixel_t)self_size.render_width : m_grid_layout.total_grid_height;
+    }
+    else
+    {
+        m_pos.width = self_size.render_width;
+        m_pos.height = (self_size.render_height.type != containing_block_context::cbc_value_type_auto) ? (pixel_t)self_size.render_height : m_grid_layout.total_grid_height;
+    }
 
     return m_grid_layout.total_grid_width;
 }
@@ -699,10 +743,21 @@ void render_item_grid::draw_children(uint_ptr hdc, pixel_t x, pixel_t y, const p
                 pixel_t rule_x = pos.x + (gap_start + gap_end - rule_width) / 2;
                 
                 position rule_pos;
-                rule_pos.x = rule_x;
-                rule_pos.y = pos.y;
-                rule_pos.width = rule_width;
-                rule_pos.height = m_pos.height;
+                if (css().get_writing_mode() != writing_mode_horizontal_tb)
+                {
+                    // tracks are stacked vertically, so the rule is a horizontal line
+                    rule_pos.x = pos.x;
+                    rule_pos.y = pos.y + (gap_start + gap_end - rule_width) / 2;
+                    rule_pos.width = m_pos.width;
+                    rule_pos.height = rule_width;
+                }
+                else
+                {
+                    rule_pos.x = rule_x;
+                    rule_pos.y = pos.y;
+                    rule_pos.width = rule_width;
+                    rule_pos.height = m_pos.height;
+                }
 
                 if (rule_pos.does_intersect(clip))
                 {
@@ -717,9 +772,10 @@ void render_item_grid::draw_children(uint_ptr hdc, pixel_t x, pixel_t y, const p
                     else
                     {
                         borders rules;
-                        rules.left.width = rule_width;
-                        rules.left.style = rule.style;
-                        rules.left.color = rule.color;
+                        border& rule_edge = css().get_writing_mode() != writing_mode_horizontal_tb ? rules.top : rules.left;
+                        rule_edge.width = rule_width;
+                        rule_edge.style = rule.style;
+                        rule_edge.color = rule.color;
                         src_el()->get_document()->container()->draw_borders(hdc, rules, rule_pos, false);
                     }
                 }

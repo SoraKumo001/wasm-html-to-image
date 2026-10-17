@@ -33,7 +33,7 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
             if(el->src_el()->css().get_position() == element_position_absolute || el->src_el()->css().get_position() == element_position_fixed)
             {
 				pixel_t min_rendered_width = el->measure(self_size, fmt_ctx);
-				if(min_rendered_width < el->width() && el->src_el()->css().get_width().is_predefined())
+				if(min_rendered_width < el->inline_size() && el->src_el()->css().get_width().is_predefined())
 				{
 					min_rendered_width = el->measure(self_size.new_inline_size(min_rendered_width, self_size.size_mode & containing_block_context::size_mode_content), fmt_ctx);
 				}
@@ -208,7 +208,7 @@ litehtml::pixel_t litehtml::render_item_block_context::get_first_baseline()
     satoru::WritingModeContext wm = get_wm_context();
 	if(m_children.empty())
 	{
-		return block_size(wm) - margin_block_end();
+		return wm.is_vertical() ? default_baseline() : block_size(wm) - margin_block_end();
 	}
 	const auto &item = m_children.front();
 	return content_offset_block(wm) + item->block_start_pos(wm) + item->get_first_baseline();
@@ -219,7 +219,7 @@ litehtml::pixel_t litehtml::render_item_block_context::get_last_baseline()
     satoru::WritingModeContext wm = get_wm_context();
 	if(m_children.empty())
 	{
-		return block_size(wm) - margin_block_end();
+		return wm.is_vertical() ? default_baseline() : block_size(wm) - margin_block_end();
 	}
 	const auto &item = m_children.back();
 	return content_offset_block(wm) + item->block_start_pos(wm) + item->get_last_baseline();

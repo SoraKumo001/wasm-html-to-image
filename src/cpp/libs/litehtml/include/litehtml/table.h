@@ -211,6 +211,7 @@ namespace litehtml
 		std::vector<std::shared_ptr<render_item>> m_captions;
 		pixel_t					m_top_captions_height;
 		pixel_t					m_bottom_captions_height;
+		writing_mode			m_mode = writing_mode_horizontal_tb;
 	public:
 
 		table_grid() :
@@ -221,6 +222,10 @@ namespace litehtml
 		{
 		}
 
+		// Must be called before finish(): selects which physical borders feed the
+		// inline-axis (column) and block-axis (row) border widths.
+		void			set_writing_mode(writing_mode mode) { m_mode = mode; }
+		bool			is_vertical() const { return m_mode != writing_mode_horizontal_tb; }
 		void			clear();
 		void			begin_row(const std::shared_ptr<render_item>& row);
 		void			add_cell(const std::shared_ptr<render_item>& el);

@@ -112,9 +112,16 @@ void litehtml::render_item::place(pixel_t x, pixel_t y,
         _place(x, y, containing_block_size, &fmt);
         fmt.apply_relative_shift(containing_block_size);
     } else {
-        fmt_ctx->push_position(x + content_left, y + content_top);
+        // The formatting context tracks logical offsets from the block-start edge. In vertical-rl
+        // that edge is the right one, so convert the physical x of the content box.
+        pixel_t push_x = x + content_left;
+        if (css().get_writing_mode() == writing_mode_vertical_rl ||
+            css().get_writing_mode() == writing_mode_sideways_rl) {
+            push_x = (pixel_t)containing_block_size.width - (x + width()) + content_offset_right();
+        }
+        fmt_ctx->push_position(push_x, y + content_top);
         _place(x, y, containing_block_size, fmt_ctx);
-        fmt_ctx->pop_position(x + content_left, y + content_top);
+        fmt_ctx->pop_position(push_x, y + content_top);
     }
 }
 
