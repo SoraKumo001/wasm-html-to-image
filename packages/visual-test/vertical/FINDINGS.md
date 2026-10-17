@@ -38,6 +38,7 @@ SVG 出力は PNG と一致 (差分 < 1%)、PDF 出力も縦書きのまま 1 �
 | 6 | text-indent (副次的に修正) | 13/56/44: outline 17%→2.6% |
 | 5 | リストマーカー (ul/ol を各列の先頭へ) | 20: 箇条書き・番号が Chromium と同じ位置 |
 | 9 | justify が最終行を均等割付しない | 12/80 |
+| 13 | `body` の縦書きをルートへ伝播し、右端基準で配置 | 60: outline 11.5%→2.1% (`html` 指定の 61 は右端が約 10px ずれる) |
 | 8 | `text-combine-upright:all` (結合ランを横書きで再整形して 1em に圧縮) | 06/94: Chromium と同等 |
 | 7 | `letter-spacing` (横書き・縦書きとも。font description 生成前に解決、グリフ間隔を加算) | 99/16。`word-spacing` は未検証 |
 | - | 縦書きブロックを BFC 化 (float の高さ漏れ) | 30/77: ページ高さ 320→266px で一致 |
@@ -58,7 +59,6 @@ SVG 出力は PNG と一致 (差分 < 1%)、PDF 出力も縦書きのまま 1 �
 | 5 | **リストマーカー**: マーカーが 1 つだけ下端に出て本文と重なる / `ol` は 3. のみ / `cjk-ideographic` は無表示 | 20 |
 | 6 | **text-indent** が無視される | 13, 56, 44 |
 | 7 | **letter-spacing / word-spacing** が無視される | 16, 58 |
-| 8 | **text-combine-upright:all** が 2 桁数字で結合されず「2 1」と縦に並ぶ | 06 |
 | 9 | **text-align:justify** が最終行まで均等割付される | 12, 80 |
 | 10 | `block-size` 指定が反映されない (内容に合わせて広がる) | 40 |
 | 11 | `vertical-align: super/sub` の位置ずらしが効かない | 39 |

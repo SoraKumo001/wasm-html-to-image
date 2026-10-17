@@ -517,11 +517,46 @@ uint_ptr document::get_font( const font_description& descr, font_metrics* fm )
 	return add_font(descr, fm);
 }
 
+// A vertical writing-mode set on <body> also applies to the root element, as browsers do for
+// the document's block flow, so the page anchors at the right edge in vertical-rl.
+static void propagate_body_writing_mode(const element::ptr& root)
+{
+	if (!root || root->css().get_writing_mode() != writing_mode_horizontal_tb)
+	{
+		return;
+	}
+	for (const auto& child : root->children())
+	{
+		if (!strcmp(child->get_tagName(), "body") && child->css().get_writing_mode() != writing_mode_horizontal_tb)
+		{
+			root->css_w().set_writing_mode(child->css().get_writing_mode());
+			return;
+		}
+	}
+}
+
+// In vertical-rl the block flow starts at the right edge, so a root that is narrower than the
+// viewport sits flush right rather than at x = 0.
+static void anchor_vertical_rl_root(const std::shared_ptr<render_item>& root, pixel_t viewport_width)
+{
+	const writing_mode mode = root->src_el()->css().get_writing_mode();
+	if (mode != writing_mode_vertical_rl && mode != writing_mode_sideways_rl)
+	{
+		return;
+	}
+	pixel_t shift = viewport_width - root->width();
+	if (shift > 0)
+	{
+		root->pos().x += shift;
+	}
+}
+
 pixel_t document::render( pixel_t max_width, render_type rt )
 {
 	pixel_t ret = 0;
 	if(m_root && m_root_render)
 	{
+		propagate_body_writing_mode(m_root);
 		position viewport;
 		m_container->get_viewport(viewport);
 		containing_block_context cb_context;
@@ -550,7 +585,7 @@ pixel_t document::render( pixel_t max_width, render_type rt )
 			m_root_render->render_positioned(rt);
 		} else
 		{
-			ret = m_root_render->measure(cb_context, nullptr); m_root_render->place(0, 0, cb_context, nullptr);
+			ret = m_root_render->measure(cb_context, nullptr); m_root_render->place(0, 0, cb_context, nullptr); anchor_vertical_rl_root(m_root_render, viewport.width);
 			
 			// Container Queries support: 
 			// After the first layout, container sizes are known.
@@ -560,6 +595,7 @@ pixel_t document::render( pixel_t max_width, render_type rt )
 			if (has_cq || has_tables) {
 			m_root->refresh_styles();
 			m_root->compute_styles();
+			propagate_body_writing_mode(m_root);
 
 			// Rebuild rendering tree because structure might have changed (e.g. pseudo-elements)
 			m_root_render = m_root->create_render_item(nullptr);
@@ -570,7 +606,7 @@ pixel_t document::render( pixel_t max_width, render_type rt )
 			}
 			
 			// Second pass
-			ret = m_root_render->measure(cb_context, nullptr); m_root_render->place(0, 0, cb_context, nullptr);
+			ret = m_root_render->measure(cb_context, nullptr); m_root_render->place(0, 0, cb_context, nullptr); anchor_vertical_rl_root(m_root_render, viewport.width);
 			}
 
 			if(m_root_render->fetch_positioned())
