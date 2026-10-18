@@ -60,6 +60,7 @@ SVG 出力は PNG と一致 (差分 < 1%)、PDF 出力も縦書きのまま 1 �
 | 7 | `letter-spacing` (横書き・縦書きとも。font description 生成前に解決、グリフ間隔を加算) | 99/16。`word-spacing` は未検証 |
 | 14 | `text-emphasis` (圏点): `text_renderer.cpp` に per-glyph 描画を追加。filled/open × dot/circle(円近似)/triangle/sesame(短い太線)、over/under・right/left 配置、空白・結合マーク除外、currentColor 解決。tagging(SVG)/stroke上塗り/tcyランは対象外 | 14: 中央列にゴマ点が Chromium と同位置に付く (fill 2.6% 変化なし=他列の既存差分が支配、outline 4.1%→3.9%) |
 | - | `::first-letter` の付与対象を `::before` 子テキスト優先に修正 (空 before は skip、`::after` は対象外。decode_utf8 分割・wrapper・二重分割ガード維持) | 62: 【が緑 2em で Chromium と一致 (fill 1.0% / outline 1.7%)。「前」までの拡大は未対応 |
+| - | `::first-letter` の先頭句読点包含 (CSS Selectors-4: 先頭字に先行する開き句読点類 `「『【〈《（［〔"'` 等 (Unicode Ps / Pi / ASCII 引用符) を wrapper に含める。`html_tag.cpp` に `is_first_letter_opening_punct` を追加し、先頭が開き句読点なら連続する開き句読点 + 直後の 1 文字を分割対象に。閉じ句読点・中黒等の後続は対象外) | 62: `【前` が緑 2em (fill 1.0% / outline 1.7%→1.4%)。Chromium は `【前】` 全体を緑化 (末尾 `】` は未対応) |
 | - | 縦書きブロックを BFC 化 (float の高さ漏れ) | 30/77: ページ高さ 320→266px で一致 |
 | - | 縦書きの下線・上線の位置 (下線はブロック開始側の内側、上線はブロック終端側の内側へ) | 43: fill 0.7%→0.3% / outline 0.8%→0.5% |
 | - | `position:fixed` を文書高さ算出から除外 (fixed サブツリー全体を `calc_document_size` でスキップ。viewport 基準の子座標が混入し高さが膨らんでいた) | 短文+fixed bottom-right 2979→55px、長文 2979→2366px に復帰 |
@@ -77,7 +78,7 @@ SVG 出力は PNG と一致 (差分 < 1%)、PDF 出力も縦書きのまま 1 �
 ## 不具合 (縦書き以外でも起きるもの / 参考)
 
 - ~~`text-emphasis` (圏点) 未対応 (14)~~ → 本変更で対応 (上記)。残件: カスタム文字列、SVG(tagging)出力、tcyラン、`open` 以外の装飾組み合わせの厳密比較。
-- ~~`::first-letter` 未対応 (62)~~ → 本変更で対応 (上記)。残件: Chromium は「前」まで 2em 緑化するが本実装は先頭 1 文字 (【) のみ適用 (約物スキップ等の厳密一致は未対応)。
+- ~~`::first-letter` 未対応 (62)~~ → 本変更で対応 (上記)。先頭に先行する開き句読点類は wrapper に含めるようになった (`【前`)。残件: Chromium は前後の句読点を包含する (`【前】` の末尾 `】`、`"A"` の末尾 `"`) が本実装は末尾の閉じ句読点・中黒を対象外とする。先頭の閉じ句読点 (例 `。あ`) も未対応 (先頭 1 文字のみ)。最小プローブ `temp/first-letter-probe.*` で Chromium 対照済み。
 - 横書きの先頭 float 右寄せでテキストが下へずれていた (76) → 本変更で修正 (下記)。残差 fill 3.2% / outline 2.2% は約物詰め (`text-spacing-trim`) 相当が無いための行末・折返し位置差 (03, 17 と同種の仕様差)。
 - Chromium の `text-spacing-trim` (約物の詰め) 相当が無く、行末位置・折返し位置が微妙にずれる (03, 17)。バグではなく仕様差。
 

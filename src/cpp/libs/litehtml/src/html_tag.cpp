@@ -43,6 +43,47 @@ static char32_t decode_utf8(const char **ptr) {
     return res;
 }
 
+// CSS Selectors-4: punctuation that precedes the first letter unit belongs to
+// ::first-letter. This minimal extension only recognises the leading
+// opening-punctuation class (Unicode Ps, initial quotes Pi, and the ASCII
+// quotation marks) so that e.g. "【前】" folds "【前" into the wrapper. Trailing
+// (closing) punctuation and interpuncts are intentionally out of scope.
+static bool is_first_letter_opening_punct(char32_t ch) {
+    switch (ch) {
+    // ASCII quotation marks (Po)
+    case 0x0022: // "
+    case 0x0027: // '
+    // Parentheses / brackets (Ps)
+    case 0x0028: case 0x005B: case 0x007B:
+    case 0x0F3A: case 0x0F3C: case 0x169B:
+    case 0x201A: case 0x201E:
+    case 0x2045: case 0x207D: case 0x208D:
+    case 0x2308: case 0x230A: case 0x2329:
+    case 0x2768: case 0x276A: case 0x276C: case 0x276E:
+    case 0x2770: case 0x2772: case 0x2774:
+    case 0x27C5: case 0x27E6: case 0x27E8: case 0x27EA: case 0x27EC: case 0x27EE:
+    case 0x2983: case 0x2985: case 0x2987: case 0x2989: case 0x298B:
+    case 0x298D: case 0x298F: case 0x2991: case 0x2993: case 0x2995: case 0x2997:
+    case 0x29D8: case 0x29DA: case 0x29FC:
+    case 0x2E22: case 0x2E24: case 0x2E26: case 0x2E28: case 0x2E42:
+    case 0x2E55: case 0x2E57: case 0x2E59: case 0x2E5B:
+    case 0x3008: case 0x300A: case 0x300C: case 0x300E:
+    case 0x3010: case 0x3014: case 0x3016: case 0x3018: case 0x301A: case 0x301D:
+    case 0xFD3E: case 0xFE17:
+    case 0xFE35: case 0xFE37: case 0xFE39: case 0xFE3B: case 0xFE3D:
+    case 0xFE3F: case 0xFE41: case 0xFE43: case 0xFE47:
+    case 0xFE59: case 0xFE5B: case 0xFE5D:
+    case 0xFF08: case 0xFF3B: case 0xFF5B: case 0xFF5F: case 0xFF62:
+    // Initial quotes (Pi)
+    case 0x00AB: case 0x2018: case 0x201B: case 0x201C: case 0x201F:
+    case 0x2039: case 0x2E02: case 0x2E04: case 0x2E09: case 0x2E0C:
+    case 0x2E1C: case 0x2E20:
+        return true;
+    default:
+        return false;
+    }
+}
+
 litehtml::html_tag::html_tag(const std::shared_ptr<document>& doc) : element(doc)
 {
         m_tag = empty_id;
@@ -1975,9 +2016,26 @@ void litehtml::html_tag::apply_first_letter()
         if(txt.empty()) return;
         const char* s = txt.c_str();
         const char* p = s;
-        decode_utf8(&p);
+        char32_t first_ch = decode_utf8(&p);
+        // CSS Selectors-4: leading punctuation preceding the first letter unit is
+        // part of ::first-letter. Fold a leading run of opening punctuation into
+        // the wrapper together with the first following character (the letter
+        // unit), e.g. "【前】" -> wrapper "【前", rest "】".
+        if(is_first_letter_opening_punct(first_ch))
+        {
+                while(*p)
+                {
+                        const char* q = p;
+                        if(!is_first_letter_opening_punct(decode_utf8(&q))) break;
+                        p = q;
+                }
+                if(*p)
+                {
+                        decode_utf8(&p); // include the first following character
+                }
+        }
         size_t first_len = (size_t)(p - s);
-        if(first_len == 0 || first_len >= txt.size() + 1) return;
+        if(first_len == 0 || first_len > txt.size()) return;
         // If the text node holds a single codepoint, first_len == txt.size(): still wrap.
         string first_str(s, first_len);
         string rest_str(p);
