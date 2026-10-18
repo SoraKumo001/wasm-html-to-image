@@ -41,6 +41,25 @@ void el_td::parse_presentational_hints()
 		m_style.add_property(_background_color_, str, "", false, get_document()->container());
 	}
 
+	// https://html.spec.whatwg.org/multipage/rendering.html#tables-2:attr-table-cellpadding
+	// The hint comes from the nearest ancestor table; it beats the zero-specificity UA padding.
+	for(auto p = parent(); p; p = p->parent())
+	{
+		if(p->tag() == _table_)
+		{
+			const char* cellpadding = p->get_attr("cellpadding");
+			if(cellpadding)
+			{
+				const selector_specificity sp(0, 0, 0, 1);
+				map_to_pixel_length_property(_padding_top_, cellpadding, sp);
+				map_to_pixel_length_property(_padding_right_, cellpadding, sp);
+				map_to_pixel_length_property(_padding_bottom_, cellpadding, sp);
+				map_to_pixel_length_property(_padding_left_, cellpadding, sp);
+			}
+			break;
+		}
+	}
+
 	str = get_attr("align");
 	if(str)
 	{

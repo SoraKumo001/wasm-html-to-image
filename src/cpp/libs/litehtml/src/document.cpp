@@ -82,6 +82,16 @@ document::ptr document::createFromString(
 	if (master_styles != "")
 	{
 		doc->m_master_css.parse_css_stylesheet(master_styles, "", doc, nullptr, nullptr, true, 0);
+		// Quirks mode (no DOCTYPE): tables do not inherit text-align, font and white-space
+		// from their ancestors (WebKit/Blink quirks.css), e.g. <center><table> keeps cells
+		// left-aligned.
+		if (doc->m_mode == quirks_mode)
+		{
+			doc->m_master_css.parse_css_stylesheet(
+				string("table { text-align: left; font-size: medium; line-height: normal;"
+				       " font-weight: normal; font-style: normal; white-space: normal; }"),
+				"", doc, nullptr, nullptr, true, 0);
+		}
 		doc->m_master_css.sort_selectors();
 	}
 	if (user_styles != "")

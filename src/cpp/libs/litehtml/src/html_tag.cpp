@@ -2317,13 +2317,13 @@ string html_tag::dump_get_name()
 }
 
 // https://html.spec.whatwg.org/multipage/rendering.html#maps-to-the-pixel-length-property
-void html_tag::map_to_pixel_length_property(string_id prop_name, string attr_value)
+void html_tag::map_to_pixel_length_property(string_id prop_name, string attr_value, selector_specificity specificity)
 {
         int n;
         if (html_parse_non_negative_integer(attr_value, n))
         {
                 css_token tok(DIMENSION, (float)n, css_number_integer, "px");
-                m_style.add_property(prop_name, {tok});
+                m_style.add_property(prop_name, {tok}, "", false, nullptr, 0, specificity);
         }
 }
 

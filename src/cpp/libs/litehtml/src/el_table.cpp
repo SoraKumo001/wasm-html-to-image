@@ -36,7 +36,8 @@ namespace litehtml
 
 		// https://html.spec.whatwg.org/multipage/rendering.html#tables-2:attr-table-cellspacing
 		str = get_attr("cellspacing");
-		if(str) map_to_pixel_length_property(_border_spacing_, str);
+		if(str) map_to_pixel_length_property(_border_spacing_, str, selector_specificity(0, 0, 0, 1));
+
 
 		// https://html.spec.whatwg.org/multipage/rendering.html#tables-2:attr-table-border
 		str = get_attr("border");

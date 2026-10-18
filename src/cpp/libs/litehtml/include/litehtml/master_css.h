@@ -171,14 +171,15 @@ hr {
 table {
 	display: table;
 	border-collapse: separate;
-	border-spacing: 2px;
 	border-top-color:gray;
 	border-left-color:gray;
 	border-bottom-color:black;
 	border-right-color:black;
-	font-size: medium;
-	font-weight: normal;
-	font-style: normal;
+}
+
+/* zero specificity so cellspacing/cellpadding presentational hints and author rules win */
+:where(table) {
+	border-spacing: 2px;
 }
 
 tbody, tfoot, thead {
@@ -196,6 +197,9 @@ td, th {
 	display: table-cell;
 	vertical-align: inherit;
 	border-width:1px;
+}
+
+:where(td, th) {
 	padding:1px;
 }
 

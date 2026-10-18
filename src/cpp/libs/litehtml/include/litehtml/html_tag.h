@@ -122,7 +122,7 @@ namespace litehtml
 		element::ptr		get_element_after(const style& style, bool create);
 		void				apply_first_letter();
 
-		void map_to_pixel_length_property(string_id prop_name, string attr_value);
+		void map_to_pixel_length_property(string_id prop_name, string attr_value, selector_specificity specificity = selector_specificity());
 		void map_to_pixel_length_property_with_default_value(string_id prop_name, string attr_value, int default_value);
 		void map_to_dimension_property(string_id prop_name, string attr_value);
 		void map_to_dimension_property_ignoring_zero(string_id prop_name, string attr_value);

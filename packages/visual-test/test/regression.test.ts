@@ -93,4 +93,21 @@ describe("regression: layout and paint probes", () => {
     expect(near(at(150, 8), BLUE)).toBe(true); // 10th square fits left of the margin box (x < 172)
     expect(isWhite(at(165, 8))).toBe(true); // an 11th square would cross into the margin
   });
+
+  it("table cellspacing/cellpadding attributes override the UA defaults", async () => {
+    const { at } = await renderPng(
+      `<table cellspacing="0" cellpadding="0"><tr>
+         <td style="width:20px;height:20px;background:#00f"></td><td style="width:20px;height:20px;background:#f00"></td>
+       </tr></table>
+       <table cellspacing="0" cellpadding="6" style="margin-top:10px"><tr>
+         <td style="background:#00f"><i style="display:block;width:10px;height:10px;background:#0f0"></i></td></tr></table>`,
+      200,
+      120,
+    );
+    expect(near(at(19, 10), BLUE)).toBe(true); // first cell ends at x=20
+    expect(near(at(21, 10), [255, 0, 0])).toBe(true); // no 2px spacing gap before the next cell
+    // second table starts at y=30: 6px padding around a 10px child -> 22px cell
+    expect(near(at(3, 36), BLUE)).toBe(true); // padding area is the cell background
+    expect(near(at(11, 41), [0, 255, 0])).toBe(true); // child sits inside the padding
+  });
 });
