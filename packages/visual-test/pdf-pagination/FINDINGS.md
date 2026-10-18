@@ -372,3 +372,104 @@ npx tsx pdf-pagination/verify.mts
   分割許容 (進捗優先)。rowspan 併合ボックスが頁より高い場合も同様に分割許容。
 - **セル内 block 分割は対象外** (行がセルを丸ごと含む)。ネスト表は外側の行ボックスに含まれる。
 - 断片化は「單一 HTML 頁分割」経路のみ。配列入力 (`htmls` 2 件以上) は従来どおり。
+
+---
+
+# 複数ページ PDF (P5: @page rule / page box)
+
+P1-P4 の「Layout-once + Slice」を土台に、CSS `@page` の **`size` / `margin`** を
+頁ジオメトリへ反映する。oracle 設計 (Polish 方式: litehtml を改造せず、頁描画の直前に
+頁ボックスだけを整える) に沿う。**スコープ P5 のみ**・コミット禁止。
+
+## 実装方針 (採用した方式)
+
+litehtml は `@page` を解釈しない (`stylesheet.cpp` の at-rule switch で default →
+`css_parse_error` で破棄)。そこで **PDF レンダラ (`pdf_renderer.cpp`) 側で
+`@page` ブロックを走査・抽出** する。litehtml / API / bindings は未変更 (純増)。
+
+1. **抽出元**: `master_css` + `user_css` (JS の `css` オプション → `scan_css` →
+   `getExtraCss`) + HTML 内のインライン `<style>` ブロック (`extract_style_blocks`)。
+   → `@page` をどの書式で書いても拾える。
+2. **`size`**: 名前付きサイズ (`a3/a4/a5/b4/b5/letter/legal/ledger/tabloid`) または
+   `<length>{1,2}`、任意の `portrait` / `landscape`。長さは 96dpi の CSS px に換算
+   (`px/pt/pc/in/cm/mm/q`)。
+3. **`margin`**: ショートハンド `<length>{1,4}` と `margin-top/right/bottom/left`。
+4. **優先順位 (仕様どおり)**:
+   - マージン: `@page margin` **>** `SatoruRenderOptions.pdfMargin*` (既存 API 互換のため
+     `@page` を上書き推奨)。
+   - 頁ボックス: `@page size` **>** `width` / `height` / `outputHeight` 引数。
+   - `@page` の無い文書は完全に従来どおり (P1-P4 とバイト一致)。
+5. **pt 変換**: SkPDF は MediaBox を pt で書く。`@page size` があるときだけ、頁を
+   `px * 72/96` の pt で `beginPage` し canvas を `0.75` 倍する。これで `@page A4` が
+   ブラウザと同じ A4 pt 寸法になる。`size` が無ければ従来の px-as-pt を維持
+   (API 互換: `output-size.test` の「明示 height 300 → MediaBox 300」を壊さない)。
+
+### テンプレート変数の判断 (counter(page) は拡張しない)
+
+`{{pageNumber}}` / `{{totalPages}}` で **頁番号は既に足りている**。ヘッダ/フッタは頁ごとに
+別 `document` として描画され、パース前に変数置換される (`replace_template_vars`)。
+`counter(page)` / `counter(pages)` を CSS で使うには litehtml の generated content に
+カウンタ機構を足す必要があり、既存の置換で得られる結果を超える価値が無い。
+→ **counter 拡張は行わない** (YAGNI)。
+
+### 変更ファイル
+
+- `src/cpp/renderers/pdf_renderer.cpp` のみ:
+  - `PageRule` / `css_length_to_px` / `named_page_size` / `parse_page_size` /
+    `parse_margin_shorthand` / `parse_page_declarations` / `parse_page_rules` /
+    `extract_style_blocks` (匿名 namespace)。
+  - `renderHtmlToPdf`: `@page` 抽出、マージン/頁ボックスの決定、`@page size` 時の
+    pt 変換 (`beginPage` 寸法 + `canvas->scale`)。
+- litehtml / API / bindings / JS 変更なし。
+
+## 検証 (`verify.mts` に P5 ケース追加)
+
+```bash
+cd packages/visual-test
+npx tsx pdf-pagination/verify.mts
+```
+
+| case     | 内容 | 判定 |
+|----------|------|------|
+| p5a4     | インライン `<style>@page { size:A4; margin:20mm }</style>` | eng `595.00x842.00pt` / chrom `594.96x841.92pt` (±1pt 以内, OK)・頁数 eng=3 chrom=3 |
+| p5land   | `@page { size: letter landscape }` | eng `792.00x612.00pt` (期待 792x612pt, OK) |
+| p5margin | `css:"@page { margin: 100px 0 }"` + `pdfMargin:0` | 頁ボックス eng `600x1123pt` (size 無しは px-as-pt 維持)・頁数 3 (content area 923px) |
+
+- **pt 一致**: Chromium は `page.pdf({ preferCSSPageSize: true })`。engine は整数 pt へ
+  丸めるため差は 0.04〜0.08pt (許容 ±1pt)。A4 = 210×297mm = 595.28×841.89pt。
+- **マージン優先**: p5margin は `@page margin` が `pdfMargin:0` を上書きしないと 2 頁に
+  なる (923px 領域で 2000px 文書 → 3 頁)。3 頁であることが上書きの証明。
+
+### P1-P4 回帰 (同スクリプト)
+
+- `short` / `long` / `image`、header/footer 各頁再描画、`position:fixed` 各頁再描画: 全て OK。
+- P2 (`avoidcard`/`legacycard`/`breakpage`/`legacybreak`/`avoidhead`): 全て OK。
+- P3 (`p3orphans`/`p3widows`/`p3long`/`p3float`): 全て OK。
+- P4 (`p4table`/`p4rowspan`): 全て OK。
+- `regression (no avoid == P1)`: `long` のスライスが P1 記録値と文字列一致。
+
+### 既存 vitest 回帰
+
+- `packages/html-to-image` vitest **135 件 通過**。
+- `packages/visual-test` vitest **155 件 通過**。
+
+## P5 の制限 (スコープ内で記録)
+
+- **bare `@page` のみ**。`:first` / `:left` / `:right` や名前付き頁 (`@page foo`) は
+  抽出時に無視する (スコープ外)。同一 CSS 内に複数の bare `@page` があれば後勝ち。
+- **`size` が無い `@page margin` は単位変換しない**: 頁ボックスは従来の `width` ×
+  (height>outputHeight>1123) px-as-pt のまま。pt 換算は `size` 指定時のみ。
+- **`size: auto` は無視** (名前付き/長さに一致しないため `has_size` は false)。
+- マージンは `@page` が 1 つでも指定されれば **全辺を `@page` 値で確定** (未指定辺は 0)。
+  一部長辺だけの `@page` で残りを `pdfMargin` に委ねる合成はしない。
+- **抽出はテキスト走査**: CSS コメント内の `@page` や、`<style>` 内の文字列リテラルに
+  現れる `@page` も拾いうる (実用上問題なし)。`@page` の入れ子ブロックは想定しない。
+- **配列入力経路 (`htmls` 2 件以上) は対象外** (従来どおり 1 要素 = 1 頁、`@page` 無視)。
+
+## スコープ外 (P5 対象外 / YAGNI)
+
+- 名前付き頁 (`page: foo`)、`:left` / `:right` / `:first` 擬似頁。
+- ノンブル制御 (`counter-reset: page` / `counter(page)` / `counter(pages)`)。
+- 縦書きの頁進行方向。
+- 頁単位の再レイアウト最適化 (P1 からの「頁数分 draw + canvas clip」のまま)。
+- `@page` の他プロパティ (border / padding / marks / bleed / size の `auto` 合成)。

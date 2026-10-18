@@ -5,8 +5,12 @@
 #include <litehtml/render_item.h>
 
 #include <algorithm>
+#include <cctype>
 #include <climits>
+#include <cmath>
+#include <cstdlib>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "api/satoru_api.h"
@@ -383,6 +387,236 @@ std::vector<PageCut> plan_page_cuts(const std::vector<BreakUnit>& units,
 
     return pages;
 }
+
+// ---- P5: @page rule (size / margin) ------------------------------------------
+//
+// litehtml discards the @page at-rule (stylesheet.cpp falls through to
+// "unrecognized rule"), so the single-HTML pagination path extracts the page box
+// itself, from every stylesheet that reaches the document (master CSS, user CSS
+// and inline <style> blocks). Only `size` and `margin` are honoured:
+//   - `size` sets the page box (px @96dpi) and, because SkPDF writes the MediaBox
+//     in points, switches the page to a 0.75 px->pt canvas scale,
+//   - `margin` overrides the SatoruRenderOptions pdfMargin* px margins.
+// Named pages (page:foo), :left/:right/:first pseudo pages and page counters are
+// out of scope (YAGNI).
+struct PageRule {
+    bool has_size = false;
+    float width_px = 0.f;
+    float height_px = 0.f;
+    bool has_margin = false;
+    float margin_top = 0.f;
+    float margin_right = 0.f;
+    float margin_bottom = 0.f;
+    float margin_left = 0.f;
+};
+
+std::string ascii_lower(std::string s) {
+    for (char& c : s) c = (char)std::tolower((unsigned char)c);
+    return s;
+}
+
+std::string trim_ws(const std::string& s) {
+    const char* ws = " \t\r\n\f";
+    size_t b = s.find_first_not_of(ws);
+    if (b == std::string::npos) return "";
+    size_t e = s.find_last_not_of(ws);
+    return s.substr(b, e - b + 1);
+}
+
+std::vector<std::string> split_ws(const std::string& s) {
+    std::vector<std::string> out;
+    size_t i = 0;
+    while (i < s.size()) {
+        while (i < s.size() && std::isspace((unsigned char)s[i])) i++;
+        size_t b = i;
+        while (i < s.size() && !std::isspace((unsigned char)s[i])) i++;
+        if (i > b) out.push_back(s.substr(b, i - b));
+    }
+    return out;
+}
+
+// CSS length -> px at 96dpi. Unitless values are accepted as px (only 0 is valid
+// CSS, but accepting the number is harmless).
+bool css_length_to_px(const std::string& token, float& out_px) {
+    std::string t = trim_ws(token);
+    if (t.empty()) return false;
+    const char* begin = t.c_str();
+    char* end = nullptr;
+    float v = std::strtof(begin, &end);
+    if (end == begin) return false;
+    std::string unit = ascii_lower(trim_ws(std::string(end)));
+    if (unit.empty() || unit == "px") out_px = v;
+    else if (unit == "pt") out_px = v * 96.f / 72.f;
+    else if (unit == "pc") out_px = v * 16.f;
+    else if (unit == "in") out_px = v * 96.f;
+    else if (unit == "cm") out_px = v * 96.f / 2.54f;
+    else if (unit == "mm") out_px = v * 96.f / 25.4f;
+    else if (unit == "q") out_px = v * 96.f / 25.4f / 4.f;
+    else return false;
+    return true;
+}
+
+// ISO/US named page sizes, expressed in mm (converted to px by the caller).
+bool named_page_size(const std::string& name, float& w_px, float& h_px) {
+    static const struct {
+        const char* name;
+        float w_mm;
+        float h_mm;
+    } kSizes[] = {
+        {"a3", 297.f, 420.f},   {"a4", 210.f, 297.f},     {"a5", 148.f, 210.f},
+        {"b4", 250.f, 353.f},   {"b5", 176.f, 250.f},     {"letter", 215.9f, 279.4f},
+        {"legal", 215.9f, 355.6f}, {"ledger", 279.4f, 431.8f}, {"tabloid", 279.4f, 431.8f},
+    };
+    for (const auto& s : kSizes) {
+        if (name == s.name) {
+            w_px = s.w_mm * 96.f / 25.4f;
+            h_px = s.h_mm * 96.f / 25.4f;
+            return true;
+        }
+    }
+    return false;
+}
+
+// `size`: [ <length>{1,2} | <page-size> ] || [ portrait | landscape ]
+bool parse_page_size(const std::string& value, float& w_px, float& h_px) {
+    std::vector<std::string> dims;
+    bool landscape = false;
+    for (const auto& tok : split_ws(value)) {
+        std::string lt = ascii_lower(tok);
+        if (lt == "portrait") continue;
+        if (lt == "landscape") {
+            landscape = true;
+            continue;
+        }
+        dims.push_back(tok);
+    }
+
+    float w = 0.f, h = 0.f;
+    if (dims.size() == 1) {
+        if (named_page_size(ascii_lower(dims[0]), w, h)) {
+            // named: already in px
+        } else if (css_length_to_px(dims[0], w)) {
+            h = w;
+        } else {
+            return false;
+        }
+    } else if (dims.size() == 2) {
+        if (!css_length_to_px(dims[0], w) || !css_length_to_px(dims[1], h)) return false;
+    } else {
+        return false;
+    }
+    if (landscape) std::swap(w, h);
+    w_px = w;
+    h_px = h;
+    return true;
+}
+
+// `margin`: <length>{1,4}
+bool parse_margin_shorthand(const std::string& value, float& t, float& r, float& b, float& l) {
+    std::vector<std::string> v = split_ws(value);
+    if (v.empty() || v.size() > 4) return false;
+    float px[4] = {0.f, 0.f, 0.f, 0.f};
+    for (size_t i = 0; i < v.size(); ++i)
+        if (!css_length_to_px(v[i], px[i])) return false;
+    switch (v.size()) {
+        case 1: t = r = b = l = px[0]; break;
+        case 2: t = b = px[0]; r = l = px[1]; break;
+        case 3: t = px[0]; r = l = px[1]; b = px[2]; break;
+        default: t = px[0]; r = px[1]; b = px[2]; l = px[3]; break;
+    }
+    return true;
+}
+
+void parse_page_declarations(const std::string& block, PageRule& rule) {
+    size_t start = 0;
+    while (start <= block.size()) {
+        size_t end = block.find(';', start);
+        std::string decl =
+            block.substr(start, (end == std::string::npos ? block.size() : end) - start);
+        size_t colon = decl.find(':');
+        if (colon != std::string::npos) {
+            std::string prop = ascii_lower(trim_ws(decl.substr(0, colon)));
+            std::string val = trim_ws(decl.substr(colon + 1));
+            if (prop == "size") {
+                float w, h;
+                if (parse_page_size(val, w, h)) {
+                    rule.has_size = true;
+                    rule.width_px = w;
+                    rule.height_px = h;
+                }
+            } else if (prop == "margin") {
+                float t, r, b, l;
+                if (parse_margin_shorthand(val, t, r, b, l)) {
+                    rule.has_margin = true;
+                    rule.margin_top = t;
+                    rule.margin_right = r;
+                    rule.margin_bottom = b;
+                    rule.margin_left = l;
+                }
+            } else if (prop == "margin-top" || prop == "margin-right" ||
+                       prop == "margin-bottom" || prop == "margin-left") {
+                float v;
+                if (css_length_to_px(val, v)) {
+                    rule.has_margin = true;
+                    if (prop == "margin-top") rule.margin_top = v;
+                    else if (prop == "margin-right") rule.margin_right = v;
+                    else if (prop == "margin-bottom") rule.margin_bottom = v;
+                    else rule.margin_left = v;
+                }
+            }
+        }
+        if (end == std::string::npos) break;
+        start = end + 1;
+    }
+}
+
+// Scan a stylesheet for @page blocks (bare @page only; pseudo/named pages are
+// ignored). Later rules win, matching the CSS cascade for identical specificity.
+void parse_page_rules(const std::string& css, PageRule& rule) {
+    std::string lower = ascii_lower(css);
+    size_t pos = 0;
+    while ((pos = lower.find("@page", pos)) != std::string::npos) {
+        size_t i = pos + 5;
+        while (i < css.size() && std::isspace((unsigned char)css[i])) i++;
+        // Pseudo/named page selectors (@page :first, @page foo) are out of scope.
+        if (i < css.size() && css[i] == ':') {
+            pos = i;
+            continue;
+        }
+        if (i >= css.size() || css[i] != '{') {
+            pos = i;
+            continue;
+        }
+        int depth = 0;
+        size_t j = i;
+        for (; j < css.size(); ++j) {
+            if (css[j] == '{') depth++;
+            else if (css[j] == '}') {
+                if (--depth == 0) break;
+            }
+        }
+        parse_page_declarations(css.substr(i + 1, (j > i ? j - i - 1 : 0)), rule);
+        pos = (j < css.size()) ? j + 1 : css.size();
+    }
+}
+
+// Concatenated contents of every inline <style> block (litehtml parses these as
+// document CSS, so an @page rule written there must be seen by the extractor too).
+std::string extract_style_blocks(const std::string& html) {
+    std::string out;
+    std::string lower = ascii_lower(html);
+    size_t pos = 0;
+    while ((pos = lower.find("<style", pos)) != std::string::npos) {
+        size_t gt = html.find('>', pos);
+        if (gt == std::string::npos) break;
+        size_t close = lower.find("</style", gt);
+        if (close == std::string::npos) break;
+        out += html.substr(gt + 1, close - gt - 1);
+        out += "\n";
+        pos = close + 7;
+    }
+    return out;
+}
 }  // namespace
 
 sk_sp<SkData> renderDocumentToPdf(SatoruInstance* inst, int width, int height,
@@ -571,6 +805,10 @@ sk_sp<SkData> renderHtmlsToPdf(const std::vector<std::string>& htmls, int width,
 // re-painted at the top of every continuation page, reserving its height so the body does not
 // overlap it.
 //
+// P5 adds the @page rule: `size` sets the page box (and switches the MediaBox to points) and
+// `margin` overrides the SatoruRenderOptions px margins. Page numbers are already available to the
+// header/footer templates as {{pageNumber}} / {{totalPages}}, so no counter(page) support is added.
+//
 // Notes / accepted limitations:
 //   - Without break-* the slice cuts between the layout's painted pixels; a line/element
 //     straddling a page boundary is simply clipped (P1 behaviour, unchanged).
@@ -586,22 +824,68 @@ sk_sp<SkData> renderHtmlToPdf(const std::string& html, int width, int height,
                               const SatoruRenderOptions& options) {
     if (html.empty()) return nullptr;
 
+    std::string css = master_css ? master_css : litehtml::master_css;
+    css += "\nbr { display: -litehtml-br !important; }\n";
+
+    // P5: @page { size / margin }. litehtml drops @page, so extract it here from
+    // every stylesheet that reaches the document (master + user + inline <style>).
+    // @page overrides the SatoruRenderOptions px margins; a `size` also overrides
+    // the page box derived from the width/height arguments (the caller's explicit
+    // CSS intent wins). A document without @page is completely unaffected.
+    PageRule page_rule;
+    {
+        std::string page_css = css;
+        if (user_css) {
+            page_css += "\n";
+            page_css += user_css;
+        }
+        page_css += "\n";
+        page_css += extract_style_blocks(html);
+        parse_page_rules(page_css, page_rule);
+    }
+
     int margin_top = options.pdfMarginTop;
     int margin_bottom = options.pdfMarginBottom;
     int margin_left = options.pdfMarginLeft;
     int margin_right = options.pdfMarginRight;
+    if (page_rule.has_margin) {
+        margin_top = (int)std::lround(page_rule.margin_top);
+        margin_right = (int)std::lround(page_rule.margin_right);
+        margin_bottom = (int)std::lround(page_rule.margin_bottom);
+        margin_left = (int)std::lround(page_rule.margin_left);
+        if (margin_top < 0) margin_top = 0;
+        if (margin_right < 0) margin_right = 0;
+        if (margin_bottom < 0) margin_bottom = 0;
+        if (margin_left < 0) margin_left = 0;
+    }
 
-    int content_width = width - margin_left - margin_right;
-    if (content_width < 1) content_width = 1;
-
-    // Page height: explicit render height wins, then outputHeight, else A4 @96dpi (1123px).
+    // Page box (px @96dpi): @page size wins, else the render width and the
+    // height > outputHeight > A4 (1123px) fallback.
+    int page_width = width;
     int page_height = (height > 0) ? height
                                    : (options.outputHeight > 0 ? options.outputHeight : 1123);
+    if (page_rule.has_size) {
+        page_width = (int)std::lround(page_rule.width_px);
+        page_height = (int)std::lround(page_rule.height_px);
+    }
+    if (page_width < 1) page_width = 1;
+    if (page_height < 1) page_height = 1;
+
+    int content_width = page_width - margin_left - margin_right;
+    if (content_width < 1) content_width = 1;
+
     int content_area_height = page_height - margin_top - margin_bottom;
     if (content_area_height < 1) content_area_height = 1;
 
-    std::string css = master_css ? master_css : litehtml::master_css;
-    css += "\nbr { display: -litehtml-br !important; }\n";
+    // SkPDF writes the MediaBox in points, while the layout works in CSS px. When
+    // @page size is given the page is emitted at pt (px * 72/96) with a matching
+    // canvas scale, so an @page A4 page matches a browser's A4 pt size. Without
+    // @page size the legacy px-as-pt convention is preserved (no API change).
+    const float kPtPerPx = 72.0f / 96.0f;
+    const float pdf_page_width = page_rule.has_size ? page_rule.width_px * kPtPerPx
+                                                     : (float)page_width;
+    const float pdf_page_height = page_rule.has_size ? page_rule.height_px * kPtPerPx
+                                                      : (float)page_height;
 
     litehtml::media_type media_type =
         (options.mediaType == 1) ? litehtml::media_type_print : litehtml::media_type_screen;
@@ -651,13 +935,15 @@ sk_sp<SkData> renderHtmlToPdf(const std::string& html, int width, int height,
 
     for (int page = 0; page < page_count; ++page) {
         int page_num = page + 1;
-        SkCanvas* canvas = pdf_doc->beginPage((SkScalar)width, (SkScalar)page_height);
+        SkCanvas* canvas = pdf_doc->beginPage((SkScalar)pdf_page_width, (SkScalar)pdf_page_height);
         if (!canvas) continue;
+        // P5: with an @page size the MediaBox is in pt; scale the px layout to pt.
+        if (page_rule.has_size) canvas->scale(kPtPerPx, kPtPerPx);
 
         if (options.backgroundColor != 0) {
             SkPaint paint;
             paint.setColor(options.backgroundColor);
-            canvas->drawRect(SkRect::MakeWH(width, page_height), paint);
+            canvas->drawRect(SkRect::MakeWH((SkScalar)page_width, (SkScalar)page_height), paint);
         }
 
         // Header / footer: re-rendered per page (same as renderHtmlsToPdf).

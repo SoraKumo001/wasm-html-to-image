@@ -91,6 +91,20 @@ function extractPdf(pdf: Buffer): { pages: string[] } {
 const strip = (s: string) => s.replace(/\s/g, "");
 const norm = (s: string) => s.replace(/\s+/g, " ").trim();
 
+/** First page MediaBox (pt) from a PDF; inflates object streams if needed. */
+function firstMediaBox(buf: Buffer): { w: number; h: number } | null {
+  const re = /\/MediaBox\s*\[\s*(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s*\]/;
+  const direct = buf.toString("latin1").match(re);
+  if (direct) return { w: +direct[3] - +direct[1], h: +direct[4] - +direct[2] };
+  for (const m of buf.toString("latin1").matchAll(/stream\r?\n([\s\S]*?)\r?\nendstream/g)) {
+    try {
+      const b = zlib.inflateSync(Buffer.from(m[1], "latin1")).toString("latin1").match(re);
+      if (b) return { w: +b[3] - +b[1], h: +b[4] - +b[2] };
+    } catch {}
+  }
+  return null;
+}
+
 const img = new PNG({ width: 300, height: 600 });
 for (let y = 0; y < 600; y++) for (let x = 0; x < 300; x++) { const i = (y * 300 + x) << 2; img.data[i] = (x * 255 / 300) | 0; img.data[i + 1] = (y * 255 / 600) | 0; img.data[i + 2] = 128; img.data[i + 3] = 255; }
 const dataUri = `data:image/png;base64,${PNG.sync.write(img).toString("base64")}`;
@@ -359,6 +373,86 @@ const p4Span =
     `p4rowspan pages=${pages.length} SPAN on ${spanPages} page(s) XA@p${pA + 1} XB@p${pB + 1} ${spanOk ? "OK" : "BAD"}`,
   );
   pages.forEach((t, i) => console.log(`   p${i + 1}: ${JSON.stringify(t)}`));
+}
+
+// ---------------------------------------------------------------------------
+// P5: @page rule. `size` sets the page box (pt, matching Chromium's
+// preferCSSPageSize) and `margin` overrides the SatoruRenderOptions px margins.
+// ---------------------------------------------------------------------------
+console.log("\nP5 @page rule:");
+{
+  // @page size A4 + 20mm margin (inline <style>): the engine MediaBox must match
+  // Chromium's A4 pt size and both must paginate the same document identically.
+  const a4Html =
+    `<html><head><style>@page { size: A4; margin: 20mm }</style></head>` +
+    `<body style="${style}"><h1 style="margin:0">A4 Title</h1>` +
+    `<div style="height:900px">block one</div><div style="height:900px">block two</div>` +
+    `<div style="height:900px">block three</div></body></html>`;
+  const r = await render({ value: a4Html, width: WIDTH, format: "pdf" });
+  const epdf = Buffer.from(r.data as Uint8Array);
+  fs.writeFileSync(path.join(OUT, "p5a4.pdf"), epdf);
+  const eng = extractPdf(epdf);
+  const ebox = firstMediaBox(epdf);
+
+  const ctx = await browser.newContext();
+  const page = await ctx.newPage();
+  const file = path.join(OUT, "p5a4.html");
+  fs.writeFileSync(file, a4Html);
+  await page.goto(pathToFileURL(file).toString());
+  await page.waitForTimeout(300);
+  const cpdf = Buffer.from(await page.pdf({ preferCSSPageSize: true, printBackground: true }));
+  const cbox = firstMediaBox(cpdf);
+  const cpages = extractPdf(cpdf).pages.length;
+  await ctx.close();
+
+  const near = (a: number, b: number) => Math.abs(a - b) <= 1;
+  const sizeOk = !!ebox && !!cbox && near(ebox.w, cbox.w) && near(ebox.h, cbox.h);
+  const pagesOk = eng.pages.length === cpages;
+  if (!sizeOk || !pagesOk) ok = false;
+  console.log(
+    `p5a4 size eng=${ebox ? `${ebox.w.toFixed(2)}x${ebox.h.toFixed(2)}` : "?"}pt chrom=${cbox ? `${cbox.w.toFixed(2)}x${cbox.h.toFixed(2)}` : "?"}pt ${sizeOk ? "OK" : "BAD"} | pages eng=${eng.pages.length} chrom=${cpages} ${pagesOk ? "OK" : "BAD"}`,
+  );
+  eng.pages.forEach((t, i) => console.log(`   eng p${i + 1}: ${JSON.stringify(norm(t))}`));
+}
+{
+  // @page size letter landscape (named size + orientation): 792x612pt.
+  const landHtml =
+    `<html><head><style>@page { size: letter landscape }</style></head>` +
+    `<body style="${style}"><h1 style="margin:0">Land Title</h1><div style="height:500px">x</div></body></html>`;
+  const r = await render({ value: landHtml, width: WIDTH, format: "pdf" });
+  const epdf = Buffer.from(r.data as Uint8Array);
+  fs.writeFileSync(path.join(OUT, "p5land.pdf"), epdf);
+  const ebox = firstMediaBox(epdf);
+  const near = (a: number, b: number) => Math.abs(a - b) <= 1;
+  const okLand = !!ebox && near(ebox.w, 792) && near(ebox.h, 612);
+  if (!okLand) ok = false;
+  console.log(
+    `p5land size eng=${ebox ? `${ebox.w.toFixed(2)}x${ebox.h.toFixed(2)}` : "?"}pt expect 792x612pt ${okLand ? "OK" : "BAD"}`,
+  );
+}
+{
+  // @page margin (via the `css` option) overrides pdfMargin; without `size` the
+  // page box keeps the legacy width x 1123 px-as-pt convention. 100px top/bottom
+  // on a 2000px document -> 3 pages (content area 923) instead of 2.
+  const marginHtml =
+    `<html><body style="${style}"><div style="height:2000px">MARGINBODY</div></body></html>`;
+  const r = await render({
+    value: marginHtml,
+    width: WIDTH,
+    format: "pdf",
+    css: "@page { margin: 100px 0 }",
+    pdfMargin: { top: 0, right: 0, bottom: 0, left: 0 },
+  } as never);
+  const epdf = Buffer.from(r.data as Uint8Array);
+  const ebox = firstMediaBox(epdf);
+  const engPages = extractPdf(epdf).pages.length;
+  const near = (a: number, b: number) => Math.abs(a - b) <= 1;
+  const boxOk = !!ebox && near(ebox.w, WIDTH) && near(ebox.h, PAGE_H);
+  const pagesOk = engPages === 3;
+  if (!boxOk || !pagesOk) ok = false;
+  console.log(
+    `p5margin box eng=${ebox ? `${ebox.w.toFixed(2)}x${ebox.h.toFixed(2)}` : "?"}pt expect ${WIDTH}x${PAGE_H}pt ${boxOk ? "OK" : "BAD"} | pages=${engPages} expect 3 ${pagesOk ? "OK" : "BAD"}`,
+  );
 }
 
 await browser.close();
