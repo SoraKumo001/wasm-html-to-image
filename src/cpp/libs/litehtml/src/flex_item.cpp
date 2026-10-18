@@ -456,6 +456,22 @@ void litehtml::flex_item_column_direction::direction_specific_init(const litehtm
 
 			el->measure(measure_cb, fmt_ctx ? &fmt_ctx_copy : nullptr);
 			min_main_size = get_el_main_size();
+			// Automatic minimum size: the smaller of the content size and a definite specified
+			// size. The measured size already honours the item's own height, so take the content
+			// size from the extent of its in-flow children (horizontal writing mode only).
+			if (!m_container_wm.is_vertical() && !size_prop.is_predefined() &&
+				size_prop.units() != css_units_percentage && !el->children().empty())
+			{
+				pixel_t content_extent = 0;
+				for (const auto& child : el->children())
+				{
+					auto position = child->src_el()->css().get_position();
+					if (position == element_position_absolute || position == element_position_fixed) continue;
+					content_extent = std::max(content_extent, child->top() + child->height() + child->get_margins().bottom);
+				}
+				pixel_t content_main = content_extent + el->content_offset_block(m_container_wm);
+				if (content_main < min_main_size) min_main_size = content_main;
+			}
 		} else
 		{
 			min_main_size = render_offset;
