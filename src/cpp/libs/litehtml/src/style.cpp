@@ -282,6 +282,14 @@ namespace litehtml
                             property_value(index, important, false, m_layer, m_specificity));
       break;
 
+    // Orphans / widows: positive <integer> (CSS Fragmentation). Values < 1 are
+    // rejected at parse time and fall back to the initial value (2).
+    case _orphans_:
+    case _widows_:
+      if (val.type == NUMBER && val.n.number_type == css_number_integer && (int)val.n.number >= 1)
+        add_parsed_property(name, property_value((int)val.n.number, important, false, m_layer, m_specificity));
+      break;
+
     case _display_:
     case _direction_:
     case _writing_mode_:

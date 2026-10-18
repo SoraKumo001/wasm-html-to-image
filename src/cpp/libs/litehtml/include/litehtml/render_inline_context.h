@@ -51,6 +51,22 @@ namespace litehtml
 
 		pixel_t get_first_baseline() override;
 		pixel_t get_last_baseline() override;
+
+		// Absolute document-space rects of the laid-out line boxes (P3 pagination).
+		void get_line_boundaries(position::vector& boxes) const override
+		{
+			pixel_t block_top = get_placement().y;
+			for(const auto& box : m_line_boxes)
+			{
+				if(box->height() <= 0) continue;
+				position p;
+				p.x = 0;
+				p.width = 0;
+				p.y = block_top + box->top();
+				p.height = box->height();
+				boxes.push_back(p);
+			}
+		}
 	};
 }
 

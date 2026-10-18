@@ -169,3 +169,97 @@ npx tsx pdf-pagination/verify.mts
 - 本文テキスト抽出比較は Skia の合字 (`fi` 等) が `ToUnicode` で `\u0000` になり得るため、
   P2 検証の固定文は合字を作らない語 (`padding` 等) を用いた (P1 の既知の抽出注意と同じ)。
 - 配列入力経路 (`htmls` 2 件以上) は従来どおり 1 要素 = 1 頁。P1/P2 の単一 HTML 頁分割とは別経路。
+
+---
+
+# 複数ページ PDF (P3: Block fragmentation / line-aware cuts)
+
+P1/P2 の「Layout-once + Slice」を土台に、**行 (line box) 単位の断片化**と
+**orphans/widows** を加える。oracle 設計 (Block fragmentation) の意図に沿う。**スコープ P3 のみ**・コミット禁止。
+
+## 実装方針 (採用した方式と、oracle 仕様からの差分)
+
+P3 は **「行境界へのカット吸着 + orphans/widows」** として実装した。すなわち、
+P2 の `plan_page_cuts` が決めた自然カット (ピクセル/avoid/強制) に対し、
+
+1. そのカットを行境界へ吸着 (跨ぐ line box は丸ごと次断片へ送る)、
+2. カットが段落 (inline formatting context) の途中に落ちる場合に orphans/widows を適用、
+
+する。描画 (頁スライス) は P1/P2 と同一で、カットが手前に動くだけ。
+
+**差分の記録 (重要):**
+
+- **`render_block_context.cpp` の子配置ループには page_remaining を持ち込んでいない。**
+  代わりに「レイアウトは頁非依存のまま 1 回だけ」行い、頁割りはレイアウト後の
+  カット計画側で行境界に吸着する。このため **measure 側の高さは頁を完全に無視**
+  (仕様の「measure側の高さは頁無視(分離厳守)」を構造的に満たす)。`render_block_context.cpp`
+  は未変更。理由: エンジンの place 段に頁送りを混ぜると座標系 (単一長尺キャンバス) と
+  親子高さの整合が崩れ、P1/P2 の完全回帰が保証できないため。
+- **inline 断片化**: `render_item_inline_context` が持つ line box の矩形を新規 API
+  (`element::get_line_boundaries` / `render_item::get_line_boundaries`) で公開し、
+  計画側が行境界を得る。**行は分割せず**、跨ぐ行を丸ごと次断片へ送る (行は頁跨ぎで
+  各斷片に描き分けられる)。CSS どおり line box は monolithic。
+- **border/padding 断片化は「先頭断片のみ」(簡易継続なし) に固定**。ブロックは 1 回だけ
+  描画され、カットで割れた場合は描かれた斷片側にのみ border/padding が出る (P1 挙動)。
+  継続断片側に border/padding を描き足す処理は行わない。→ **記録: 先頭断片のみ方式を採用**。
+- **orphans/widows**: CSS 値尊重。既定 2/2。下端斷片の行数 < orphans なら斷片ごと次頁へ
+  (当頁 0 行)、次頁先頭斷片の行数 < widows なら行を手前へ繰り上げ (段落全体行数が
+  orphans+widows 以上の場合のみ)。負値/0 は parse 時に棄却し初期値 2。
+- **float 跨ぎ**: 暫定仕様。カットを跨ぐ float box は丸ごと次斷片へ送る。回り込み解除の
+  再レイアウトはしない。
+- **flex / grid / table コンテナは atomic 送り**: 内部へは行断片化のため降りず、コンテナ
+  全体を 1 つの atomic box として扱う (跨ぐ場合は丸ごと次斷片へ)。`display:flex|inline-flex|
+  grid|inline-grid|table|inline-table` が対象。
+
+### 変更ファイル
+
+- litehtml: `string_id.h` (`_orphans_`/`_widows_`), `css_properties.{h,cpp}` (int member/
+  getter/compute/dump), `style.cpp` (整数パース), `render_item.h` (virtual
+  `get_line_boundaries`), `render_inline_context.h` (override), `element.{h,cpp}` (公開 API)。
+- `src/cpp/renderers/pdf_renderer.cpp`: `LineGroup`/`FloatBox`、`collect_line_groups`、
+  `snap_cut_to_content`、`plan_page_cuts` の引数追加と P3 ステップ (4)。
+
+### 非回帰の要点
+
+自然カットを跨ぐ line box / float が無く、かつカットが段落を割らない文書では
+`snap_cut_to_content` は完全な no-op → P1/P2 とバイト単位で同一のカット列になる。
+
+## 検証 (`verify.mts` に P3 ケース追加)
+
+```bash
+cd packages/visual-test
+npx tsx pdf-pagination/verify.mts
+```
+
+| case      | 内容 | eng 頁 | chrom 頁 | 頁あたり行数 eng / chrom | 判定 |
+|-----------|------|--------|----------|--------------------------|------|
+| p3orphans | spacer 1103px で 1 行だけ収まる → orphans:2 で段落ごと次頁 | 2 | 2 | `[0,10]` / `[0,10]` | 孤児行ゼロ |
+| p3widows  | spacer 943px で 9 行収まる → widows:2 で 1 行繰り上げ | 2 | 2 | `[8,2]` / `[8,2]` | 割れ位置一致 |
+| p3long    | 80 行段落の自然割り (行境界) | 2 | 2 | `[56,24]` / `[56,24]` | ±0 行 |
+| p3float   | 境界を跨ぐ float (1000..1200) が次頁へ丸ごと | 2 | - | FLOATX は 1 頁のみ | OK |
+
+- 「孤児行ゼロ」: p3orphans は当頁の段落斷片 0 行 (Chromium と一致)。
+- 「割れ位置±1行以内」: 全ケースで Chromium と完全一致 (±0)。
+- `text` 判定は Skia Type3 `ToUnicode` で数字が `\u0000` になる既知事象のため、
+  行を表す英字 (`L`) の個数のみで比較 (行の欠落/重複が無いことを確認)。
+- float は Chromium 対照を課さず (暫定仕様)、FLOATX が單一頁に 1 回だけ出ることを確認。
+
+### P1/P2 回帰 (同スクリプト)
+
+- `short` / `long` / `image`、header/footer 各頁再描画、`position:fixed` 各頁再描画: 全て OK。
+- P2 (`avoidcard`/`legacycard`/`breakpage`/`legacybreak`/`avoidhead`): 全て OK。
+- `regression (no avoid == P1)`: `long` のスライスが P1 記録値と文字列一致。
+
+### 既存 vitest 回帰
+
+- `packages/html-to-image` vitest **135 件 通過**。
+- `packages/visual-test` vitest **155 件 通過**。
+
+## P3 の制限 (スコープ内で記録)
+
+- 行断片化は **カット吸着** であり、行送り (段落が頁を跨いで上に詰まる) の再レイアウトはしない。
+  頁下端の余白は「その行が入らなかった分」だけ空く (Chromium と同じ挙動)。
+- 段落が頁より高い等、orphans+widows を同時に満たせない場合は調整せず自然カットのまま。
+- border/padding の継続斷片装飾なし (先頭斷片のみ)。
+- float の回り込みは解除しない (暫定)。
+- 断片化は「單一 HTML 頁分割」経路のみ。配列入力 (`htmls` 2 件以上) は従来どおり。

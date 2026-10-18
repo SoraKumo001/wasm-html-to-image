@@ -52,6 +52,9 @@ namespace litehtml
 		bool						is_inline_box()				const;	// returns true if element is inline box (inline-table, inline-box, inline-flex)
 		bool						is_block_box()				const;
 		position					get_placement()				const;
+		// Absolute document-space rects of this element's text line boxes when it is an
+		// inline formatting context (P3 pagination). Empty otherwise.
+		void						get_line_boundaries(position::vector& boxes) const;
 		bool						is_positioned()				const;
 		bool						is_float()					const;
 		bool						is_block_formatting_context() const;

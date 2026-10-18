@@ -240,5 +240,66 @@ const regOk = JSON.stringify(longPages) === JSON.stringify(["Long Docblock onebl
 if (!regOk) ok = false;
 console.log(`regression (no avoid == P1) slices ${regOk ? "OK" : "MISMATCH"}`);
 
+// ---------------------------------------------------------------------------
+// P3: line-box fragmentation. A paragraph must break at line boundaries (no line
+// is split) and honour orphans/widows (default 2/2, overridable via CSS).
+// ---------------------------------------------------------------------------
+console.log("\nP3 line fragmentation:");
+const lineStyle = "margin:0;font-family:sans-serif;font-size:20px;line-height:20px";
+const para = (n: number) =>
+  Array.from({ length: n }, (_, i) => `L${String(i + 1).padStart(2, "0")}`).join("<br>");
+const countL = (s: string) => (s.match(/L/g) ?? []).length;
+
+const p3cases: Record<string, { html: string; pages: number; total: number }> = {
+  // 1103px spacer: exactly one line fits on page 1 -> orphans:2 pushes the whole
+  // paragraph to page 2 (no orphan line left behind).
+  p3orphans: {
+    html: `<html><body style="${lineStyle}"><div style="height:1103px"></div><p style="margin:0;orphans:2;widows:2">${para(10)}</p></body></html>`,
+    pages: 2,
+    total: 10,
+  },
+  // 943px spacer: 9 lines fit, leaving a 1-line widow -> widows:2 pulls one line.
+  p3widows: {
+    html: `<html><body style="${lineStyle}"><div style="height:943px"></div><p style="margin:0;orphans:2;widows:2">${para(10)}</p></body></html>`,
+    pages: 2,
+    total: 10,
+  },
+  // Long paragraph: the natural break must fall on a line boundary (56 / 24 lines).
+  p3long: {
+    html: `<html><body style="${lineStyle}"><p style="margin:0;orphans:2;widows:2">${para(80)}</p></body></html>`,
+    pages: 2,
+    total: 80,
+  },
+};
+for (const [name, spec] of Object.entries(p3cases)) {
+  const { eng, chrom, domText } = await engineVsChromium(name, spec.html);
+  const pagesOk = eng.pages.length === chrom.pages.length && eng.pages.length === spec.pages;
+  // Digits are extracted as \u0000 by Skia's Type3 ToUnicode subset (P1 note), so compare
+  // the letter run only: it proves no line text was lost or duplicated across pages.
+  const textOk = countL(eng.pages.join("")) === countL(domText);
+  const counts = eng.pages.map(countL);
+  const chromCounts = chrom.pages.map(countL);
+  const totalOk = counts.reduce((a, b) => a + b, 0) === spec.total;
+  // No orphan/widow fragment: every page carrying a fragment has >= 2 lines.
+  const fragOk = counts.every((c) => c === 0 || c >= 2);
+  // Break position within +-1 line of Chromium.
+  const nearOk =
+    counts.length === chromCounts.length && counts.every((c, i) => Math.abs(c - chromCounts[i]) <= 1);
+  if (!pagesOk || !textOk || !totalOk || !fragOk || !nearOk) ok = false;
+  console.log(
+    `${name.padEnd(10)} pages eng=${eng.pages.length} chrom=${chrom.pages.length} ${pagesOk ? "OK" : "MISMATCH"} | text ${textOk ? "OK" : "MISMATCH"} | lines eng=${JSON.stringify(counts)} chrom=${JSON.stringify(chromCounts)} | total ${totalOk ? "OK" : "BAD"} | frag ${fragOk ? "OK" : "BAD"} | near ${nearOk ? "OK" : "BAD"}`,
+  );
+}
+
+// Float straddling the page boundary stays whole in one fragment (provisional).
+const floatHtml = `<html><body style="${lineStyle}"><div style="height:1000px"></div><div style="float:left;width:200px;height:200px">FLOATX</div><p style="margin:0">tail</p></body></html>`;
+const fx2 = await render({ value: floatHtml, width: WIDTH, format: "pdf" });
+const fxp = extractPdf(Buffer.from(fx2.data as Uint8Array)).pages.map(norm);
+const floatPages = fxp.filter((t) => t.includes("FLOATX")).length;
+const floatOk = fxp.length === 2 && floatPages === 1;
+if (!floatOk) ok = false;
+console.log(`p3float pages=${fxp.length} onPages=${floatPages} ${floatOk ? "OK" : "BAD"}`);
+fxp.forEach((t, i) => console.log(`   p${i + 1}: ${JSON.stringify(t)}`));
+
 await browser.close();
 console.log(ok ? "ALL OK" : "FAILURES PRESENT");

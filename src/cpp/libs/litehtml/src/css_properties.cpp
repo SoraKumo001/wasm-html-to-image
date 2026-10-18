@@ -113,6 +113,11 @@ void litehtml::css_properties::compute(const element* el, const document::ptr& d
     m_break_inside =
         (break_inside)el->get_property<int>(_break_inside_, false, break_inside_auto,
                                             offset(m_break_inside));
+    // orphans / widows are inherited integers (CSS Fragmentation), default 2.
+    m_orphans = el->get_property<int>(_orphans_, true, 2, offset(m_orphans));
+    if (m_orphans < 1) m_orphans = 1;
+    m_widows = el->get_property<int>(_widows_, true, 2, offset(m_widows));
+    if (m_widows < 1) m_widows = 1;
     m_overflow_wrap = (overflow_wrap)el->get_property<int>(
         _overflow_wrap_, true, overflow_wrap_normal, offset(m_overflow_wrap));
     if (m_overflow_wrap == overflow_wrap_normal) {
@@ -1345,6 +1350,8 @@ litehtml::css_properties::dump_get_attrs() const {
     ret.emplace_back("break_before", index_value(m_break_before, break_flow_strings));
     ret.emplace_back("break_after", index_value(m_break_after, break_flow_strings));
     ret.emplace_back("break_inside", index_value(m_break_inside, break_inside_strings));
+    ret.emplace_back("orphans", std::to_string(m_orphans));
+    ret.emplace_back("widows", std::to_string(m_widows));
     ret.emplace_back("overflow_wrap", index_value(m_overflow_wrap, overflow_wrap_strings));
     ret.emplace_back("text_wrap", index_value(m_text_wrap, text_wrap_strings));
     ret.emplace_back("opacity", std::to_string(m_opacity));

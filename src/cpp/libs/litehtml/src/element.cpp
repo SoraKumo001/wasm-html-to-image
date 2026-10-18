@@ -48,6 +48,18 @@ position element::get_placement() const
 	return pos;
 }
 
+void element::get_line_boundaries(position::vector& boxes) const
+{
+	for(const auto& ri_el : m_renders)
+	{
+		auto ri = ri_el.lock();
+		if(ri)
+		{
+			ri->get_line_boundaries(boxes);
+		}
+	}
+}
+
 bool element::is_inline() const
 {
 	if(	css().get_display() == display_inline ||

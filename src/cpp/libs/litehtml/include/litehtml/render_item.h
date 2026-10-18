@@ -637,6 +637,10 @@ namespace litehtml
                 virtual void set_inline_boxes( position::vector& /*boxes*/ ) {};
                 virtual void add_inline_box( const position& /*box*/ ) {};
                 virtual void clear_inline_boxes() {};
+                // Absolute rects of the text line boxes of an inline formatting context,
+                // in document coordinates. Used by the PDF pagination pass (P3) to snap
+                // page cuts to line boundaries. Empty for non-inline-context render items.
+                virtual void get_line_boundaries( position::vector& /*boxes*/ ) const {};
         void draw_stacking_context( uint_ptr hdc, pixel_t x, pixel_t y, const position* clip, bool with_positioned );
         virtual void draw_children( uint_ptr hdc, pixel_t x, pixel_t y, const position* clip, draw_flag flag, int zindex );
         virtual pixel_t get_draw_vertical_offset() { return 0; }

@@ -321,6 +321,8 @@ namespace litehtml
       _page_break_before_,
       _page_break_after_,
       _page_break_inside_,
+      _orphans_,
+      _widows_,
       _text_align_,
       _vertical_align_,
       _color_,

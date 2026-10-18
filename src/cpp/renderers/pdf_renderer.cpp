@@ -1,6 +1,7 @@
 #include "pdf_renderer.h"
 
 #include <litehtml/master_css.h>
+#include <litehtml/element.h>
 
 #include <algorithm>
 #include <climits>
@@ -106,6 +107,119 @@ std::vector<BreakUnit> collect_break_units(const litehtml::element* root) {
     return units;
 }
 
+// ---- P3: inline (line-box) fragmentation data ---------------------------------
+//
+// Line-level fragmentation is planned on top of the P2 atomic-break cuts. A text
+// paragraph is represented by the line boxes of one inline formatting context; the
+// pass snaps a page cut to a line boundary (a line box is never split) and then
+// honours orphans/widows. Floated boxes are kept whole in one fragment (provisional).
+struct LineGroup {
+    std::vector<int> tops;     // absolute line-box top edges, in order
+    std::vector<int> bottoms;  // absolute line-box bottom edges, in order
+    int orphans = 2;           // minimum lines kept at the bottom of a page
+    int widows = 2;            // minimum lines kept at the top of the next page
+};
+
+struct FloatBox {
+    int top = 0;
+    int bottom = 0;
+};
+
+// Walk the flow subtree collecting the line boxes of every inline formatting
+// context (paragraph) and every floated box. Coordinates are document-space
+// (matching element::get_placement and the draw offset used when slicing pages).
+void collect_line_groups(const litehtml::element* el, std::vector<LineGroup>& groups,
+                         std::vector<FloatBox>& floats) {
+    if (!el) return;
+    if (el->css().get_display() == litehtml::display_none) return;
+    const litehtml::element_position pos = el->css().get_position();
+    if (pos == litehtml::element_position_absolute || pos == litehtml::element_position_fixed)
+        return;
+
+    // Flex / grid / table containers are atomic for pagination (P3): they are never
+    // line-fragmented. Descend no further; instead treat the whole container like a
+    // float so a container straddling a cut moves wholly to the next fragment.
+    const litehtml::style_display disp = el->css().get_display();
+    if (disp == litehtml::display_flex || disp == litehtml::display_inline_flex ||
+        disp == litehtml::display_grid || disp == litehtml::display_inline_grid ||
+        disp == litehtml::display_table || disp == litehtml::display_inline_table) {
+        litehtml::position p = el->get_placement();
+        if (p.height > 0) floats.push_back({(int)p.y, (int)(p.y + p.height)});
+        return;
+    }
+
+    const bool is_float = el->is_float() && el->in_normal_flow();
+    if (is_float) {
+        litehtml::position p = el->get_placement();
+        if (p.height > 0) floats.push_back({(int)p.y, (int)(p.y + p.height)});
+    }
+
+    // A float is treated atomically: its own lines do not create a paragraph group.
+    if (!is_float) {
+        litehtml::position::vector boxes;
+        el->get_line_boundaries(boxes);
+        if (!boxes.empty()) {
+            LineGroup g;
+            g.orphans = el->css().get_orphans();
+            g.widows = el->css().get_widows();
+            if (g.orphans < 1) g.orphans = 1;
+            if (g.widows < 1) g.widows = 1;
+            for (const auto& b : boxes) {
+                if (b.height <= 0) continue;
+                g.tops.push_back((int)b.y);
+                g.bottoms.push_back((int)(b.y + b.height));
+            }
+            if (!g.tops.empty()) groups.push_back(std::move(g));
+        }
+    }
+
+    for (const auto& child : el->children()) collect_line_groups(child.get(), groups, floats);
+}
+
+// Snap a natural cut so that no line box / float is split, then apply
+// orphans/widows to the paragraph the cut falls inside. Never returns a cut that
+// is not after `pos` (the caller falls back to the pixel cut in that case).
+int snap_cut_to_content(int cut, int pos, const std::vector<LineGroup>& groups,
+                        const std::vector<FloatBox>& floats) {
+    // 1) A straddling line box or float moves wholly to the next page.
+    for (const auto& f : floats)
+        if (f.top < cut && cut < f.bottom && f.top > pos) cut = std::min(cut, f.top);
+    for (const auto& g : groups)
+        for (size_t i = 0; i < g.tops.size(); ++i)
+            if (g.tops[i] < cut && cut < g.bottoms[i] && g.tops[i] > pos)
+                cut = std::min(cut, g.tops[i]);
+
+    // 2) orphans / widows within the split paragraph.
+    for (const auto& g : groups) {
+        const int n = (int)g.tops.size();
+        if (n < 2) continue;
+        int k = 0;  // number of lines entirely above the cut
+        while (k < n && g.bottoms[k] <= cut) k++;
+        if (k <= 0 || k >= n) continue;              // not split (or straddle left over)
+        if (g.tops[k] < cut && cut < g.bottoms[k]) continue;
+
+        // First line of the fragment that lives on the current page.
+        int first_on_page = 0;
+        while (first_on_page < n && g.bottoms[first_on_page] <= pos) first_on_page++;
+        const int above = k - first_on_page;         // lines of this page's fragment
+        const int below = n - k;                     // lines on the next page
+
+        int new_k = k;
+        if (above < g.orphans) {
+            new_k = first_on_page;                   // move the whole fragment to the next page
+        } else if (below < g.widows) {
+            if (n >= g.orphans + g.widows) {
+                new_k = std::max(first_on_page + g.orphans, n - g.widows);
+            }
+        }
+        if (new_k != k) {
+            const int nc = (new_k == 0) ? g.tops[0] : g.tops[new_k];
+            if (nc > pos) cut = nc;
+        }
+    }
+    return cut;
+}
+
 // Plan page-start offsets. With no break-* in the document this reproduces P1's
 // fixed pixel cuts (0, areaHeight, 2*areaHeight, ...). break-* can only move a cut
 // earlier than the pixel cut:
@@ -113,7 +227,9 @@ std::vector<BreakUnit> collect_break_units(const litehtml::element* root) {
 //   - break-inside: avoid pulls the cut back to the top of a straddling unit,
 //   - break-before/after: avoid pulls it back to the previous unit's top so the
 //     two neighbours stay together.
-std::vector<int> plan_page_cuts(const std::vector<BreakUnit>& units, int area_height,
+std::vector<int> plan_page_cuts(const std::vector<BreakUnit>& units,
+                                const std::vector<LineGroup>& line_groups,
+                                const std::vector<FloatBox>& floats, int area_height,
                                 int doc_height) {
     std::vector<int> cuts;
     cuts.push_back(0);
@@ -165,6 +281,11 @@ std::vector<int> plan_page_cuts(const std::vector<BreakUnit>& units, int area_he
                                            (b && b->before == litehtml::break_flow_avoid);
                 if (avoid_between && a && a->top > pos) cut = a->top;
             }
+
+            // 4) P3: never split a line box or a float; honour orphans/widows.
+            //    With no straddling content this is a no-op, so a document without
+            //    fragmentation CSS still cuts exactly as P1/P2 did.
+            cut = snap_cut_to_content(cut, pos, line_groups, floats);
         }
 
         if (cut <= pos) cut = limit;  // no forward progress: fall back to the pixel cut
@@ -406,8 +527,14 @@ sk_sp<SkData> renderHtmlToPdf(const std::string& html, int width, int height,
 
     // P2: plan cut positions from the fragmentation CSS (falling back to P1's fixed
     // pixel cuts when no break-* is present). Page i starts at page_cuts[i].
+    // P3: line boxes of every paragraph + floated boxes refine the cuts so a line is
+    // never split and orphans/widows are honoured.
     std::vector<BreakUnit> break_units = collect_break_units(doc->root().get());
-    std::vector<int> page_cuts = plan_page_cuts(break_units, content_area_height, doc_height);
+    std::vector<LineGroup> line_groups;
+    std::vector<FloatBox> float_boxes;
+    collect_line_groups(doc->root().get(), line_groups, float_boxes);
+    std::vector<int> page_cuts =
+        plan_page_cuts(break_units, line_groups, float_boxes, content_area_height, doc_height);
     int page_count = (int)page_cuts.size();
     if (page_count < 1) page_count = 1;
 

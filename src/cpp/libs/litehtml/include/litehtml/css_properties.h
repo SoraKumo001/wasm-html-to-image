@@ -157,6 +157,9 @@ namespace litehtml
     break_flow m_break_before;
     break_flow m_break_after;
     break_inside m_break_inside;
+    // Orphans / widows: minimum line fragments kept at the bottom / top of a page.
+    int m_orphans;
+    int m_widows;
     blend_mode m_mix_blend_mode;
     blend_mode m_background_blend_mode;
 
@@ -258,6 +261,8 @@ namespace litehtml
                        m_break_before(break_flow_auto),
                        m_break_after(break_flow_auto),
                        m_break_inside(break_inside_auto),
+                       m_orphans(2),
+                       m_widows(2),
                        m_mix_blend_mode(blend_mode_normal),
                        m_background_blend_mode(blend_mode_normal),
                        m_isolation(isolation_auto),
@@ -317,6 +322,10 @@ namespace litehtml
     void set_break_after(break_flow mBreakAfter);
     break_inside get_break_inside() const;
     void set_break_inside(break_inside mBreakInside);
+    int get_orphans() const;
+    void set_orphans(int orphans);
+    int get_widows() const;
+    void set_widows(int widows);
 
     style_display get_display() const;
     void set_display(style_display mDisplay);
@@ -719,6 +728,26 @@ namespace litehtml
   inline void css_properties::set_break_inside(break_inside mBreakInside)
   {
     m_break_inside = mBreakInside;
+  }
+
+  inline int css_properties::get_orphans() const
+  {
+    return m_orphans;
+  }
+
+  inline void css_properties::set_orphans(int orphans)
+  {
+    m_orphans = orphans;
+  }
+
+  inline int css_properties::get_widows() const
+  {
+    return m_widows;
+  }
+
+  inline void css_properties::set_widows(int widows)
+  {
+    m_widows = widows;
   }
 
   inline style_display css_properties::get_display() const
