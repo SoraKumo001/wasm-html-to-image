@@ -792,6 +792,13 @@ void litehtml::render_item::get_redraw_box(litehtml::position& pos, pixel_t x /*
 
 void litehtml::render_item::calc_document_size(litehtml::size& sz, pixel_t x /*= 0*/,
                                                pixel_t y /*= 0*/) {
+    // Fixed-position subtrees are laid out relative to the viewport and must not
+    // contribute to the document size (Chromium parity). Skip the whole subtree,
+    // not just the fixed box itself, so viewport-based child offsets (e.g. a
+    // bottom-anchored child with top ~3000px) cannot leak into the height.
+    if (src_el()->css().get_position() == element_position_fixed) {
+        return;
+    }
     if (css().get_display() != display_inline && css().get_display() != display_table_row) {
         if (is_visible()) {
             if (src_el()->css().get_position() != element_position_fixed) {

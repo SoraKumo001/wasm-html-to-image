@@ -60,6 +60,7 @@ SVG 出力は PNG と一致 (差分 < 1%)、PDF 出力も縦書きのまま 1 �
 | - | `::first-letter` の付与対象を `::before` 子テキスト優先に修正 (空 before は skip、`::after` は対象外。decode_utf8 分割・wrapper・二重分割ガード維持) | 62: 【が緑 2em で Chromium と一致 (fill 1.0% / outline 1.7%)。「前」までの拡大は未対応 |
 | - | 縦書きブロックを BFC 化 (float の高さ漏れ) | 30/77: ページ高さ 320→266px で一致 |
 | - | 縦書きの下線・上線の位置 (下線はブロック開始側の内側、上線はブロック終端側の内側へ) | 43: fill 0.7%→0.3% / outline 0.8%→0.5% |
+| - | `position:fixed` を文書高さ算出から除外 (fixed サブツリー全体を `calc_document_size` でスキップ。viewport 基準の子座標が混入し高さが膨らんでいた) | 短文+fixed bottom-right 2979→55px、長文 2979→2366px に復帰 |
 
 既存の横書きビジュアルテスト 26 アセットは基準値から ±0.3% 以内で回帰なし。
 - 横書き先頭 float の measure 台帳汚染 (76: `place_float` が measure 時に未配置座標で `add_float` し、共有 fmt_ctx に残った phantom が place 時の行幅計算を狂わせていた。measure + 横書き時のみ台帳更新を skip し自幅を返す。縦書きは従来通り): 76 fill 6.9%→3.2% / outline 9.9%→2.2%、高さ 201→154px で Chromium と一致。vertical 全数・vitest 155 件・横書き 26 件で回帰なし (76 の baseline のみ正値へ更新)。
