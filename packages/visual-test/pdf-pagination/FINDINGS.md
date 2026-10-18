@@ -263,3 +263,112 @@ npx tsx pdf-pagination/verify.mts
 - border/padding の継続斷片装飾なし (先頭斷片のみ)。
 - float の回り込みは解除しない (暫定)。
 - 断片化は「單一 HTML 頁分割」経路のみ。配列入力 (`htmls` 2 件以上) は従来どおり。
+
+---
+
+# 複数ページ PDF (P4: Table fragmentation / row units + thead repeat)
+
+P1/P2/P3 の「Layout-once + Slice」を土台に、**表 (table) の行単位断片化**と
+**thead の頁毎繰返し**を加える。oracle 設計 (Table fragmentation) に沿う。**スコープ P4 のみ**・コミット禁止。
+
+## 実装方針 (採用した方式と、oracle 仕様からの差分)
+
+`render_item_table` / `render_item_table_row` は `table_grid` が行を配置し
+`render_item_table` がセルを描画する**独立エンジン**であり、P3 の行 (line box) 収集とは
+座標系が異なる。そこで P4 は **P3 から分離した行単位のカット吸着**として実装した:
+
+1. **行を atomic unit 化**: 各 `<tr>` を P3 の float と同じ「跨ぐカットを丸ごと次斷片へ送る」
+   ボックスとして `plan_page_cuts` に渡す。カットが行の内部に落ちれば行頭へ吸着する。
+   頁より高い行は分割許容 (進捗優先)。
+2. **rowspan>1 は次頁送り優先**: 1 つのセルが覆う行 (rowspan) を 1 つの atomic ボックスへ
+   併合する。セル内 block 分割は対象外 (行ボックスがセルを丸ごと含むため構造的に分割されない)。
+3. **thead 繰返し**: 継続頁では thead 帯 (行の union 矩形) を頁内容の先頭に再描画し、
+   その高さを頁内容領域から**予約**する。本文は予約分だけ下へシフトし、ヘッダ帯と重ならない。
+4. **flex / grid は atomic 送りのみ維持** (P3 のまま)。table だけを行単位へ切り替える。
+
+**差分の記録 (重要):**
+
+- **行の矩形は `element::get_placement()` では取れない**。表の行/セルの render item は
+  `render_item_table::init()` が `render_item::init()` の再帰を打ち切るため
+  `element::add_render` に登録されず、`element::get_placement()` は常に 0 を返す。
+  そこで P3 の `get_line_boundaries` と同様に **render item へ新規 API を追加**した:
+  - `render_item::get_table_row_boundaries(position::vector&)` (P4 override: `render_item_table`)
+    … `table_grid` の `row(i).top/bottom` + テーブル render item の絶対位置から各行矩形を返す
+    (rowspan で覆われる行は併合)。`element::get_placement` 依存を回避。
+  - `render_item::get_table_header_boundary(position&)` (P4 override) … 各行の `<tr>` 要素の
+    親を遡り `display:table-header-group` または `<thead>` タグを持つ行の union を返す。
+- **カット計画 (`plan_page_cuts`) は `PageCut{offset, header_top, header_height}` を返す**。
+  ヘッダ予約は「その頁が始まる位置 `pos`」で判定し (`table_top < pos < table_bottom`)、
+  頁スライスのクリップ/シフトに反映する (予約は頁の開始位置に紐付く)。
+- **ヘッダ再描画は「ドキュメントをヘッダ帯へクリップして再 draw」**: 継続頁で
+  `doc->draw(0,0,-header_top)` を `clipRect(0,0,W,header_height)` で描く。本文は
+  `doc->draw(0,0,-(offset-header_height))` を `clipRect(0,header_height,W,slice)` で描く。
+  これによりヘッダ帯と本文が重ならない。`position:fixed` は draw オフセットを無視するため、
+  ビューポート位置がどちらか一方のクリップ帯に入り、**二重描画されない** (P1 の性質を維持)。
+- **P3 の「table は atomic float」は撤去**し、table を検出したら行ボックス収集へ切り替えた
+  (`collect_line_groups`)。flex/grid の atomic 送りはそのまま。
+
+### 変更ファイル
+
+- litehtml: `render_item.h` (`get_table_row_boundaries` / `get_table_header_boundary` virtual),
+  `render_table.h` / `render_table.cpp` (`render_item_table` override 2 種)。
+- `src/cpp/renderers/pdf_renderer.cpp`: `RepeatHeader` / `PageCut`、`collect_table_rows` /
+  `collect_repeat_headers`、`collect_line_groups` の table 分岐、`plan_page_cuts` の戻り値と
+  ヘッダ予約、`renderHtmlToPdf` の頁スライス (ヘッダ帯再描画 + 本文シフト)。
+
+### 非回帰の要点
+
+表を含まない文書では `repeat_headers` が空・行ボックスが空となり、`header_height = 0`、
+`limit = pos + area_height` で P1/P2/P3 と同一のカット列になる (`long` のスライスが
+P1 記録値と文字列一致することを assert)。
+
+## 検証 (`verify.mts` に P4 ケース追加)
+
+```bash
+cd packages/visual-test
+npx tsx pdf-pagination/verify.mts
+```
+
+| case      | 内容 | eng 頁 | chrom 頁 | 行保全 | thead 頁毎 | 判定 |
+|-----------|------|--------|----------|--------|-----------|------|
+| p4table   | 12 行表 (各行 250px) + `<thead>` | 3 | 3 | eng=12 dom=12 chrom=12 | eng 3/3 chrom 3/3 | OK |
+| p4rowspan | 700px spacer + rowspan=2 セル (行 0-1 が頁境界を跨ぐ) | 3 | - | XA/XB が同一頁 + SPAN も同頁 | - | OK |
+
+- **行の欠落/重複ゼロ**: `RMK` (数字を含まない語) の頁連結出現数 = DOM の行数 = 12
+  (Skia Type3 `ToUnicode` で数字が `\u0000` になる既知事象を回避)。
+- **各頁 thead 存在**: 3 頁すべてに `HEAD` が出る (Chromium の thead 繰返しと一致)。
+- **カットは行境界**: eng の頁開始オフセットは行境界 (0 / 1033 / 2041) に吸着。
+- p4rowspan: rowspan=2 のセルが覆う行 (0-1) を 1 atomic ボックスに併合した結果、
+  境界を跨ぐグループが丸ごと次頁 (p2) へ送られ、`XA`/`XB` が同一頁に留まる
+  (併合なしなら p1/p2 に割れる)。`SPAN` は 1 頁のみでセルは分割されない。
+
+### P1/P2/P3 回帰 (同スクリプト)
+
+- `short` / `long` / `image`、header/footer、`position:fixed` 各頁再描画: 全て OK。
+- P2 (`avoidcard`/`legacycard`/`breakpage`/`legacybreak`/`avoidhead`): 全て OK。
+- P3 (`p3orphans`/`p3widows`/`p3long`/`p3float`): 全て OK。
+- `regression (no avoid == P1)`: `long` のスライスが P1 記録値と文字列一致。
+
+### 既存 vitest 回帰
+
+- `packages/html-to-image` vitest **135 件 通過**。
+- `packages/visual-test` vitest **155 件 通過**。
+
+## P4 の制限 (スコープ内で記録)
+
+- **border-collapse 境界の二重線は許容誤差**: 継続頁のヘッダ帯再描画と本文先頭行の境界で、
+  折り畳みボーダーが二重に見え得る (ヘッダ帯を別 draw するため)。要件どおり許容として記録。
+- **`display:table-header-group` を明示指定した表は、エンジン側の表レイアウトが
+  ヘッダ行高 0 を返す** (`document::fix_table_children` が table-header-group の
+  row-group を匿名ラッパで包み、ヘッダセルの高さが 0 になる既存挙動)。本実装の検出は
+  `display:table-header-group` と `<thead>` タグの**両方**を見るが、検証は
+  master CSS 既定 (`<thead>` = table-row-group、タグは `_thead_` のまま) で行った。
+  ヘッダ-group レイアウト自体の修正は表エンジン側の課題で P4 (頁割) のスコープ外。
+- **thead 繰返しは「予約 + 下シフト」方式**: 継続頁では本文全体をヘッダ高だけ下へシフトする
+  (表以外の要素も同頁内で一緒に下がる)。表だけを押し下げる厳密再レイアウトはしない。
+- **1 頁に複数の「繰返しヘッダ表」が同時継続する場合は最大高の 1 表のみ予約・再描画**
+  (稀なケース。他表のヘッダは繰り返さない)。
+- **行ボックスは `table_grid` の行高** に基づく。行頭が頁先頭 (`pos`) 以前の行は移動できず
+  分割許容 (進捗優先)。rowspan 併合ボックスが頁より高い場合も同様に分割許容。
+- **セル内 block 分割は対象外** (行がセルを丸ごと含む)。ネスト表は外側の行ボックスに含まれる。
+- 断片化は「單一 HTML 頁分割」経路のみ。配列入力 (`htmls` 2 件以上) は従来どおり。

@@ -301,5 +301,65 @@ if (!floatOk) ok = false;
 console.log(`p3float pages=${fxp.length} onPages=${floatPages} ${floatOk ? "OK" : "BAD"}`);
 fxp.forEach((t, i) => console.log(`   p${i + 1}: ${JSON.stringify(t)}`));
 
+// ---------------------------------------------------------------------------
+// P4: table fragmentation. A <tr> is the atomic pagination unit (never split
+// unless taller than a page) and a table-header-group (<thead>) repeats on every
+// continuation page. Rows must not be lost or duplicated (row marker count
+// conserved) and every page carrying table content must show the repeated header.
+// ---------------------------------------------------------------------------
+console.log("\nP4 table fragmentation:");
+const p4Rows = 12;
+const p4Cells = Array.from({ length: p4Rows }, () => `<tr><td style="height:250px">RMK</td></tr>`).join("");
+const p4Table =
+  `<html><body style="${style}"><table style="width:400px;border-collapse:collapse">` +
+  `<thead><tr><td>HEAD</td></tr></thead><tbody>${p4Cells}</tbody></table></body></html>`;
+const countOf = (s: string, sub: string) => s.split(sub).length - 1;
+{
+  const { eng, chrom, domText } = await engineVsChromium("p4table", p4Table);
+  const engPages = eng.pages.map(norm);
+  const chromPages = chrom.pages.map(norm);
+  const engRows = countOf(eng.pages.join(""), "RMK");
+  const chromRows = countOf(chrom.pages.join(""), "RMK");
+  const domRows = countOf(domText, "RMK");
+  const engHead = engPages.filter((t) => t.includes("HEAD")).length;
+  const chromHead = chromPages.filter((t) => t.includes("HEAD")).length;
+  const pagesOk = eng.pages.length >= 2;
+  const rowsOk = engRows === p4Rows && engRows === domRows;
+  const headOk = engHead === eng.pages.length;
+  const chromOk = chromRows === p4Rows && chromHead === chrom.pages.length;
+  if (!pagesOk || !rowsOk || !headOk || !chromOk) ok = false;
+  console.log(
+    `p4table pages eng=${eng.pages.length} chrom=${chrom.pages.length} ${pagesOk ? "OK" : "BAD"} | rows eng=${engRows} dom=${domRows} chrom=${chromRows} ${rowsOk ? "OK" : "BAD"} | thead eng=${engHead}/${eng.pages.length} chrom=${chromHead}/${chrom.pages.length} ${headOk && chromOk ? "OK" : "BAD"}`,
+  );
+  engPages.forEach((t, i) => console.log(`   eng p${i + 1}: ${JSON.stringify(t)}`));
+  chromPages.forEach((t, i) => console.log(`   chr p${i + 1}: ${JSON.stringify(t)}`));
+}
+
+// A rowspan>1 cell makes its spanned rows one atomic unit: they must move to the
+// next page together (the cell is never split). The 700px spacer puts the spanned
+// group (rows 0-1, 700..1500) across the page-1 cut (1123); with the merge the
+// whole group moves to page 2, so the markers of both spanned rows stay together.
+const p4Span =
+  `<html><body style="${style}"><div style="height:700px"></div>` +
+  `<table style="width:400px;border-collapse:collapse"><tbody>` +
+  `<tr><td rowspan="2" style="height:400px">SPAN</td><td style="height:400px">XA</td></tr>` +
+  `<tr><td style="height:400px">XB</td></tr>` +
+  `<tr><td style="height:400px">XC</td></tr></tbody></table></body></html>`;
+{
+  const r = await render({ value: p4Span, width: WIDTH, format: "pdf" });
+  const pages = extractPdf(Buffer.from(r.data as Uint8Array)).pages.map(norm);
+  const pageOf = (m: string) => pages.findIndex((t) => t.includes(m));
+  const spanPages = pages.filter((t) => t.includes("SPAN")).length;
+  const pA = pageOf("XA");
+  const pB = pageOf("XB");
+  // SPAN is never split (one page) and the spanned rows XA/XB share that page.
+  const spanOk = spanPages === 1 && pA >= 0 && pA === pB && pages[pA].includes("SPAN");
+  if (!spanOk) ok = false;
+  console.log(
+    `p4rowspan pages=${pages.length} SPAN on ${spanPages} page(s) XA@p${pA + 1} XB@p${pB + 1} ${spanOk ? "OK" : "BAD"}`,
+  );
+  pages.forEach((t, i) => console.log(`   p${i + 1}: ${JSON.stringify(t)}`));
+}
+
 await browser.close();
 console.log(ok ? "ALL OK" : "FAILURES PRESENT");

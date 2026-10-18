@@ -2,6 +2,7 @@
 
 #include <litehtml/master_css.h>
 #include <litehtml/element.h>
+#include <litehtml/render_item.h>
 
 #include <algorithm>
 #include <climits>
@@ -125,6 +126,61 @@ struct FloatBox {
     int bottom = 0;
 };
 
+// ---- P4: table fragmentation -------------------------------------------------
+//
+// render_item_table / render_item_table_row are a self-contained layout engine
+// (rows are placed by table_grid, cells are painted by render_item_table), so
+// table fragmentation is handled separately from the P3 line-box pass:
+//   - a <tr> is the atomic pagination unit (a row is never split unless it is
+//     taller than a page); rows covered by a rowspan>1 cell are merged into one
+//     atomic box (next-page-first, cell-internal splitting is out of scope),
+//   - a header group (display:table-header-group / <thead>) is re-painted at the
+//     top of every continuation page.
+struct RepeatHeader {
+    int table_top = 0;
+    int table_bottom = 0;
+    int header_top = 0;
+    int header_height = 0;
+};
+
+// Atomic pagination boxes for a table: one box per row, with rows covered by a
+// rowspan>1 cell merged (so the spanned cell is never split across pages). The
+// row rects come from the table render item (table rows are placed by the table
+// engine, not by the generic block layout, so element::get_placement is empty).
+void collect_table_rows(const litehtml::element* table, std::vector<FloatBox>& boxes) {
+    if (!table) return;
+    auto ri = const_cast<litehtml::element*>(table)->get_render_item();
+    if (!ri) return;
+    litehtml::position::vector row_rects;
+    ri->get_table_row_boundaries(row_rects);
+    for (const auto& r : row_rects) {
+        if (r.height > 0) boxes.push_back({(int)r.y, (int)(r.y + r.height)});
+    }
+}
+
+// Header groups of every table that carry a display:table-header-group (or a
+// <thead> tag, which the engine maps to a row group by default). The band is the
+// union of the header rows' rects, in document coordinates.
+void collect_repeat_headers(const litehtml::element* el, std::vector<RepeatHeader>& out) {
+    if (!el) return;
+    if (el->css().get_display() == litehtml::display_none) return;
+    const litehtml::style_display disp = el->css().get_display();
+    if (disp == litehtml::display_table || disp == litehtml::display_inline_table) {
+        auto ri = const_cast<litehtml::element*>(el)->get_render_item();
+        litehtml::position header_box;
+        if (ri && ri->get_table_header_boundary(header_box) && header_box.height > 0) {
+            litehtml::position tp = ri->get_placement();
+            RepeatHeader rh;
+            rh.table_top = (int)tp.y;
+            rh.table_bottom = (int)(tp.y + tp.height);
+            rh.header_top = (int)header_box.y;
+            rh.header_height = (int)header_box.height;
+            out.push_back(rh);
+        }
+    }
+    for (const auto& child : el->children()) collect_repeat_headers(child.get(), out);
+}
+
 // Walk the flow subtree collecting the line boxes of every inline formatting
 // context (paragraph) and every floated box. Coordinates are document-space
 // (matching element::get_placement and the draw offset used when slicing pages).
@@ -136,13 +192,20 @@ void collect_line_groups(const litehtml::element* el, std::vector<LineGroup>& gr
     if (pos == litehtml::element_position_absolute || pos == litehtml::element_position_fixed)
         return;
 
-    // Flex / grid / table containers are atomic for pagination (P3): they are never
+    // P4: a table is fragmented by rows (its own engine), not as one atomic box.
+    // Push each row (rowspan groups merged) as an atomic box and do not descend
+    // into cells: line fragmentation inside a cell is out of scope.
+    const litehtml::style_display disp = el->css().get_display();
+    if (disp == litehtml::display_table || disp == litehtml::display_inline_table) {
+        collect_table_rows(el, floats);
+        return;
+    }
+
+    // Flex / grid containers are atomic for pagination (P3): they are never
     // line-fragmented. Descend no further; instead treat the whole container like a
     // float so a container straddling a cut moves wholly to the next fragment.
-    const litehtml::style_display disp = el->css().get_display();
     if (disp == litehtml::display_flex || disp == litehtml::display_inline_flex ||
-        disp == litehtml::display_grid || disp == litehtml::display_inline_grid ||
-        disp == litehtml::display_table || disp == litehtml::display_inline_table) {
+        disp == litehtml::display_grid || disp == litehtml::display_inline_grid) {
         litehtml::position p = el->get_placement();
         if (p.height > 0) floats.push_back({(int)p.y, (int)(p.y + p.height)});
         return;
@@ -220,6 +283,14 @@ int snap_cut_to_content(int cut, int pos, const std::vector<LineGroup>& groups,
     return cut;
 }
 
+// One planned page: its document start offset plus the repeated-header band to
+// re-paint at the top (header_top < 0 / header_height == 0: none).
+struct PageCut {
+    int offset = 0;
+    int header_top = -1;
+    int header_height = 0;
+};
+
 // Plan page-start offsets. With no break-* in the document this reproduces P1's
 // fixed pixel cuts (0, areaHeight, 2*areaHeight, ...). break-* can only move a cut
 // earlier than the pixel cut:
@@ -227,17 +298,33 @@ int snap_cut_to_content(int cut, int pos, const std::vector<LineGroup>& groups,
 //   - break-inside: avoid pulls the cut back to the top of a straddling unit,
 //   - break-before/after: avoid pulls it back to the previous unit's top so the
 //     two neighbours stay together.
-std::vector<int> plan_page_cuts(const std::vector<BreakUnit>& units,
-                                const std::vector<LineGroup>& line_groups,
-                                const std::vector<FloatBox>& floats, int area_height,
-                                int doc_height) {
-    std::vector<int> cuts;
-    cuts.push_back(0);
+std::vector<PageCut> plan_page_cuts(const std::vector<BreakUnit>& units,
+                                    const std::vector<LineGroup>& line_groups,
+                                    const std::vector<FloatBox>& floats,
+                                    const std::vector<RepeatHeader>& repeat_headers,
+                                    int area_height, int doc_height) {
+    std::vector<PageCut> pages;
+    pages.push_back(PageCut{0, -1, 0});
     if (area_height < 1) area_height = 1;
 
     int pos = 0;
     while (pos < doc_height) {
-        const int limit = pos + area_height;
+        // P4: a table whose header repeats and which continues from a previous page
+        // reserves its header height at the top of this page, so the body rows do
+        // not overlap the repeated header. The reserve belongs to the page that
+        // starts at `pos` (pages.back()), not to the page starting at `cut`.
+        int header_top = -1;
+        int header_height = 0;
+        for (const auto& rh : repeat_headers) {
+            if (rh.table_top < pos && rh.table_bottom > pos && rh.header_height > header_height) {
+                header_height = rh.header_height;
+                header_top = rh.header_top;
+            }
+        }
+        pages.back().header_top = header_top;
+        pages.back().header_height = header_height;
+        int limit = pos + area_height - header_height;
+        if (limit <= pos) limit = pos + area_height;  // header taller than page: no reserve
 
         // 1) Forced breaks (break-before/after: page): the earliest edge after pos
         //    that still fits on this page ends it early.
@@ -290,11 +377,11 @@ std::vector<int> plan_page_cuts(const std::vector<BreakUnit>& units,
 
         if (cut <= pos) cut = limit;  // no forward progress: fall back to the pixel cut
         if (cut <= pos || cut >= doc_height) break;
-        cuts.push_back(cut);
+        pages.push_back(PageCut{cut, -1, 0});
         pos = cut;
     }
 
-    return cuts;
+    return pages;
 }
 }  // namespace
 
@@ -479,6 +566,11 @@ sk_sp<SkData> renderHtmlsToPdf(const std::vector<std::string>& htmls, int width,
 // cut at a unit edge, break-inside:avoid (and break-before/after:avoid) move a cut earlier. A
 // document without break-* still cuts at the fixed P1 pixel positions.
 //
+// P3 adds line-box cut snapping + orphans/widows. P4 adds table fragmentation: a table is broken
+// by rows (<tr> is the atomic unit, rowspan groups merged) and a table-header-group (<thead>) is
+// re-painted at the top of every continuation page, reserving its height so the body does not
+// overlap it.
+//
 // Notes / accepted limitations:
 //   - Without break-* the slice cuts between the layout's painted pixels; a line/element
 //     straddling a page boundary is simply clipped (P1 behaviour, unchanged).
@@ -526,16 +618,21 @@ sk_sp<SkData> renderHtmlToPdf(const std::string& html, int width, int height,
     if (doc_height < 1) doc_height = 1;
 
     // P2: plan cut positions from the fragmentation CSS (falling back to P1's fixed
-    // pixel cuts when no break-* is present). Page i starts at page_cuts[i].
+    // pixel cuts when no break-* is present). Page i starts at pages[i].offset.
     // P3: line boxes of every paragraph + floated boxes refine the cuts so a line is
     // never split and orphans/widows are honoured.
+    // P4: table rows are atomic boxes (collected into float_boxes by
+    // collect_line_groups) and header groups repeat on continuation pages.
     std::vector<BreakUnit> break_units = collect_break_units(doc->root().get());
     std::vector<LineGroup> line_groups;
     std::vector<FloatBox> float_boxes;
     collect_line_groups(doc->root().get(), line_groups, float_boxes);
-    std::vector<int> page_cuts =
-        plan_page_cuts(break_units, line_groups, float_boxes, content_area_height, doc_height);
-    int page_count = (int)page_cuts.size();
+    std::vector<RepeatHeader> repeat_headers;
+    collect_repeat_headers(doc->root().get(), repeat_headers);
+    std::vector<PageCut> pages =
+        plan_page_cuts(break_units, line_groups, float_boxes, repeat_headers, content_area_height,
+                       doc_height);
+    int page_count = (int)pages.size();
     if (page_count < 1) page_count = 1;
 
     SkDynamicMemoryWStream stream;
@@ -586,24 +683,51 @@ sk_sp<SkData> renderHtmlToPdf(const std::string& html, int width, int height,
         // which ignore it, stay at their viewport position); the canvas clip bounds the page.
         // The clip height is the distance to the next cut (a fragmentation-shortened page must
         // not paint content that starts the following page), capped at the page content area.
-        const int page_offset = (page < (int)page_cuts.size()) ? page_cuts[page] : 0;
-        int slice_height = content_area_height;
-        if (page + 1 < (int)page_cuts.size()) slice_height = page_cuts[page + 1] - page_offset;
+        // P4: when a repeated header is reserved, the body is shifted down by the header
+        // height and clipped below it so the two bands never overlap.
+        const int page_offset = (page < (int)pages.size()) ? pages[page].offset : 0;
+        const int header_top = (page < (int)pages.size()) ? pages[page].header_top : -1;
+        const int header_height = (page < (int)pages.size()) ? pages[page].header_height : 0;
+
+        int avail = content_area_height - header_height;
+        if (avail < 1) avail = 1;
+        int slice_height = avail;
+        if (page + 1 < (int)pages.size()) slice_height = pages[page + 1].offset - page_offset;
         if (slice_height < 1) slice_height = 1;
-        if (slice_height > content_area_height) slice_height = content_area_height;
+        if (slice_height > avail) slice_height = avail;
 
         canvas->save();
         canvas->translate((SkScalar)margin_left, (SkScalar)margin_top);
-        canvas->clipRect(SkRect::MakeXYWH(0, 0, (SkScalar)content_width, (SkScalar)slice_height));
+        canvas->clipRect(
+            SkRect::MakeXYWH(0, (SkScalar)header_height, (SkScalar)content_width, (SkScalar)slice_height));
 
         container.reset();
         container.set_canvas(canvas);
         container.set_height(content_area_height);
         container.set_tagging(false);
-        doc->draw(0, 0, -(litehtml::pixel_t)page_offset, nullptr);
+        doc->draw(0, 0, -(litehtml::pixel_t)(page_offset - header_height), nullptr);
         container.flush();
 
         canvas->restore();
+
+        // P4: repeated table header. Re-paint the document clipped to the header band
+        // (its document-space rect) at the top of the page, so the thead appears on
+        // every continuation page.
+        if (header_height > 0 && header_top >= 0) {
+            canvas->save();
+            canvas->translate((SkScalar)margin_left, (SkScalar)margin_top);
+            canvas->clipRect(
+                SkRect::MakeXYWH(0, 0, (SkScalar)content_width, (SkScalar)header_height));
+
+            container.reset();
+            container.set_canvas(canvas);
+            container.set_height(content_area_height);
+            container.set_tagging(false);
+            doc->draw(0, 0, -(litehtml::pixel_t)header_top, nullptr);
+            container.flush();
+
+            canvas->restore();
+        }
 
         pdf_doc->endPage();
     }

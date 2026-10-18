@@ -27,6 +27,8 @@ namespace litehtml
 		}
 		void draw_children(uint_ptr hdc, pixel_t x, pixel_t y, const position* clip, draw_flag flag, int zindex) override;
 		pixel_t get_draw_vertical_offset() override;
+		void get_table_row_boundaries( position::vector& boxes ) const override;
+		bool get_table_header_boundary( position& box ) const override;
 		std::shared_ptr<render_item> init() override;
 	};
 

@@ -2,6 +2,9 @@
 #include "document.h"
 #include "iterators.h"
 
+#include <algorithm>
+#include <vector>
+
 
 // Width a cell needs in a horizontal table. A cell in an orthogonal (vertical) writing mode
 // reports its inline size (physical height) from measure(), but the column needs its block size.
@@ -963,6 +966,90 @@ litehtml::pixel_t litehtml::render_item_table::get_draw_vertical_offset()
         return m_grid->top_captions_height();
     }
     return 0;
+}
+
+void litehtml::render_item_table::get_table_row_boundaries( position::vector& boxes ) const
+{
+    if (!m_grid || m_grid->rows_count() <= 0) return;
+
+    position origin = get_placement();
+    const pixel_t captions = m_grid->top_captions_height();
+    const int n = m_grid->rows_count();
+
+    // Rows covered by a rowspan>1 cell are merged so the spanned cell is never split.
+    std::vector<int> span_end(n, 0);
+    for (int row = 0; row < n; row++)
+    {
+        for (int col = 0; col < m_grid->cols_count(); col++)
+        {
+            table_cell* cell = m_grid->cell(col, row);
+            if (cell && cell->el && cell->rowspan > 1)
+            {
+                span_end[row] = std::max(span_end[row], row + cell->rowspan - 1);
+            }
+        }
+    }
+
+    for (int i = 0; i < n;)
+    {
+        int end = std::max(i, std::min(span_end[i], n - 1));
+        for (int j = i; j <= end; j++) end = std::max(end, std::min(span_end[j], n - 1));
+
+        position r;
+        r.x = origin.x;
+        r.width = origin.width;
+        r.y = origin.y + m_grid->row(i).top + captions;
+        r.height = m_grid->row(end).bottom - m_grid->row(i).top;
+        boxes.push_back(r);
+        i = end + 1;
+    }
+}
+
+bool litehtml::render_item_table::get_table_header_boundary( position& box ) const
+{
+    if (!m_grid || m_grid->rows_count() <= 0) return false;
+
+    const element* table = src_el().get();
+    position origin = get_placement();
+    const pixel_t captions = m_grid->top_captions_height();
+
+    bool found = false;
+    position r;
+    for (int row = 0; row < m_grid->rows_count(); row++)
+    {
+        auto row_ri = m_grid->row(row).el_row;
+        if (!row_ri) continue;
+        const element* tr = row_ri->src_el().get();
+        bool in_header = false;
+        for (auto p = tr ? tr->parent() : nullptr; p && p.get() != table; p = p->parent())
+        {
+            if (p->css().get_display() == display_table_header_group || p->tag() == _thead_)
+            {
+                in_header = true;
+                break;
+            }
+        }
+        if (!in_header) continue;
+
+        position rb;
+        rb.x = origin.x;
+        rb.width = origin.width;
+        rb.y = origin.y + m_grid->row(row).top + captions;
+        rb.height = m_grid->row(row).height;
+        if (!found)
+        {
+            r = rb;
+            found = true;
+        }
+        else
+        {
+            if (rb.y < r.y) r.y = rb.y;
+            pixel_t bottom = std::max(r.y + r.height, rb.y + rb.height);
+            r.height = bottom - r.y;
+        }
+    }
+    if (found) box = r;
+    return found;
 }
 
 void litehtml::render_item_table_row::get_inline_boxes( position::vector& boxes ) const

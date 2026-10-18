@@ -641,6 +641,14 @@ namespace litehtml
                 // in document coordinates. Used by the PDF pagination pass (P3) to snap
                 // page cuts to line boundaries. Empty for non-inline-context render items.
                 virtual void get_line_boundaries( position::vector& /*boxes*/ ) const {};
+                // Absolute rects of a table's rows, in document coordinates. Used by the
+                // PDF pagination pass (P4) to treat each row as an atomic break unit.
+                // Empty for non-table render items.
+                virtual void get_table_row_boundaries( position::vector& /*boxes*/ ) const {};
+                // Absolute rect of a table's header group (display:table-header-group /
+                // <thead>) in document coordinates, for the PDF pagination pass (P4)
+                // to repeat the header on continuation pages. Returns false if none.
+                virtual bool get_table_header_boundary( position& /*box*/ ) const { return false; }
         void draw_stacking_context( uint_ptr hdc, pixel_t x, pixel_t y, const position* clip, bool with_positioned );
         virtual void draw_children( uint_ptr hdc, pixel_t x, pixel_t y, const position* clip, draw_flag flag, int zindex );
         virtual pixel_t get_draw_vertical_offset() { return 0; }
