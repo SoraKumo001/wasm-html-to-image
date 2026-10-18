@@ -54,7 +54,6 @@ litehtml::pixel_t litehtml::render_item_flex::_render_content(pixel_t x, pixel_t
 			single_line = true;
 			fit_container = true;
 		}
-		// TODO: min/max block size checks using logical properties
 	}
 
 	pixel_t main_gap = (pixel_t)(is_main_inline ? css().get_column_gap().calc_percent(container_main_size) : css().get_row_gap().calc_percent(container_main_size));
@@ -63,31 +62,61 @@ litehtml::pixel_t litehtml::render_item_flex::_render_content(pixel_t x, pixel_t
 	/////////////////////////////////////////////////////////////////
 	/// Split flex items to lines
 	/////////////////////////////////////////////////////////////////
-	m_lines = get_lines(self_size, fmt_ctx, is_main_inline, container_main_size, single_line, main_gap); 
-
 	pixel_t sum_cross_size = 0;
 	pixel_t sum_main_size = 0;
 	pixel_t max_inline_size = 0;
 
-
-
-	/////////////////////////////////////////////////////////////////
-	/// Resolving Flexible Lengths
-	/// REF: https://www.w3.org/TR/css-flexbox-1/#resolve-flexible-lengths
-	/////////////////////////////////////////////////////////////////
-	for(auto& ln : m_lines)
+	auto resolve_lines = [&]()
 	{
-		if(is_main_inline)
-		{
-			max_inline_size = std::max(max_inline_size, ln.flex_base_size);
-		}
-		ln.init(container_main_size, fit_container, is_main_inline, self_size, fmt_ctx);   
-		sum_cross_size += ln.cross_size;
+		sum_cross_size = 0;
+		sum_main_size = 0;
+		max_inline_size = 0;
+		m_lines = get_lines(self_size, fmt_ctx, is_main_inline, container_main_size, single_line, main_gap);
 
-		sum_main_size = std::max(sum_main_size, ln.main_size);
-		if(reverse)
+		/////////////////////////////////////////////////////////////////
+		/// Resolving Flexible Lengths
+		/// REF: https://www.w3.org/TR/css-flexbox-1/#resolve-flexible-lengths
+		/////////////////////////////////////////////////////////////////
+		for(auto& ln : m_lines)
 		{
-			ln.items.reverse();
+			if(is_main_inline)
+			{
+				max_inline_size = std::max(max_inline_size, ln.flex_base_size);
+			}
+			ln.init(container_main_size, fit_container, is_main_inline, self_size, fmt_ctx);
+			sum_cross_size += ln.cross_size;
+
+			sum_main_size = std::max(sum_main_size, ln.main_size);
+			if(reverse)
+			{
+				ln.items.reverse();
+			}
+		}
+	};
+
+	resolve_lines();
+
+	// Column container with auto block size: clamp the content-sized main size by
+	// min/max block size, then redo flexible length resolution against that size
+	// (flex-grow fills min-block-size, flex-shrink fits max-block-size).
+	if(fit_container)
+	{
+		pixel_t clamped = sum_main_size;
+		const auto& max_bs = self_size.max_block_size();
+		const auto& min_bs = self_size.min_block_size();
+		if(max_bs.type != containing_block_context::cbc_value_type_none && clamped > (pixel_t) max_bs)
+		{
+			clamped = (pixel_t) max_bs;
+		}
+		if(min_bs.type != containing_block_context::cbc_value_type_none && clamped < (pixel_t) min_bs)
+		{
+			clamped = (pixel_t) min_bs;
+		}
+		if(clamped != sum_main_size)
+		{
+			container_main_size = clamped;
+			fit_container = false;
+			resolve_lines();
 		}
 	}
 
