@@ -120,6 +120,7 @@ namespace litehtml
 		string				get_list_marker_text(int index);
 		element::ptr		get_element_before(const style& style, bool create);
 		element::ptr		get_element_after(const style& style, bool create);
+		void				apply_first_letter();
 
 		void map_to_pixel_length_property(string_id prop_name, string attr_value);
 		void map_to_pixel_length_property_with_default_value(string_id prop_name, string attr_value, int default_value);
@@ -128,6 +129,10 @@ namespace litehtml
 
 	private:
 		void				handle_counter_properties();
+		style				m_first_letter_style;
+		bool				m_has_first_letter_style = false;
+		bool				m_first_letter_applied = false;
+		element::ptr		m_first_letter_wrapper;
 
 	};
 

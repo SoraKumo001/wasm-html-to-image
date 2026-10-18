@@ -6,6 +6,7 @@
 // 本ファイルに shaping/layout ロジックの複製を持ち込まない。
 
 #include <algorithm>
+#include <cctype>
 #include <cstring>
 
 #include "bridge/magic_tags.h"
@@ -13,6 +14,7 @@
 #include "core/satoru_context.h"
 #include "core/text/tagging_context.h"
 #include "core/text/text_decoration_renderer.h"
+#include "core/text/text_geometry.h"
 #include "core/text/text_geometry.h"
 #include "core/text/text_layout.h"
 #include "core/text/text_types.h"
@@ -23,6 +25,7 @@
 #include "include/core/SkFontMetrics.h"
 #include "include/core/SkMaskFilter.h"
 #include "include/core/SkPaint.h"
+#include "include/core/SkPathBuilder.h"
 #include "include/core/SkTextBlob.h"
 #include "include/effects/SkDashPathEffect.h"
 #include "modules/skshaper/include/SkShaper.h"
@@ -58,6 +61,190 @@ float baselineShiftForBlob(const font_info* fi, const sk_sp<SkTextBlob>& blob) {
         return baselineShiftForRun(fi, run.font);
     }
     return 0.0f;
+}
+
+// text-emphasis (圏点): litehtml の css_properties が emphasis_style/color/position を
+// 解析して font_description に格納するが、描画は未対応だったためここで打つ。
+// 最小範囲: filled/open × dot/circle/double-circle(円近似)/triangle/sesame。
+// カスタム文字列・first-letter 等は対象外。
+struct EmphasisSpec {
+    bool enabled = false;
+    bool filled = true;
+    enum Shape { Dot, Triangle, Sesame } shape = Dot;
+};
+
+EmphasisSpec parseEmphasisStyle(const std::string& style) {
+    EmphasisSpec spec;
+    if (style.empty()) return spec;
+    std::string lower;
+    lower.reserve(style.size());
+    for (unsigned char c : style) lower.push_back((char)std::tolower(c));
+    // カスタム文字列 ("*" 等) は未対応
+    if (lower.find('"') != std::string::npos || lower.find('\'') != std::string::npos) {
+        return spec;
+    }
+    if (lower.find("none") != std::string::npos) return spec;
+    spec.enabled = true;
+    spec.filled = (lower.find("open") == std::string::npos);
+    if (lower.find("sesame") != std::string::npos) {
+        spec.shape = EmphasisSpec::Sesame;
+    } else if (lower.find("triangle") != std::string::npos) {
+        spec.shape = EmphasisSpec::Triangle;
+    } else {
+        spec.shape = EmphasisSpec::Dot;  // dot / circle / double-circle(円近似)
+    }
+    return spec;
+}
+
+bool isEmphasisSpace(char32_t u) {
+    // Chromium は空白に圏点を打たない (U+0020 / NBSP / 全角空白 / ASCII制御空白)
+    return u == 0x20 || u == 0x00A0 || u == 0x3000 || (u >= 0x09 && u <= 0x0D);
+}
+
+// 1つの圏点を (cx, cy) 中心に打つ。(ox, oy): 外向き法線、(ix, iy): インライン方向。
+void drawEmphasisMark(SkCanvas* canvas, const EmphasisSpec& spec, float cx, float cy, float size,
+                      const SkPaint& base, float ox, float oy, float ix, float iy) {
+    SkPaint paint(base);
+    paint.setPathEffect(nullptr);
+    if (spec.shape == EmphasisSpec::Sesame) {
+        // ゴマ点: 短い太線 (縦書き "＼" / 横書き "、")。軸 = inline - outward。
+        paint.setStyle(SkPaint::kStroke_Style);
+        paint.setStrokeWidth(std::max(1.0f, size * 0.12f));
+        paint.setStrokeCap(SkPaint::kRound_Cap);
+        float k = size * 0.11f;
+        float ax = ix - ox, ay = iy - oy;
+        canvas->drawLine(cx + ax * k, cy + ay * k, cx - ax * k, cy - ay * k, paint);
+        return;
+    }
+    float r = size * 0.11f;
+    if (spec.shape == EmphasisSpec::Triangle) {
+        // 頂点を外側に向けた三角形
+        float px = -oy, py = ox;
+        SkPathBuilder builder;
+        builder.moveTo(cx + ox * r, cy + oy * r);
+        builder.lineTo(cx - ox * r * 0.8f + px * r * 0.9f, cy - oy * r * 0.8f + py * r * 0.9f);
+        builder.lineTo(cx - ox * r * 0.8f - px * r * 0.9f, cy - oy * r * 0.8f - py * r * 0.9f);
+        builder.close();
+        SkPath path = builder.detach();
+        if (spec.filled) {
+            paint.setStyle(SkPaint::kFill_Style);
+        } else {
+            paint.setStyle(SkPaint::kStroke_Style);
+            paint.setStrokeWidth(std::max(1.0f, size * 0.07f));
+            paint.setStrokeJoin(SkPaint::kRound_Join);
+        }
+        canvas->drawPath(path, paint);
+        return;
+    }
+    // Dot / circle (double-circle は円近似)
+    if (spec.filled) {
+        paint.setStyle(SkPaint::kFill_Style);
+        canvas->drawCircle(cx, cy, r, paint);
+    } else {
+        paint.setStyle(SkPaint::kStroke_Style);
+        paint.setStrokeWidth(std::max(1.0f, size * 0.07f));
+        canvas->drawCircle(cx, cy, r, paint);
+    }
+}
+
+// 1ランの圏点を打つ。グリフ位置は本文と同じ shaping 結果から求める。
+void drawEmphasisRun(SkCanvas* canvas, font_info* fi, const litehtml::position& pos,
+                     litehtml::writing_mode mode, const SkPaint& paint, const EmphasisSpec& spec,
+                     const TextAnalysis& run_chars, const ShapedResult& shaped, float inline_start,
+                     bool is_upright, bool is_punctuation, bool is_rtl) {
+    struct GlyphPos {
+        float x;
+        float y;
+        SkFont font;
+        SkGlyphID id;
+    };
+    std::vector<GlyphPos> glyphs;
+    SkTextBlob::Iter it(*shaped.blob);
+    SkTextBlob::Iter::ExperimentalRun run;
+    while (it.experimentalNext(&run)) {
+        for (int i = 0; i < run.count; ++i) {
+            glyphs.push_back({run.positions[i].fX, run.positions[i].fY, run.font, run.glyphs[i]});
+        }
+    }
+    if (glyphs.empty()) return;
+    // LTR かつグリフ数=文字数の場合のみ 1:1 対応で空白・結合マークを除外する。
+    // (RTL や合字は全グリフに打つフォールバック)
+    bool one_to_one = !is_rtl && run_chars.chars.size() == glyphs.size();
+
+    bool is_vertical =
+        (mode == litehtml::writing_mode_vertical_rl || mode == litehtml::writing_mode_vertical_lr);
+    int epos = fi->desc.emphasis_position;
+    bool second_side;
+    if (!is_vertical) {
+        second_side = (epos & litehtml::text_emphasis_position_under) != 0;
+    } else {
+        // 縦書き: over/right=右側、under/left=左側 (既定 over right=右側)
+        second_side =
+            ((epos &
+              (litehtml::text_emphasis_position_under | litehtml::text_emphasis_position_left)) !=
+             0) &&
+            ((epos & litehtml::text_emphasis_position_right) == 0);
+    }
+    float ox = 0.0f, oy = 0.0f, ix = 1.0f, iy = 0.0f;
+    if (!is_vertical) {
+        ix = 1.0f;
+        iy = 0.0f;
+        oy = second_side ? 1.0f : -1.0f;
+    } else {
+        ix = 0.0f;
+        iy = 1.0f;
+        ox = second_side ? -1.0f : 1.0f;
+    }
+
+    float size = (float)fi->desc.size;
+    if (!(size > 0.0f)) return;
+    float gap = size * 0.19f;  // グリフ端からマーク中心まで
+
+    SkPaint mark_paint(paint);
+    if (!fi->desc.emphasis_color.is_current_color) {
+        const auto& e = fi->desc.emphasis_color;
+        mark_paint.setColor(
+            SkColorSetARGB(SkColorGetA(paint.getColor()), e.red, e.green, e.blue));
+    }
+
+    TextGeometry geom(mode, pos, fi);
+    size_t n = glyphs.size();
+    for (size_t i = 0; i < n; ++i) {
+        if (one_to_one) {
+            const auto& ch = run_chars.chars[i];
+            if (ch.is_mark || isEmphasisSpace(ch.codepoint)) continue;
+        }
+        float adv = (i + 1 < n) ? (glyphs[i + 1].x - glyphs[i].x)
+                                : (float)(shaped.width - glyphs[i].x);
+        float cx, cy;
+        if (is_vertical) {
+            float gx = inline_start + glyphs[i].x;
+            auto p = geom.getGlyphPlacement(gx, glyphs[i].y, is_upright, is_punctuation,
+                                            glyphs[i].font, glyphs[i].id);
+            SkFontMetrics m;
+            glyphs[i].font.getMetrics(&m);
+            float left, right;
+            if (is_upright) {
+                float w = glyphs[i].font.getWidth(glyphs[i].id);
+                left = p.x;
+                right = p.x + w;
+            } else {
+                // 90度回転 (RSXform) の描画と同値: X 範囲は [px-descent, px+ascent]
+                left = p.x - m.fDescent;
+                right = p.x - m.fAscent;
+            }
+            cx = (ox > 0.0f) ? (right + gap) : (left - gap);
+            cy = (float)pos.y + gx + adv * 0.5f;
+        } else {
+            float base =
+                (float)pos.y + glyphs[i].y + baselineShiftForRun(fi, glyphs[i].font);
+            cx = (float)pos.x + inline_start + glyphs[i].x + adv * 0.5f;
+            SkFontMetrics m;
+            glyphs[i].font.getMetrics(&m);
+            cy = (oy < 0.0f) ? (base + m.fAscent - gap) : (base + m.fDescent + gap);
+        }
+        drawEmphasisMark(canvas, spec, cx, cy, size, mark_paint, ox, oy, ix, iy);
+    }
 }
 }  // namespace
 
@@ -352,6 +539,11 @@ double TextRenderer::drawTextInternal(SatoruContext* ctx, SkCanvas* canvas, cons
     bool is_vertical =
         (mode == litehtml::writing_mode_vertical_rl || mode == litehtml::writing_mode_vertical_lr);
 
+    // text-emphasis (圏点): バッチャ経路では直接描画と順序がずれるため、圏点ありは直接描画にする。
+    EmphasisSpec emphasis_spec = parseEmphasisStyle(fi->desc.emphasis_style);
+    bool want_emphasis =
+        emphasis_spec.enabled && !tagging && paint.getStyle() != SkPaint::kStroke_Style;
+
     size_t start = 0;
     while (start < analysis.chars.size()) {
         size_t end = start + 1;
@@ -463,7 +655,7 @@ double TextRenderer::drawTextInternal(SatoruContext* ctx, SkCanvas* canvas, cons
             canvas->restore();
         } else if (batcher && fi->desc.text_shadow.empty() &&
                    fi->desc.decoration_line == litehtml::text_decoration_line_none &&
-                   fi->desc.text_stroke_width <= 0.0f && !is_run_combine) {
+                   fi->desc.text_stroke_width <= 0.0f && !is_run_combine && !want_emphasis) {
             TextBatcher::Style style;
             style.fi = fi;
             SkColor c = paint.getColor();
@@ -567,6 +759,12 @@ double TextRenderer::drawTextInternal(SatoruContext* ctx, SkCanvas* canvas, cons
                 canvas->drawTextBlob(normalizedBlob, 0, 0, p_emoji);
             }
             canvas->restore();
+        }
+
+        if (want_emphasis && !is_run_combine) {
+            drawEmphasisRun(canvas, fi, pos, mode, paint, emphasis_spec, run_analysis, shaped,
+                            (float)current_l_pos.inline_offset, is_upright, is_punctuation,
+                            (analysis.bidi_level & 1) != 0);
         }
 
         if (is_run_combine) {

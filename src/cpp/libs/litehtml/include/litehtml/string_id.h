@@ -146,6 +146,7 @@ namespace litehtml
       // CSS pseudo-elements
       _before_,
       _after_,
+      _first_letter_,
 
       // CSS pseudo-classes
       _root_,

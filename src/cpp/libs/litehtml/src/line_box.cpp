@@ -847,6 +847,15 @@ std::list< std::unique_ptr<litehtml::line_box_item> > litehtml::line_box::finish
 			lbi->pos().y = m_inline_end - (lbi->pos().y - m_block_pos) - lbi->height();
 		}
 	}
+	// vertical-rtl (case 65): keep glyph order, pack a short start-aligned line toward the inline end.
+	// Recomputed from current item tops so repeated finish() calls are a no-op (first pass untouched).
+	if(m_writing_mode != writing_mode_horizontal_tb && m_writing_mode != writing_mode_sideways_lr && m_direction == direction_rtl && !m_inline_reverse && (m_text_align == text_align_start || m_text_align == text_align_left) && !m_items.empty())
+	{
+		pixel_t line_top = m_items.front()->pos().y;
+		for(const auto& lbi : m_items) line_top = std::min(line_top, lbi->pos().y);
+		pixel_t free_space = m_inline_end - (line_top + m_inline_size);
+		if(free_space > 0) for(const auto& lbi : m_items) lbi->pos().y += free_space;
+	}
 
 	// Second pass:
 	// 1. Vertical align top/bottom
@@ -957,8 +966,20 @@ std::list< std::unique_ptr<litehtml::line_box_item> > litehtml::line_box::finish
             }
             else
             {
-                // For vertical, logical height is physical width
-                inlines.back().box.width = lbi->right() - lbi->left() + lbi->get_el()->content_offset_width();
+                // For vertical, logical height is physical width.
+                // Transposed from horizontal: the block extent is the marker's
+                // font height (lbi bottom-top) plus block-axis offsets. Using
+                // right-left here yields 0 because inline-start/end markers
+                // are zero-width in the block direction.
+                inlines.back().box.width = lbi->bottom() - lbi->top() + lbi->get_el()->content_offset_width();
+                if (m_writing_mode == writing_mode_vertical_rl ||
+                    m_writing_mode == writing_mode_sideways_rl)
+                {
+                    // Block-start is on the right: the text fragment lies to
+                    // the block-end (left) of the start marker, so the box
+                    // must extend leftward from the marker instead of right.
+                    inlines.back().box.x -= inlines.back().box.width;
+                }
             }
 		} else if(lbi->get_type() == line_box_item::type_inline_end)
 		{
@@ -967,7 +988,11 @@ std::list< std::unique_ptr<litehtml::line_box_item> > litehtml::line_box::finish
                 if (m_writing_mode == writing_mode_horizontal_tb)
 				    inlines.back().box.width = lbi->right() - inlines.back().box.x;
                 else
-                    inlines.back().box.height = lbi->bottom() - inlines.back().box.y;
+                    // Transposed from horizontal: the inline extent runs to the
+                    // end marker's inline position plus the inline-end offset.
+                    // Using lbi bottom() would add the marker's font-height
+                    // strut (its m_pos.height), overshooting by one line.
+                    inlines.back().box.height = lbi->top() - inlines.back().box.y + lbi->get_el()->content_offset_bottom();
                 
 				inlines.back().element->add_inline_box(inlines.back().box);
 				inlines.pop_back();

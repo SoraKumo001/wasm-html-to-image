@@ -20,6 +20,7 @@ const char* satoru_master_css =
     "b, strong { font-weight: bold; }\n"
     "i, em { font-style: italic; }\n"
     "u { text-decoration: underline; }\n"
+    "mark { background-color: yellow; color: black; }\n"
     "del, s { text-decoration: line-through; }\n"
     "sup { vertical-align: super; font-size: smaller; }\n"
     "sub { vertical-align: sub; font-size: smaller; }\n"

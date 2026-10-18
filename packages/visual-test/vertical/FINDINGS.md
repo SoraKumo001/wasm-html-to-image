@@ -45,6 +45,7 @@ SVG 出力は PNG と一致 (差分 < 1%)、PDF 出力も縦書きのまま 1 �
 | 14 | `writing-mode: sideways-rl` (vertical-rl + `text-orientation: sideways` へ折り畳み) | 66: sideways-rl は一致 |
 | - | `writing-mode: sideways-lr` のインライン軸反転 (`sideways-lr` は下→上に読む。折り畳み前に `is_inline_reverse` を `css_properties` に保持し、`line_box` の第2パス直前で縦書きのインライン座標 y のみミラー。述語は `sideways-lr` のみ) | 66: outline 1.7%→1.4% (sideways-lr が Chromium と同順) |
 | - | 縦書き `direction:rtl` で RTL の視覚順序反転 (物理X軸) が誤発火していたのを横書きに限定 | 65: outline 2.5%→2.1% |
+| - | 縦書き `direction:rtl` の短行をインライン終端 (=下端) へ寄せる (`line_box::finish` のミラー直後・第2パス前に vertical + rtl + 非 reverse + 短行のとき全 lbi の y に空きを加算。現在位置基準の再計算で再 finish は no-op。第一パス・start/end マップ・論理ジオメトリ・can_hold/add_item/new_inline_size 不変、sideways-lr 除外、center/justify 対象外) | 65: outline 2.1%→1.7%、高さ一致 (800x266)。66 不変 |
 | 5 | リストマーカー `cjk-ideographic` / `hiragana` / `hiragana-iroha` / `katakana` / `katakana-iroha` (末尾は 、)。マーカー文字をレイアウト時に計測してグリフ収集へ登録 | 20/64a |
 | 1 | 縦書き table の caption (`caption-side: top` はブロック開始側、`bottom` は終端側) | 74a/74b |
 | 13 | `html` 直接指定の縦書き: 縦書きで高さが確定した要素の子に shrink-to-fit を引き継がない | 61: outline 4.0%→1.1%、61i: 72.8%→0.2% |
@@ -55,21 +56,26 @@ SVG 出力は PNG と一致 (差分 < 1%)、PDF 出力も縦書きのまま 1 �
 | 13 | `body` の縦書きをルートへ伝播し、右端基準で配置 | 60: outline 11.5%→2.1% |
 | 8 | `text-combine-upright:all` (結合ランを横書きで再整形して 1em に圧縮) | 06/94: Chromium と同等 |
 | 7 | `letter-spacing` (横書き・縦書きとも。font description 生成前に解決、グリフ間隔を加算) | 99/16。`word-spacing` は未検証 |
+| 14 | `text-emphasis` (圏点): `text_renderer.cpp` に per-glyph 描画を追加。filled/open × dot/circle(円近似)/triangle/sesame(短い太線)、over/under・right/left 配置、空白・結合マーク除外、currentColor 解決。tagging(SVG)/stroke上塗り/tcyランは対象外 | 14: 中央列にゴマ点が Chromium と同位置に付く (fill 2.6% 変化なし=他列の既存差分が支配、outline 4.1%→3.9%) |
+| - | `::first-letter` の付与対象を `::before` 子テキスト優先に修正 (空 before は skip、`::after` は対象外。decode_utf8 分割・wrapper・二重分割ガード維持) | 62: 【が緑 2em で Chromium と一致 (fill 1.0% / outline 1.7%)。「前」までの拡大は未対応 |
 | - | 縦書きブロックを BFC 化 (float の高さ漏れ) | 30/77: ページ高さ 320→266px で一致 |
+| - | 縦書きの下線・上線の位置 (下線はブロック開始側の内側、上線はブロック終端側の内側へ) | 43: fill 0.7%→0.3% / outline 0.8%→0.5% |
 
 既存の横書きビジュアルテスト 26 アセットは基準値から ±0.3% 以内で回帰なし。
+- 横書き先頭 float の measure 台帳汚染 (76: `place_float` が measure 時に未配置座標で `add_float` し、共有 fmt_ctx に残った phantom が place 時の行幅計算を狂わせていた。measure + 横書き時のみ台帳更新を skip し自幅を返す。縦書きは従来通り): 76 fill 6.9%→3.2% / outline 9.9%→2.2%、高さ 201→154px で Chromium と一致。vertical 全数・vitest 155 件・横書き 26 件で回帰なし (76 の baseline のみ正値へ更新)。
 未対応・既知の制限:
 - ルビ: 1 つの `<ruby>` に複数の `<rt>` を持つ複合ルビ、`rtc`、ルビの均等割付は未対応。縦書きで折り返し位置にルビが来る場合の 2 列分割は修正済み (44)
-- 縦書き内の `direction:rtl` (65): Chromium は LTR ラン (CJK・ラテン) の字順を反転せず、行をインライン終端 (=下端) へ寄せる。字順反転の誤発火は修正済みだが、行を下端へ寄せる配置は未対応 (残留 2.1%)。Chromium 実測: `vertical-rl/lr` + `direction:rtl` では各字は上→下のままで、短い行だけ下端に寄る (字順は不変)。
+- 縦書き内の `direction:rtl` (65): Chromium は LTR ラン (CJK・ラテン) の字順を反転せず、行をインライン終端 (=下端) へ寄せる。字順反転の誤発火修正に加え、短行の下端寄せ配置に対応 (残留 outline 1.7%。text-align:center/justify は対象外)。Chromium 実測: `vertical-rl/lr` + `direction:rtl` では各字は上→下のままで、短い行だけ下端に寄る (字順は不変)。
+- カラー絵文字未対応 (64): `😀🐱` 等のカラー絵文字 (CBDT/COLR) は未対応。単色の記号 (★☆♪→←等) は問題なし。
 
 ## 不具合 (縦書き以外でも起きるもの / 参考)
 
-- `text-emphasis` (圏点) 未対応 (14)。
-- `::first-letter` 未対応 (62)。
-- 横書きでも先頭 float 右寄せ時にテキストが下へずれる (76)。
+- ~~`text-emphasis` (圏点) 未対応 (14)~~ → 本変更で対応 (上記)。残件: カスタム文字列、SVG(tagging)出力、tcyラン、`open` 以外の装飾組み合わせの厳密比較。
+- ~~`::first-letter` 未対応 (62)~~ → 本変更で対応 (上記)。残件: Chromium は「前」まで 2em 緑化するが本実装は先頭 1 文字 (【) のみ適用 (約物スキップ等の厳密一致は未対応)。
+- 横書きの先頭 float 右寄せでテキストが下へずれていた (76) → 本変更で修正 (下記)。残差 fill 3.2% / outline 2.2% は約物詰め (`text-spacing-trim`) 相当が無いための行末・折返し位置差 (03, 17 と同種の仕様差)。
 - Chromium の `text-spacing-trim` (約物の詰め) 相当が無く、行末位置・折返し位置が微妙にずれる (03, 17)。バグではなく仕様差。
 
 ## 未検証
 
-目視していないケース (メトリクス上は差分 < 3%): 05, 10, 11, 24, 25, 32, 35–38, 41–43, 64, 68–73。
+目視していないケース (メトリクス上は差分 < 3%): 05, 10, 11, 24, 25, 32, 35–38, 41, 42, 64, 68–73。
 複数ページ PDF の改ページ、`display:inline-grid`/`columns`、フォント fallback の CJK 外字は未実施。

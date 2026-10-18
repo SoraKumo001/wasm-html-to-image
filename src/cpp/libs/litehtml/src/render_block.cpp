@@ -21,6 +21,15 @@ litehtml::pixel_t litehtml::render_item_block::place_float(const std::shared_ptr
 		el->place_logical(line_inline_start, line_block_start, self_size.new_inline_size(line_inline_end, self_size.size_mode & containing_block_context::size_mode_content), fmt_ctx);
 	}
 
+	// In measure mode the float is not placed (see the guards above), so its position is
+	// stale. Registering it would pollute a shared formatting context with a phantom
+	// float whose bogus position later place-phase queries mistake for a real one
+	// (e.g. a leading float:right pushes the first text line down). Skip the ledger
+	// updates in measure mode for horizontal writing and report the float's own width.
+	// Vertical writing keeps the legacy behavior (float cases 30/77 depend on it).
+	bool skip_ledger = (self_size.size_mode & containing_block_context::size_mode_measure) &&
+					   self_size.mode == writing_mode_horizontal_tb;
+
 	if(min_rendered_inline_size < el->inline_size() && el->src_el()->css().get_width().is_predefined())
 	{
 		min_rendered_inline_size = el->measure(self_size.new_inline_size(min_rendered_inline_size, self_size.size_mode & containing_block_context::size_mode_content), fmt_ctx);
@@ -40,10 +49,16 @@ litehtml::pixel_t litehtml::render_item_block::place_float(const std::shared_ptr
 				el->place_logical(fmt_ctx->get_line_left(line_block_start), line_block_start, self_size.new_inline_size(line_inline_end, self_size.size_mode & containing_block_context::size_mode_content), fmt_ctx);
 			}
         }
-		fmt_ctx->add_float(el, min_rendered_inline_size, self_size.context_idx);
-		fix_line_width(float_left, self_size, fmt_ctx);
+		if(skip_ledger)
+		{
+			ret_inline_size = min_rendered_inline_size;
+		} else
+		{
+			fmt_ctx->add_float(el, min_rendered_inline_size, self_size.context_idx);
+			fix_line_width(float_left, self_size, fmt_ctx);
 
-		ret_inline_size = fmt_ctx->find_min_left(line_block_start, self_size.context_idx);
+			ret_inline_size = fmt_ctx->find_min_left(line_block_start, self_size.context_idx);
+		}
     } else if (el->src_el()->css().get_float() == float_right)
     {
         if(line_inline_start + el->inline_size() > line_inline_end)
@@ -60,10 +75,16 @@ litehtml::pixel_t litehtml::render_item_block::place_float(const std::shared_ptr
 				el->place_logical(line_inline_end - el->inline_size(), line_block_start, self_size.new_inline_size(self_size.render_inline_size(), self_size.size_mode & containing_block_context::size_mode_content), fmt_ctx);
 			}
         }
-		fmt_ctx->add_float(el, min_rendered_inline_size, self_size.context_idx);
-		fix_line_width(float_right, self_size, fmt_ctx);
-		line_inline_end = fmt_ctx->find_min_right(line_block_start, self_size.render_inline_size(), self_size.context_idx);
-		ret_inline_size = self_size.render_inline_size() - line_inline_end;
+		if(skip_ledger)
+		{
+			ret_inline_size = min_rendered_inline_size;
+		} else
+		{
+			fmt_ctx->add_float(el, min_rendered_inline_size, self_size.context_idx);
+			fix_line_width(float_right, self_size, fmt_ctx);
+			line_inline_end = fmt_ctx->find_min_right(line_block_start, self_size.render_inline_size(), self_size.context_idx);
+			ret_inline_size = self_size.render_inline_size() - line_inline_end;
+		}
     }
     return ret_inline_size;
 }

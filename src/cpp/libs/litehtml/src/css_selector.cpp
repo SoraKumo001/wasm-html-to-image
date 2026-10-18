@@ -513,7 +513,7 @@ css_attribute_selector parse_subclass_selector(const css_token_vector& tokens, i
 bool is_supported_simple_pseudo_element(const string& name) {
     string n = lowcase(name);
     if (is_one_of(n, "before", "after", "marker", "placeholder", "backdrop", "file-selector-button",
-                  "selection"))
+                  "selection", "first-letter"))
         return true;
 
     if (n.size() > 8 && n.substr(0, 8) == "-webkit-") return true;

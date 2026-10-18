@@ -107,10 +107,22 @@ void TextDecorationRenderer::drawDecoration(SkCanvas* canvas, font_info* fi,
     if (fi->desc.decoration_line & litehtml::text_decoration_line_underline) {
         float underline_offset =
             (float)fi->fm_ascent + (float)fi->desc.underline_offset.val() + thickness;
+        if (wm_ctx.is_vertical()) {
+            // Chromium places the vertical underline just inside the
+            // block-start edge (right for vertical-rl, left for
+            // vertical-lr), not at an ascent distance from it. Flush the
+            // line's outer edge with the run box's block-start edge.
+            underline_offset = (float)fi->desc.underline_offset.val() + thickness;
+        }
         draw_logical_line(underline_offset);
     }
     if (fi->desc.decoration_line & litehtml::text_decoration_line_overline) {
-        draw_logical_line(0);
+        float overline_offset = 0;
+        if (wm_ctx.is_vertical()) {
+            // Mirror of underline: just inside the block-end edge.
+            overline_offset = (float)wm_ctx.container_width() - thickness;
+        }
+        draw_logical_line(overline_offset);
     }
     if (fi->desc.decoration_line & litehtml::text_decoration_line_line_through) {
         draw_logical_line((float)fi->fm_ascent * 0.65f);

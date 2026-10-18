@@ -263,18 +263,37 @@ void litehtml::html_tag::apply_stylesheet( const litehtml::css& stylesheet )
 					{
 						if(select(*sel, true))
 						{
+							bool handled = false;
 							if((apply & (select_match_with_after | select_match_with_before)))
 							{
 								apply_before_after();
-							} else
+								handled = true;
+							}
+							if((apply & select_match_with_first_letter))
+							{
+								m_first_letter_style.combine(*sel->m_style, sel->m_specificity);
+								m_has_first_letter_style = true;
+								us->m_used = true;
+								handled = true;
+							}
+							if(!handled)
 							{
 								add_style(*sel->m_style, sel->m_specificity);
 								us->m_used = true;
 							}
 						}
-					} else if((apply & (select_match_with_after | select_match_with_before)))
+					} else if((apply & (select_match_with_after | select_match_with_before | select_match_with_first_letter)))
 					{
-						apply_before_after();
+						if((apply & (select_match_with_after | select_match_with_before)))
+						{
+							apply_before_after();
+						}
+						if((apply & select_match_with_first_letter))
+						{
+							m_first_letter_style.combine(*sel->m_style, sel->m_specificity);
+							m_has_first_letter_style = true;
+							us->m_used = true;
+						}
 					} else
 					{
 						add_style(*sel->m_style, sel->m_specificity);
@@ -309,6 +328,11 @@ void litehtml::html_tag::apply_stylesheet( const litehtml::css& stylesheet )
 		{
 			el->apply_stylesheet(stylesheet);
 		}
+	}
+
+	if(m_has_first_letter_style)
+	{
+		apply_first_letter();
 	}
 }
 
@@ -674,6 +698,9 @@ int litehtml::html_tag::select(const css_element_selector& selector, bool apply_
                                         return select_no_match;
                                 }
                                 res |= select_match_with_before;
+                        } else if(attr.name == _first_letter_)
+                        {
+                                res |= select_match_with_first_letter;
                         } else
                         {
                                 return select_no_match;
@@ -1831,6 +1858,161 @@ litehtml::element::ptr litehtml::html_tag::get_element_after(const style& style,
         return nullptr;
 }
 
+void litehtml::html_tag::apply_first_letter()
+{
+        if(!m_has_first_letter_style) return;
+        if(m_first_letter_applied)
+        {
+                if(m_first_letter_wrapper)
+                {
+                        m_first_letter_wrapper->reset_style();
+                        m_first_letter_wrapper->add_style(m_first_letter_style);
+                        m_first_letter_wrapper->compute_styles();
+                }
+                return;
+        }
+
+        // Depth-first search for the first non-empty text node inside `container`,
+        // skipping any ::after subtree. Returns target text node via out params.
+        element::ptr found_target;
+        element::ptr found_parent;
+        std::function<bool(const element::ptr&)> dfs;
+        dfs = [&](const element::ptr& node) -> bool
+        {
+                auto tag_ptr = std::dynamic_pointer_cast<html_tag>(node);
+                if(!tag_ptr) return false;
+                for(auto& child : tag_ptr->children())
+                {
+                        if(!child) continue;
+                        if(child->tag() == __tag_after_) continue; // ::after対象外
+                        if(child->tag() == __tag_before_ && node.get() != this)
+                        {
+                                // nested ::before pseudo (should not happen); skip its tag itself but
+                                // still allow searching inside the top-level ::before via explicit pass
+                                continue;
+                        }
+                        if(child->is_text())
+                        {
+                                if(child->is_white_space()) continue;
+                                string t;
+                                child->get_text(t);
+                                if(t.empty()) continue;
+                                found_target = child;
+                                found_parent = node;
+                                return true;
+                        }
+                        if(child->is_break()) continue;
+                        // Descend into element children (inline wrappers, before pseudo, etc.)
+                        // Skip replaced / images etc. by only descending into html_tag containers.
+                        if(std::dynamic_pointer_cast<html_tag>(child))
+                        {
+                                if(dfs(child)) return true;
+                        }
+                }
+                return false;
+        };
+
+        // 1) ::before子を先に探索 (before空はskip → 通常子へ)
+        if(!m_children.empty() && m_children.front()->tag() == __tag_before_)
+        {
+                element::ptr before_el = m_children.front();
+                // Search inside ::before (its own children, never its ::after)
+                if(dfs(before_el))
+                {
+                        // found inside before
+                } else
+                {
+                        found_target = nullptr;
+                }
+        }
+        // 2) 通常子の探索 (::before自体と::afterは除外)
+        if(!found_target)
+        {
+                for(auto& child : m_children)
+                {
+                        if(!child) continue;
+                        if(child->tag() == __tag_before_) continue;
+                        if(child->tag() == __tag_after_) continue; // ::after対象外
+                        if(child->is_text())
+                        {
+                                if(child->is_white_space()) continue;
+                                string t;
+                                child->get_text(t);
+                                if(t.empty()) continue;
+                                found_target = child;
+                                found_parent = shared_from_this();
+                                break;
+                        }
+                        if(child->is_break()) continue;
+                        if(std::dynamic_pointer_cast<html_tag>(child))
+                        {
+                                // Temporarily reuse dfs for this subtree
+                                found_target = nullptr;
+                                if(dfs(child))
+                                {
+                                        // dfs set found_target/found_parent
+                                        break;
+                                }
+                        }
+                }
+        }
+
+        if(!found_target || !found_parent) return;
+
+        // 二重分割ガード: 既にwrapper内が対象なら何もしない
+        {
+                element::ptr p = found_parent;
+                while(p)
+                {
+                        if(p == m_first_letter_wrapper) return;
+                        p = p->parent();
+                }
+                if(found_target == m_first_letter_wrapper) return;
+        }
+
+        string txt;
+        found_target->get_text(txt);
+        if(txt.empty()) return;
+        const char* s = txt.c_str();
+        const char* p = s;
+        decode_utf8(&p);
+        size_t first_len = (size_t)(p - s);
+        if(first_len == 0 || first_len >= txt.size() + 1) return;
+        // If the text node holds a single codepoint, first_len == txt.size(): still wrap.
+        string first_str(s, first_len);
+        string rest_str(p);
+        if(first_str.empty()) return;
+
+        auto parent_tag = std::dynamic_pointer_cast<html_tag>(found_parent);
+        if(!parent_tag) return;
+        auto& vec = parent_tag->children();
+        auto it = std::find(vec.begin(), vec.end(), found_target);
+        if(it == vec.end()) return;
+
+        auto wrapper = std::make_shared<html_tag>(get_document());
+        wrapper->set_tagName("span");
+        wrapper->parent(found_parent);
+
+        auto first_el = std::make_shared<el_text>(first_str.c_str(), get_document());
+        wrapper->appendChild(first_el);
+
+        wrapper->add_style(m_first_letter_style);
+        wrapper->compute_styles();
+
+        it = vec.erase(it);
+        vec.insert(it, wrapper);
+        if(!rest_str.empty())
+        {
+                auto rest_el = std::make_shared<el_text>(rest_str.c_str(), get_document());
+                rest_el->parent(found_parent);
+                rest_el->compute_styles(false);
+                vec.insert(it, rest_el);
+        }
+
+        m_first_letter_applied = true;
+        m_first_letter_wrapper = wrapper;
+}
+
 
 void litehtml::html_tag::handle_counter_properties()
 {
@@ -1882,6 +2064,9 @@ void litehtml::html_tag::refresh_styles()
 
         m_style.clear();
 
+        m_first_letter_style.clear();
+        m_has_first_letter_style = false;
+
         parse_presentational_hints();
 
         for (auto& usel : m_used_styles)
@@ -1901,6 +2086,7 @@ void litehtml::html_tag::refresh_styles()
                                 {
                                         if(select(*usel->m_selector, true))
                                         {
+                                                bool handled = false;
                                                 if(apply & select_match_with_after)
                                                 {
                                                         element::ptr el = get_element_after(*usel->m_selector->m_style, !content_none);
@@ -1916,6 +2102,7 @@ void litehtml::html_tag::refresh_styles()
                                                                         el->add_style(*usel->m_selector->m_style, usel->m_selector->m_specificity);
                                                                 }
                                                         }
+                                                        handled = true;
                                                 } else if(apply & select_match_with_before)
                                                 {
                                                         element::ptr el = get_element_before(*usel->m_selector->m_style, !content_none);
@@ -1931,8 +2118,16 @@ void litehtml::html_tag::refresh_styles()
                                                                         el->add_style(*usel->m_selector->m_style, usel->m_selector->m_specificity);
                                                                 }
                                                         }
+                                                        handled = true;
                                                 }
-                                                else
+                                                if(apply & select_match_with_first_letter)
+                                                {
+                                                        m_first_letter_style.combine(*usel->m_selector->m_style, usel->m_selector->m_specificity);
+                                                        m_has_first_letter_style = true;
+                                                        usel->m_used = true;
+                                                        handled = true;
+                                                }
+                                                if(!handled)
                                                 {
                                                         add_style(*usel->m_selector->m_style, usel->m_selector->m_specificity);
                                                         usel->m_used = true;
@@ -1940,6 +2135,7 @@ void litehtml::html_tag::refresh_styles()
                                         }
                                 } else 
                                 {
+                                        bool handled = false;
                                         if(apply & select_match_with_after)
                                         {
                                                 element::ptr el = get_element_after(*usel->m_selector->m_style, !content_none);
@@ -1954,6 +2150,7 @@ void litehtml::html_tag::refresh_styles()
                                                                 el->add_style(*usel->m_selector->m_style, usel->m_selector->m_specificity);
                                                         }
                                                 }
+                                                handled = true;
                                         } else if(apply & select_match_with_before)
                                         {
                                                 element::ptr el = get_element_before(*usel->m_selector->m_style, !content_none);
@@ -1968,7 +2165,16 @@ void litehtml::html_tag::refresh_styles()
                                                                 el->add_style(*usel->m_selector->m_style, usel->m_selector->m_specificity);
                                                         }
                                                 }
-                                        } else
+                                                handled = true;
+                                        }
+                                        if(apply & select_match_with_first_letter)
+                                        {
+                                                m_first_letter_style.combine(*usel->m_selector->m_style, usel->m_selector->m_specificity);
+                                                m_has_first_letter_style = true;
+                                                usel->m_used = true;
+                                                handled = true;
+                                        }
+                                        if(!handled)
                                         {
                                                 add_style(*usel->m_selector->m_style, usel->m_selector->m_specificity);
                                                 usel->m_used = true;
@@ -1982,6 +2188,19 @@ void litehtml::html_tag::refresh_styles()
         if (style)
         {
                 m_style.add(style, "", get_document()->container(), css::unlayered_id, selector_specificity(1, 0, 0, 0));
+        }
+
+        if(m_has_first_letter_style)
+        {
+                if(m_first_letter_applied && m_first_letter_wrapper)
+                {
+                        m_first_letter_wrapper->reset_style();
+                        m_first_letter_wrapper->add_style(m_first_letter_style);
+                        m_first_letter_wrapper->compute_styles();
+                } else
+                {
+                        apply_first_letter();
+                }
         }
 }
 

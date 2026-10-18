@@ -1145,6 +1145,7 @@ namespace litehtml
                 select_match_pseudo_class       = 0x02,
                 select_match_with_before        = 0x10,
                 select_match_with_after         = 0x20,
+                select_match_with_first_letter  = 0x40,
         };
 
         template<class T>
