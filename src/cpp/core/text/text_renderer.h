@@ -87,7 +87,8 @@ class TextRenderer {
                          std::vector<text_draw_info>& usedTextDraws,
                          std::vector<SkPath>& usedGlyphs,
                          std::vector<glyph_draw_info>& usedGlyphDraws,
-                         std::set<char32_t>* usedCodepoints, TextBatcher* batcher = nullptr);
+                         std::set<char32_t>* usedCodepoints, TextBatcher* batcher = nullptr,
+                         bool forceEllipsis = false);
 
    private:
     // Internal helper for shaping and drawing a single run of text

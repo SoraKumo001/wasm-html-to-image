@@ -331,7 +331,8 @@ std::list< std::unique_ptr<litehtml::line_box_item> > litehtml::line_box::finish
 					// still-open marker kept in the prefix: skipping it would
 					// hide the kept text as well (draw walk checks skip()).
 					bool shared = false;
-					for(auto kept_it = m_items.begin(); kept_it != kept_end; ++kept_it)
+					// Only markers can share a render_item with the kept prefix; text runs never do.
+					for(auto kept_it = m_items.begin(); (*next_it)->get_type() != line_box_item::type_text_part && kept_it != kept_end; ++kept_it)
 					{
 						if((*kept_it)->get_el() == (*next_it)->get_el())
 						{

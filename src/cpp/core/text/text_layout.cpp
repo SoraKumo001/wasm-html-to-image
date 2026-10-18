@@ -743,12 +743,13 @@ ShapedResult TextLayout::shapePreparedText(SatoruContext* ctx, const char* cache
 
 std::string TextLayout::ellipsizeText(SatoruContext* ctx, const char* text, font_info* fi,
                                       litehtml::writing_mode mode, double maxWidth,
-                                      std::set<char32_t>* usedCodepoints) {
+                                      std::set<char32_t>* usedCodepoints, bool force) {
     if (!text || !*text) return "";
 
-    // First, check if full text fits
+    // First, check if full text fits. A forced ellipsis (the line decided an ellipsis
+    // must follow this run) is appended even when the run itself fits the budget.
     MeasureResult full_res = measureText(ctx, text, fi, mode, maxWidth, usedCodepoints);
-    if (full_res.fits) return std::string(text);
+    if (full_res.fits && !force) return std::string(text);
 
     // Calculate ellipsis width. Use the horizontal ellipsis character U+2026
     // (the CSS text-overflow ellipsis glyph), not three ASCII dots.

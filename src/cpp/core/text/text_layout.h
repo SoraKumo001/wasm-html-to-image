@@ -38,7 +38,8 @@ class TextLayout {
 
     static std::string ellipsizeText(SatoruContext* ctx, const char* text, font_info* fi,
                                      litehtml::writing_mode mode, double maxWidth,
-                                     std::set<char32_t>* usedCodepoints = nullptr);
+                                     std::set<char32_t>* usedCodepoints = nullptr,
+                                     bool force = false);
 
     static ShapedResult shapeText(
         SatoruContext* ctx, const char* text, size_t len, font_info* fi,

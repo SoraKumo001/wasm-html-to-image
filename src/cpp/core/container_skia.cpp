@@ -8,6 +8,8 @@
 #include <sstream>
 #include <string_view>
 
+#include <utf8proc.h>
+
 #include "bridge/magic_tags.h"
 #include "container_skia_helpers.h"
 #include "core/text/text_layout.h"
@@ -373,6 +375,8 @@ void container_skia::draw_text(litehtml::uint_ptr hdc, const char* text, litehtm
     if (!fi || fi->fonts.empty()) return;
 
     litehtml::position actual_pos = pos;
+    // litehtml collapses a run that must be followed by an ellipsis to ~0 width.
+    const bool force_ellipsis = overflow == litehtml::text_overflow_ellipsis && pos.width < 1.0f;
     if (overflow == litehtml::text_overflow_ellipsis) {
         if (!m_clip.clips.empty()) {
             // Clip right edge is the real available width for this line.
@@ -429,7 +433,7 @@ void container_skia::draw_text(litehtml::uint_ptr hdc, const char* text, litehtm
             satoru::TextRenderer::drawText(
                 &m_context, m_canvas, text, fi, maskColor, actual_pos, overflow, dir, mode, false,
                 get_current_opacity(), m_paint.textShadows, m_paint.textDraws, m_usedGlyphs,
-                m_usedGlyphDraws, m_resourceManager ? &m_text.usedCodepoints : nullptr, m_text.batcher);
+                m_usedGlyphDraws, m_resourceManager ? &m_text.usedCodepoints : nullptr, m_text.batcher, force_ellipsis);
             flush();
 
             // Draw gradient with SrcIn blend mode (only visible through text mask)
@@ -459,7 +463,7 @@ void container_skia::draw_text(litehtml::uint_ptr hdc, const char* text, litehtm
                 satoru::TextRenderer::drawText(&m_context, nullptr, text, fi, maskColor, actual_pos,
                                                overflow, dir, mode, false, get_current_opacity(),
                                                m_paint.textShadows, m_paint.textDraws, m_usedGlyphs,
-                                               m_usedGlyphDraws, &fi->used_codepoints, nullptr);
+                                               m_usedGlyphDraws, &fi->used_codepoints, nullptr, force_ellipsis);
             }
             return;
         }
@@ -468,7 +472,7 @@ void container_skia::draw_text(litehtml::uint_ptr hdc, const char* text, litehtm
     satoru::TextRenderer::drawText(&m_context, m_canvas, text, fi, color, actual_pos, overflow, dir,
                                    mode, m_tagging, get_current_opacity(), m_paint.textShadows,
                                    m_paint.textDraws, m_usedGlyphs, m_usedGlyphDraws,
-                                   m_resourceManager ? &m_text.usedCodepoints : nullptr, m_text.batcher);
+                                   m_resourceManager ? &m_text.usedCodepoints : nullptr, m_text.batcher, force_ellipsis);
     std::string s(text);
     if (!s.empty() && s.find_first_not_of(" \n\r\t") != std::string::npos) {
         if (!m_clip.clips.empty()) {
@@ -479,7 +483,7 @@ void container_skia::draw_text(litehtml::uint_ptr hdc, const char* text, litehtm
         satoru::TextRenderer::drawText(&m_context, nullptr, text, fi, color, actual_pos, overflow,
                                        dir, mode, m_tagging, get_current_opacity(),
                                        m_paint.textShadows, m_paint.textDraws, m_usedGlyphs,
-                                       m_usedGlyphDraws, &fi->used_codepoints, nullptr);
+                                       m_usedGlyphDraws, &fi->used_codepoints, nullptr, force_ellipsis);
     }
 }
 
@@ -543,11 +547,57 @@ void container_skia::get_viewport(litehtml::position& viewport) const {
     viewport.height = m_height;
 }
 void container_skia::transform_text(litehtml::string& text, litehtml::text_transform tt) {
-    if (text.empty()) return;
-    if (tt == litehtml::text_transform_uppercase)
-        for (auto& c : text) c = (char)toupper(c);
-    else if (tt == litehtml::text_transform_lowercase)
-        for (auto& c : text) c = (char)tolower(c);
+    if (text.empty() || tt == litehtml::text_transform_none) return;
+    std::string out;
+    out.reserve(text.size());
+    const auto* p = (const utf8proc_uint8_t*)text.data();
+    utf8proc_ssize_t remaining = (utf8proc_ssize_t)text.size();
+    bool word_start = true;
+    while (remaining > 0) {
+        utf8proc_int32_t cp;
+        utf8proc_ssize_t n = utf8proc_iterate(p, remaining, &cp);
+        if (n < 0) {  // invalid byte: copy as-is
+            out.push_back((char)*p);
+            p++;
+            remaining--;
+            word_start = false;
+            continue;
+        }
+        utf8proc_int32_t mapped = cp;
+        switch (tt) {
+            case litehtml::text_transform_uppercase:
+                mapped = utf8proc_toupper(cp);
+                break;
+            case litehtml::text_transform_lowercase:
+                mapped = utf8proc_tolower(cp);
+                break;
+            case litehtml::text_transform_capitalize:
+                if (word_start && utf8proc_category(cp) >= UTF8PROC_CATEGORY_LU &&
+                    utf8proc_category(cp) <= UTF8PROC_CATEGORY_LO) {
+                    mapped = utf8proc_totitle(cp);
+                }
+                break;
+            default:
+                break;
+        }
+        // Words are runs of letters/numbers/marks (an apostrophe stays inside a word).
+        auto cat = utf8proc_category(cp);
+        bool in_word = (cat >= UTF8PROC_CATEGORY_LU && cat <= UTF8PROC_CATEGORY_LO) ||
+                       (cat >= UTF8PROC_CATEGORY_MN && cat <= UTF8PROC_CATEGORY_ME) ||
+                       (cat >= UTF8PROC_CATEGORY_ND && cat <= UTF8PROC_CATEGORY_NO) ||
+                       cp == '\'' || cp == 0x2019 || cp == '_';
+        word_start = !in_word;
+        utf8proc_uint8_t buf[4];
+        utf8proc_ssize_t len = utf8proc_encode_char(mapped, buf);
+        if (len <= 0) {
+            out.append((const char*)p, (size_t)n);
+        } else {
+            out.append((const char*)buf, (size_t)len);
+        }
+        p += n;
+        remaining -= n;
+    }
+    text = std::move(out);
 }
 void container_skia::import_css(litehtml::string& text, const litehtml::string& url,
                                 litehtml::string& baseurl) {

@@ -370,7 +370,8 @@ void TextRenderer::drawText(SatoruContext* ctx, SkCanvas* canvas, const char* te
                             std::vector<text_draw_info>& usedTextDraws,
                             std::vector<SkPath>& usedGlyphs,
                             std::vector<glyph_draw_info>& usedGlyphDraws,
-                            std::set<char32_t>* usedCodepoints, TextBatcher* batcher) {
+                            std::set<char32_t>* usedCodepoints, TextBatcher* batcher,
+                            bool forceEllipsis) {
     if (!canvas || !fi || fi->fonts.empty()) return;
 
     fi->is_rtl = (dir == litehtml::direction_rtl);
@@ -385,7 +386,7 @@ void TextRenderer::drawText(SatoruContext* ctx, SkCanvas* canvas, const char* te
         // litehtml marks a forced ellipsis by collapsing the run to ~0 width.
         // In that case the caller (container_skia) has already recovered the real
         // available width from the clip box, so use it as the ellipsize budget.
-        bool forced = (available_size < 1.0f);
+        bool forced = forceEllipsis || (available_size < 1.0f);
         double margin = 2.0;
         double budget = available_size;
         if (forced && mode != litehtml::writing_mode_horizontal_tb) {
@@ -401,7 +402,7 @@ void TextRenderer::drawText(SatoruContext* ctx, SkCanvas* canvas, const char* te
             (forced || TextLayout::measureText(ctx, text, fi, mode, -1.0, nullptr).width >
                            available_size + margin)) {
             ellipsized_text = TextLayout::ellipsizeText(ctx, text, fi, mode, budget,
-                                                        usedCodepoints);
+                                                        usedCodepoints, forced);
             draw_text = ellipsized_text.c_str();
             draw_text_len = ellipsized_text.size();
         }
