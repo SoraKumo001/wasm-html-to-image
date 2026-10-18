@@ -24,7 +24,7 @@ const char* satoru_master_css =
     "sup { vertical-align: super; font-size: smaller; }\n"
     "sub { vertical-align: sub; font-size: smaller; }\n"
     "ruby { display: inline-flex; flex-direction: column-reverse; align-items: center; "
-    "vertical-align: text-bottom; line-height: normal; }\n"
+    "text-indent: 0; vertical-align: text-bottom; line-height: normal; }\n"
     "rt { display: block; font-size: 50%; line-height: normal; text-align: center; }\n"
     "rb { display: block; }\n"
     "rp { display: none; }\n"

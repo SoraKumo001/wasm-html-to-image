@@ -43,11 +43,14 @@ SVG 出力は PNG と一致 (差分 < 1%)、PDF 出力も縦書きのまま 1 �
 | 11 | `vertical-align: super/sub` (フォントメトリクスの super_shift/sub_shift が未設定だった。横書きも同様) | 39/63a |
 | 12 | 列をまたぐインラインの枠線・角丸 (縦書きでは左右の辺を各断片に、上下の辺を先頭・末尾にだけ描く) | 67: 辺の描画は一致。断片のサイズ・折返し位置には差が残る |
 | 14 | `writing-mode: sideways-rl` (vertical-rl + `text-orientation: sideways` へ折り畳み) | 66: sideways-rl は一致 |
-| 5 | リストマーカー `cjk-ideographic` / `hiragana` / `katakana` (末尾は 、)。マーカー文字をレイアウト時に計測してグリフ収集へ登録 | 20/64a |
+| - | `writing-mode: sideways-lr` のインライン軸反転 (`sideways-lr` は下→上に読む。折り畳み前に `is_inline_reverse` を `css_properties` に保持し、`line_box` の第2パス直前で縦書きのインライン座標 y のみミラー。述語は `sideways-lr` のみ) | 66: outline 1.7%→1.4% (sideways-lr が Chromium と同順) |
+| - | 縦書き `direction:rtl` で RTL の視覚順序反転 (物理X軸) が誤発火していたのを横書きに限定 | 65: outline 2.5%→2.1% |
+| 5 | リストマーカー `cjk-ideographic` / `hiragana` / `hiragana-iroha` / `katakana` / `katakana-iroha` (末尾は 、)。マーカー文字をレイアウト時に計測してグリフ収集へ登録 | 20/64a |
 | 1 | 縦書き table の caption (`caption-side: top` はブロック開始側、`bottom` は終端側) | 74a/74b |
 | 13 | `html` 直接指定の縦書き: 縦書きで高さが確定した要素の子に shrink-to-fit を引き継がない | 61: outline 4.0%→1.1%、61i: 72.8%→0.2% |
 | - | table セルの `vertical-align` を縦書きではブロック軸 (横方向) に適用 (従来は物理的な縦方向にずれていた) | 75: outline 1.9%→0.6% |
 | - | `<ruby>` / `<rt>` (UA スタイルで inline-flex + column-reverse。縦書き・横書き両対応) | 07/79/79a: ルビが基底文字の上(縦書きは右)に出る |
+| - | 縦書きの `<ruby>` を不可分なインラインとして扱う (アノテーションが基底文字を 2 列に割らない。UA 規則に `text-indent:0` を追加し、コンテンツ幅で計測・配置。収まらない場合は次の列へ丸ごと移動) | 44: ルビが 1 列に収まり、`fill 3.6%→3.5% / outline 5.1%→4.0%` |
 | - | `render_item::measure` のキャッシュヒット時の戻り値を縦書きではインライン方向の長さに修正 | |
 | 13 | `body` の縦書きをルートへ伝播し、右端基準で配置 | 60: outline 11.5%→2.1% |
 | 8 | `text-combine-upright:all` (結合ランを横書きで再整形して 1em に圧縮) | 06/94: Chromium と同等 |
@@ -56,9 +59,8 @@ SVG 出力は PNG と一致 (差分 < 1%)、PDF 出力も縦書きのまま 1 �
 
 既存の横書きビジュアルテスト 26 アセットは基準値から ±0.3% 以内で回帰なし。
 未対応・既知の制限:
-- ルビ: 1 つの `<ruby>` に複数の `<rt>` を持つ複合ルビ、`rtc`、ルビの均等割付は未対応。縦書きで折り返し位置にルビが来る場合に基底文字が 2 列に割れることがある (44)
-- `sideways-lr` (行の読み順が下→上) と縦書き内の `direction:rtl` (65): 行を下端から詰める反転が必要。現状は上→下で描画
-- `hiragana-iroha` / `katakana-iroha` のマーカー未対応 (cjk-ideographic / hiragana / katakana は対応済み)
+- ルビ: 1 つの `<ruby>` に複数の `<rt>` を持つ複合ルビ、`rtc`、ルビの均等割付は未対応。縦書きで折り返し位置にルビが来る場合の 2 列分割は修正済み (44)
+- 縦書き内の `direction:rtl` (65): Chromium は LTR ラン (CJK・ラテン) の字順を反転せず、行をインライン終端 (=下端) へ寄せる。字順反転の誤発火は修正済みだが、行を下端へ寄せる配置は未対応 (残留 2.1%)。Chromium 実測: `vertical-rl/lr` + `direction:rtl` では各字は上→下のままで、短い行だけ下端に寄る (字順は不変)。
 
 ## 不具合 (縦書き以外でも起きるもの / 参考)
 

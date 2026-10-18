@@ -34,6 +34,9 @@ namespace litehtml
     direction m_direction;
     writing_mode m_writing_mode;
     text_orientation m_text_orientation;
+    // Inline axis is mirrored (sideways-lr reads bottom-to-top). Computed from the original
+    // writing mode before sideways-* is folded into vertical-*.
+    bool m_inline_reverse;
     text_combine_upright m_text_combine_upright;
     text_align m_text_align;
     overflow m_overflow;
@@ -173,6 +176,7 @@ namespace litehtml
                        m_direction(direction_ltr),
                        m_writing_mode(writing_mode_horizontal_tb),
                        m_text_orientation(text_orientation_mixed),
+                       m_inline_reverse(false),
                        m_text_combine_upright(text_combine_upright_none),
                        m_text_align(text_align_start),
                        m_overflow(overflow_visible),
@@ -263,6 +267,8 @@ namespace litehtml
 
     writing_mode get_writing_mode() const;
     void set_writing_mode(writing_mode mWritingMode);
+
+    bool get_inline_reverse() const;
 
     text_orientation get_text_orientation() const;
     void set_text_orientation(text_orientation mTextOrientation);
@@ -543,6 +549,11 @@ namespace litehtml
   inline writing_mode css_properties::get_writing_mode() const
   {
     return m_writing_mode;
+  }
+
+  inline bool css_properties::get_inline_reverse() const
+  {
+    return m_inline_reverse;
   }
 
   inline void css_properties::set_writing_mode(writing_mode mWritingMode)

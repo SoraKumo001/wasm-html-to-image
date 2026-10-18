@@ -1621,8 +1621,12 @@ litehtml::string litehtml::html_tag::get_list_marker_text(int index)
                 return cjk_ideographic_number(index);
         case litehtml::list_style_type_hiragana:
                 return kana_number("あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわゐゑをん", index);
+        case litehtml::list_style_type_hiragana_iroha:
+                return kana_number("いろはにほへとちりぬるをわかよたれそつねならむうゐのおくやまけふこえてあさきゆめみしゑひもせす", index);
         case litehtml::list_style_type_katakana:
                 return kana_number("アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヰヱヲン", index);
+        case litehtml::list_style_type_katakana_iroha:
+                return kana_number("イロハニホヘトチリヌルヲワカヨタレソツネナラムウヰノオクヤマケフコエテアサキユメミシヱヒモセス", index);
         default:
                 return "";
 //      case litehtml::list_style_type_armenian:

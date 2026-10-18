@@ -5,7 +5,33 @@
 #include "iterators.h"
 #include "types.h"
 
-#include <cstdio>
+#include <algorithm>
+#include <cstring>
+
+namespace
+{
+// Ruby annotations (<ruby> with its <rt>) are laid out as an atomic inline-flex box.
+// In vertical writing the engine otherwise re-measures such an inline-level flex box at
+// its min-content inline size, which lets the annotation wrap its base text into a second
+// column. Detecting the box here lets place_inline keep it atomic (content-sized inline
+// extent, no fragmenting re-measure) and send it whole to the next column when it does not
+// fit, matching Chromium. Only affects <ruby>-like inline-flex boxes in vertical writing.
+bool satoru_is_ruby_box(const std::shared_ptr<litehtml::render_item>& el)
+{
+	if(!el || !el->src_el()) return false;
+	const char* tag = el->src_el()->get_tagName();
+	if(tag && strcmp(tag, "ruby") == 0) return true;
+	if(el->src_el()->css().get_display() == litehtml::display_inline_flex)
+	{
+		for(const auto& child : el->src_el()->children())
+		{
+			const char* ct = child ? child->get_tagName() : nullptr;
+			if(ct && strcmp(ct, "rt") == 0) return true;
+		}
+	}
+	return false;
+}
+}
 
 litehtml::pixel_t litehtml::render_item_inline_context::_render_content(pixel_t /*x*/, pixel_t /*y*/, bool /*second_pass*/, const containing_block_context &self_size, formatting_context* fmt_ctx)
 {
@@ -336,7 +362,7 @@ litehtml::pixel_t litehtml::render_item_inline_context::new_box(const std::uniqu
 			css().get_text_align(),
 			css().get_direction(),
 			css().get_text_overflow(),
-			css().get_overflow(), css().get_writing_mode()));
+			css().get_overflow(), css().get_writing_mode(), css().get_inline_reverse()));
 
 	// Add items returned by finish_last_box function into the new line
 	for(auto& it : items)
@@ -389,14 +415,30 @@ void litehtml::render_item_inline_context::place_inline(std::unique_ptr<line_box
     {
     if (item->get_el()->src_el()->is_inline_box())
     {
-    auto cb = self_size.new_inline_size(line_ctx.right, self_size.size_mode & containing_block_context::size_mode_content);
+    // A ruby box is atomic: measure it at its content inline size so its base text and
+    // annotation are never split, and never re-measure it at the min-content size.
+    bool ruby_atomic = self_size.mode != writing_mode_horizontal_tb &&
+                       satoru_is_ruby_box(item->get_el());
+    uint32_t cb_size_mode = self_size.size_mode & containing_block_context::size_mode_content;
+    if (ruby_atomic)
+    {
+        cb_size_mode |= containing_block_context::size_mode_content;
+    }
+    auto cb = self_size.new_inline_size(line_ctx.right, cb_size_mode);
     pixel_t min_rendered_width = item->get_el()->measure(cb, fmt_ctx);
     if (!(self_size.size_mode & containing_block_context::size_mode_measure))
             {
-    item->get_el()->place(line_ctx.left, line_ctx.top, cb, fmt_ctx);
+    // Lay the ruby out in a content-sized inline extent. A small slack keeps text that exactly
+    // fills the extent from wrapping because of floating point rounding of glyph advances.
+    // The whole ruby stays atomic and can_hold can move it to the next column intact.
+    auto place_cb = ruby_atomic
+        ? self_size.new_inline_size(min_rendered_width + 0.5f, cb_size_mode)
+        : cb;
+    item->get_el()->place(line_ctx.left, line_ctx.top, place_cb, fmt_ctx);
     }
 
-    if (min_rendered_width < item->get_el()->inline_size() &&
+    if (!ruby_atomic &&
+    min_rendered_width < item->get_el()->inline_size() &&
     item->get_el()->src_el()->css().get_width().is_predefined())
     {
     // Re-measure at the content's own size. A hair of slack keeps content that exactly fits

@@ -15,6 +15,26 @@
 
 // No external depth tracking needed now
 
+namespace litehtml
+{
+namespace
+{
+// True when the inline (text flow) axis runs backwards and the line's items must be mirrored
+// along it. Only sideways-lr does so: it reads bottom-to-top, while sideways-rl and the
+// vertical-* modes read top-to-bottom. A vertical writing mode with direction:rtl only aligns
+// the line to the inline end for the LTR runs (CJK/Latin) this engine lays out; it does NOT
+// reverse the character order, so it is deliberately not mirrored (see Chromium, case 65).
+// Kept here so the layout code consumes a plain flag and `direction` never leaks into
+// logical_geometry.h. Takes the *original* writing mode, before sideways-rl/lr are folded into
+// vertical-rl/lr below. `direction` is part of the predicate's shape for that reason.
+bool is_inline_reverse(writing_mode mode, direction direction_unused)
+{
+    (void) direction_unused;
+    return mode == writing_mode_sideways_lr;
+}
+}  // namespace
+}  // namespace litehtml
+
 void litehtml::css_properties::compute(const element* el, const document::ptr& doc) {
     m_color = el->get_property<web_color>(_color_, true, web_color::black, offset(m_color));
     m_text_fill_color = el->get_property<web_color>(
@@ -38,6 +58,8 @@ void litehtml::css_properties::compute(const element* el, const document::ptr& d
         _writing_mode_, true, writing_mode_horizontal_tb, offset(m_writing_mode));
     m_text_orientation = (text_orientation)el->get_property<int>(
         _text_orientation_, true, text_orientation_mixed, offset(m_text_orientation));
+    // Retain whether the inline axis is mirrored before sideways-* is folded away.
+    m_inline_reverse = is_inline_reverse(m_writing_mode, m_direction);
     // sideways-rl/lr are vertical flows whose glyphs are all rotated sideways. Fold them into the
     // vertical modes the layout code understands so the two cannot drift apart.
     if (m_writing_mode == writing_mode_sideways_rl || m_writing_mode == writing_mode_sideways_lr) {

@@ -158,9 +158,10 @@ namespace litehtml
         overflow				m_overflow;
 		pixel_t m_min_width;
 		writing_mode m_writing_mode;
+		bool m_inline_reverse;
 		std::list< std::unique_ptr<line_box_item> > m_items;
     public:
-        line_box(pixel_t block_pos, pixel_t inline_pos, pixel_t inline_end, const css_line_height_t& line_height, const font_metrics& fm, text_align align, direction dir, text_overflow text_overflow, overflow overflow, writing_mode mode) :
+        line_box(pixel_t block_pos, pixel_t inline_pos, pixel_t inline_end, const css_line_height_t& line_height, const font_metrics& fm, text_align align, direction dir, text_overflow text_overflow, overflow overflow, writing_mode mode, bool inline_reverse) :
 				m_block_pos(block_pos),
 				m_inline_pos(inline_pos),
 				m_inline_end(inline_end),
@@ -174,7 +175,8 @@ namespace litehtml
 				m_text_overflow(text_overflow),
 				m_overflow(overflow),
 				m_min_width(0),
-				m_writing_mode(mode)
+				m_writing_mode(mode),
+				m_inline_reverse(inline_reverse)
 		{
         }
 

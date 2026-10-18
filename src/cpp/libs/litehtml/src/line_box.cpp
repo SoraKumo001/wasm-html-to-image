@@ -457,7 +457,10 @@ std::list< std::unique_ptr<litehtml::line_box_item> > litehtml::line_box::finish
                 shift_x = 0;
         }
 
-        if (m_direction == direction_rtl)
+        // This reordering assigns coordinates along the physical X axis, so it only applies to
+        // horizontal writing. In vertical writing direction:rtl reverses the inline (Y) axis and
+        // is handled separately by the mirror just before the second pass.
+        if (m_direction == direction_rtl && m_writing_mode == writing_mode_horizontal_tb)
         {
             // Visual reordering for RTL:
             // 1. Initial reverse of all items (Level 1 reordering)
@@ -828,6 +831,22 @@ std::list< std::unique_ptr<litehtml::line_box_item> > litehtml::line_box::finish
 	current_context.fm = m_font_metrics;
 	current_context.start_lbi = nullptr;
 	//int va_top_bottom = 0;
+
+	// Mirror the inline (text-flow) axis for a reversed inline flow (sideways-lr reads
+	// bottom-to-top): pack the items from the inline end instead of the inline start.
+	// Only pos().y (the inline coordinate in vertical writing) is mirrored; the block
+	// coordinate pos().x and the item order stay untouched. In this codebase the inline-axis
+	// origin of a vertical line box is m_block_pos (m_inline_pos is the block edge of vertical-rl),
+	// so the mirror is about [m_block_pos, m_inline_end]. A vertical writing mode with
+	// direction:rtl is deliberately NOT mirrored here (see Chromium, case 65): it keeps the
+	// LTR-run glyph order and only aligns the line toward the inline end.
+	if (m_inline_reverse)
+	{
+		for (const auto& lbi : m_items)
+		{
+			lbi->pos().y = m_inline_end - (lbi->pos().y - m_block_pos) - lbi->height();
+		}
+	}
 
 	// Second pass:
 	// 1. Vertical align top/bottom
