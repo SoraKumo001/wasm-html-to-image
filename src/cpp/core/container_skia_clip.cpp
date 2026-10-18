@@ -1,4 +1,5 @@
 // P2a責務: clip + clip-path + mask (詳細は下記 責務 ブロック)。
+#include <algorithm>
 #include <cmath>
 
 #include "bridge/magic_tags.h"
@@ -370,6 +371,19 @@ void container_skia::push_mask(litehtml::uint_ptr hdc, const litehtml::css_token
     if (!m_canvas || mask.empty()) return;
     flush();
 
+    // mask url() images are not seen by litehtml's background loader: request them here.
+    if (m_resourceManager) {
+        for (const auto& layer_tokens : litehtml::parse_comma_separated_list(mask)) {
+            for (const auto& tok : layer_tokens) {
+                if (tok.type == litehtml::CV_FUNCTION && litehtml::lowcase(tok.name) == "url" &&
+                    !tok.value.empty() && !tok.value.front().str.empty()) {
+                    const std::string& url = tok.value.front().str;
+                    m_resourceManager->request(url, url, ResourceType::Image, false);
+                }
+            }
+        }
+    }
+
     if (m_tagging) {
         mask_info info;
         info.tokens = mask;
@@ -437,47 +451,177 @@ void container_skia::pop_mask(litehtml::uint_ptr hdc) {
         auto layers = litehtml::parse_comma_separated_list(mask_tokens);
 
         for (const auto& layer_tokens : layers) {
+            // Split a layer into <image> and the shorthand parts: <position> [/ <size>] <repeat>.
+            const litehtml::css_token* image_tok = nullptr;
+            std::vector<litehtml::css_length> pos_vals, size_vals;
+            std::vector<std::string> pos_keys;
+            bool size_contain = false, size_cover = false, after_slash = false;
+            bool rep_x = true, rep_y = true;
             for (const auto& tok : layer_tokens) {
                 if (tok.type == litehtml::CV_FUNCTION) {
                     std::string name = litehtml::lowcase(tok.name);
-                    if (name == "url") {
-                        if (!tok.value.empty()) {
-                            std::string url = tok.value.front().str;
-                            auto it = m_context.imageCache.find(url);
-                            if (it != m_context.imageCache.end() && it->second.skImage) {
-                                SkPaint p;
-                                p.setAntiAlias(true);
-                                m_canvas->drawImageRect(
-                                    it->second.skImage,
-                                    SkRect::MakeXYWH((float)pos.x, (float)pos.y, (float)pos.width,
-                                                     (float)pos.height),
-                                    SkSamplingOptions(SkFilterMode::kLinear), &p);
-                            }
-                        }
-                    } else if (name == "linear-gradient" || name == "repeating-linear-gradient" ||
-                               name == "radial-gradient" || name == "repeating-radial-gradient" ||
-                               name == "conic-gradient" || name == "repeating-conic-gradient") {
-                        litehtml::gradient g;
-                        if (litehtml::parse_gradient(tok, g, nullptr)) {
-                            litehtml::background_layer layer;
-                            layer.origin_box = pos;
-                            layer.border_box = pos;
-                            layer.clip_box = pos;
-
-                            if (name.find("linear") != std::string::npos) {
-                                auto grad = litehtml::background::get_linear_gradient(g, pos);
-                                if (grad) draw_linear_gradient(0, layer, *grad);
-                            } else if (name.find("radial") != std::string::npos) {
-                                auto grad = litehtml::background::get_radial_gradient(g, pos);
-                                if (grad) draw_radial_gradient(0, layer, *grad);
-                            } else {
-                                auto grad = litehtml::background::get_conic_gradient(g, pos);
-                                if (grad) draw_conic_gradient(0, layer, *grad);
-                            }
-                        }
+                    if (!image_tok && (name == "url" || name.find("gradient") != std::string::npos))
+                        image_tok = &tok;
+                } else if (tok.type == '/') {
+                    after_slash = true;
+                } else if (tok.type == litehtml::IDENT) {
+                    std::string id = litehtml::lowcase(tok.ident());
+                    if (id == "no-repeat") {
+                        rep_x = rep_y = false;
+                    } else if (id == "repeat-x") {
+                        rep_x = true;
+                        rep_y = false;
+                    } else if (id == "repeat-y") {
+                        rep_x = false;
+                        rep_y = true;
+                    } else if (id == "repeat" || id == "space" || id == "round") {
+                        rep_x = rep_y = true;
+                    } else if (id == "contain") {
+                        size_contain = true;
+                    } else if (id == "cover") {
+                        size_cover = true;
+                    } else if (id == "auto") {
+                        if (after_slash) size_vals.push_back(litehtml::css_length());
+                    } else if (!after_slash && (id == "left" || id == "right" || id == "top" ||
+                                                id == "bottom" || id == "center")) {
+                        pos_keys.push_back(id);
+                    }
+                } else if (tok.type == litehtml::DIMENSION || tok.type == litehtml::PERCENTAGE ||
+                           tok.type == litehtml::NUMBER) {
+                    litehtml::css_length len;
+                    if (len.from_token(tok, litehtml::f_length_percentage | litehtml::f_positive)) {
+                        (after_slash ? size_vals : pos_vals).push_back(len);
                     }
                 }
             }
+            if (!image_tok) continue;
+            // A default-constructed (predefined) length means "auto".
+            auto is_auto = [](const litehtml::css_length& l) { return l.is_predefined(); };
+
+            const float bw = (float)pos.width, bh = (float)pos.height;
+            const std::string iname = litehtml::lowcase(image_tok->name);
+            sk_sp<SkImage> img;
+            float iw = bw, ih = bh;
+            if (iname == "url") {
+                if (image_tok->value.empty()) continue;
+                auto it = m_context.imageCache.find(image_tok->value.front().str);
+                if (it == m_context.imageCache.end() || !it->second.skImage) continue;
+                img = it->second.skImage;
+                iw = (float)img->width();
+                ih = (float)img->height();
+            }
+            // Tile size (background-size semantics).
+            float tw = iw, th = ih;
+            if (size_contain || size_cover) {
+                float k = size_contain ? std::min(bw / iw, bh / ih) : std::max(bw / iw, bh / ih);
+                tw = iw * k;
+                th = ih * k;
+            } else if (!size_vals.empty()) {
+                bool aw = is_auto(size_vals[0]);
+                bool ah = size_vals.size() < 2 || is_auto(size_vals[1]);
+                float w = aw ? 0.f : (float)size_vals[0].calc_percent(bw);
+                float h = ah ? 0.f : (float)size_vals[1].calc_percent(bh);
+                if (aw && ah) {
+                    w = iw;
+                    h = ih;
+                } else if (aw) {
+                    w = ih > 0 ? h * iw / ih : h;
+                } else if (ah) {
+                    h = iw > 0 ? w * ih / iw : w;
+                }
+                tw = w;
+                th = h;
+            }
+            if (tw <= 0 || th <= 0) continue;
+            // Tile origin from <position> (default 0% 0%).
+            auto axis = [&](bool horizontal) {
+                float room = horizontal ? bw - tw : bh - th;
+                const std::string lo = horizontal ? "left" : "top";
+                const std::string hi = horizontal ? "right" : "bottom";
+                const std::string other_lo = horizontal ? "top" : "left";
+                const std::string other_hi = horizontal ? "bottom" : "right";
+                bool named_this = false, named_other = false;
+                float frac = 0.f;
+                for (const auto& k : pos_keys) {
+                    if (k == lo) {
+                        frac = 0.f;
+                        named_this = true;
+                    } else if (k == hi) {
+                        frac = 1.f;
+                        named_this = true;
+                    } else if (k == other_lo || k == other_hi) {
+                        named_other = true;
+                    }
+                }
+                if (named_this) return room * frac;
+                size_t centers = (size_t)std::count(pos_keys.begin(), pos_keys.end(), "center");
+                if (centers > 0 && (centers >= 2 || named_other || pos_keys.size() == 1)) {
+                    return room * 0.5f;
+                }
+                if (!pos_vals.empty()) {
+                    // First numeric value is x, the second is y (a single value centers y).
+                    size_t idx = horizontal ? 0 : 1;
+                    if (idx < pos_vals.size()) return (float)pos_vals[idx].calc_percent(room);
+                    return room * 0.5f;
+                }
+                return 0.f;
+            };
+            float ox = (float)pos.x + axis(true);
+            float oy = (float)pos.y + axis(false);
+
+            SkRect box = SkRect::MakeXYWH((float)pos.x, (float)pos.y, bw, bh);
+            m_canvas->save();
+            m_canvas->clipRect(box);
+            // Tile index range covering the box when repeating.
+            int kx0 = 0, kx1 = 0, ky0 = 0, ky1 = 0;
+            if (rep_x) {
+                kx0 = (int)std::floor(((float)pos.x - ox) / tw);
+                kx1 = (int)std::ceil(((float)pos.x + bw - ox) / tw) - 1;
+            }
+            if (rep_y) {
+                ky0 = (int)std::floor(((float)pos.y - oy) / th);
+                ky1 = (int)std::ceil(((float)pos.y + bh - oy) / th) - 1;
+            }
+            if ((kx1 - kx0 + 1) * (ky1 - ky0 + 1) > 4096) {  // tiny tiles: avoid a runaway loop
+                kx1 = kx0;
+                ky1 = ky0;
+            }
+            for (int ky = ky0; ky <= ky1; ky++) {
+                for (int kx = kx0; kx <= kx1; kx++) {
+                    SkRect tile = SkRect::MakeXYWH(ox + kx * tw, oy + ky * th, tw, th);
+                    if (img) {
+                        SkPaint p;
+                        p.setAntiAlias(true);
+                        m_canvas->drawImageRect(img, tile, SkSamplingOptions(SkFilterMode::kLinear),
+                                                &p);
+                    } else {
+                        litehtml::gradient g;
+                        if (!litehtml::parse_gradient(*image_tok, g, nullptr)) continue;
+                        litehtml::position tpos((litehtml::pixel_t)tile.x(),
+                                                (litehtml::pixel_t)tile.y(),
+                                                (litehtml::pixel_t)tile.width(),
+                                                (litehtml::pixel_t)tile.height());
+                        litehtml::background_layer layer;
+                        layer.origin_box = tpos;
+                        layer.border_box = tpos;
+                        layer.clip_box = tpos;
+                        m_canvas->save();
+                        m_canvas->clipRect(tile);
+                        if (iname.find("linear") != std::string::npos) {
+                            auto grad = litehtml::background::get_linear_gradient(g, tpos);
+                            if (grad) draw_linear_gradient(0, layer, *grad);
+                        } else if (iname.find("radial") != std::string::npos) {
+                            auto grad = litehtml::background::get_radial_gradient(g, tpos);
+                            if (grad) draw_radial_gradient(0, layer, *grad);
+                        } else {
+                            auto grad = litehtml::background::get_conic_gradient(g, tpos);
+                            if (grad) draw_conic_gradient(0, layer, *grad);
+                        }
+                        m_canvas->restore();
+                    }
+                }
+            }
+            m_canvas->restore();
         }
 
         m_canvas->restore();  // composite mask into content

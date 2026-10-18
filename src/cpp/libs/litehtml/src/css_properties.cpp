@@ -1,4 +1,5 @@
 #include "css_properties.h"
+#include "css_parser.h"
 
 #include <algorithm>
 #include <cmath>
@@ -157,6 +158,7 @@ void litehtml::css_properties::compute(const element* el, const document::ptr& d
         m_mask = el->get_property<css_token_vector>(__webkit_mask_, false, css_token_vector(),
                                                     offset(m_mask));
     }
+    const bool mask_from_shorthand = !m_mask.empty();
     // mask-image longhand (same image-layer tokens as the shorthand)
     if (m_mask.empty()) {
         m_mask = el->get_property<css_token_vector>(_mask_image_, false, css_token_vector(),
@@ -165,6 +167,38 @@ void litehtml::css_properties::compute(const element* el, const document::ptr& d
     if (m_mask.empty()) {
         m_mask = el->get_property<css_token_vector>(__webkit_mask_image_, false,
                                                     css_token_vector(), offset(m_mask));
+    }
+    if (!m_mask.empty() && !mask_from_shorthand) {
+        // Fold mask-size / mask-repeat / mask-position into shorthand-equivalent layer tokens:
+        // <image> <position> [/ <size>] <repeat>  (list entries cycle across layers).
+        auto get_list = [&](string_id id, string_id webkit_id) {
+            css_token_vector v = el->get_property<css_token_vector>(id, false, css_token_vector(), offset(m_mask));
+            if (v.empty()) v = el->get_property<css_token_vector>(webkit_id, false, css_token_vector(), offset(m_mask));
+            return parse_comma_separated_list(v);
+        };
+        auto images = parse_comma_separated_list(m_mask);
+        auto sizes = get_list(_mask_size_, __webkit_mask_size_);
+        auto repeats = get_list(_mask_repeat_, __webkit_mask_repeat_);
+        auto positions = get_list(_mask_position_, __webkit_mask_position_);
+        if (!sizes.empty() || !repeats.empty() || !positions.empty()) {
+            css_token_vector merged;
+            for (size_t i = 0; i < images.size(); i++) {
+                if (i > 0) merged.push_back(css_token(css_token_type(',')));
+                merged.insert(merged.end(), images[i].begin(), images[i].end());
+                const css_token_vector* pos = positions.empty() ? nullptr : &positions[i % positions.size()];
+                const css_token_vector* size = sizes.empty() ? nullptr : &sizes[i % sizes.size()];
+                if (pos) merged.insert(merged.end(), pos->begin(), pos->end());
+                if (size) {
+                    merged.push_back(css_token(css_token_type('/')));
+                    merged.insert(merged.end(), size->begin(), size->end());
+                }
+                if (!repeats.empty()) {
+                    const auto& rep = repeats[i % repeats.size()];
+                    merged.insert(merged.end(), rep.begin(), rep.end());
+                }
+            }
+            m_mask = merged;
+        }
     }
     m_clip = el->get_property<css_token_vector>(_clip_, false, css_token_vector(), offset(m_clip));
 
