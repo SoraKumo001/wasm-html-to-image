@@ -56,6 +56,10 @@ namespace litehtml
 
 		css_attribute_selector(attr_select_type type = select_class, string name = "")
 			: type(type), prefix(empty_id), name(_id(name)), matcher(), caseless_match(0), a(0), b(0) {}
+		// string_id overload: avoids re-interning internal ids (e.g. __litehtml_anchor_)
+		// whose raw spelling differs from the registered string ("-litehtml-anchor").
+		css_attribute_selector(attr_select_type type, string_id id)
+			: type(type), prefix(empty_id), name(id), matcher(), caseless_match(0), a(0), b(0) {}
 
 		operator bool() const { return name != empty_id; }
 	};

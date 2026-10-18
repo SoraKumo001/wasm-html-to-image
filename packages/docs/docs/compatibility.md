@@ -49,7 +49,8 @@ title: 互換性と仕様
 | **クリッピング & マスク** | `clip-path: circle(), ellipse(), polygon(), path(), inset()`, `mask` | Skia ネイティブパスによる自由形状クリッピングとアルファマスク |
 | **インライン SVG**   | `<svg>`, `<path>`, `<circle>`, `<rect>`, `<g>`, `<linearGradient>` 等 | SkSVGDOM によるベクターグラフィックスの直接埋め込み描画 |
 | **モダン CSS 機能**  | `calc()`, `light-dark()`, CSS 変数 (`var(--...)`), `@layer`             | 数値計算やデザイントークンの活用                       |
-| **セレクタ**         | クラス, ID, 属性セレクタ, `:nth-child()`, `:not()`, `:is()`, `:where()`, `:has()`, `::before`, `::after` | 擬似クラス・擬似要素 (`content`) による高度なスタイリング |
+| **セレクタ**         | クラス, ID, 属性セレクタ, `:nth-child()`, `:not()`, `:is()`, `:where()`, `:has()`, `::before`, `::after` | 擬似クラス・擬似要素 (`content`) による高度なスタイリング。`:has()` は子 (`>`)・子孫・隣接 (`+`)・一般 (`~`) コンビネータの動作を Chromium 対照で確認済み |
+| **スクロール・表示最適化** | `scroll-snap-*`, `scroll-snap-align`, `content-visibility` は no-op (無視) | 静止画レンダラーではスクロール位置や遅延描画の概念がないため、指定があっても通常描画される |
 | **レスポンシブ**     | `@container` (コンテナクエリ), `@media print`, `@media screen`          | コンポーネント単位のサイズ適応                         |
 
 ---

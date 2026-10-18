@@ -627,7 +627,7 @@ css_selector::ptr parse_complex_selector(const css_token_vector& tokens, documen
     if (relative) {
         auto anchor = make_shared<css_selector>();
         anchor->m_right.m_tag = star_id;
-        anchor->m_right.m_attrs.emplace_back(select_pseudo_class, "__litehtml_anchor_");
+        anchor->m_right.m_attrs.emplace_back(select_pseudo_class, __litehtml_anchor_);
 
         auto new_selector = make_shared<css_selector>();
         new_selector->m_left = anchor;
