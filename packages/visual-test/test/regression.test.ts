@@ -110,4 +110,14 @@ describe("regression: layout and paint probes", () => {
     expect(near(at(3, 36), BLUE)).toBe(true); // padding area is the cell background
     expect(near(at(11, 41), [0, 255, 0])).toBe(true); // child sits inside the padding
   });
+
+  it("calc() in a media query neither crashes nor mismatches", async () => {
+    const css = `<style>.a{width:50px;height:50px}
+      @media (max-width:calc(500px - 1px)){.a{background:#00f}}
+      @media (min-width:calc(500px + 1px)){.a{background:#f00}}</style><div class="a"></div>`;
+    const narrow = await renderPng(css, 400, 80);
+    expect(near(narrow.at(10, 10), BLUE)).toBe(true);
+    const wide = await renderPng(css, 700, 80);
+    expect(near(wide.at(10, 10), [255, 0, 0])).toBe(true);
+  });
 });

@@ -431,6 +431,13 @@ bool convert_units(mf_info mfi, css_token val[2], document::ptr doc)
 		if (val[1].type != 0) return false;
 		css_length length;
 		if (!length.from_token(val[0], f_length)) return false;
+		if (length.is_calc())
+		{
+			// calc()/min()/max()/clamp() cannot go through cvt_units (they hold no plain value);
+			// evaluate them against a zero percentage basis and replace the function token.
+			val[0] = css_token(DIMENSION, (float) length.calc_percent(0), css_number_number, "px");
+			return true;
+		}
 		font_metrics fm;
 		fm.x_height = fm.font_size = doc->container()->get_default_font_size();
 		doc->cvt_units(length, fm, 0);
