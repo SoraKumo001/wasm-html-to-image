@@ -366,9 +366,26 @@ void SatoruInstance::collect_resources(const std::string& html, int width, int h
         if (!missing.empty()) {
             auto& unicode = context.getUnicodeService();
             std::set<char32_t> extMissing;
+            bool emojiMissing = false;
             for (char32_t cp : missing) {
                 // 絵文字は別経路 (Noto Color Emoji)。HanaMin 取得対象から外す。
-                if (!unicode.isEmoji(cp)) extMissing.insert(cp);
+                if (unicode.isEmoji(cp)) {
+                    emojiMissing = true;
+                } else {
+                    extMissing.insert(cp);
+                }
+            }
+            // font-family に絵文字フォントが無くても、どの書体にも無い絵文字があれば
+            // fontMap の Noto Color Emoji を自動取得する (未取得だと字が消える)。
+            if (emojiMissing) {
+                static const std::string kEmojiFamily = "Noto Color Emoji";
+                const auto& fontMap = context.getFontMap();
+                auto it = fontMap.find(kEmojiFamily);
+                if (it != fontMap.end() &&
+                    context.fontManager.matchFonts(kEmojiFamily, 400, SkFontStyle::kUpright_Slant)
+                        .empty()) {
+                    resourceManager.request(it->second, kEmojiFamily, ResourceType::Font, false);
+                }
             }
             if (!extMissing.empty()) {
                 std::vector<std::string> hanaUrls = context.fontManager.getFontUrls(

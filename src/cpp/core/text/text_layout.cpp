@@ -15,6 +15,8 @@
 #include "core/text/text_types.h"
 #include "core/text/unicode_service.h"
 #include "include/core/SkFont.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTypeface.h"
 #include "include/core/SkTextBlob.h"
 #include "modules/skshaper/include/SkShaper.h"
 #include "utils/logging.h"
@@ -22,6 +24,17 @@
 namespace satoru {
 
 namespace {
+
+// 選択された書体がカラー絵文字フォントか (書体名に emoji/color を含む)。
+bool is_color_emoji_font(const SkFont& font) {
+    SkTypeface* tf = font.getTypeface();
+    if (!tf) return false;
+    SkString name;
+    tf->getFamilyName(&name);
+    std::string lower = name.c_str();
+    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+    return lower.find("emoji") != std::string::npos || lower.find("color") != std::string::npos;
+}
 void replayUsedCodepoints(const MeasureResult& result, std::set<char32_t>* usedCodepoints) {
     if (!usedCodepoints) return;
     for (char32_t codepoint : result.usedCodepoints) {
@@ -549,6 +562,8 @@ TextAnalysis TextLayout::analyzeText(SatoruContext* ctx, const char* text, size_
         ca.font =
             ctx->fontManager.selectFont(ca.codepoint, fi, has_last_font ? &last_font : nullptr,
                                         unicode, ca.is_emoji, ca.is_mark);
+        // ★☆ 等は絵文字レンジだが通常書体で描かれる。カラー書体が選ばれた場合のみ絵文字扱い。
+        if (ca.is_emoji && !is_color_emoji_font(ca.font)) ca.is_emoji = false;
 
         ca.is_substitution_failed = false;
         if (mode != litehtml::writing_mode_horizontal_tb) {
@@ -562,7 +577,7 @@ TextAnalysis TextLayout::analyzeText(SatoruContext* ctx, const char* text, size_
                 if (substituted_font.getTypeface()->unicharToGlyph(substituted) != 0) {
                     ca.font = substituted_font;
                     ca.codepoint = substituted;
-                    ca.is_emoji = substituted_is_emoji;
+                    ca.is_emoji = substituted_is_emoji && is_color_emoji_font(ca.font);
                     ca.is_mark = substituted_is_mark;
                 } else {
                     ca.is_substitution_failed = true;
