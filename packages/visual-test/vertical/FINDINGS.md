@@ -48,6 +48,7 @@ SVG 出力は PNG と一致 (差分 < 1%)、PDF 出力も縦書きのまま 1 �
 | - | `writing-mode: sideways-lr` のインライン軸反転 (`sideways-lr` は下→上に読む。折り畳み前に `is_inline_reverse` を `css_properties` に保持し、`line_box` の第2パス直前で縦書きのインライン座標 y のみミラー。述語は `sideways-lr` のみ) | 66: outline 1.7%→1.4% (sideways-lr が Chromium と同順) |
 | - | 縦書き `direction:rtl` で RTL の視覚順序反転 (物理X軸) が誤発火していたのを横書きに限定 | 65: outline 2.5%→2.1% |
 | - | 縦書き `direction:rtl` の短行をインライン終端 (=下端) へ寄せる (`line_box::finish` のミラー直後・第2パス前に vertical + rtl + 非 reverse + 短行のとき全 lbi の y に空きを加算。現在位置基準の再計算で再 finish は no-op。第一パス・start/end マップ・論理ジオメトリ・can_hold/add_item/new_inline_size 不変、sideways-lr 除外、center/justify 対象外) | 65: outline 2.1%→1.7%、高さ一致 (800x266)。66 不変 |
+| - | 縦書きの text-align 空き計算を横書きと分離 (`line_box::finish` 第一パス: 局所 `avail` を導入。横書き= `m_inline_end - m_inline_pos`、縦書き= `m_inline_end - m_block_pos`。`right`/`center`/`justify` の空き計算3箇所のみ置換。`m_inline_pos` 改名・ctor・適用側 (旧604-626)・RTL 横ガード・ellipsis の `container_width` (旧276) は不変) | 12: outline 4.5%→2.6% / fill 4.3%→3.4%、80: outline 2.7%→1.6% / fill 2.6%→2.1% で Chromium と一致。65 は不変 (outline 1.7%・高さ 800x266 で冪等)、66 も不変 (sideways は text-align 無しで対象外) |
 | 5 | リストマーカー `cjk-ideographic` / `hiragana` / `hiragana-iroha` / `katakana` / `katakana-iroha` (末尾は 、)。マーカー文字をレイアウト時に計測してグリフ収集へ登録 | 20/64a |
 | 1 | 縦書き table の caption (`caption-side: top` はブロック開始側、`bottom` は終端側) | 74a/74b |
 | 13 | `html` 直接指定の縦書き: 縦書きで高さが確定した要素の子に shrink-to-fit を引き継がない | 61: outline 4.0%→1.1%、61i: 72.8%→0.2% |

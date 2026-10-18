@@ -458,26 +458,34 @@ std::list< std::unique_ptr<litehtml::line_box_item> > litehtml::line_box::finish
             align = text_align_right;
         }
 
+        // Free space along the inline axis. In horizontal writing the inline axis runs
+        // along X from m_inline_pos, but in vertical writing it runs along Y from
+        // m_block_pos (m_inline_pos is the block edge there). Using m_inline_pos
+        // unconditionally mis-measured the available space for vertical text.
+        pixel_t avail = (m_writing_mode == writing_mode_horizontal_tb)
+            ? (m_inline_end - m_inline_pos)
+            : (m_inline_end - m_block_pos);
+
         switch (align)
         {
             case text_align_right:
-                if (m_inline_size < (m_inline_end - m_inline_pos))
+                if (m_inline_size < avail)
                 {
-                    shift_x = (m_inline_end - m_inline_pos) - m_inline_size;
+                    shift_x = avail - m_inline_size;
                 }
                 break;
             case text_align_center:
-                if (m_inline_size < (m_inline_end - m_inline_pos))
+                if (m_inline_size < avail)
                 {
-                    shift_x = ((m_inline_end - m_inline_pos) - m_inline_size) / 2;
+                    shift_x = (avail - m_inline_size) / 2;
                 }
                 break;
             case text_align_justify:
                 // the last line of a block is not justified
-                if (!last_box && m_inline_size < (m_inline_end - m_inline_pos))
+                if (!last_box && m_inline_size < avail)
                 {
                     shift_x = 0;
-                    spacing_x = (m_inline_end - m_inline_pos) - m_inline_size;
+                    spacing_x = avail - m_inline_size;
                     // don't justify for small lines
                     if (spacing_x > m_inline_size / 4)
                         spacing_x = 0;
