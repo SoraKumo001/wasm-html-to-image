@@ -98,9 +98,28 @@ std::shared_ptr<litehtml::render_item> litehtml::render_item_block::init()
     {
         if (auto p = src_el()->parent())
         {
-            int val = atoi(p->get_attr("start", "1"));
-			for(const auto &child : p->children())
+            // <ol reversed> counts down (default start = number of items); li@value resets the counter.
+            const bool reversed = p->get_attr("reversed") != nullptr;
+            const int step = reversed ? -1 : 1;
+            int val = 1;
+            if(const char* start_attr = p->get_attr("start"))
             {
+                val = atoi(start_attr);
+            } else if(reversed)
+            {
+                val = 0;
+                for(const auto &child : p->children())
+                {
+                    if(child->css().get_display() == display_list_item) val++;
+                }
+            }
+            for(const auto &child : p->children())
+            {
+                if(child->css().get_display() != display_list_item && child != src_el()) continue;
+                if(const char* value_attr = child->get_attr("value"))
+                {
+                    val = atoi(value_attr);
+                }
                 if (child == src_el())
                 {
                     src_el()->set_attr("list_index", std::to_string(val).c_str());
@@ -110,8 +129,7 @@ std::shared_ptr<litehtml::render_item> litehtml::render_item_block::init()
                     }
                     break;
                 }
-                else if (child->css().get_display() == display_list_item)
-                    val++;
+                val += step;
             }
         }
     }
