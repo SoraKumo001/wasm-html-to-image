@@ -41,7 +41,8 @@ namespace litehtml
 			op_clamp,
 			op_minmax,
 			op_repeat_auto_fit,
-			op_repeat_auto_fill
+			op_repeat_auto_fill,
+			op_fit_content
 		};
 	private:
 		math_op m_op = op_none;

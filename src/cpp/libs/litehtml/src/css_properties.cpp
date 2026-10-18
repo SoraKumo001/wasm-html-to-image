@@ -1177,6 +1177,19 @@ void litehtml::css_properties::compute_flex(const element* el, const document::p
             m_display = display_flex;
         }
     }
+    // Grid items are blockified too (CSS Display 3 "blockification").
+    if (parent && (parent->css().m_display == display_grid ||
+                   parent->css().m_display == display_inline_grid)) {
+        if (m_display == display_inline || m_display == display_inline_block) {
+            m_display = display_block;
+        } else if (m_display == display_inline_table) {
+            m_display = display_table;
+        } else if (m_display == display_inline_flex) {
+            m_display = display_flex;
+        } else if (m_display == display_inline_grid) {
+            m_display = display_grid;
+        }
+    }
 }
 
 void litehtml::css_properties::compute_grid(const element* el, const document::ptr& doc) {

@@ -180,4 +180,33 @@ describe("regression: layout and paint probes", () => {
     const i = (50 * tImg.width + 50) * 4;
     expect([tImg.data[i], tImg.data[i + 1]]).toEqual([255, 0]);
   });
+
+  it("grid content-sized tracks (auto, max-content, fit-content, minmax) and blockified inline items", async () => {
+    const cell = (c: string) => `<span style="background:${c};display:inline-block;width:60px;height:10px"></span>`;
+    const widths = async (tpl: string) => {
+      const { at } = await renderPng(
+        `<div style="display:grid;grid-template-columns:${tpl};width:300px">${cell("#f00")}${cell("#00f")}</div>`,
+        320,
+        20,
+      );
+      // first x where the pixel stops being red (width of column 1 as drawn by the red item)
+      let x = 0;
+      while (x < 300 && at(x, 5)[0] > 200 && at(x, 5)[2] < 60) x++;
+      return { redEnd: x, blueAtRedEnd: near(at(x + 1, 5), BLUE) };
+    };
+    for (const tpl of ["auto 1fr", "max-content 1fr", "fit-content(200px) 1fr", "minmax(0, 200px) 1fr"]) {
+      const r = await widths(tpl);
+      expect(r.redEnd, tpl).toBe(60);
+      expect(r.blueAtRedEnd, tpl).toBe(true);
+    }
+    // inline children of a grid container become grid items (one per cell, not overlapped)
+    const { at } = await renderPng(
+      `<div style="display:grid;grid-template-columns:fit-content(200px) 1fr;font-size:10px;line-height:10px">
+         <time style="background:#f00;color:#f00">AAAA</time><a style="background:#00f;color:#00f">BBBB</a></div>`,
+      200,
+      20,
+    );
+    expect(near(at(5, 5), [255, 0, 0])).toBe(true);
+    expect(near(at(30, 5), BLUE)).toBe(true);
+  });
 });

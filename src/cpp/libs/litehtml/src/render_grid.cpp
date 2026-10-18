@@ -559,6 +559,120 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         max_row = std::max(max_row, item.pos.row_end);
     }
 
+    // Content-sized columns (auto, min-content, max-content, fit-content()): size them from the
+    // items that sit in a single column, then re-distribute the space left over to fr columns.
+    if (!is_multicol)
+    {
+        std::vector<int> kinds(num_columns, 0);  // 0 fixed/fr, 1 auto, 2 min-content, 3 max-content, 4 fit-content
+        bool any_content = false;
+        for (int i = 0; i < num_columns && i < (int)columns_template.size(); i++)
+        {
+            const auto& l = columns_template[i];
+            if (l.is_calc())
+            {
+                if (l.get_op() == css_length::op_fit_content) kinds[i] = 4;
+                else if (l.get_op() == css_length::op_minmax && l.get_operands().size() == 2 &&
+                         l.get_operands()[1].units() != css_units_fr)
+                    kinds[i] = 5;  // minmax(min, <length|auto|max-content>): content clamped to [min, max]
+            }
+            else if (l.is_predefined())
+            {
+                kinds[i] = l.predef() == 1 ? 2 : (l.predef() == 2 ? 3 : 1);
+            }
+            if (kinds[i]) any_content = true;
+        }
+        if (any_content)
+        {
+            std::vector<pixel_t> contrib(num_columns, 0);
+            for (auto& item : m_grid_layout.items)
+            {
+                if (item.pos.col_end - item.pos.col_start != 1) continue;
+                int c = item.pos.col_start;
+                if (c >= num_columns || !kinds[c]) continue;
+                containing_block_context cb = self_size;
+                cb.size_mode |= containing_block_context::size_mode_content;
+                pixel_t measured = item.el->measure(cb, fmt_ctx);
+                pixel_t w = item.el->inline_size();
+                // Inline-level items (blockified grid items that still lay out as inline text)
+                // report no box size; fall back to the measured content width.
+                if (w <= 0) w = measured;
+                contrib[c] = std::max(contrib[c], w);
+            }
+            pixel_t content_total = 0;
+            pixel_t gaps = m_grid_layout.column_gap * (num_columns - 1);
+            for (int i = 0; i < num_columns; i++)
+            {
+                if (!kinds[i]) continue;
+                pixel_t w = contrib[i];
+                if (kinds[i] == 4) w = std::min(w, columns_template[i].get_operands()[0].calc_percent(render_inline));
+                if (kinds[i] == 5)
+                {
+                    const auto& mm = columns_template[i].get_operands();
+                    w = std::max(w, mm[0].calc_percent(render_inline));
+                    if (!mm[1].is_predefined()) w = std::min(w, mm[1].calc_percent(render_inline));
+                }
+                m_grid_layout.column_widths[i] = w;
+                content_total += w;
+            }
+
+            float fr_sum = 0;
+            for (int i = 0; i < num_columns; i++)
+            {
+                const auto& l = columns_template[i];
+                if (l.units() == css_units_fr)
+                {
+                    fr_sum += l.val();
+                }
+                else if (l.is_calc() && l.get_op() == css_length::op_minmax && l.get_operands()[1].units() == css_units_fr)
+                {
+                    fr_sum += l.get_operands()[1].val();
+                }
+            }
+
+            pixel_t fixed2 = gaps + content_total;
+            for (int i = 0; i < num_columns; i++)
+            {
+                if (kinds[i]) continue;
+                const auto& l = columns_template[i];
+                if (l.units() == css_units_fr) continue;
+                if (l.is_calc() && l.get_op() == css_length::op_minmax)
+                    fixed2 += l.get_operands()[0].calc_percent(render_inline);
+                else if (!l.is_predefined())
+                    fixed2 += l.calc_percent(render_inline);
+            }
+            pixel_t remaining = render_inline - fixed2;
+            if (remaining < 0) remaining = 0;
+            if (fr_sum > 0)
+            {
+                for (int i = 0; i < num_columns; i++)
+                {
+                    if (kinds[i]) continue;
+                    const auto& l = columns_template[i];
+                    if (l.units() == css_units_fr)
+                    {
+                        m_grid_layout.column_widths[i] = (pixel_t)(remaining * (l.val() / fr_sum));
+                    }
+                    else if (l.is_calc() && l.get_op() == css_length::op_minmax)
+                    {
+                        m_grid_layout.column_widths[i] = l.get_operands()[0].calc_percent(render_inline);
+                        if (l.get_operands()[1].units() == css_units_fr)
+                            m_grid_layout.column_widths[i] += (pixel_t)(remaining * (l.get_operands()[1].val() / fr_sum));
+                    }
+                }
+            }
+            else if (remaining > 0)
+            {
+                // No fr tracks: auto tracks stretch to fill the free space (justify-content: normal).
+                int autos = (int)std::count(kinds.begin(), kinds.end(), 1);
+                if (autos > 0)
+                {
+                    for (int i = 0; i < num_columns; i++)
+                        if (kinds[i] == 1) m_grid_layout.column_widths[i] += remaining / autos;
+                }
+            }
+        }
+    }
+
     if (columns_template.empty() && src_el()->css().get_display() == display_inline_grid)
     {
         // Inline grids shrink-to-fit: size the single implicit column to the

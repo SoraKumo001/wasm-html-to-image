@@ -2109,6 +2109,28 @@ namespace litehtml
         tracks.push_back(len);
         return true;
       }
+      else if (tok.type == IDENT && (lowcase(tok.ident()) == "min-content" || lowcase(tok.ident()) == "max-content"))
+      {
+        // content-sized tracks: predef 1 = min-content, 2 = max-content (0 = auto)
+        len.predef(lowcase(tok.ident()) == "min-content" ? 1 : 2);
+        tracks.push_back(len);
+        return true;
+      }
+      else if (tok.type == CV_FUNCTION && lowcase(tok.name) == "fit-content")
+      {
+        css_token_vector inner;
+        for (const auto& t : tok.value)
+          if (t.type != WHITESPACE) inner.push_back(t);
+        css_length limit;
+        if (inner.size() == 1 && limit.from_token(inner[0], f_length_percentage | f_positive))
+        {
+          std::vector<css_length> operands;
+          operands.push_back(limit);
+          len.set_math(css_length::op_fit_content, std::move(operands));
+          tracks.push_back(len);
+          return true;
+        }
+      }
       return false;
     };
 
