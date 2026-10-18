@@ -29,6 +29,8 @@ const char* satoru_master_css =
     "rt { display: block; font-size: 50%; line-height: normal; text-align: center; }\n"
     "rb { display: block; }\n"
     "rp { display: none; }\n"
+    "rtc, rbc { display: block; }\n"
+    "rtc rt { font-size: 100%; }\n"
     "h1 { display: block; font-size: 2em; font-weight: bold; margin-block-start: 0.67em; "
     "margin-block-end: 0.67em; }\n"
     "h2 { display: block; font-size: 1.5em; font-weight: bold; margin-block-start: 0.83em; "

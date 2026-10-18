@@ -55,6 +55,7 @@ SVG 出力は PNG と一致 (差分 < 1%)、PDF 出力も縦書きのまま 1 �
 | - | table セルの `vertical-align` を縦書きではブロック軸 (横方向) に適用 (従来は物理的な縦方向にずれていた) | 75: outline 1.9%→0.6% |
 | - | `<ruby>` / `<rt>` (UA スタイルで inline-flex + column-reverse。縦書き・横書き両対応) | 07/79/79a: ルビが基底文字の上(縦書きは右)に出る |
 | - | 縦書きの `<ruby>` を不可分なインラインとして扱う (アノテーションが基底文字を 2 列に割らない。UA 規則に `text-indent:0` を追加し、コンテンツ幅で計測・配置。収まらない場合は次の列へ丸ごと移動) | 44: ルビが 1 列に収まり、`fill 3.6%→3.5% / outline 5.1%→4.0%` |
+| - | 複合ルビ (1 つの `<ruby>` に複数の `<rt>`、または `<rtc>` を持つ) を 2 アイテムの column-reverse flex (基底 1 匿名 block + 注釈 1 匿名 block) に統合 (`render_flex::init` の ruby 専用分岐。発動条件は `rt>=2 || rtc` のみ)。注釈側は全 `<rt>`/`<rtc>` の内容を 1 匿名 block へ平坦化し 1 行に流す。UA 規則に `rtc, rbc { display:block }` と `rtc rt { font-size:100% }` を追加。モノルビ (rt=1・rtc なし) は旧パスでバイト同一。`flex_item.cpp`/`splitText`/`flex_line` の justify は不変 | 07/79/79a/44 は不変 (07 fill 1.3/outline 2.4、44 fill 3.5/outline 4.0)。新規 79b/79c/79d/79e で崩壊なし: 79c 縦書き複合は 800x326 で Chromium と一致、79b 横書き複合は注釈が 1 行 (fill 3.5/outline 9.7) |
 | - | `render_item::measure` のキャッシュヒット時の戻り値を縦書きではインライン方向の長さに修正 | |
 | 13 | `body` の縦書きをルートへ伝播し、右端基準で配置 | 60: outline 11.5%→2.1% |
 | 8 | `text-combine-upright:all` (結合ランを横書きで再整形して 1em に圧縮) | 06/94: Chromium と同等 |
@@ -69,9 +70,10 @@ SVG 出力は PNG と一致 (差分 < 1%)、PDF 出力も縦書きのまま 1 �
 
 既存の横書きビジュアルテスト 26 アセットは基準値から ±0.3% 以内で回帰なし。
 - 横書き先頭 float の measure 台帳汚染 (76: `place_float` が measure 時に未配置座標で `add_float` し、共有 fmt_ctx に残った phantom が place 時の行幅計算を狂わせていた。measure + 横書き時のみ台帳更新を skip し自幅を返す。縦書きは従来通り): 76 fill 6.9%→3.2% / outline 9.9%→2.2%、高さ 201→154px で Chromium と一致。vertical 全数・vitest 155 件・横書き 26 件で回帰なし (76 の baseline のみ正値へ更新)。
+- 複合ルビ P1 (上表): wasm build 済み。vertical `compare.ts` 全数はエラー無し、既存 07/79/79a/44 は前回値と一致 (07 fill 1.3% / outline 2.4%、44 fill 3.5% / outline 4.0%、79 fill 3.0% / outline 6.5%、79a fill 2.9% / outline 6.4%)。vitest 159 件 (visual-test、新規 79b–79e の baseline 追加) 通過、横書き 26 アセット (png+svg) も通過 (横書きアセットに ruby は無く影響なし)。新規 4 ケースの Chromium 並置は `out/79b-ruby-compound-h.png` 〜 `79e-ruby-jukugo-2char.png`。
 未対応・既知の制限:
 - inline-grid: 固定トラック + 暗黙の自動単一列のみ対応。明示 `auto` トラック・`fr` の shrink、複数自動列の内容按分は未対応 (固定列は可用幅で解決される)。ベースラインは先行 (first row) のみ (last も同一値を返す)。
-- ルビ: 1 つの `<ruby>` に複数の `<rt>` を持つ複合ルビ、`rtc`、ルビの均等割付は未対応。縦書きで折り返し位置にルビが来る場合の 2 列分割は修正済み (44)
+- ルビ: 複合ルビ (1 つの `<ruby>` に複数の `<rt>`、または `<rtc>`) は P1 で 2 アイテム化 (上記)。均等割付 (各注釈を各基底文字へ分配) は未対応で、注釈全体を基底幅へ中央寄せする。横書き複合は注釈 block の strut (line-height) の分だけ基底+注釈の箱が高くなる (79b: ours 89px vs Chromium 67px)。`rtc` は Chromium が ruby として扱わず inline fallback するため差が残る。P2 (対切りネスト・均等割付・両面ルビ) は対象外。縦書きで折り返し位置にルビが来る場合の 2 列分割は修正済み (44)
 - 縦書き内の `direction:rtl` (65): Chromium は LTR ラン (CJK・ラテン) の字順を反転せず、行をインライン終端 (=下端) へ寄せる。字順反転の誤発火修正に加え、短行の下端寄せ配置に対応 (残留 outline 1.7%。text-align:center/justify は対象外)。Chromium 実測: `vertical-rl/lr` + `direction:rtl` では各字は上→下のままで、短い行だけ下端に寄る (字順は不変)。
 - カラー絵文字 (64): font-family に絵文字フォントが無くても、どの書体にも無い絵文字があれば fontMap の Noto Color Emoji を自動取得して描画する (横書き・縦書き)。U+2600–27BF の ★☆ 等は通常書体で黒く描く (従来は白塗りで消えていた)。
 - 文字体系 fallback: Noto Sans JP に無いハングル・ヘブライ・アラビア・タイ・デーヴァナーガリー・ギリシャ文字は、どの書体にも無い場合に文字体系別の Noto Sans (Google Fonts css2) を自動取得して global fallback へ登録する (`satoru_api.cpp` の `kScriptFallbacks`)。従来は豆腐になっていた。

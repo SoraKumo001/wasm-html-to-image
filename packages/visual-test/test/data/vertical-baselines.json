@@ -610,5 +610,29 @@
     "outline": 6.387019230769231,
     "width": 800,
     "height": 104
+  },
+  "79b-ruby-compound-h.html": {
+    "fill": 3.480337078651685,
+    "outline": 9.724719101123595,
+    "width": 800,
+    "height": 89
+  },
+  "79c-ruby-compound-v.html": {
+    "fill": 0.6648773006134969,
+    "outline": 1.3048312883435582,
+    "width": 800,
+    "height": 326
+  },
+  "79d-ruby-rtc.html": {
+    "fill": 3.484550561797753,
+    "outline": 9.603932584269662,
+    "width": 800,
+    "height": 89
+  },
+  "79e-ruby-jukugo-2char.html": {
+    "fill": 4.613175675675675,
+    "outline": 10.68918918918919,
+    "width": 800,
+    "height": 74
   }
 }

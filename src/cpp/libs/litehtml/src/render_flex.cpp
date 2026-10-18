@@ -3,6 +3,9 @@
 #include "html_tag.h"
 #include "document.h"
 
+#include <cstring>
+#include <functional>
+
 litehtml::pixel_t litehtml::render_item_flex::_render_content(pixel_t x, pixel_t y, bool /*second_pass*/, const containing_block_context &self_size, formatting_context* fmt_ctx)
 {
 
@@ -514,6 +517,76 @@ std::list<litehtml::flex_line> litehtml::render_item_flex::get_lines(const liteh
 
 std::shared_ptr<litehtml::render_item> litehtml::render_item_flex::init()
 {
+    // Compound ruby (<ruby> with two or more <rt>, or with an <rtc>) is laid out as a
+    // two-item column-reverse flex box: one anonymous block for the base and one for all
+    // annotations. The annotation block collects the contents of every <rt>/<rtc> so the
+    // annotation flows as a single line (Chromium distributes it evenly over the base
+    // characters; here it is only merged, which is an accepted degradation). Mono ruby
+    // (a single <rt> and no <rtc>) keeps the legacy path unchanged.
+    if(const char* tag = src_el()->get_tagName(); tag && strcmp(tag, "ruby") == 0)
+    {
+        int rt_count = 0;
+        bool has_rtc = false;
+        for(const auto& el : m_children)
+        {
+            const char* ct = el->src_el()->get_tagName();
+            if(ct && strcmp(ct, "rt") == 0) rt_count++;
+            else if(ct && strcmp(ct, "rtc") == 0) has_rtc = true;
+        }
+        if(rt_count >= 2 || has_rtc)
+        {
+            decltype(m_children) new_children;
+
+            auto make_anon = [&]() -> std::shared_ptr<render_item_block>
+                {
+                    auto anon_el = std::make_shared<el_anonymous>(src_el()->get_document());
+                    auto anon_ri = std::make_shared<render_item_block>(anon_el);
+                    anon_ri->parent(shared_from_this());
+                    anon_el->parent(src_el());
+                    anon_el->compute_styles(false);
+                    return anon_ri;
+                };
+
+            auto base_ri = make_anon();
+            auto anno_ri = make_anon();
+
+            // Collect the annotation content, flattening <rtc> and nested <rt> so it
+            // becomes one inline run inside the annotation block.
+            std::function<void(const std::shared_ptr<render_item>&)> collect_annotation =
+                [&](const std::shared_ptr<render_item>& el)
+                {
+                    const char* ct = el->src_el()->get_tagName();
+                    if(ct && (strcmp(ct, "rt") == 0 || strcmp(ct, "rtc") == 0))
+                    {
+                        for(const auto& sub : el->children())
+                        {
+                            collect_annotation(sub);
+                        }
+                    } else
+                    {
+                        anno_ri->add_child(el);
+                    }
+                };
+
+            for(const auto& el : m_children)
+            {
+                const char* ct = el->src_el()->get_tagName();
+                if(ct && (strcmp(ct, "rt") == 0 || strcmp(ct, "rtc") == 0))
+                {
+                    collect_annotation(el);
+                } else if(!el->src_el()->is_white_space())
+                {
+                    base_ri->add_child(el);
+                }
+            }
+
+            new_children.push_back(base_ri->init());
+            new_children.push_back(anno_ri->init());
+            children() = new_children;
+            return shared_from_this();
+        }
+    }
+
     decltype(m_children) new_children;
     decltype(m_children) inlines;
 
