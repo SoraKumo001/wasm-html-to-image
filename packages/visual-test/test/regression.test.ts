@@ -145,4 +145,17 @@ describe("regression: layout and paint probes", () => {
     expect(near(at(5, 125), BLUE)).toBe(true); // td valign=top (second table starts at y=120)
     expect(isWhite(at(5, 60))).toBe(true); // not vertically centered
   });
+
+  it("<center> centers block-level tables and divs", async () => {
+    const { at } = await renderPng(
+      `<center><table width="50%" cellspacing="0" cellpadding="0"><tr><td style="height:20px;background:#00f"></td></tr></table>
+       <div style="width:100px;height:20px;background:#f00"></div></center>`,
+      400,
+      60,
+    );
+    expect(isWhite(at(90, 10))).toBe(true);
+    expect(near(at(110, 10), BLUE)).toBe(true); // table spans x=100..299
+    expect(isWhite(at(140, 30))).toBe(true);
+    expect(near(at(160, 30), [255, 0, 0])).toBe(true); // div spans x=150..249
+  });
 });
