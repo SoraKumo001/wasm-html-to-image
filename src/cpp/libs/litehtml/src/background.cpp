@@ -561,6 +561,11 @@ std::unique_ptr<litehtml::background_layer::radial_gradient> litehtml::backgroun
 	{
 		ret->radius.y = (float) g.radial_radius_y.calc_percent(origin_box.height);
 	}
+	else if(!g.radial_radius_x.is_predefined())
+	{
+		// circle with a single <length>: the radius applies to both axes
+		ret->radius.y = ret->radius.x;
+	}
 
 	if(ret->prepare_color_points(ret->radius.x, g.m_type, g.m_colors))
 	{
