@@ -36,7 +36,7 @@ SVG 出力は PNG と一致 (差分 < 1%)、PDF 出力も縦書きのまま 1 �
 | - | `display:inline-grid` のインライン整形対応 (行への組込み、shrink-to-fit 幅決定、先行ベースライン配置) | H/V プローブで Chromium と一致。明示 auto/fr・複数自動列・last=first は残件 |
 | - | columns (`column-count`/`column-width`/`columns`/`column-gap`/`column-rule`): width→fr 換算、gap normal→1em、rule 描画。均等バランス・断片化・`column-span` は対象外 | 横書きプローブ p1/p3/p5/p6/p7 で 0.0%/0.0% 一致 |
 | 3 | inline-block: 縦書きでの shrink-to-fit 判定、中央ベースライン | 18/86/87: 4〜5%→0〜2% |
-| 4 | float: 縦書き行ボックスが float を避ける、rl での fmt_ctx オフセット補正 | 77: 5.3%→2.7%、30 も回り込み (高さ差 54px は未解決) |
+| 4 | float: 縦書き行ボックスが float を避ける、rl での fmt_ctx オフセット補正 | 77: 5.3%→2.7%、30 も回り込み (高さ差は BFC 化で解消。ledger をマージンボックスで記録するよう修正し 4.9%→3.4% / outline 5.9%→2.6%) |
 | 6 | text-indent (副次的に修正) | 13/56/44: outline 17%→2.6% |
 | 5 | リストマーカー (ul/ol を各列の先頭へ) | 20: 箇条書き・番号が Chromium と同じ位置 |
 | 9 | justify が最終行を均等割付しない | 12/80 |

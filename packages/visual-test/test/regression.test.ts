@@ -81,4 +81,16 @@ describe("regression: layout and paint probes", () => {
     expect(near(at(50, 25), BLUE)).toBe(true);
     expect(isWhite(at(50, 35))).toBe(true);
   });
+
+  it("float margin box (not the border box) narrows the first line", async () => {
+    const squares = '<i style="display:inline-block;width:16px;height:16px;background:#00f"></i>'.repeat(30);
+    const { at } = await renderPng(
+      `<div style="width:240px;font-size:0;line-height:16px">
+         <div style="float:right;width:60px;height:60px;background:#f00;margin:4px"></div>${squares}</div>`,
+      300,
+      100,
+    );
+    expect(near(at(150, 8), BLUE)).toBe(true); // 10th square fits left of the margin box (x < 172)
+    expect(isWhite(at(165, 8))).toBe(true); // an 11th square would cross into the margin
+  });
 });

@@ -8,8 +8,14 @@ void litehtml::formatting_context::add_float(const std::shared_ptr<render_item> 
     satoru::WritingModeContext wm(m_writing_mode, 0, 0); // Temporary context for mapping
 
     // Calculate logical position relative to BFC origin
-    pixel_t el_inline_offset = el->inline_start_pos();
-    pixel_t el_block_offset  = el->block_start_pos();
+    // inline_start_pos()/block_start_pos() address the content box, while the ledger entry
+    // spans the margin box (inline_size()/block_size() include margin, border and padding).
+    pixel_t el_inline_offset = el->inline_start_pos() - wm.inline_start(el->get_margins()) -
+                               wm.inline_start(el->get_borders()) -
+                               wm.inline_start(el->get_paddings());
+    pixel_t el_block_offset  = el->block_start_pos() - wm.block_start(el->get_margins()) -
+                               wm.block_start(el->get_borders()) -
+                               wm.block_start(el->get_paddings());
 
 	fb.pos.x		= el_inline_offset + m_current_inline_pos;
 	fb.pos.y		= el_block_offset + m_current_block_pos;
