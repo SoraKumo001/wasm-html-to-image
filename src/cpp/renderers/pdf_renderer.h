@@ -15,4 +15,10 @@ sk_sp<SkData> renderHtmlsToPdf(const std::vector<std::string>& htmls, int width,
                                SatoruContext& context, const char* master_css, const char* user_css,
                                const SatoruRenderOptions& options);
 
+// P1: single-HTML multi-page PDF (Layout-once + Slice). Independent of the array
+// path above; one document is laid out once and sliced into pages of `pageHeight`.
+sk_sp<SkData> renderHtmlToPdf(const std::string& html, int width, int height,
+                              SatoruContext& context, const char* master_css, const char* user_css,
+                              const SatoruRenderOptions& options);
+
 #endif  // PDF_RENDERER_H

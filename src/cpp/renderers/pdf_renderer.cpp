@@ -221,3 +221,130 @@ sk_sp<SkData> renderHtmlsToPdf(const std::vector<std::string>& htmls, int width,
 
     return stream.detachAsData();
 }
+
+// P1: single-HTML multi-page PDF via "Layout once + Slice". This path is independent of
+// renderHtmlsToPdf's array (one-item-per-page) approach:
+//   1) lay the document out exactly once at contentWidth,
+//   2) derive the page count from doc->height(),
+//   3) for each page: beginPage -> (per-page background) -> header/footer re-render (same as
+//      renderHtmlsToPdf today) -> draw the shared document shifted by -page*contentAreaHeight and
+//      clipped to the page's content area -> endPage.
+//
+// pageHeight = height(>0) : options.outputHeight(>0) : A4 @96dpi (1123px). contentAreaHeight is
+// pageHeight minus the top/bottom margins.
+//
+// Notes / accepted limitations (P1):
+//   - The slice cuts between the layout's painted pixels; a line/element straddling a page
+//     boundary is simply clipped. litehtml has no break/avoid-break, so this is by design.
+//   - position:fixed: litehtml draws fixed elements ignoring the doc->draw (x,y) offset
+//     (render_item.cpp draws them with draw(hdc, 0, 0, ...)), so the vertical page shift (which is
+//     applied through the draw offset rather than a canvas translate) leaves them in place ->
+//     they are re-painted at the same viewport position on every page.
+//   - position:sticky: litehtml has no sticky positioning (element_position only has
+//     static/relative/absolute/fixed), so a "sticky" element is laid out as normal flow and
+//     painted once, wherever it lands. Provisionally accepted.
+sk_sp<SkData> renderHtmlToPdf(const std::string& html, int width, int height,
+                              SatoruContext& context, const char* master_css, const char* user_css,
+                              const SatoruRenderOptions& options) {
+    if (html.empty()) return nullptr;
+
+    int margin_top = options.pdfMarginTop;
+    int margin_bottom = options.pdfMarginBottom;
+    int margin_left = options.pdfMarginLeft;
+    int margin_right = options.pdfMarginRight;
+
+    int content_width = width - margin_left - margin_right;
+    if (content_width < 1) content_width = 1;
+
+    // Page height: explicit render height wins, then outputHeight, else A4 @96dpi (1123px).
+    int page_height = (height > 0) ? height
+                                   : (options.outputHeight > 0 ? options.outputHeight : 1123);
+    int content_area_height = page_height - margin_top - margin_bottom;
+    if (content_area_height < 1) content_area_height = 1;
+
+    std::string css = master_css ? master_css : litehtml::master_css;
+    css += "\nbr { display: -litehtml-br !important; }\n";
+
+    litehtml::media_type media_type =
+        (options.mediaType == 1) ? litehtml::media_type_print : litehtml::media_type_screen;
+
+    // Layout once. The container is reused for every page (reset + set_canvas below), matching the
+    // document-reuse pattern already used elsewhere in this file.
+    container_skia container(content_width, content_area_height, nullptr, context, nullptr, false,
+                             media_type);
+    auto doc = litehtml::document::createFromString(html.c_str(), &container, css.c_str(), user_css);
+    if (!doc) return nullptr;
+
+    doc->render(content_width);
+    int doc_height = (int)doc->height();
+    if (doc_height < 1) doc_height = 1;
+
+    int page_count = (doc_height + content_area_height - 1) / content_area_height;
+    if (page_count < 1) page_count = 1;
+
+    SkDynamicMemoryWStream stream;
+    SkPDF::Metadata metadata;
+    metadata.fTitle = options.pdfTitle.empty() ? "Satoru PDF Export" : options.pdfTitle.c_str();
+    metadata.fAuthor = options.pdfAuthor.c_str();
+    metadata.fSubject = options.pdfSubject.c_str();
+    metadata.fKeywords = options.pdfKeywords.c_str();
+    metadata.fCreator = options.pdfCreator.empty() ? "Satoru Engine" : options.pdfCreator.c_str();
+    metadata.fProducer = options.pdfProducer.c_str();
+    metadata.jpegDecoder = PdfJpegDecoder;
+    metadata.jpegEncoder = PdfJpegEncoder;
+
+    auto pdf_doc = SkPDF::MakeDocument(&stream, metadata);
+    if (!pdf_doc) return nullptr;
+
+    for (int page = 0; page < page_count; ++page) {
+        int page_num = page + 1;
+        SkCanvas* canvas = pdf_doc->beginPage((SkScalar)width, (SkScalar)page_height);
+        if (!canvas) continue;
+
+        if (options.backgroundColor != 0) {
+            SkPaint paint;
+            paint.setColor(options.backgroundColor);
+            canvas->drawRect(SkRect::MakeWH(width, page_height), paint);
+        }
+
+        // Header / footer: re-rendered per page (same as renderHtmlsToPdf).
+        if (!options.pdfHeader.empty()) {
+            std::string headerHtml = replace_template_vars(options.pdfHeader, page_num, page_count);
+            canvas->save();
+            canvas->translate((SkScalar)margin_left, 0);
+            render_template(headerHtml, content_width, margin_top, canvas, context, css.c_str(),
+                            user_css, media_type);
+            canvas->restore();
+        }
+
+        if (!options.pdfFooter.empty()) {
+            std::string footerHtml = replace_template_vars(options.pdfFooter, page_num, page_count);
+            canvas->save();
+            canvas->translate((SkScalar)margin_left, (SkScalar)(page_height - margin_bottom));
+            render_template(footerHtml, content_width, margin_bottom, canvas, context, css.c_str(),
+                            user_css, media_type);
+            canvas->restore();
+        }
+
+        // Content slice: the page shift is applied through the draw offset (so fixed elements,
+        // which ignore it, stay at their viewport position); the canvas clip bounds the page.
+        canvas->save();
+        canvas->translate((SkScalar)margin_left, (SkScalar)margin_top);
+        canvas->clipRect(SkRect::MakeXYWH(0, 0, (SkScalar)content_width, (SkScalar)content_area_height));
+
+        container.reset();
+        container.set_canvas(canvas);
+        container.set_height(content_area_height);
+        container.set_tagging(false);
+        doc->draw(0, 0, -(litehtml::pixel_t)(page * content_area_height), nullptr);
+        container.flush();
+
+        canvas->restore();
+
+        pdf_doc->endPage();
+    }
+
+    pdf_doc->close();
+
+    return stream.detachAsData();
+}

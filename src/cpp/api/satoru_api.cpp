@@ -642,10 +642,11 @@ const uint8_t* satoru_api_html_to_pdf(SatoruInstance* inst, const char* html, in
     return render_and_store(
         inst,
         [&]() {
-            std::vector<std::string> htmls = {html};
-            return renderHtmlsToPdf(htmls, width, height, inst->context,
-                                    inst->get_full_master_css().c_str(),
-                                    inst->context.getExtraCss().c_str(), options);
+            // P1: single HTML -> Layout-once + Slice multi-page path (independent of the array
+            // renderHtmlsToPdf).
+            return renderHtmlToPdf(html, width, height, inst->context,
+                                   inst->get_full_master_css().c_str(),
+                                   inst->context.getExtraCss().c_str(), options);
         },
         &SatoruContext::set_last_pdf, out_size);
 }
@@ -688,6 +689,12 @@ const uint8_t* satoru_api_render(SatoruInstance* inst, const std::vector<std::st
         case RenderFormat::WebP:
             return satoru_api_html_to_webp(inst, htmls[0].c_str(), width, height, options, out_size);
         case RenderFormat::PDF:
+            // P1: a single HTML paginates (Layout-once + Slice); the array form keeps its
+            // documented one-item-per-page behaviour.
+            if (htmls.size() == 1) {
+                return satoru_api_html_to_pdf(inst, htmls[0].c_str(), width, height, options,
+                                              out_size);
+            }
             return satoru_api_htmls_to_pdf(inst, htmls, width, height, options, out_size);
         default:
             break;
