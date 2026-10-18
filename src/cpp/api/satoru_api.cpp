@@ -9,6 +9,7 @@
 #include <cstdarg>
 #include <cstring>
 #include <iomanip>
+#include <set>
 #include <sstream>
 #include <vector>
 
@@ -122,6 +123,8 @@ void SatoruInstance::collect_resources(const std::string& html, int width, int h
     profile_mapped_font_url_request_count = 0;
     profile_font_character_count = 0;
     profile_measured_font_character_count = 0;
+    profile_ext_missing_count = 0;
+    profile_hana_url_count = 0;
     profile_rebuild_count = 0;
     profile_rebuild_initial_count = 0;
     profile_rebuild_html_count = 0;
@@ -353,6 +356,40 @@ void SatoruInstance::collect_resources(const std::string& html, int width, int h
             }
         }
     }
+
+    // CJK 外字 fallback: Google Fonts の subset (unicode-range) に含まれない
+    // Ext-A 以降・互換漢字補足等の usedCodepoints を HanaMin のブロック別 woff2 で補う。
+    // __fallback__ 名で読み込み、per-glyph 選択 (selectFont) が拾う。
+    {
+        static const std::string kHanaminBase = "https://cdn.jsdelivr.net/npm/hanamin@0.0.5/";
+        auto missing = context.fontManager.uncoveredCodepoints(usedCodepoints);
+        if (!missing.empty()) {
+            auto& unicode = context.getUnicodeService();
+            std::set<char32_t> extMissing;
+            for (char32_t cp : missing) {
+                // 絵文字は別経路 (Noto Color Emoji)。HanaMin 取得対象から外す。
+                if (!unicode.isEmoji(cp)) extMissing.insert(cp);
+            }
+            if (!extMissing.empty()) {
+                std::vector<std::string> hanaUrls = context.fontManager.getFontUrls(
+                    "hanamin", 400, SkFontStyle::kUpright_Slant, &extMissing);
+                profile_ext_missing_count = (int)extMissing.size();
+                profile_hana_url_count = (int)hanaUrls.size();
+                if (hanaUrls.empty()) {
+                    // HanaMin.css 未走査 (または該当なし): subset 一覧 CSS を一度だけ取得。
+                    // 解決済みなら request 側で dedup される。
+                    resourceManager.request(kHanaminBase + "HanaMin.css", "hanamin",
+                                            ResourceType::Css, false);
+                } else {
+                    for (const auto& u : hanaUrls) {
+                        std::string abs = u;
+                        if (abs.find("://") == std::string::npos) abs = kHanaminBase + abs;
+                        resourceManager.request(abs, "__fallback__", ResourceType::Font, false);
+                    }
+                }
+            }
+        }
+    }
     if (collect_profile_enabled) {
         auto font_requests_end = std::chrono::high_resolution_clock::now();
         profile_font_requests_ms += elapsed_ms(font_requests_start, font_requests_end);
@@ -373,6 +410,8 @@ std::string SatoruInstance::get_collect_profile_json() const {
        << ",\"cppMappedFontUrlRequestCount\":" << profile_mapped_font_url_request_count
        << ",\"cppFontCharacterCount\":" << profile_font_character_count
        << ",\"cppMeasuredFontCharacterCount\":" << profile_measured_font_character_count
+       << ",\"cppExtMissingCount\":" << profile_ext_missing_count
+       << ",\"cppHanaUrlCount\":" << profile_hana_url_count
        << ",\"cppDocumentRebuildCount\":" << profile_rebuild_count
        << ",\"cppDocumentRebuildInitialCount\":" << profile_rebuild_initial_count
        << ",\"cppDocumentRebuildHtmlCount\":" << profile_rebuild_html_count

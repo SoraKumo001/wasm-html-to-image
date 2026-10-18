@@ -489,6 +489,50 @@ bool SatoruFontManager::hasFontFaceSource(const std::string& family, const std::
     return false;
 }
 
+std::set<char32_t> SatoruFontManager::uncoveredCodepoints(
+    const std::set<char32_t>& codepoints) const {
+    std::set<char32_t> out;
+    for (char32_t cp : codepoints) {
+        if (cp < 0x80) continue;  // ASCII は常に解決可能とみなす (走査コスト回避)
+        bool covered = false;
+        for (const auto& [name, typefaces] : m_typefaceCache) {
+            for (const auto& c : typefaces) {
+                if (c.typeface && c.typeface->unicharToGlyph((SkUnichar)cp) != 0) {
+                    covered = true;
+                    break;
+                }
+            }
+            if (covered) break;
+        }
+        if (!covered) {
+            for (const auto& [req, srcs] : m_fontFaces) {
+                // HanaMin.css は未取得ブロックの索引であり、その unicode-range は
+                // 取得必要性の根拠にはなっても、取得済みの根拠にはならない
+                // (通常経路の取得対象はレイアウト要求 family のみ)。除外する。
+                if (req.family == "hanamin") continue;
+                auto cached = m_typefaceCache.find(req.family);
+                bool familyLoaded = cached != m_typefaceCache.end() && !cached->second.empty();
+                for (const auto& src : srcs) {
+                    if (src.ranges.empty()) {
+                        // unicode-range 指定の無い @font-face は全域請求。
+                        // family 未読み込みの間は通常経路の取得を待つ。
+                        if (!familyLoaded) {
+                            covered = true;
+                            break;
+                        }
+                    } else if (checkUnicodeRange(cp, src.ranges)) {
+                        covered = true;
+                        break;
+                    }
+                }
+                if (covered) break;
+            }
+        }
+        if (!covered) out.insert(cp);
+    }
+    return out;
+}
+
 // ============================================================================
 // Section font_fallback (2/2): 最適マッチ選択 (将来 font_fallback.cpp)
 // ============================================================================

@@ -126,6 +126,25 @@ void ResourceManager::add(const std::string& url, const uint8_t* data, size_t si
                         m_context.fontManager.addFallbackTypeface(tfs[0]);
                     }
                 }
+
+                // CJK 外字 fallback: collect 時に "__fallback__" 名で要求された
+                // HanaMin 等のブロック別 woff2 を global fallback へ登録し、
+                // per-glyph 選択 (selectFont) から参照可能にする。
+                if (name == "__fallback__") {
+                    auto tfs = m_context.fontManager.matchFonts("__fallback__", 400,
+                                                                SkFontStyle::kUpright_Slant);
+                    for (const auto& tf : tfs) {
+                        bool duplicate = false;
+                        for (const auto& existing :
+                             m_context.fontManager.getFallbackTypefaces()) {
+                            if (existing->uniqueID() == tf->uniqueID()) {
+                                duplicate = true;
+                                break;
+                            }
+                        }
+                        if (!duplicate) m_context.fontManager.addFallbackTypeface(tf);
+                    }
+                }
             }
         }
 

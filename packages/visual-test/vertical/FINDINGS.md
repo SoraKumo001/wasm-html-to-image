@@ -83,4 +83,40 @@ SVG 出力は PNG と一致 (差分 < 1%)、PDF 出力も縦書きのまま 1 �
 ## 未検証
 
 目視していないケース (メトリクス上は差分 < 3%): 05, 10, 11, 24, 25, 32, 35–38, 41, 42, 64, 68–73。
-複数ページ PDF の改ページ、`columns`、フォント fallback の CJK 外字は未実施。
+複数ページ PDF の改ページ、`columns` は未実施。フォント fallback の CJK 外字は下記「CJK 外字 fallback (Ext-A 以降/IVS)」で対応済み。
+
+## CJK 外字 fallback (Ext-A 以降/IVS)
+
+Google Fonts の Noto subset (`unicode-range`) は Ext-A (U+3400〜)・Ext-B 以降・IVS (U+E0100〜)・
+BMP の稀用字 (U+9FFF 等) を含まない。`getFontUrls` の usedCodepoints 駆動取得だけでは該当 subset が
+存在せず tofu になる (Chromium はシステムフォントで描画するため差が出る)。
+最小プローブ (`packages/visual-test/temp/cjk-ext-probe.*`、Ext-A U+3400 + Ext-B U+20000/U+2A6D6 +
+IVS 葛+U+E0100 + 絵文字混じり) で事前確認: Ext-A/B・U+9FFF が本エンジンのみ tofu。
+
+対応 (取得のみ。選択・描画は既存の per-glyph `selectFont` + global fallback をそのまま使う):
+
+- `SatoruFontManager::uncoveredCodepoints` (font_manager.h/cpp) を追加。読み込み済み書体の
+  いずれにもグリフが無く、どの `@font-face` の `unicode-range` にも該当しない codepoint を返す。
+  `unicode-range` 無しの `@font-face` (fontsource 丸ごと等) は family 未読み込みの間のみ請求中とみなす
+  (読み込み後にグリフが無ければ未対応として返す)。HanaMin.css 自体は未取得ブロックの索引なので
+  被覆根拠から除外する (さもないと取得が発生しない)。
+- `collect_resources` (satoru_api.cpp) で上記 missing (絵文字は除外) に対し、HanaMin.css
+  (`https://cdn.jsdelivr.net/npm/hanamin@0.0.5/HanaMin.css`) を Css として取得→走査し、
+  翌ラウンドで `getFontUrls("hanamin", ...)` の該当ブロック woff2 のみを `__fallback__` 名で取得する。
+  相対 URL は同ベースで絶対化する。通常ドキュメント (missing 無し) では追加リクエストは発生しない。
+- `resource_manager.cpp` で `__fallback__` 名の読み込み書体を global fallback へ登録
+  (重複排除あり)。`selectFont` が Ext グリフを拾う。診断用に `cppExtMissingCount` /
+  `cppHanaUrlCount` を collect profile に追加。
+
+結果 (プローブ再実行、左 Chromium / 右 本エンジン):
+
+- Ext-A U+3400、Ext-B U+20000/U+2A6D6 が描画されるようになった (HanaMin=明朝体のため
+  Chromium のゴシックとは書体が異なる。存在修正であり字形一致は対象外)。
+- IVS は基字 (葛) が描画され、セレクタ自体は従来通り無視 (変化なし)。
+- 残件: BMP 稀用字 U+9FFF は Noto subset・HanaMin のどちらにも存在せず tofu のまま
+  (Chromium はシステムフォントで描画)。カラー絵文字は従来通り未対応 (別経路のため対象外)。
+
+検証: wasm build + package build 済み。vitest 155 件 (visual-test) + unit 135 件が通過。
+vertical `compare.ts` 全数 (108 ケース) はエラー無し・メトリクスは既存 baseline 圏内
+(例: 76 fill 3.2% / outline 2.2% で一致)。横書き 26 アセット (png+svg vitest) も通過。
+SVG (text-to-paths)・PDF も同プローブで出力確認 (Ext-A/B はパス化される)。

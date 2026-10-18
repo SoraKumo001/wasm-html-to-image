@@ -34,6 +34,12 @@ class SatoruFontManager : public satoru::IFontManager {
     std::string getFontUrl(const std::string& family, int weight,
                            SkFontStyle::Slant slant) const override;
     bool hasFontFaceSource(const std::string& family, const std::string& url) const override;
+    // usedCodepoints のうち、読み込み済み書体のいずれにもグリフが無く、
+    // どの @font-face の unicode-range も該当しないものを返す (CJK 外字検出用)。
+    // unicode-range の無い @font-face は、当該 family が未読み込みの間のみ
+    // 請求中とみなす (読み込み後にグリフが無ければ未対応として返す)。
+    std::set<char32_t> uncoveredCodepoints(
+        const std::set<char32_t>& codepoints) const override;
 
     std::vector<sk_sp<SkTypeface>> matchFonts(const std::string& family, int weight,
                                               SkFontStyle::Slant slant) override;

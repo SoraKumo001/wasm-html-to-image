@@ -34,6 +34,8 @@ class IFontManager {
     virtual std::string getFontUrl(const std::string& family, int weight,
                                    SkFontStyle::Slant slant) const = 0;
     virtual bool hasFontFaceSource(const std::string& family, const std::string& url) const = 0;
+    virtual std::set<char32_t> uncoveredCodepoints(
+        const std::set<char32_t>& codepoints) const = 0;
 
     // ── Font matching ──────────────────────────────────────────────────
     virtual std::vector<sk_sp<SkTypeface>> matchFonts(const std::string& family, int weight,

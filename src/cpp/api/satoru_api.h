@@ -61,6 +61,8 @@ class SatoruInstance {
     int profile_mapped_font_url_request_count = 0;
     int profile_font_character_count = 0;
     int profile_measured_font_character_count = 0;
+    int profile_ext_missing_count = 0;
+    int profile_hana_url_count = 0;
     int profile_rebuild_count = 0;
     int profile_rebuild_initial_count = 0;
     int profile_rebuild_html_count = 0;
