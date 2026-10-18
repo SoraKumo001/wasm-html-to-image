@@ -61,10 +61,12 @@ SVG 出力は PNG と一致 (差分 < 1%)、PDF 出力も縦書きのまま 1 �
 | - | 縦書きブロックを BFC 化 (float の高さ漏れ) | 30/77: ページ高さ 320→266px で一致 |
 | - | 縦書きの下線・上線の位置 (下線はブロック開始側の内側、上線はブロック終端側の内側へ) | 43: fill 0.7%→0.3% / outline 0.8%→0.5% |
 | - | `position:fixed` を文書高さ算出から除外 (fixed サブツリー全体を `calc_document_size` でスキップ。viewport 基準の子座標が混入し高さが膨らんでいた) | 短文+fixed bottom-right 2979→55px、長文 2979→2366px に復帰 |
+| - | `display:inline-grid` のインライン整形 (行への組込み・shrink-to-fit・先行ベースライン。縦書き含む) | H/V 最小プローブで幅・高さ一致 (残差はフォントのラスタ差のみ。h-fixed 4.5%/4.2%、h-auto 2.0%/1.9%、h-base 2.5%/3.7%、v-fixed/v-auto 0.4%/0.3%) |
 
 既存の横書きビジュアルテスト 26 アセットは基準値から ±0.3% 以内で回帰なし。
 - 横書き先頭 float の measure 台帳汚染 (76: `place_float` が measure 時に未配置座標で `add_float` し、共有 fmt_ctx に残った phantom が place 時の行幅計算を狂わせていた。measure + 横書き時のみ台帳更新を skip し自幅を返す。縦書きは従来通り): 76 fill 6.9%→3.2% / outline 9.9%→2.2%、高さ 201→154px で Chromium と一致。vertical 全数・vitest 155 件・横書き 26 件で回帰なし (76 の baseline のみ正値へ更新)。
 未対応・既知の制限:
+- inline-grid: 固定トラック + 暗黙の自動単一列のみ対応。明示 `auto` トラック・`fr` の shrink、複数自動列の内容按分は未対応 (固定列は可用幅で解決される)。ベースラインは先行 (first row) のみ (last も同一値を返す)。
 - ルビ: 1 つの `<ruby>` に複数の `<rt>` を持つ複合ルビ、`rtc`、ルビの均等割付は未対応。縦書きで折り返し位置にルビが来る場合の 2 列分割は修正済み (44)
 - 縦書き内の `direction:rtl` (65): Chromium は LTR ラン (CJK・ラテン) の字順を反転せず、行をインライン終端 (=下端) へ寄せる。字順反転の誤発火修正に加え、短行の下端寄せ配置に対応 (残留 outline 1.7%。text-align:center/justify は対象外)。Chromium 実測: `vertical-rl/lr` + `direction:rtl` では各字は上→下のままで、短い行だけ下端に寄る (字順は不変)。
 - カラー絵文字未対応 (64): `😀🐱` 等のカラー絵文字 (CBDT/COLR) は未対応。単色の記号 (★☆♪→←等) は問題なし。
@@ -79,4 +81,4 @@ SVG 出力は PNG と一致 (差分 < 1%)、PDF 出力も縦書きのまま 1 �
 ## 未検証
 
 目視していないケース (メトリクス上は差分 < 3%): 05, 10, 11, 24, 25, 32, 35–38, 41, 42, 64, 68–73。
-複数ページ PDF の改ページ、`display:inline-grid`/`columns`、フォント fallback の CJK 外字は未実施。
+複数ページ PDF の改ページ、`columns`、フォント fallback の CJK 外字は未実施。

@@ -1216,7 +1216,8 @@ std::shared_ptr<litehtml::element> litehtml::render_item::get_child_by_point(
                         !el->src_el()->is_positioned()) {
                         if (el->src_el()->css().get_display() == display_inline_block ||
                             el->src_el()->css().get_display() == display_inline_table ||
-                            el->src_el()->css().get_display() == display_inline_flex) {
+                            el->src_el()->css().get_display() == display_inline_flex ||
+                            el->src_el()->css().get_display() == display_inline_grid) {
                             ret = el->get_element_by_point(el_pos.x, el_pos.y, client_x, client_y,
                                                            check);
                             process = false;
@@ -1254,7 +1255,8 @@ std::shared_ptr<litehtml::element> litehtml::render_item::get_child_by_point(
                 } else {
                     if (el->src_el()->css().get_float() == float_none &&
                         el->src_el()->css().get_display() != display_inline_block &&
-                        el->src_el()->css().get_display() != display_inline_flex) {
+                        el->src_el()->css().get_display() != display_inline_flex &&
+                        el->src_el()->css().get_display() != display_inline_grid) {
                         element::ptr child = el->get_child_by_point(el_pos.x, el_pos.y, client_x,
                                                                     client_y, flag, zindex, check);
                         if (child) {

@@ -787,7 +787,7 @@ void litehtml::css_properties::compute_font(const element* el, const document::p
     m_font_style = (font_style)el->get_property<int>(_font_style_, true, font_style_normal,
                                                      offset(m_font_style));
     bool propagate_decoration =
-        !is_one_of(m_display, display_inline_block, display_inline_table, display_inline_flex) &&
+        !is_one_of(m_display, display_inline_block, display_inline_table, display_inline_flex, display_inline_grid) &&
         m_float == float_none &&
         !is_one_of(m_el_position, element_position_absolute, element_position_fixed);
 

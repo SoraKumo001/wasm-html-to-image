@@ -288,7 +288,12 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
     }
     else if (columns_template.empty())
     {
-        m_grid_layout.column_widths[0] = render_inline;
+        // The implicit single column is sized after items are known (see below).
+        // Block grids fill the available inline size; inline grids shrink-to-fit.
+        if (src_el()->css().get_display() != display_inline_grid)
+        {
+            m_grid_layout.column_widths[0] = render_inline;
+        }
     }
 
     // Determine placements and number of rows
@@ -462,6 +467,30 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         item.pos = { item_col_start, item_col_start + item_col_span, item_row_start, item_row_start + item_row_span };
         m_grid_layout.items.push_back(item);
         max_row = std::max(max_row, item.pos.row_end);
+    }
+
+    if (columns_template.empty() && src_el()->css().get_display() == display_inline_grid)
+    {
+        // Inline grids shrink-to-fit: size the single implicit column to the
+        // widest item's content, capped by the available inline size.
+        // (Block grids keep filling the available inline size, set above.)
+        pixel_t maxc = 0;
+        for (auto& item : m_grid_layout.items)
+        {
+            containing_block_context cb = self_size;
+            cb.size_mode |= containing_block_context::size_mode_content;
+            item.el->measure(cb, fmt_ctx);
+            // NB: measure() returns min(content, explicit); the track needs
+            // the item's margin-box size (explicit width wins), i.e. inline_size().
+            pixel_t w = item.el->inline_size();
+            if (w > maxc) maxc = w;
+        }
+        if (render_inline.type != containing_block_context::cbc_value_type_auto &&
+            render_inline.value > 0 && maxc > render_inline.value)
+        {
+            maxc = render_inline.value;
+        }
+        m_grid_layout.column_widths[0] = maxc;
     }
 
     int num_rows = std::max((int)rows_template.size(), max_row);
@@ -782,6 +811,41 @@ void render_item_grid::draw_children(uint_ptr hdc, pixel_t x, pixel_t y, const p
             }
         }
     }
+}
+
+litehtml::pixel_t litehtml::render_item_grid::get_first_baseline()
+{
+    if (src_el()->css().get_display() == display_inline_grid && !m_grid_layout.items.empty())
+    {
+        // An inline grid aligns by the first row: the first item in row-major order.
+        const grid_item* best = &m_grid_layout.items.front();
+        for (const auto& item : m_grid_layout.items)
+        {
+            if (item.pos.row_start < best->pos.row_start ||
+                (item.pos.row_start == best->pos.row_start && item.pos.col_start < best->pos.col_start))
+            {
+                best = &item;
+            }
+        }
+        if (best->pos.row_start >= 0 && best->pos.row_start < (int)m_grid_layout.row_offsets.size())
+        {
+            return m_grid_layout.row_offsets[best->pos.row_start] +
+                   best->el->content_offset_top() +
+                   best->el->get_first_baseline();
+        }
+    }
+    return render_item_block::get_first_baseline();
+}
+
+litehtml::pixel_t litehtml::render_item_grid::get_last_baseline()
+{
+    if (src_el()->css().get_display() == display_inline_grid && !m_grid_layout.items.empty())
+    {
+        // Inline-axis (vertical-align) alignment of an inline grid also uses the
+        // first row's baseline (Chromium parity).
+        return get_first_baseline();
+    }
+    return render_item_block::get_last_baseline();
 }
 
 } // namespace litehtml

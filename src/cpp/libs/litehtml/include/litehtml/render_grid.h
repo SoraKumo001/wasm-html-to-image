@@ -70,6 +70,8 @@ namespace litehtml
 		}
 		std::shared_ptr<render_item> init() override;
 		void draw_children(uint_ptr hdc, pixel_t x, pixel_t y, const position* clip, draw_flag flag, int zindex) override;
+		pixel_t get_first_baseline() override;
+		pixel_t get_last_baseline() override;
 	};
 }
 
