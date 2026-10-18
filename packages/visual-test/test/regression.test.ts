@@ -158,4 +158,26 @@ describe("regression: layout and paint probes", () => {
     expect(isWhite(at(140, 30))).toBe(true);
     expect(near(at(160, 30), [255, 0, 0])).toBe(true); // div spans x=150..249
   });
+
+  it("<body bgcolor> and <body background> presentational attributes apply", async () => {
+    const solid = await render({
+      value: `<html><body bgcolor="#0000ff"><div style="height:20px"></div></body></html>`,
+      width: 100,
+      height: 60,
+      format: "png",
+    });
+    const sImg = PNG.sync.read(Buffer.from(solid.data));
+    expect([sImg.data[(50 * sImg.width + 50) * 4], sImg.data[(50 * sImg.width + 50) * 4 + 2]]).toEqual([0, 255]);
+
+    const tile = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20'%3E%3Crect width='20' height='20' fill='%23f00'/%3E%3C/svg%3E";
+    const textured = await render({
+      value: `<html><body style="margin:0" background="${tile}"><div style="height:20px"></div></body></html>`,
+      width: 100,
+      height: 60,
+      format: "png",
+    });
+    const tImg = PNG.sync.read(Buffer.from(textured.data));
+    const i = (50 * tImg.width + 50) * 4;
+    expect([tImg.data[i], tImg.data[i + 1]]).toEqual([255, 0]);
+  });
 });

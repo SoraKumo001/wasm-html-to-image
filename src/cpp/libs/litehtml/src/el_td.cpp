@@ -30,7 +30,11 @@ void el_td::parse_presentational_hints()
 	if(str)
 	{
 		string url = "url('";
-		url += str;
+		for (const char c : string(str))
+		{
+			if (c == '\\' || c == '\'') url += '\\';
+			url += c;
+		}
 		url += "')";
 		m_style.add_property(_background_image_, url);
 	}
