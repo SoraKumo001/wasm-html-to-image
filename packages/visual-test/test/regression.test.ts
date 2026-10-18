@@ -120,4 +120,11 @@ describe("regression: layout and paint probes", () => {
     const wide = await renderPng(css, 700, 80);
     expect(near(wide.at(10, 10), [255, 0, 0])).toBe(true);
   });
+
+  it("a bitmap too large to allocate fails the render without killing the instance", async () => {
+    const huge = `<html><body style="margin:0"><div style="height:1200000px;background:#eee"></div></body></html>`;
+    await expect(render({ value: huge, width: 1000, format: "png" })).rejects.toThrow();
+    const { at } = await renderPng(`<div style="width:50px;height:50px;background:#00f"></div>`, 100, 60);
+    expect(near(at(10, 10), BLUE)).toBe(true);
+  });
 });

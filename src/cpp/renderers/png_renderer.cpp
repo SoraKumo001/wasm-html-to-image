@@ -35,7 +35,12 @@ bool renderDocumentToBitmap(SatoruInstance* inst, int width, int height,
 
     SkImageInfo info = SkImageInfo::MakeN32Premul(out_width, out_height, SkColorSpace::MakeSRGB());
     SkBitmap bitmap;
-    bitmap.allocPixels(info);
+    if (!bitmap.tryAllocPixels(info)) {
+        // allocPixels() would abort the whole wasm instance; fail the render instead.
+        SATORU_LOG_ERROR("[Satoru] cannot allocate %dx%d bitmap (out of memory)", out_width,
+                         out_height);
+        return false;
+    }
     bitmap.eraseColor(options.backgroundColor);
 
     SkCanvas canvas(bitmap);
@@ -103,7 +108,12 @@ bool renderHtmlToBitmap(const char* html, int width, int height, SatoruContext& 
 
     SkImageInfo info = SkImageInfo::MakeN32Premul(out_width, out_height, SkColorSpace::MakeSRGB());
     SkBitmap bitmap;
-    bitmap.allocPixels(info);
+    if (!bitmap.tryAllocPixels(info)) {
+        // allocPixels() would abort the whole wasm instance; fail the render instead.
+        SATORU_LOG_ERROR("[Satoru] cannot allocate %dx%d bitmap (out of memory)", out_width,
+                         out_height);
+        return false;
+    }
     bitmap.eraseColor(options.backgroundColor);
 
     SkCanvas canvas(bitmap);

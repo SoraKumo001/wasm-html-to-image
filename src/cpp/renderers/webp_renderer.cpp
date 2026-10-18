@@ -12,6 +12,7 @@
 #include "include/encode/SkWebpEncoder.h"
 #include "common/skia_encode.h"
 #include "render_utils.h"
+#include "utils/logging.h"
 
 sk_sp<SkData> renderDocumentToWebp(SatoruInstance* inst, int width, int height,
                                    const SatoruRenderOptions& options) {
@@ -31,7 +32,11 @@ sk_sp<SkData> renderDocumentToWebp(SatoruInstance* inst, int width, int height,
 
     SkImageInfo info = SkImageInfo::MakeN32Premul(out_width, out_height, SkColorSpace::MakeSRGB());
     SkBitmap bitmap;
-    bitmap.allocPixels(info);
+    if (!bitmap.tryAllocPixels(info)) {
+        SATORU_LOG_ERROR("[Satoru] cannot allocate %dx%d bitmap (out of memory)", out_width,
+                         out_height);
+        return nullptr;
+    }
     bitmap.eraseColor(options.backgroundColor);
 
     SkCanvas canvas(bitmap);
@@ -91,7 +96,11 @@ sk_sp<SkData> renderHtmlToWebp(const char* html, int width, int height, SatoruCo
 
     SkImageInfo info = SkImageInfo::MakeN32Premul(out_width, out_height, SkColorSpace::MakeSRGB());
     SkBitmap bitmap;
-    bitmap.allocPixels(info);
+    if (!bitmap.tryAllocPixels(info)) {
+        SATORU_LOG_ERROR("[Satoru] cannot allocate %dx%d bitmap (out of memory)", out_width,
+                         out_height);
+        return nullptr;
+    }
     bitmap.eraseColor(options.backgroundColor);
 
     SkCanvas canvas(bitmap);
