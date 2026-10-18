@@ -126,6 +126,7 @@ namespace litehtml
           {_grid_row_gap_, {_row_gap_}},
           {_grid_column_gap_, {_column_gap_}},
           {_outline_, {_outline_width_, _outline_style_, _outline_color_}},
+          {_columns_, {_column_width_, _column_count_}},
           {_column_rule_, {_column_rule_width_, _column_rule_style_, _column_rule_color_}},
 
           {_text_decoration_, {_text_decoration_color_, _text_decoration_line_, _text_decoration_style_, _text_decoration_thickness_}},
@@ -822,6 +823,46 @@ namespace litehtml
       else if (ident == "auto")
         add_parsed_property(name, property_value(0, important, false, m_layer, m_specificity));
       break;
+
+    case _column_width_:
+      return add_length_property(name, val, "auto", f_length | f_positive, important);
+
+    case _columns_:
+    {
+      // `columns: <column-width> || <column-count>` — either order, `auto` = both auto.
+      if (value.size() == 1 && value[0].type == IDENT && lowcase(value[0].name) == "auto")
+      {
+        add_parsed_property(_column_width_, property_value(css_length::predef_value(0), important, false, m_layer, m_specificity));
+        add_parsed_property(_column_count_, property_value(0, important, false, m_layer, m_specificity));
+        break;
+      }
+      if (value.size() > 2) break;
+      css_length width;
+      bool have_width = false, width_is_auto = false;
+      int count = 0;
+      bool have_count = false, ok = true;
+      for (const auto& tok : value)
+      {
+        if (tok.type == NUMBER && tok.n.number_type == css_number_integer && !have_count)
+        {
+          if ((int)tok.n.number <= 0) { ok = false; break; }
+          count = (int)tok.n.number;
+          have_count = true;
+        }
+        else if (!have_width && width.from_token(tok, f_length | f_positive, "auto"))
+        {
+          have_width = true;
+          width_is_auto = width.is_predefined();
+        }
+        else { ok = false; break; }
+      }
+      if (!ok) break;
+      if (have_width)
+        add_parsed_property(_column_width_, property_value(width_is_auto ? css_length::predef_value(0) : width, important, false, m_layer, m_specificity));
+      if (have_count)
+        add_parsed_property(_column_count_, property_value(count, important, false, m_layer, m_specificity));
+      break;
+    }
 
     case _counter_increment_:
     case _counter_reset_:

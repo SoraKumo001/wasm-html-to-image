@@ -105,6 +105,7 @@ namespace litehtml
     float m_flex_shrink;
     css_length m_flex_basis;
     int m_column_count;
+    css_length m_column_width;
     flex_direction m_flex_direction;
     flex_wrap m_flex_wrap;
     flex_justify_content m_flex_justify_content;
@@ -219,6 +220,7 @@ namespace litehtml
                        m_flex_grow(0),
                        m_flex_shrink(1),
                        m_column_count(0),
+                       m_column_width(css_length::predef_value(0)),
                        m_flex_direction(flex_direction_row),
                        m_flex_wrap(flex_wrap_nowrap),
                        m_flex_justify_content(flex_justify_content_flex_start),
@@ -441,6 +443,8 @@ namespace litehtml
     const css_length &get_flex_basis() const;
     int get_column_count() const;
     void set_column_count(int count);
+    const css_length &get_column_width() const;
+    void set_column_width(const css_length &width);
     flex_direction get_flex_direction() const;
     flex_wrap get_flex_wrap() const;
     flex_justify_content get_flex_justify_content() const;
@@ -1061,6 +1065,16 @@ namespace litehtml
   inline void css_properties::set_column_count(int count)
   {
     m_column_count = count;
+  }
+
+  inline const css_length &css_properties::get_column_width() const
+  {
+    return m_column_width;
+  }
+
+  inline void css_properties::set_column_width(const css_length &width)
+  {
+    m_column_width = width;
   }
 
   inline flex_direction css_properties::get_flex_direction() const

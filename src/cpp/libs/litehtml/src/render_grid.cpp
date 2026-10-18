@@ -17,6 +17,12 @@ std::shared_ptr<render_item> render_item_grid::init()
     m_initialized = true;
 
     int column_count = src_el()->css().get_column_count();
+    // Width-driven multicol (`column-width`, with or without `column-count`):
+    // the track count needs the available inline size, so the grouping into N
+    // column boxes is (re)done in calculate_grid_layout(). init() only splits
+    // the flowable content into words here.
+    const bool has_col_width = !src_el()->css().get_column_width().is_predefined();
+    const bool flow_split = column_count > 1 || (column_count <= 0 && has_col_width);
     if (column_count <= 0) column_count = 1;
 
     std::vector<std::shared_ptr<render_item>> items;
@@ -26,7 +32,7 @@ std::shared_ptr<render_item> render_item_grid::init()
     {
         if(!current_inlines.empty())
         {
-            if (column_count > 1)
+            if (flow_split)
             {
                 // Multi-column flow simulation: split text into flowable words
                 for (const auto& inl : current_inlines)
@@ -88,36 +94,30 @@ std::shared_ptr<render_item> render_item_grid::init()
     }
     flush_inlines();
 
-    if (column_count > 1 && !items.empty())
+    if (!items.empty() && flow_split)
     {
-        // 2. Group items into column containers to simulate flow
-        std::vector<std::shared_ptr<render_item>> columns;
-        for (int i = 0; i < column_count; i++)
+        if (column_count > 1 && !has_col_width)
         {
-            auto anon_el = std::make_shared<el_div>(src_el()->get_document());
-            anon_el->parent(src_el());
-            string style = "display: block; width: 100%; grid-column-start: " + std::to_string(i + 1);
-            anon_el->set_attr("style", style.c_str());
-            anon_el->compute_styles(false);
-            
-            auto anon_ri = std::make_shared<render_item_block>(anon_el);
-            anon_ri->parent(shared_from_this());
-            columns.push_back(anon_ri);
+            // Count-only: the track count is already known, group right away.
+            auto columns = group_into_columns(std::move(items), column_count);
+            children().clear();
+            for (auto& col : columns)
+            {
+                children().push_back(col->init());
+            }
+            m_multicol_grouped = column_count;
         }
-
-        size_t items_per_col = (items.size() + column_count - 1) / column_count;
-        if (items_per_col == 0) items_per_col = 1;
-        for (size_t i = 0; i < items.size(); i++)
+        else
         {
-            size_t col_idx = std::min((size_t)(i / items_per_col), (size_t)(column_count - 1));
-            columns[col_idx]->add_child(items[i]);
-            items[i]->parent(columns[col_idx]);
-        }
-
-        children().clear();
-        for (auto& col : columns)
-        {
-            children().push_back(col->init());
+            // Width-driven (with or without count): keep the flowable words
+            // flat; calculate_grid_layout() groups them once the available
+            // inline size is known.
+            children().clear();
+            for (auto& item : items)
+            {
+                item->parent(shared_from_this());
+                children().push_back(item);
+            }
         }
     }
     else
@@ -130,6 +130,35 @@ std::shared_ptr<render_item> render_item_grid::init()
     }
 
     return shared_from_this();
+}
+
+std::vector<std::shared_ptr<render_item>> render_item_grid::group_into_columns(
+    std::vector<std::shared_ptr<render_item>> items, int column_count)
+{
+    // 2. Group items into column containers to simulate flow
+    std::vector<std::shared_ptr<render_item>> columns;
+    for (int i = 0; i < column_count; i++)
+    {
+        auto anon_el = std::make_shared<el_div>(src_el()->get_document());
+        anon_el->parent(src_el());
+        string style = "display: block; width: 100%; grid-column-start: " + std::to_string(i + 1);
+        anon_el->set_attr("style", style.c_str());
+        anon_el->compute_styles(false);
+
+        auto anon_ri = std::make_shared<render_item_block>(anon_el);
+        anon_ri->parent(shared_from_this());
+        columns.push_back(anon_ri);
+    }
+
+    size_t items_per_col = (items.size() + column_count - 1) / column_count;
+    if (items_per_col == 0) items_per_col = 1;
+    for (size_t i = 0; i < items.size(); i++)
+    {
+        size_t col_idx = std::min((size_t)(i / items_per_col), (size_t)(column_count - 1));
+        columns[col_idx]->add_child(items[i]);
+        items[i]->parent(columns[col_idx]);
+    }
+    return columns;
 }
 
 namespace
@@ -178,8 +207,68 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
     m_grid_layout.column_gap = css().get_column_gap().calc_percent(render_inline);
     m_grid_layout.row_gap = css().get_row_gap().calc_percent(render_block);
 
+    // Multicol emulation: resolve the effective track count. `column-width`
+    // derives it from the available inline size (N fr tracks fill it exactly);
+    // with both set, the count caps the width-derived number.
+    const int specified_count = src_el()->css().get_column_count();
+    const bool has_col_width = !src_el()->css().get_column_width().is_predefined();
+    const bool is_multicol = specified_count > 0 || has_col_width;
+    int multicol_n = specified_count > 0 ? specified_count : 1;
+    if (is_multicol)
+    {
+        // Note: render_inline carries the resolved pixel value even when its
+        // type is auto (e.g. block boxes in an auto-width container), so the
+        // value alone decides whether the track count can be derived.
+        const bool avail_known = render_inline.value > 0;
+        if (has_col_width && avail_known)
+        {
+            pixel_t col_w = src_el()->css().get_column_width().calc_percent(render_inline);
+            pixel_t denom = col_w + m_grid_layout.column_gap;
+            if (denom > 0)
+            {
+                int nmax = (render_inline + m_grid_layout.column_gap) / denom;
+                if (nmax < 1) nmax = 1;
+                multicol_n = specified_count > 0 ? std::min(specified_count, nmax) : nmax;
+            }
+        }
+        if (m_multicol_grouped != multicol_n)
+        {
+            // (Re)group the flowable content into the resolved number of
+            // column boxes. Previously grouped children are unwrapped one
+            // level back to their flowable items first.
+            std::vector<std::shared_ptr<render_item>> leaves;
+            if (m_multicol_grouped > 0)
+            {
+                for (const auto& c : children())
+                {
+                    for (const auto& g : c->children()) leaves.push_back(g);
+                }
+            }
+            else
+            {
+                for (const auto& c : children()) leaves.push_back(c);
+            }
+            if (!leaves.empty())
+            {
+                auto columns = group_into_columns(std::move(leaves), multicol_n);
+                children().clear();
+                for (auto& col : columns) children().push_back(col->init());
+                m_multicol_grouped = multicol_n;
+            }
+        }
+    }
+
     // Expand column template
     length_vector columns_template;
+    if (is_multicol)
+    {
+        for (int i = 0; i < multicol_n; i++)
+        {
+            columns_template.push_back(css_length(1, css_units_fr));
+        }
+    }
+    else
+    {
     for (const auto& len : columns_template_raw)
     {
         if (len.is_calc() && (len.get_op() == css_length::op_repeat_auto_fit || len.get_op() == css_length::op_repeat_auto_fill))
@@ -207,6 +296,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         {
             columns_template.push_back(len);
         }
+    }
     }
 
     // Expand row template

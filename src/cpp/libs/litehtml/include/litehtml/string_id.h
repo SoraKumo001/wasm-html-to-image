@@ -374,6 +374,8 @@ namespace litehtml
       _flex_shrink_,
       _flex_basis_,
       _column_count_,
+      _column_width_,
+      _columns_,
       _column_rule_,
       _column_rule_width_,
       _column_rule_style_,

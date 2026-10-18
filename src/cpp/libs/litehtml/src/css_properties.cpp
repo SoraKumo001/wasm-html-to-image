@@ -653,6 +653,10 @@ void litehtml::css_properties::compute(const element* el, const document::ptr& d
         m_line_clamp = el->get_property<int>(__webkit_line_clamp_, false, 0, offset(m_line_clamp));
     }
     m_column_count = el->get_property<int>(_column_count_, false, 0, offset(m_column_count));
+    m_column_width = el->get_property<css_length>(_column_width_, false,
+                                                 css_length::predef_value(0),
+                                                 offset(m_column_width));
+    doc->cvt_units(m_column_width, m_font_metrics, 0);
     m_column_gap = el->get_property<css_length>(_column_gap_, false, 0, offset(m_column_gap));
     doc->cvt_units(m_column_gap, m_font_metrics, 0);
 
@@ -683,10 +687,28 @@ void litehtml::css_properties::compute(const element* el, const document::ptr& d
     compute_flex(el, doc);
     compute_grid(el, doc);
 
-    if (m_column_count > 0 && m_display != display_none) {
+    if ((m_column_count > 0 || !m_column_width.is_predefined()) &&
+        m_display != display_none) {
+        // Multicol is emulated with an equal-width (fr) grid: content is split
+        // across N column boxes in init()/layout, gaps and rules come from
+        // column-gap/column-rule. Balancing, fragmentation and spanning are
+        // out of scope — each column simply flows its share of the content.
+        const bool gap_unspecified =
+            el->get_property_value(_column_gap_).is<invalid>();
+        if (gap_unspecified || m_column_gap.is_predefined()) {
+            // The initial/normal column gap is 1em (unlike grid's 0).
+            m_column_gap.set_value((float)get_font_size(), css_units_px);
+        }
         m_display = display_grid;
         m_grid_template_columns.clear();
-        for (int i = 0; i < m_column_count; i++) {
+        if (m_column_count > 0 && m_column_width.is_predefined()) {
+            for (int i = 0; i < m_column_count; i++) {
+                m_grid_template_columns.push_back(css_length(1, css_units_fr));
+            }
+        } else {
+            // Width-driven (or width+count): the track count depends on the
+            // available inline size, so it is resolved in render_item_grid::
+            // calculate_grid_layout. Keep a single fr placeholder here.
             m_grid_template_columns.push_back(css_length(1, css_units_fr));
         }
     }

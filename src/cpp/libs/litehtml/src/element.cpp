@@ -155,7 +155,7 @@ std::shared_ptr<render_item> element::create_render_item(const std::shared_ptr<r
 				css().get_display() == display_webkit_box ||
 				css().get_display() == display_webkit_inline_box)
 	{
-		if (css().get_column_count() > 0)
+		if (css().get_column_count() > 0 || !css().get_column_width().is_predefined())
 		{
 			ret = std::make_shared<render_item_grid>(shared_from_this());
 		}

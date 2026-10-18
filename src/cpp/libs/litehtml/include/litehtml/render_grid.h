@@ -54,9 +54,17 @@ namespace litehtml
 
 		grid_layout m_grid_layout;
 		bool m_initialized = false;
+		// Multicol emulation groups flowable content into N column boxes. The
+		// grouping is (re)done in calculate_grid_layout() whenever the resolved
+		// track count differs from the current grouping: width-driven counts
+		// need the available inline size, and count+width takes the minimum.
+		// 0 means the children are still flat (not grouped yet).
+		int m_multicol_grouped = 0;
 
 		void calculate_grid_layout(const containing_block_context& self_size, formatting_context* fmt_ctx);
 		void place_grid_items(pixel_t x, pixel_t y, const containing_block_context& self_size, formatting_context* fmt_ctx);
+		std::vector<std::shared_ptr<render_item>> group_into_columns(
+			std::vector<std::shared_ptr<render_item>> items, int column_count);
 
 		pixel_t _render_content(pixel_t x, pixel_t y, bool second_pass, const containing_block_context &self_size, formatting_context* fmt_ctx) override;
 

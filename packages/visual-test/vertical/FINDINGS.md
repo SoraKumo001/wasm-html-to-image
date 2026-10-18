@@ -33,6 +33,8 @@ SVG 出力は PNG と一致 (差分 < 1%)、PDF 出力も縦書きのまま 1 �
 |---|------|------|
 | 1 | table の縦書きレイアウト (`layout_table_vertical`、罫線軸の転置) | 22/74: 高さ 912→456px で Chromium と一致 |
 | 2 | grid の縦書き (列=インライン軸/行=ブロック軸へ転置) | 63: 差分 36%→3% |
+| - | `display:inline-grid` のインライン整形対応 (行への組込み、shrink-to-fit 幅決定、先行ベースライン配置) | H/V プローブで Chromium と一致。明示 auto/fr・複数自動列・last=first は残件 |
+| - | columns (`column-count`/`column-width`/`columns`/`column-gap`/`column-rule`): width→fr 換算、gap normal→1em、rule 描画。均等バランス・断片化・`column-span` は対象外 | 横書きプローブ p1/p3/p5/p6/p7 で 0.0%/0.0% 一致 |
 | 3 | inline-block: 縦書きでの shrink-to-fit 判定、中央ベースライン | 18/86/87: 4〜5%→0〜2% |
 | 4 | float: 縦書き行ボックスが float を避ける、rl での fmt_ctx オフセット補正 | 77: 5.3%→2.7%、30 も回り込み (高さ差 54px は未解決) |
 | 6 | text-indent (副次的に修正) | 13/56/44: outline 17%→2.6% |
