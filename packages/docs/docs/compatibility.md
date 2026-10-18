@@ -43,10 +43,10 @@ title: 互換性と仕様
 | **Flexbox**          | `flex`, `flex-direction`, `justify-content`, `align-items`, `flex-wrap`, `gap` | W3C 仕様準拠の多段レイアウト解決                       |
 | **Grid**             | `grid-template-columns`, `grid-template-rows`, `grid-column`, `grid-row`, `gap`, `place-items` | 基本的なグリッド配置・トラック計算・自己配置をサポート |
 | **位置指定**         | `position: static / relative / absolute / fixed`, `top`, `right`, `bottom`, `left`, `inset`, `z-index` | 包含ブロックに応じた正確な配置                         |
-| **タイポグラフィ**   | HarfBuzz テキストシェイピング, BiDi (双方向テキスト), 縦書き (`writing-mode`) | CJK (日中韓)、アラビア語、絵文字、縦書き (`vertical-rl`)、文字縁取り (`-webkit-text-stroke`)、複数行省略 (`-webkit-line-clamp`) に対応 |
+| **タイポグラフィ**   | HarfBuzz テキストシェイピング, BiDi (双方向テキスト), 縦書き (`writing-mode`) | CJK (日中韓)、ハングル・ヘブライ語・アラビア語・タイ語・ヒンディー語・ギリシャ文字、カラー絵文字、縦書き (`vertical-rl`)、文字縁取り (`-webkit-text-stroke`)、複数行省略 (`-webkit-line-clamp` / `text-overflow: ellipsis`)、`text-transform` に対応。Noto Sans JP に無い文字体系と絵文字のフォントは、必要なときだけ外部 CDN (Google Fonts / jsDelivr) から自動取得します |
 | **装飾・エフェクト** | `box-shadow`, `border-radius`, `opacity`, `transform`, `filter`, `backdrop-filter` | 角丸クリッピング、複数ドロップシャドウ、ブラー、色調整、トランスフォーム対応 |
 | **グラデーション & 背景** | `linear-gradient`, `radial-gradient`, `conic-gradient`, `background-size`, `mix-blend-mode` | 複雑なカラーストップとアングル指定、ブレンドモードに対応 |
-| **クリッピング & マスク** | `clip-path: circle(), ellipse(), polygon(), path(), inset()`, `mask` | Skia ネイティブパスによる自由形状クリッピングとアルファマスク |
+| **クリッピング & マスク** | `clip-path: circle(), ellipse(), polygon(), path(), inset()`, `mask` / `mask-image` / `mask-size` / `mask-repeat` / `mask-position` | Skia ネイティブパスによる自由形状クリッピングとアルファマスク (画像・グラデーションを繰り返し・サイズ指定付きで適用) |
 | **インライン SVG**   | `<svg>`, `<path>`, `<circle>`, `<rect>`, `<g>`, `<linearGradient>` 等 | SkSVGDOM によるベクターグラフィックスの直接埋め込み描画 |
 | **モダン CSS 機能**  | `calc()`, `light-dark()`, CSS 変数 (`var(--...)`), `@layer`             | 数値計算やデザイントークンの活用                       |
 | **セレクタ**         | クラス, ID, 属性セレクタ, `:nth-child()`, `:not()`, `:is()`, `:where()`, `:has()`, `::before`, `::after` | 擬似クラス・擬似要素 (`content`) による高度なスタイリング。`:has()` は子 (`>`)・子孫・隣接 (`+`)・一般 (`~`) コンビネータの動作を Chromium 対照で確認済み |

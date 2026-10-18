@@ -40,9 +40,9 @@ Supported input types, output formats, CSS properties, and runtime environments.
 - **Box Model**: Margins, paddings, borders, box-sizing (`border-box`, `content-box`), `aspect-ratio`, and logical properties (`margin-inline`, `padding-block`, etc.).
 - **Flexbox**: Multi-pass resolution conforming to W3C Flexbox specs (`flex-direction`, `justify-content`, `align-items`, `flex-wrap`, `gap`, `row-gap`, `column-gap`, etc.).
 - **Grid Layout**: Grid tracks (`grid-template-columns/rows`), item placement (`grid-column/row`), `place-items`, `gap`.
-- **Typography & Internationalization**: HarfBuzz text shaping, bidirectional text (BiDi), line-breaking for CJK, Latin, Arabic, and Emoji. Vertical text (`writing-mode: vertical-rl`), multi-line truncation (`-webkit-line-clamp`), and text stroke (`-webkit-text-stroke`).
+- **Typography & Internationalization**: HarfBuzz text shaping, bidirectional text (BiDi), line-breaking for CJK, Latin, Arabic, and Emoji. Vertical text (`writing-mode: vertical-rl`), multi-line truncation (`-webkit-line-clamp` / `text-overflow: ellipsis`), `text-transform`, and text stroke (`-webkit-text-stroke`). Fonts for scripts missing from Noto Sans JP (Hangul, Hebrew, Arabic, Thai, Devanagari, Greek) and for color emoji are fetched on demand from external CDNs (Google Fonts / jsDelivr) only when such characters appear.
 - **Visual Effects**: Box shadows (multiple shadows, inset), border-radii (elliptical, individual corners), transforms, opacity, filters (`blur`, `drop-shadow`), backdrop filters, and blend modes (`mix-blend-mode`, `background-blend-mode`).
-- **Clipping & Shapes**: Native Skia vector clipping paths (`circle()`, `ellipse()`, `polygon()`, `path()`, `inset()`), and alpha masks.
+- **Clipping & Shapes**: Native Skia vector clipping paths (`circle()`, `ellipse()`, `polygon()`, `path()`, `inset()`), and alpha masks (`mask`, `mask-image`, `mask-size`, `mask-repeat`, `mask-position`; images and gradients, tiled).
 - **Inline SVG**: Direct embedded `<svg>` rendering with `<path>`, `<rect>`, `<circle>`, `<g>`, `<linearGradient>`, etc. via SkSVGDOM.
 - **Modern CSS**: `calc()`, `light-dark()`, CSS Variables (`var(--name)`), cascade layers (`@layer`).
 - **Selectors & Pseudo-elements**: ID, class, attributes, `:nth-child()`, `:not()`, `:is()`, `:where()`, `:has()`, `::before`, `::after` (`content`).

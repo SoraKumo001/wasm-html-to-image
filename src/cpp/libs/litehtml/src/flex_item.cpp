@@ -460,7 +460,7 @@ void litehtml::flex_item_column_direction::direction_specific_init(const litehtm
 			// size. The measured size already honours the item's own height, so take the content
 			// size from the extent of its in-flow children (horizontal writing mode only).
 			if (!m_container_wm.is_vertical() && !size_prop.is_predefined() &&
-				size_prop.units() != css_units_percentage && !el->children().empty())
+				size_prop.units() != css_units_percentage)
 			{
 				pixel_t content_extent = 0;
 				for (const auto& child : el->children())
