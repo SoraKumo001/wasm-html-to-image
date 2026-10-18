@@ -69,7 +69,7 @@ void el_td::parse_presentational_hints()
 	str = get_attr("valign");
 	if(str)
 	{
-		m_style.add_property(_vertical_align_, str);
+		m_style.add_property(_vertical_align_, str, "", false, nullptr, 0, selector_specificity(0, 0, 0, 1));
 	}
 
 	html_tag::parse_presentational_hints();

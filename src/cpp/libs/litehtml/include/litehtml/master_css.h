@@ -184,18 +184,24 @@ table {
 
 tbody, tfoot, thead {
 	display:table-row-group;
+}
+
+/* zero specificity so the valign presentational hints and author rules win */
+:where(tbody, tfoot, thead) {
 	vertical-align:middle;
 }
 
 tr {
 	display: table-row;
-	vertical-align: inherit;
 	border-color: inherit;
+}
+
+:where(tr, td, th) {
+	vertical-align: inherit;
 }
 
 td, th {
 	display: table-cell;
-	vertical-align: inherit;
 	border-width:1px;
 }
 

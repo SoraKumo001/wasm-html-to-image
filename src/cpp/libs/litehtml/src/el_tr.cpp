@@ -26,7 +26,7 @@ void litehtml::el_tr::parse_presentational_hints()
 	str = get_attr("valign");
 	if(str)
 	{
-		m_style.add_property(_vertical_align_, str);
+		m_style.add_property(_vertical_align_, str, "", false, nullptr, 0, selector_specificity(0, 0, 0, 1));
 	}
 	str = get_attr("bgcolor");
 	if (str)

@@ -127,4 +127,22 @@ describe("regression: layout and paint probes", () => {
     const { at } = await renderPng(`<div style="width:50px;height:50px;background:#00f"></div>`, 100, 60);
     expect(near(at(10, 10), BLUE)).toBe(true);
   });
+
+  it("valign attributes on tr and td place cell content at the top", async () => {
+    const { at } = await renderPng(
+      `<table cellspacing="0" cellpadding="0"><tr valign="top">
+         <td><i style="display:block;width:10px;height:10px;background:#00f"></i></td>
+         <td><i style="display:block;width:10px;height:100px;background:#888"></i></td>
+       </tr></table>
+       <table cellspacing="0" cellpadding="0" style="margin-top:20px"><tr>
+         <td valign="top"><i style="display:block;width:10px;height:10px;background:#00f"></i></td>
+         <td><i style="display:block;width:10px;height:100px;background:#888"></i></td>
+       </tr></table>`,
+      100,
+      260,
+    );
+    expect(near(at(5, 5), BLUE)).toBe(true); // tr valign=top
+    expect(near(at(5, 125), BLUE)).toBe(true); // td valign=top (second table starts at y=120)
+    expect(isWhite(at(5, 60))).toBe(true); // not vertically centered
+  });
 });
