@@ -9,6 +9,7 @@
 #include <cstdarg>
 #include <cstring>
 #include <iomanip>
+#include <map>
 #include <set>
 #include <sstream>
 #include <vector>
@@ -37,6 +38,36 @@ satoru::JsLogger* satoru_api_get_js_logger() { return &g_js_logger; }
 // P1: 汎用文字列処理 (json_escape / codepoints_to_utf8) は common/string_utils.h に寄せた。
 // 下記は satoru 固有のヘルパーのみ残す。返却値・throw 挙動は不変。
 namespace {
+
+// Noto Sans JP に含まれない文字体系の fallback 書体 (Google Fonts css2)。
+// key は font_manager の uncoveredCodepoints で被覆根拠から除外される索引 family 名。
+struct ScriptFallback {
+    const char* key;
+    const char* css;
+};
+const ScriptFallback kScriptFallbacks[] = {
+    {"satoru-fb-hangul", "https://fonts.googleapis.com/css2?family=Noto+Sans+KR"},
+    {"satoru-fb-hebrew", "https://fonts.googleapis.com/css2?family=Noto+Sans+Hebrew"},
+    {"satoru-fb-arabic", "https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic"},
+    {"satoru-fb-thai", "https://fonts.googleapis.com/css2?family=Noto+Sans+Thai"},
+    {"satoru-fb-devanagari", "https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari"},
+    {"satoru-fb-greek", "https://fonts.googleapis.com/css2?family=Noto+Sans"},
+};
+
+int script_fallback_group(char32_t cp) {
+    if ((cp >= 0x1100 && cp <= 0x11FF) || (cp >= 0x3130 && cp <= 0x318F) ||
+        (cp >= 0xA960 && cp <= 0xA97F) || (cp >= 0xAC00 && cp <= 0xD7FF))
+        return 0;
+    if ((cp >= 0x0590 && cp <= 0x05FF) || (cp >= 0xFB1D && cp <= 0xFB4F)) return 1;
+    if ((cp >= 0x0600 && cp <= 0x06FF) || (cp >= 0x0750 && cp <= 0x077F) ||
+        (cp >= 0x08A0 && cp <= 0x08FF) || (cp >= 0xFB50 && cp <= 0xFDFF) ||
+        (cp >= 0xFE70 && cp <= 0xFEFF))
+        return 2;
+    if (cp >= 0x0E00 && cp <= 0x0E7F) return 3;
+    if (cp >= 0x0900 && cp <= 0x097F) return 4;
+    if ((cp >= 0x0370 && cp <= 0x03FF) || (cp >= 0x1F00 && cp <= 0x1FFF)) return 5;
+    return -1;
+}
 typedef sk_sp<SkData> SkDataPtr;
 
 template <typename F>
@@ -367,12 +398,30 @@ void SatoruInstance::collect_resources(const std::string& html, int width, int h
             auto& unicode = context.getUnicodeService();
             std::set<char32_t> extMissing;
             bool emojiMissing = false;
+            std::map<int, std::set<char32_t>> scriptMissing;
             for (char32_t cp : missing) {
                 // 絵文字は別経路 (Noto Color Emoji)。HanaMin 取得対象から外す。
                 if (unicode.isEmoji(cp)) {
                     emojiMissing = true;
+                } else if (int g = script_fallback_group(cp); g >= 0) {
+                    scriptMissing[g].insert(cp);
                 } else {
                     extMissing.insert(cp);
+                }
+            }
+            // Noto Sans JP が持たない文字体系 (ハングル・ヘブライ・アラビア・タイ・デーヴァナーガリー)
+            // は文字体系別の Noto Sans を取得し、per-glyph 選択の global fallback へ登録する。
+            for (const auto& [group, cps] : scriptMissing) {
+                const auto& sf = kScriptFallbacks[group];
+                std::vector<std::string> urls = context.fontManager.getFontUrls(
+                    sf.key, 400, SkFontStyle::kUpright_Slant, &cps);
+                if (urls.empty()) {
+                    // subset 一覧 CSS を一度だけ取得 (取得済みなら request 側で dedup)。
+                    resourceManager.request(sf.css, sf.key, ResourceType::Font, false);
+                } else {
+                    for (const auto& u : urls) {
+                        resourceManager.request(u, "__fallback__", ResourceType::Font, false);
+                    }
                 }
             }
             // font-family に絵文字フォントが無くても、どの書体にも無い絵文字があれば

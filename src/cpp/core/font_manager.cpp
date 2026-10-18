@@ -489,6 +489,23 @@ bool SatoruFontManager::hasFontFaceSource(const std::string& family, const std::
     return false;
 }
 
+// 取得要否の索引としてのみ使う family (HanaMin.css・文字体系別 Noto Sans の css)。
+// その unicode-range は取得必要性の根拠にはなっても、取得済みの根拠にはならない。
+static bool is_fallback_index_family(const std::string& family) {
+    std::string f;
+    for (char c : family) {
+        if (c == '\'' || c == '"' || c == ' ') continue;
+        f.push_back((char)std::tolower((unsigned char)c));
+    }
+    if (f == "hanamin" || f.compare(0, 10, "satoru-fb-") == 0) return true;
+    static const char* const kNames[] = {"notosanskr", "notosanshebrew", "notosansarabic",
+                                         "notosansthai", "notosansdevanagari", "notosans"};
+    for (const char* n : kNames) {
+        if (f == n) return true;
+    }
+    return false;
+}
+
 std::set<char32_t> SatoruFontManager::uncoveredCodepoints(
     const std::set<char32_t>& codepoints) const {
     std::set<char32_t> out;
@@ -509,7 +526,7 @@ std::set<char32_t> SatoruFontManager::uncoveredCodepoints(
                 // HanaMin.css は未取得ブロックの索引であり、その unicode-range は
                 // 取得必要性の根拠にはなっても、取得済みの根拠にはならない
                 // (通常経路の取得対象はレイアウト要求 family のみ)。除外する。
-                if (req.family == "hanamin") continue;
+                if (is_fallback_index_family(req.family)) continue;
                 auto cached = m_typefaceCache.find(req.family);
                 bool familyLoaded = cached != m_typefaceCache.end() && !cached->second.empty();
                 for (const auto& src : srcs) {

@@ -72,6 +72,7 @@ SVG 出力は PNG と一致 (差分 < 1%)、PDF 出力も縦書きのまま 1 �
 - ルビ: 1 つの `<ruby>` に複数の `<rt>` を持つ複合ルビ、`rtc`、ルビの均等割付は未対応。縦書きで折り返し位置にルビが来る場合の 2 列分割は修正済み (44)
 - 縦書き内の `direction:rtl` (65): Chromium は LTR ラン (CJK・ラテン) の字順を反転せず、行をインライン終端 (=下端) へ寄せる。字順反転の誤発火修正に加え、短行の下端寄せ配置に対応 (残留 outline 1.7%。text-align:center/justify は対象外)。Chromium 実測: `vertical-rl/lr` + `direction:rtl` では各字は上→下のままで、短い行だけ下端に寄る (字順は不変)。
 - カラー絵文字 (64): font-family に絵文字フォントが無くても、どの書体にも無い絵文字があれば fontMap の Noto Color Emoji を自動取得して描画する (横書き・縦書き)。U+2600–27BF の ★☆ 等は通常書体で黒く描く (従来は白塗りで消えていた)。
+- 文字体系 fallback: Noto Sans JP に無いハングル・ヘブライ・アラビア・タイ・デーヴァナーガリー・ギリシャ文字は、どの書体にも無い場合に文字体系別の Noto Sans (Google Fonts css2) を自動取得して global fallback へ登録する (`satoru_api.cpp` の `kScriptFallbacks`)。従来は豆腐になっていた。
 
 ## 不具合 (縦書き以外でも起きるもの / 参考)
 
