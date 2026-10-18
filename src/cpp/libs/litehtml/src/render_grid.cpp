@@ -1,3 +1,4 @@
+#include <cmath>
 #include "html.h"
 #include "render_grid.h"
 #include "render_inline.h"
@@ -592,11 +593,12 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                 containing_block_context cb = self_size;
                 cb.size_mode |= containing_block_context::size_mode_content;
                 pixel_t measured = item.el->measure(cb, fmt_ctx);
-                pixel_t w = item.el->inline_size();
-                // Inline-level items (blockified grid items that still lay out as inline text)
-                // report no box size; fall back to the measured content width.
-                if (w <= 0) w = measured;
-                contrib[c] = std::max(contrib[c], w);
+                // inline_size() is the margin box of the measured box; for text content that box can
+                // still be empty (only padding/border), so also use the measured content width.
+                pixel_t w = std::max((pixel_t)item.el->inline_size(),
+                                     measured + item.el->content_offset_width());
+                // Round up: a track a fraction of a pixel too narrow makes the item's text wrap.
+                contrib[c] = std::max(contrib[c], (pixel_t)std::ceil(w));
             }
             pixel_t content_total = 0;
             pixel_t gaps = m_grid_layout.column_gap * (num_columns - 1);
