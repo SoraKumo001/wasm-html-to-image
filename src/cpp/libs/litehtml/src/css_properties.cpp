@@ -101,6 +101,18 @@ void litehtml::css_properties::compute(const element* el, const document::ptr& d
         (text_wrap)el->get_property<int>(_text_wrap_, true, text_wrap_wrap, offset(m_text_wrap));
     m_word_break = (word_break)el->get_property<int>(_word_break_, true, word_break_normal,
                                                      offset(m_word_break));
+    // CSS Fragmentation. Not inherited. Legacy page-break-* are remapped onto the
+    // break-* properties at parse time (style::add_property), so only the modern
+    // names are read here.
+    m_break_before =
+        (break_flow)el->get_property<int>(_break_before_, false, break_flow_auto,
+                                          offset(m_break_before));
+    m_break_after =
+        (break_flow)el->get_property<int>(_break_after_, false, break_flow_auto,
+                                          offset(m_break_after));
+    m_break_inside =
+        (break_inside)el->get_property<int>(_break_inside_, false, break_inside_auto,
+                                            offset(m_break_inside));
     m_overflow_wrap = (overflow_wrap)el->get_property<int>(
         _overflow_wrap_, true, overflow_wrap_normal, offset(m_overflow_wrap));
     if (m_overflow_wrap == overflow_wrap_normal) {
@@ -1330,6 +1342,9 @@ litehtml::css_properties::dump_get_attrs() const {
     ret.emplace_back("line_clamp", std::to_string(m_line_clamp));
     ret.emplace_back("webkit_box_orient", index_value(m_webkit_box_orient, box_orient_strings));
     ret.emplace_back("word_break", index_value(m_word_break, word_break_strings));
+    ret.emplace_back("break_before", index_value(m_break_before, break_flow_strings));
+    ret.emplace_back("break_after", index_value(m_break_after, break_flow_strings));
+    ret.emplace_back("break_inside", index_value(m_break_inside, break_inside_strings));
     ret.emplace_back("overflow_wrap", index_value(m_overflow_wrap, overflow_wrap_strings));
     ret.emplace_back("text_wrap", index_value(m_text_wrap, text_wrap_strings));
     ret.emplace_back("opacity", std::to_string(m_opacity));

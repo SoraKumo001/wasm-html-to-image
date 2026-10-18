@@ -50,6 +50,10 @@ namespace litehtml
           {_overflow_wrap_, overflow_wrap_strings},
           {_word_wrap_, overflow_wrap_strings},
 
+          {_break_before_, break_flow_strings},
+          {_break_after_, break_flow_strings},
+          {_break_inside_, break_inside_strings},
+
           {_font_style_, font_style_strings},
           {_font_variant_, font_variant_strings},
           {_font_weight_, font_weight_strings},
@@ -256,6 +260,28 @@ namespace litehtml
       parse_place_shorthand(name, value, important);
       break;
 
+    // Legacy CSS 2.1 page-break-* aliases. Remap onto break-* at parse time so the
+    // layout/pagination code only ever sees the modern fragmentation properties.
+    case _page_break_before_:
+    case _page_break_after_:
+    {
+      if (int index = value_index(ident, page_break_flow_strings); index >= 0)
+      {
+        // auto->auto, always->page, avoid->avoid, left/right->page
+        int mapped = (index == page_break_flow_auto)   ? break_flow_auto
+                     : (index == page_break_flow_avoid) ? break_flow_avoid
+                                                        : break_flow_page;
+        string_id modern = (name == _page_break_before_) ? _break_before_ : _break_after_;
+        add_parsed_property(modern, property_value(mapped, important, false, m_layer, m_specificity));
+      }
+      break;
+    }
+    case _page_break_inside_:
+      if (int index = value_index(ident, page_break_inside_strings); index >= 0)
+        add_parsed_property(_break_inside_,
+                            property_value(index, important, false, m_layer, m_specificity));
+      break;
+
     case _display_:
     case _direction_:
     case _writing_mode_:
@@ -279,6 +305,9 @@ namespace litehtml
     case _text_combine_upright_:
     case _overflow_wrap_:
     case _word_wrap_:
+    case _break_before_:
+    case _break_after_:
+    case _break_inside_:
     case _font_style_:
     case _font_variant_:
     case _text_decoration_style_:

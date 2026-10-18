@@ -104,6 +104,23 @@ const cases: Record<string, string> = {
 
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH ?? "C:/Users/oikawa/AppData/Local/ms-playwright/chromium-1248/chrome-win64/chrome.exe" });
 let ok = true;
+
+async function engineVsChromium(name: string, html: string) {
+  const r = await render({ value: html, width: WIDTH, format: "pdf" });
+  const pdf = Buffer.from(r.data as Uint8Array);
+  fs.writeFileSync(path.join(OUT, `${name}.pdf`), pdf);
+  const eng = extractPdf(pdf);
+  const ctx = await browser.newContext();
+  const page = await ctx.newPage();
+  const file = path.join(OUT, `${name}.html`);
+  fs.writeFileSync(file, html);
+  await page.goto(pathToFileURL(file).toString());
+  await page.waitForTimeout(300);
+  const domText = await page.evaluate(() => document.body.innerText);
+  const chrom = extractPdf(Buffer.from(await page.pdf({ width: `${WIDTH}px`, height: `${PAGE_H}px`, margin: { top: "0", right: "0", bottom: "0", left: "0" }, printBackground: true })));
+  await ctx.close();
+  return { eng, chrom, domText };
+}
 for (const [name, html] of Object.entries(cases)) {
   const r = await render({ value: html, width: WIDTH, format: "pdf" });
   const pdf = Buffer.from(r.data as Uint8Array);
@@ -148,6 +165,80 @@ const fxOk = fxPages.length === 3 && fxPages.every((t) => norm(t).includes("FIXE
 if (!fxOk) ok = false;
 console.log(`fixed pages=${fxPages.length} onEveryPage=${fxOk ? "OK" : "MISMATCH"}`);
 fxPages.forEach((t, i) => console.log(`   p${i + 1}: ${JSON.stringify(norm(t))}`));
+
+// ---------------------------------------------------------------------------
+// P2: CSS fragmentation (break-*/page-break-* aliases) via atomic break units.
+// The page height is 1123px and body margin is 0, so unit edges land on known
+// coordinates; assertions below pin the expected page assignment.
+// ---------------------------------------------------------------------------
+console.log("\nP2 fragmentation:");
+const p2: Record<string, { html: string; pages: number; p1Has?: string[]; p1Not?: string[]; p2Has?: string[] }> = {
+  // Card with break-inside:avoid straddles the bottom edge (1000..1300) -> pushed whole.
+  avoidcard: {
+    html: `<html><body style="${style}"><div style="height:1000px">padding</div><div style="break-inside:avoid;height:300px">AVOIDCARD</div><p style="margin:0">tail</p></body></html>`,
+    pages: 2,
+    p1Has: ["padding"],
+    p1Not: ["AVOIDCARD"],
+    p2Has: ["AVOIDCARD", "tail"],
+  },
+  // Legacy alias (page-break-inside:avoid) must behave exactly like break-inside:avoid.
+  legacycard: {
+    html: `<html><body style="${style}"><div style="height:1000px">padding</div><div style="page-break-inside:avoid;height:300px">LEGCARD</div><p style="margin:0">tail</p></body></html>`,
+    pages: 2,
+    p1Has: ["padding"],
+    p1Not: ["LEGCARD"],
+    p2Has: ["LEGCARD", "tail"],
+  },
+  // break-before:page forces a break at B.top (300) on an otherwise single-page doc.
+  breakpage: {
+    html: `<html><body style="${style}"><div style="height:300px">A</div><div style="break-before:page;height:300px">B</div></body></html>`,
+    pages: 2,
+    p1Has: ["A"],
+    p1Not: ["B"],
+    p2Has: ["B"],
+  },
+  // Legacy alias page-break-before:always == break-before:page.
+  legacybreak: {
+    html: `<html><body style="${style}"><div style="height:300px">A</div><div style="page-break-before:always;height:300px">B</div></body></html>`,
+    pages: 2,
+    p1Has: ["A"],
+    p1Not: ["B"],
+    p2Has: ["B"],
+  },
+  // Heading (break-after:avoid) whose bottom sits exactly on the page edge: the cut
+  // sits between HEAD and PARA, so HEAD is pushed down to stay with PARA.
+  avoidhead: {
+    html: `<html><body style="${style}"><div style="height:1073px">padding</div><h2 style="break-after:avoid;margin:0;height:50px">HEAD</h2><p style="margin:0;height:50px">PARA</p></body></html>`,
+    pages: 2,
+    p1Has: ["padding"],
+    p1Not: ["HEAD", "PARA"],
+    p2Has: ["HEAD", "PARA"],
+  },
+};
+for (const [name, spec] of Object.entries(p2)) {
+  const { eng, chrom, domText } = await engineVsChromium(name, spec.html);
+  const pagesOk = eng.pages.length === chrom.pages.length && eng.pages.length === spec.pages;
+  const textOk = strip(eng.pages.join("")) === strip(domText);
+  const chromTextOk = strip(eng.pages.join("")) === strip(chrom.pages.join(""));
+  const p1 = norm(eng.pages[0] ?? "");
+  const p2t = norm(eng.pages[1] ?? "");
+  const splitOk =
+    (spec.p1Has ?? []).every((s) => p1.includes(s)) &&
+    (spec.p1Not ?? []).every((s) => !p1.includes(s)) &&
+    (spec.p2Has ?? []).every((s) => p2t.includes(s));
+  if (!pagesOk || !textOk || !splitOk) ok = false;
+  console.log(`${name.padEnd(10)} pages eng=${eng.pages.length} chrom=${chrom.pages.length} ${pagesOk ? "OK" : "MISMATCH"} | text ${textOk ? "OK" : "MISMATCH"} | chromtext ${chromTextOk ? "OK" : "DIFF"} | split ${splitOk ? "OK" : "BAD"}`);
+  eng.pages.forEach((t, i) => console.log(`   eng p${i + 1}: ${JSON.stringify(norm(t))}`));
+  chrom.pages.forEach((t, i) => console.log(`   chr p${i + 1}: ${JSON.stringify(norm(t))}`));
+}
+
+// Regression gate: a document with no fragmentation CSS must slice exactly as P1
+// did (fixed pixel cuts). These are the P1-recorded slices for the `long` case.
+const longReg = await render({ value: cases.long, width: WIDTH, format: "pdf" });
+const longPages = extractPdf(Buffer.from(longReg.data as Uint8Array)).pages.map(norm);
+const regOk = JSON.stringify(longPages) === JSON.stringify(["Long Docblock oneblock two", "block three", "Tail line end"]);
+if (!regOk) ok = false;
+console.log(`regression (no avoid == P1) slices ${regOk ? "OK" : "MISMATCH"}`);
 
 await browser.close();
 console.log(ok ? "ALL OK" : "FAILURES PRESENT");

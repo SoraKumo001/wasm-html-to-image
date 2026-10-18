@@ -1037,6 +1037,48 @@ namespace litehtml
 				word_break_break_word
 		};
 
+// CSS Fragmentation (break-before / break-after). Only the subset the PDF
+// pagination pass consumes is modelled: auto / avoid / page.
+#define break_flow_strings "auto;avoid;page"
+
+		enum break_flow
+		{
+				break_flow_auto,
+				break_flow_avoid,
+				break_flow_page
+		};
+
+// CSS Fragmentation (break-inside). Only auto / avoid are modelled.
+#define break_inside_strings "auto;avoid"
+
+		enum break_inside
+		{
+				break_inside_auto,
+				break_inside_avoid
+		};
+
+// Legacy CSS 2.1 page-break-* value sets (aliases of break-*). Kept separate
+// because page-break-before/after speak "always"/"left"/"right" instead of
+// "page"; style::add_property remaps them onto break_flow at parse time.
+#define page_break_flow_strings "auto;always;avoid;left;right"
+
+		enum page_break_flow
+		{
+				page_break_flow_auto,
+				page_break_flow_always,
+				page_break_flow_avoid,
+				page_break_flow_left,
+				page_break_flow_right
+		};
+
+#define page_break_inside_strings "auto;avoid"
+
+		enum page_break_inside
+		{
+				page_break_inside_auto,
+				page_break_inside_avoid
+		};
+
 #define content_property_string         "none;normal;open-quote;close-quote;no-open-quote;no-close-quote"
 
         enum content_property

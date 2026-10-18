@@ -153,6 +153,10 @@ namespace litehtml
     css_token_vector m_mask;
     word_break m_word_break;
     overflow_wrap m_overflow_wrap;
+    // CSS Fragmentation (consumed by the PDF pagination pass).
+    break_flow m_break_before;
+    break_flow m_break_after;
+    break_inside m_break_inside;
     blend_mode m_mix_blend_mode;
     blend_mode m_background_blend_mode;
 
@@ -251,6 +255,9 @@ namespace litehtml
                        m_clip(),
                        m_word_break(word_break_normal),
                        m_overflow_wrap(overflow_wrap_normal),
+                       m_break_before(break_flow_auto),
+                       m_break_after(break_flow_auto),
+                       m_break_inside(break_inside_auto),
                        m_mix_blend_mode(blend_mode_normal),
                        m_background_blend_mode(blend_mode_normal),
                        m_isolation(isolation_auto),
@@ -303,6 +310,13 @@ namespace litehtml
 
     overflow_wrap get_overflow_wrap() const;
     void set_overflow_wrap(overflow_wrap mOverflowWrap);
+
+    break_flow get_break_before() const;
+    void set_break_before(break_flow mBreakBefore);
+    break_flow get_break_after() const;
+    void set_break_after(break_flow mBreakAfter);
+    break_inside get_break_inside() const;
+    void set_break_inside(break_inside mBreakInside);
 
     style_display get_display() const;
     void set_display(style_display mDisplay);
@@ -675,6 +689,36 @@ namespace litehtml
   inline void css_properties::set_overflow_wrap(overflow_wrap mOverflowWrap)
   {
     m_overflow_wrap = mOverflowWrap;
+  }
+
+  inline break_flow css_properties::get_break_before() const
+  {
+    return m_break_before;
+  }
+
+  inline void css_properties::set_break_before(break_flow mBreakBefore)
+  {
+    m_break_before = mBreakBefore;
+  }
+
+  inline break_flow css_properties::get_break_after() const
+  {
+    return m_break_after;
+  }
+
+  inline void css_properties::set_break_after(break_flow mBreakAfter)
+  {
+    m_break_after = mBreakAfter;
+  }
+
+  inline break_inside css_properties::get_break_inside() const
+  {
+    return m_break_inside;
+  }
+
+  inline void css_properties::set_break_inside(break_inside mBreakInside)
+  {
+    m_break_inside = mBreakInside;
   }
 
   inline style_display css_properties::get_display() const

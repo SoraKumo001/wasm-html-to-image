@@ -2,6 +2,8 @@
 
 #include <litehtml/master_css.h>
 
+#include <algorithm>
+#include <climits>
 #include <memory>
 #include <vector>
 
@@ -54,6 +56,124 @@ void render_template(const std::string& html, int width, int height, SkCanvas* c
         doc->draw(0, 0, 0, nullptr);
         container.flush();
     }
+}
+
+// ---- P2: CSS fragmentation (atomic-break) page-cut planning -------------------
+//
+// After the single layout pass, plan page start offsets ("cuts") in document
+// coordinates. An atomic unit is a direct block-level child of the flow root
+// (<body>) or a replaced element (img / whole table) sitting at that level. The
+// pass never descends into nested content: break decisions are taken outside
+// render_block_context, at the top level only (oracle: "atomic break").
+struct BreakUnit {
+    int top = 0;
+    int bottom = 0;
+    litehtml::break_flow before = litehtml::break_flow_auto;
+    litehtml::break_flow after = litehtml::break_flow_auto;
+    litehtml::break_inside inside = litehtml::break_inside_auto;
+};
+
+std::vector<BreakUnit> collect_break_units(const litehtml::element* root) {
+    std::vector<BreakUnit> units;
+    if (!root) return units;
+
+    const litehtml::element* flow = root;
+    for (const auto& child : root->children()) {
+        if (child && child->tag() == litehtml::_body_) {
+            flow = child.get();
+            break;
+        }
+    }
+
+    for (const auto& child : flow->children()) {
+        if (!child) continue;
+        if (!child->in_normal_flow()) continue;
+        // Top-level block boxes, plus replaced elements (img / whole table).
+        if (!(child->is_block_box() || child->is_replaced())) continue;
+        litehtml::position p = child->get_placement();
+        if (p.height <= 0) continue;
+        BreakUnit u;
+        u.top = (int)p.y;
+        u.bottom = (int)(p.y + p.height);
+        u.before = child->css().get_break_before();
+        u.after = child->css().get_break_after();
+        u.inside = child->css().get_break_inside();
+        units.push_back(u);
+    }
+
+    std::sort(units.begin(), units.end(),
+              [](const BreakUnit& a, const BreakUnit& b) { return a.top < b.top; });
+    return units;
+}
+
+// Plan page-start offsets. With no break-* in the document this reproduces P1's
+// fixed pixel cuts (0, areaHeight, 2*areaHeight, ...). break-* can only move a cut
+// earlier than the pixel cut:
+//   - break-before/after: page forces a cut at that unit edge,
+//   - break-inside: avoid pulls the cut back to the top of a straddling unit,
+//   - break-before/after: avoid pulls it back to the previous unit's top so the
+//     two neighbours stay together.
+std::vector<int> plan_page_cuts(const std::vector<BreakUnit>& units, int area_height,
+                                int doc_height) {
+    std::vector<int> cuts;
+    cuts.push_back(0);
+    if (area_height < 1) area_height = 1;
+
+    int pos = 0;
+    while (pos < doc_height) {
+        const int limit = pos + area_height;
+
+        // 1) Forced breaks (break-before/after: page): the earliest edge after pos
+        //    that still fits on this page ends it early.
+        int forced = INT_MAX;
+        for (const auto& u : units) {
+            if (u.before == litehtml::break_flow_page && u.top > pos) forced = std::min(forced, u.top);
+            if (u.after == litehtml::break_flow_page && u.bottom > pos)
+                forced = std::min(forced, u.bottom);
+        }
+
+        int cut;
+        if (forced <= limit) {
+            cut = forced;
+        } else {
+            cut = limit;
+
+            // 2) break-inside: avoid — a unit straddling the cut moves down whole.
+            for (const auto& u : units) {
+                if (u.inside == litehtml::break_inside_avoid && u.top > pos && u.top < cut &&
+                    u.bottom > cut)
+                    cut = std::min(cut, u.top);
+            }
+
+            // 3) break-after/before: avoid — the cut must not fall between two
+            //    neighbours; move it to the top of the already-fitting first one.
+            bool inside_unit = false;
+            for (const auto& u : units) {
+                if (u.top < cut && cut < u.bottom) {
+                    inside_unit = true;
+                    break;
+                }
+            }
+            if (!inside_unit) {
+                const BreakUnit* a = nullptr;  // last unit entirely above the cut
+                const BreakUnit* b = nullptr;  // first unit at/after the cut
+                for (const auto& u : units) {
+                    if (u.bottom <= cut && (!a || u.bottom > a->bottom)) a = &u;
+                    if (u.top >= cut && (!b || u.top < b->top)) b = &u;
+                }
+                const bool avoid_between = (a && a->after == litehtml::break_flow_avoid) ||
+                                           (b && b->before == litehtml::break_flow_avoid);
+                if (avoid_between && a && a->top > pos) cut = a->top;
+            }
+        }
+
+        if (cut <= pos) cut = limit;  // no forward progress: fall back to the pixel cut
+        if (cut <= pos || cut >= doc_height) break;
+        cuts.push_back(cut);
+        pos = cut;
+    }
+
+    return cuts;
 }
 }  // namespace
 
@@ -225,17 +345,22 @@ sk_sp<SkData> renderHtmlsToPdf(const std::vector<std::string>& htmls, int width,
 // P1: single-HTML multi-page PDF via "Layout once + Slice". This path is independent of
 // renderHtmlsToPdf's array (one-item-per-page) approach:
 //   1) lay the document out exactly once at contentWidth,
-//   2) derive the page count from doc->height(),
+//   2) plan the page start offsets ("cuts") from the fragmentation CSS (P2),
 //   3) for each page: beginPage -> (per-page background) -> header/footer re-render (same as
-//      renderHtmlsToPdf today) -> draw the shared document shifted by -page*contentAreaHeight and
-//      clipped to the page's content area -> endPage.
+//      renderHtmlsToPdf today) -> draw the shared document shifted by -cut[page] and clipped to
+//      the page's slice -> endPage.
 //
 // pageHeight = height(>0) : options.outputHeight(>0) : A4 @96dpi (1123px). contentAreaHeight is
 // pageHeight minus the top/bottom margins.
 //
-// Notes / accepted limitations (P1):
-//   - The slice cuts between the layout's painted pixels; a line/element straddling a page
-//     boundary is simply clipped. litehtml has no break/avoid-break, so this is by design.
+// P2 adds CSS fragmentation on top of the P1 "layout once + slice" model (see plan_page_cuts):
+// top-level block children / replaced elements are atomic units, break-before/after:page force a
+// cut at a unit edge, break-inside:avoid (and break-before/after:avoid) move a cut earlier. A
+// document without break-* still cuts at the fixed P1 pixel positions.
+//
+// Notes / accepted limitations:
+//   - Without break-* the slice cuts between the layout's painted pixels; a line/element
+//     straddling a page boundary is simply clipped (P1 behaviour, unchanged).
 //   - position:fixed: litehtml draws fixed elements ignoring the doc->draw (x,y) offset
 //     (render_item.cpp draws them with draw(hdc, 0, 0, ...)), so the vertical page shift (which is
 //     applied through the draw offset rather than a canvas translate) leaves them in place ->
@@ -279,7 +404,11 @@ sk_sp<SkData> renderHtmlToPdf(const std::string& html, int width, int height,
     int doc_height = (int)doc->height();
     if (doc_height < 1) doc_height = 1;
 
-    int page_count = (doc_height + content_area_height - 1) / content_area_height;
+    // P2: plan cut positions from the fragmentation CSS (falling back to P1's fixed
+    // pixel cuts when no break-* is present). Page i starts at page_cuts[i].
+    std::vector<BreakUnit> break_units = collect_break_units(doc->root().get());
+    std::vector<int> page_cuts = plan_page_cuts(break_units, content_area_height, doc_height);
+    int page_count = (int)page_cuts.size();
     if (page_count < 1) page_count = 1;
 
     SkDynamicMemoryWStream stream;
@@ -328,15 +457,23 @@ sk_sp<SkData> renderHtmlToPdf(const std::string& html, int width, int height,
 
         // Content slice: the page shift is applied through the draw offset (so fixed elements,
         // which ignore it, stay at their viewport position); the canvas clip bounds the page.
+        // The clip height is the distance to the next cut (a fragmentation-shortened page must
+        // not paint content that starts the following page), capped at the page content area.
+        const int page_offset = (page < (int)page_cuts.size()) ? page_cuts[page] : 0;
+        int slice_height = content_area_height;
+        if (page + 1 < (int)page_cuts.size()) slice_height = page_cuts[page + 1] - page_offset;
+        if (slice_height < 1) slice_height = 1;
+        if (slice_height > content_area_height) slice_height = content_area_height;
+
         canvas->save();
         canvas->translate((SkScalar)margin_left, (SkScalar)margin_top);
-        canvas->clipRect(SkRect::MakeXYWH(0, 0, (SkScalar)content_width, (SkScalar)content_area_height));
+        canvas->clipRect(SkRect::MakeXYWH(0, 0, (SkScalar)content_width, (SkScalar)slice_height));
 
         container.reset();
         container.set_canvas(canvas);
         container.set_height(content_area_height);
         container.set_tagging(false);
-        doc->draw(0, 0, -(litehtml::pixel_t)(page * content_area_height), nullptr);
+        doc->draw(0, 0, -(litehtml::pixel_t)page_offset, nullptr);
         container.flush();
 
         canvas->restore();

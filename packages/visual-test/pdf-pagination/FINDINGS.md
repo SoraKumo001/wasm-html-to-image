@@ -76,5 +76,96 @@ npx tsx pdf-pagination/verify.mts
 
 ## スコープ外 (P1 対象外)
 
-- 明示的な改ページ CSS、sticky、表/行の分割制御。
+- 明示的な改ページ CSS、sticky、表/行の分割制御。 → P2 で `break-*` のみ実装 (下記)。
 - 配列経路の頁分割。
+
+---
+
+# 複数ページ PDF (P2: CSS Fragmentation / Atomic break)
+
+P1 の「Layout-once + Slice」を土台に、切断位置を CSS 断片化プロパティで賢くする。
+oracle 設計 (Atomic break) 準拠。**スコープ P2 のみ**・コミット禁止。
+
+## 実装
+
+### 1. CSS 追加 (litehtml)
+
+- 新規プロパティは最小 3 つ:
+  | プロパティ | 値 | enum |
+  |---|---|---|
+  | `break-before` | `auto` / `avoid` / `page` | `break_flow` |
+  | `break-after`  | `auto` / `avoid` / `page` | `break_flow` |
+  | `break-inside` | `auto` / `avoid`           | `break_inside` |
+- レガシー `page-break-*` は **エイリアス同値マップ** (`style::add_property` で parse 時に
+  `break-*` へ写像。コンピュート側はモダン名のみ読む):
+  - `page-break-before/after`: `auto`→`auto` / `always`→`page` / `avoid`→`avoid` / `left|right`→`page`
+  - `page-break-inside`: `auto`→`auto` / `avoid`→`avoid`
+- 非継承 (`get_property<int>(..., inherited=false, ...)`)。
+- 変更点: `types.h` (enum/strings), `string_id.h` (property id), `css_properties.{h,cpp}`
+  (member/getter/compute/dump), `style.cpp` (valid values + parse + legacy remap)。
+
+### 2. ページネーションパス (render_block_context 外 / atomic unit)
+
+`src/cpp/renderers/pdf_renderer.cpp` の `renderHtmlToPdf` 内、**レイアウト後に一度だけ**計画:
+
+- `collect_break_units(doc->root())`: フロールート `<body>` の直下にある
+  **最上位 block child** と **置換要素 (`img` / `table` 全体)** を atomic unit として収集。
+  - `display:none` / `position:absolute|fixed` は除外 (`in_normal_flow()`)。
+  - **ネスト内へは立入禁止** (直下のみ。孫以降は親 unit に丸ごと含める)。
+  - unit の `top/bottom` は `element::get_placement()` (文書座標)。
+- `plan_page_cuts(units, contentAreaHeight, docHeight)` が頁開始オフセット列を作る:
+  1. **自然切断 = P1 と同じ固定ピクセル切断** (`pos + H`)。`break-*` 無しなら P1 と完全一致。
+  2. **強制改頁** (`break-before:page` はその unit の `top`、`break-after:page` は `bottom`) が
+     頁内 (`<= pos+H`) にあれば、そこで頁を早期終了。
+  3. **`break-inside:avoid`**: unit が切断位置を跨ぐなら切断をその unit の `top` へ後退 (次頁送り)。
+  4. **`break-before/after:avoid`**: 切断が隣接 unit の間 (ギャップ) に落ちるなら、
+     直前 unit の `top` へ後退させて 2 つを同一頁に保つ。
+  - 進捗保証: `cut <= pos` ならピクセル切断へフォールバック。頁より高い avoid unit は分割許容。
+
+### 3. 頁スライス幅 (P1 からの差分)
+
+P1 は各頁のクリップ高を常に `contentAreaHeight` にしていたが、P2 では切断が
+`H` より手前に来るため、**クリップ高 = 次 cut までの距離** (`min(次cut - offset, contentAreaHeight)`)
+に変更。これが無いと短い頁で次頁先頭の内容が二重描画される。最終頁は `contentAreaHeight`。
+`position:fixed` の再描画・header/footer の頁毎再描画は P1 のまま。
+
+## 検証 (`verify.mts` を拡張)
+
+`packages/visual-test/pdf-pagination/verify.mts` に P2 ケースを追加。Chromium
+(`page.pdf()`, 600×1123, 余白 0) と頁数・連結テキストを対照。頁スライス (avoid の場合の
+unit 配置) は明示 assert。
+
+```bash
+cd packages/visual-test
+npx tsx pdf-pagination/verify.mts
+```
+
+結果 (全て OK):
+
+| case | 内容 | eng 頁数 | chrom 頁数 | 頁配置 assert |
+|---|---|---|---|---|
+| avoidcard  | `break-inside:avoid` のカード (1000..1300) が境界跨ぎ | 2 | 2 | p1=padding / p2=AVOIDCARD+tail |
+| legacycard | `page-break-inside:avoid` (レガシー同値)         | 2 | 2 | 同上 |
+| breakpage  | `break-before:page` (doc 高 600 < H)            | 2 | 2 | p1=A / p2=B |
+| legacybreak| `page-break-before:always` (レガシー同値)        | 2 | 2 | p1=A / p2=B |
+| avoidhead  | `break-after:avoid` 見出し (bottom = 頁境界)     | 2 | 2 | p1=padding / p2=HEAD+PARA |
+
+- **リグレッションゲート**: avoid 無し文書 (`short`/`long`/`image`) は P1 と同一 (頁数・頁スライス)。
+  `long` のスライスは P1 記録値と文字列一致を assert。
+- header/footer 各頁再描画・`position:fixed` 各頁再描画も P1 同様に継続。
+
+### 既存 vitest 回帰
+
+- `packages/html-to-image` vitest **135 件 通過**。
+- `packages/visual-test` vitest **155 件 通過**。
+
+## P2 の制限 (スコープ内で記録)
+
+- atomic unit は **最上位のみ**。1 つの巨大な直下 `div` に中身を全部入れた文書では unit が 1 つに
+  なり、`break-*` は効かない (ネスト内立入禁止の設計どおり)。
+- `break-inside:avoid` は頁より高い unit では分割される (進捗優先)。
+- `break-before/after:avoid` が効くのは切断が単位間ギャップに落ちる場合のみ。切断が次 unit の
+  内部に落ちる場合は「その unit の途中で切れる」だけで、前方 unit との break ではないため対象外。
+- 本文テキスト抽出比較は Skia の合字 (`fi` 等) が `ToUnicode` で `\u0000` になり得るため、
+  P2 検証の固定文は合字を作らない語 (`padding` 等) を用いた (P1 の既知の抽出注意と同じ)。
+- 配列入力経路 (`htmls` 2 件以上) は従来どおり 1 要素 = 1 頁。P1/P2 の単一 HTML 頁分割とは別経路。

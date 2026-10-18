@@ -313,6 +313,14 @@ namespace litehtml
       _word_break_,
       _overflow_wrap_,
       _word_wrap_,
+
+      // CSS Fragmentation (PDF pagination). Legacy page-break-* are aliases.
+      _break_before_,
+      _break_after_,
+      _break_inside_,
+      _page_break_before_,
+      _page_break_after_,
+      _page_break_inside_,
       _text_align_,
       _vertical_align_,
       _color_,
