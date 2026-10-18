@@ -1461,6 +1461,17 @@ std::shared_ptr<litehtml::render_item> litehtml::render_item::init() {
     return shared_from_this();
 }
 
+// A percentage height resolves against the containing block's height only when that height is
+// definite; against an auto-height block it behaves as auto (min-height: 0, max-height: none).
+// Without this `height: 100%` chains resolved against the 3000px initial viewport height.
+static bool percent_height_is_indefinite(const litehtml::css_length& len,
+                                         const litehtml::containing_block_context& cb_context) {
+    if (len.is_predefined()) return false;
+    const bool is_percent = len.units() == litehtml::css_units_percentage ||
+                            (len.is_calc() && len.calc_percent() != 0);
+    return is_percent && cb_context.height.type == litehtml::containing_block_context::cbc_value_type_auto;
+}
+
 void litehtml::render_item::calc_cb_length(const css_length& len, pixel_t percent_base,
                                            containing_block_context::typed_pixel& out_value) const {
     if (!len.is_predefined()) {
@@ -1572,7 +1583,7 @@ litehtml::containing_block_context litehtml::render_item::calculate_containing_b
                     }
                 }
             }
-            if (height) {
+            if (height && !percent_height_is_indefinite(*height, cb_context)) {
                 // Mapping physical height to parent's physical height
                 calc_cb_length(*height, cb_context.height, ret.height);
             }
@@ -1605,8 +1616,10 @@ litehtml::containing_block_context litehtml::render_item::calculate_containing_b
     calc_cb_length(src_el()->css().get_max_width(), cb_context.width, ret.max_width);
 
     // Min/Max heights (physical height = block-size in horizontal-tb)
-    calc_cb_length(src_el()->css().get_min_height(), cb_context.height, ret.min_height);
-    calc_cb_length(src_el()->css().get_max_height(), cb_context.height, ret.max_height);
+    if (!percent_height_is_indefinite(src_el()->css().get_min_height(), cb_context))
+        calc_cb_length(src_el()->css().get_min_height(), cb_context.height, ret.min_height);
+    if (!percent_height_is_indefinite(src_el()->css().get_max_height(), cb_context))
+        calc_cb_length(src_el()->css().get_max_height(), cb_context.height, ret.max_height);
 
     // Fix box sizing
     // Physical width adjustment (inline-size)

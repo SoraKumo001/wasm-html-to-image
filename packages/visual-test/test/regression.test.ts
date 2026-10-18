@@ -209,4 +209,10 @@ describe("regression: layout and paint probes", () => {
     expect(near(at(5, 5), [255, 0, 0])).toBe(true);
     expect(near(at(30, 5), BLUE)).toBe(true);
   });
+
+  it("percentage heights against an auto-height parent behave as auto", async () => {
+    const html = `<html><body style="margin:0;background:#fff"><div style="background:#00f"><div style="height:100%;min-height:100%;background:#00f;color:#00f;font-size:10px;line-height:10px">x</div></div></body></html>`;
+    const r = await render({ value: html, width: 100, format: "png" });
+    expect(r.height).toBeLessThan(100); // was the 3000px initial viewport height
+  });
 });
