@@ -26,6 +26,25 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(skia)
 
+# SkLumaColorFilter::Make() (used by SVG <mask>) builds an SkSL runtime effect, which is
+# stubbed out in this SkSL-less build and aborts the instance. Redirect it to a raster-pipeline
+# implementation (src/cpp/utils/skia_luma.cpp). Idempotent: only patches an unpatched checkout.
+set(_skia_rcf "${skia_SOURCE_DIR}/src/effects/colorfilters/SkRuntimeColorFilter.cpp")
+file(READ "${_skia_rcf}" _skia_rcf_txt)
+if(NOT _skia_rcf_txt MATCHES "satoru_make_luma_filter")
+  string(REPLACE
+    "    const SkRuntimeEffect* lumaEffect = GetKnownRuntimeEffect(StableKey::kLuma);
+
+    return lumaEffect->makeColorFilter(SkData::MakeEmpty());"
+    "    sk_sp<SkColorFilter> satoru_make_luma_filter();
+    return satoru_make_luma_filter();"
+    _skia_rcf_patched "${_skia_rcf_txt}")
+  if(_skia_rcf_patched STREQUAL _skia_rcf_txt)
+    message(FATAL_ERROR "skia.cmake: SkLumaColorFilter::Make() patch did not apply (Skia source changed?)")
+  endif()
+  file(WRITE "${_skia_rcf}" "${_skia_rcf_patched}")
+endif()
+
 # --- Target: skia_lib ---
 # satoru正をベースに統合:
 #  - FreeType ports / skshaper+harfbuzz+skunicode: WASM_ENABLE_TEXT_SHAPING=ON既定で常時 (image-optは無し)

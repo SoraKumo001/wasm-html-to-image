@@ -115,6 +115,7 @@ target_sources(html_to_image_core PRIVATE
     src/cpp/renderers/pdf_renderer.cpp
     src/cpp/utils/logging.cpp
     src/cpp/utils/pdf_merger.cpp
+    src/cpp/utils/skia_luma.cpp
     src/cpp/utils/skia_stubs.cpp
     src/cpp/utils/skunicode_satoru.cpp
 )

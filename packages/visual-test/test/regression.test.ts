@@ -215,4 +215,16 @@ describe("regression: layout and paint probes", () => {
     const r = await render({ value: html, width: 100, format: "png" });
     expect(r.height).toBeLessThan(100); // was the 3000px initial viewport height
   });
+
+  it("inline SVG <mask> renders by luminance instead of aborting the wasm instance", async () => {
+    const svg = (mask: string) =>
+      `<svg width="50" height="50"><mask id="m">${mask}</mask><rect width="50" height="50" fill="#00f" mask="url(#m)"/></svg>`;
+    const half = await renderPng(svg(`<rect width="25" height="50" fill="#fff"/>`), 100, 60);
+    expect(near(half.at(10, 25), BLUE)).toBe(true); // white (luma 1) keeps the content
+    expect(isWhite(half.at(40, 25))).toBe(true); // unmasked area is transparent
+    const gray = await renderPng(svg(`<rect width="50" height="50" fill="#808080"/>`), 100, 60);
+    const [r] = gray.at(25, 25);
+    expect(r).toBeGreaterThan(100); // ~50% mask: blue blended with the white page
+    expect(r).toBeLessThan(160);
+  });
 });
