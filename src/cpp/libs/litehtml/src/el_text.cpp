@@ -155,9 +155,9 @@ void litehtml::el_text::draw(uint_ptr hdc, pixel_t x, pixel_t y, const position 
 					color = el_parent->css().get_text_fill_color();
 				}
 				text_overflow overflow = el_parent->css().get_text_overflow();
-				if (ri->force_ellipsis())
+				if(!ri->force_ellipsis())
 				{
-					overflow = text_overflow_ellipsis;
+					overflow = text_overflow_clip;
 				}
 				doc->container()->draw_text(hdc, m_use_transformed ? m_transformed_text.c_str() : m_text.c_str(), font,
 											color, pos, overflow, el_parent->css().get_direction(), el_parent->css().get_writing_mode());

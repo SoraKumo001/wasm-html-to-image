@@ -256,8 +256,21 @@ litehtml::pixel_t litehtml::line_box::calc_va_baseline(const va_context& current
 
 std::list< std::unique_ptr<litehtml::line_box_item> > litehtml::line_box::finish(bool last_box, const containing_block_context &containing_block_size)
 {
-	if (m_text_overflow == text_overflow_ellipsis && 
-		is_one_of(m_overflow, overflow_hidden, overflow_scroll, overflow_auto) &&
+	bool block_ellipsis = (m_text_overflow == text_overflow_ellipsis &&
+		is_one_of(m_overflow, overflow_hidden, overflow_scroll, overflow_auto));
+	if(!block_ellipsis)
+	{
+		for(auto& item : m_items)
+		{
+			const auto& css = item->get_el()->src_el()->css();
+			if(css.get_text_overflow() == text_overflow_ellipsis && css.get_overflow() != overflow_visible)
+			{
+				block_ellipsis = true;
+				break;
+			}
+		}
+	}
+	if (block_ellipsis &&
 		!(containing_block_size.size_mode & containing_block_context::size_mode_content))
 	{
 		pixel_t container_width = m_inline_end - m_inline_pos;
@@ -309,11 +322,27 @@ std::list< std::unique_ptr<litehtml::line_box_item> > litehtml::line_box::finish
 				// Mark for ellipsis
 				(*last_visible_it)->get_el()->force_ellipsis(true);
 				(*last_visible_it)->get_el()->pos().width = 0.1f;
-				
-				auto next_it = std::next(last_visible_it);
+
+				auto kept_end = std::next(last_visible_it);
+				auto next_it = kept_end;
 				while (next_it != m_items.end())
 				{
-					(*next_it)->get_el()->skip(true);
+					// Inline start/end markers share their render_item with the
+					// still-open marker kept in the prefix: skipping it would
+					// hide the kept text as well (draw walk checks skip()).
+					bool shared = false;
+					for(auto kept_it = m_items.begin(); kept_it != kept_end; ++kept_it)
+					{
+						if((*kept_it)->get_el() == (*next_it)->get_el())
+						{
+							shared = true;
+							break;
+						}
+					}
+					if(!shared)
+					{
+						(*next_it)->get_el()->skip(true);
+					}
 					next_it = m_items.erase(next_it);
 				}
 			}
