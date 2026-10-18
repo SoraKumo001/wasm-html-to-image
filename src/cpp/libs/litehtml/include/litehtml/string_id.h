@@ -417,6 +417,8 @@ namespace litehtml
       _clip_path_,
       _mask_,
       __webkit_mask_,
+      _mask_image_,
+      __webkit_mask_image_,
       _pointer_events_,
       _user_select_,
       __webkit_user_select_,

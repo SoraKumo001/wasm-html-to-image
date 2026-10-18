@@ -157,6 +157,15 @@ void litehtml::css_properties::compute(const element* el, const document::ptr& d
         m_mask = el->get_property<css_token_vector>(__webkit_mask_, false, css_token_vector(),
                                                     offset(m_mask));
     }
+    // mask-image longhand (same image-layer tokens as the shorthand)
+    if (m_mask.empty()) {
+        m_mask = el->get_property<css_token_vector>(_mask_image_, false, css_token_vector(),
+                                                    offset(m_mask));
+    }
+    if (m_mask.empty()) {
+        m_mask = el->get_property<css_token_vector>(__webkit_mask_image_, false,
+                                                    css_token_vector(), offset(m_mask));
+    }
     m_clip = el->get_property<css_token_vector>(_clip_, false, css_token_vector(), offset(m_clip));
 
     // https://www.w3.org/TR/CSS22/visuren.html#dis-pos-flo

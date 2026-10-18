@@ -232,6 +232,8 @@ namespace litehtml
     case _object_position_:
     case _mask_:
     case __webkit_mask_:
+    case _mask_image_:
+    case __webkit_mask_image_:
     case _pointer_events_:
     case _user_select_:
     case __webkit_user_select_:
