@@ -20,6 +20,13 @@
 #include "satoru_context.h"
 #include "utils/logging.h"
 
+// Default viewport height (px) used for layout when the caller omits `height`.
+// Viewport-relative units (vh/vmin/vmax) and viewport media queries resolve
+// against this value, so it must model a browser viewport rather than an
+// arbitrary tall layout canvas. Matches Chromium's no-JS viewport 1000x800:
+// e.g. `padding-top:25vh` must be 0.25*800 = 200px, not 0.25*3000 = 750px.
+inline constexpr int k_default_viewport_height = 800;
+
 class container_skia : public litehtml::document_container {
     // ── P2a: 共有状態の責務別分離 ──
     // 5分割ファイルと対応: paint→container_skia.cpp (draw_*系)+helpers(無状態純粋関数),

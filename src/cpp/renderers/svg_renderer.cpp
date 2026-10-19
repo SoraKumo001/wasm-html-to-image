@@ -1759,7 +1759,7 @@ std::string renderDocumentToSvg(SatoruInstance* inst, int width, int height,
 std::string renderHtmlToSvg(const char* html, int width, int height, SatoruContext& context,
                             const char* master_css, const char* user_css,
                             const SatoruRenderOptions& options) {
-    int initial_height = (height > 0) ? height : 3000;
+    int initial_height = (height > 0) ? height : k_default_viewport_height;
     litehtml::media_type media_type =
         (options.mediaType == 1) ? litehtml::media_type_print : litehtml::media_type_screen;
     auto container = std::make_unique<container_skia>(width, initial_height, nullptr, context,

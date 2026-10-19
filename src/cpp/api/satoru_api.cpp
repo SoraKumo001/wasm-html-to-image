@@ -197,7 +197,7 @@ void SatoruInstance::collect_resources(const std::string& html, int width, int h
             last_width = -1;  // Force re-layout
             last_media_type = (int)mt;
             image_sizes_scanned = false;
-            int initial_height = (height > 0) ? height : 3000;
+            int initial_height = (height > 0) ? height : k_default_viewport_height;
             render_container = std::make_unique<container_skia>(
                 width, initial_height, nullptr, context, &resourceManager, false, mt);
 

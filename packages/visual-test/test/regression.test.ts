@@ -280,6 +280,26 @@ describe("regression: layout and paint probes", () => {
     expect(r.height).toBe(110); // a dropped vh term made max-height negative and collapsed the box
   });
 
+  it("vh resolves against the default viewport height, not the layout canvas", async () => {
+    // With `height` omitted the layout canvas used to be 3000px tall, so vh/vmin/vmax
+    // resolved against 3000 instead of a browser-like viewport. Chromium (no-JS viewport
+    // 1000x800) resolves 25vh to 0.25 * 800 = 200px.
+    const vh = await render({
+      value: `<html><body style="margin:0"><div style="height:25vh;background:#c00"></div></body></html>`,
+      width: 1000,
+      format: "png",
+    });
+    expect(vh.height).toBe(200); // was 750 (0.25 * 3000)
+    // example.com's body{ padding-top:25vh } must sit ~200px down, not 750px.
+    const pad = await render({
+      value: `<html><body style="margin:0;padding:25vh 0 0 0"><p style="margin:0">x</p></body></html>`,
+      width: 1000,
+      format: "png",
+    });
+    expect(pad.height).toBeGreaterThanOrEqual(200); // at least the 25vh padding alone
+    expect(pad.height).toBeLessThan(280); // Chromium's content is ~224px (was 773)
+  });
+
   it("an absolutely positioned inline-flex box is blockified out of the line box", async () => {
     const r = await render({
       value: `<html><body style="margin:0"><div style="display:flex;width:300px"><h1 style="margin:0;font-size:16px">Title text here</h1><div><input type="checkbox" style="position:absolute;display:inline-flex;width:100%;height:100%"></div></div></body></html>`,
