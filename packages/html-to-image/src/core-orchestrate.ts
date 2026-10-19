@@ -65,8 +65,9 @@ export interface Orchestration {
   animation: boolean;
   /**
    * HTML animated-output request (`animation: { duration, fps }`). When set,
-   * the HTML pipeline samples the document's `@keyframes` opacity animation
-   * into converter frames before encoding. Loop is fixed to infinite.
+   * the HTML pipeline samples the document's `@keyframes` animation
+   * (opacity / transform / color) into converter frames before encoding.
+   * Loop is fixed to infinite.
    */
   animationFrames: { duration: number; fps?: number } | undefined;
   width: number;
@@ -641,9 +642,9 @@ export async function tryRunHtmlInstance(
     const renderStart = now();
     const cInst = module.converter_create_instance();
     try {
-      // Animated HTML: sample the document's @keyframes opacity animation
-      // straight into the converter's frames (additive). Falls back to the
-      // single-frame path when no frames were produced.
+      // Animated HTML: sample the document's @keyframes animation (opacity /
+      // transform / color) straight into the converter's frames (additive).
+      // Falls back to the single-frame path when no frames were produced.
       let renderedFrames = false;
       const renderAnimationToConverter =
         module.satoru_render_animation_to_converter;

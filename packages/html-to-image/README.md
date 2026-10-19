@@ -274,7 +274,7 @@ npx wasm-html-to-image https://example.com/news -o news.png --base-url https://e
 # Convert and resize an image
 npx wasm-html-to-image photo.jpg -o photo.avif -w 800 -f avif -q 80
 
-# Sample an opacity @keyframes animation into an animated WebP
+# Sample an opacity / transform / color @keyframes animation into an animated WebP
 npx wasm-html-to-image loader.html -o loader.webp -f webp --animation 2000 --animation-fps 20
 ```
 

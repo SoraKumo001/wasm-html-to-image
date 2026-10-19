@@ -77,9 +77,19 @@ const redColumns = (img: PNG) => {
   return cols;
 };
 
-// One 32-bit hash per ANMF (animation frame) chunk in a RIFF/WEBP container.
-// Distinct hashes prove the sampled frames actually differ in pixel content.
-function webpFrameHashes(data: Uint8Array): number[] {
+// One entry per ANMF (animation frame) chunk in a RIFF/WEBP container.
+// The hash proves the sampled frames differ in pixel content; the rectangle
+// is the region the encoder had to store (the part that changed).
+type WebpFrame = {
+  hash: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  duration: number;
+};
+
+function webpFrames(data: Uint8Array): WebpFrame[] {
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
   const fourcc = (o: number) =>
     String.fromCharCode(
@@ -91,7 +101,10 @@ function webpFrameHashes(data: Uint8Array): number[] {
   if (data.byteLength < 12 || fourcc(0) !== "RIFF" || fourcc(8) !== "WEBP") {
     return [];
   }
-  const hashes: number[] = [];
+  // ANMF frame header: 24 bit frame x/y, width-1, height-1 and duration.
+  const u24 = (o: number) =>
+    view.getUint8(o) | (view.getUint8(o + 1) << 8) | (view.getUint8(o + 2) << 16);
+  const frames: WebpFrame[] = [];
   let o = 12;
   while (o + 8 <= data.byteLength) {
     const size = view.getUint32(o + 4, true);
@@ -100,12 +113,69 @@ function webpFrameHashes(data: Uint8Array): number[] {
       for (let i = o + 8; i < o + 8 + size && i < data.byteLength; i++) {
         hash = (hash * 31 + data[i]) >>> 0;
       }
-      hashes.push(hash);
+      frames.push({
+        hash,
+        x: u24(o + 8) * 2,
+        y: u24(o + 11) * 2,
+        width: u24(o + 14) + 1,
+        height: u24(o + 17) + 1,
+        duration: u24(o + 20),
+      });
     }
     o += 8 + size + (size & 1);
   }
-  return hashes;
+  return frames;
 }
+
+// One 32-bit hash per ANMF (animation frame) chunk in a RIFF/WEBP container.
+// Distinct hashes prove the sampled frames actually differ in pixel content.
+function webpFrameHashes(data: Uint8Array): number[] {
+  return webpFrames(data).map((frame) => frame.hash);
+}
+
+// A still encode of an animated document keeps the first sampled frame
+// (progress 0): a still format can only carry a single frame.
+async function renderFirstFrame(html: string, width: number, height: number) {
+  const { data } = await render({
+    value: html,
+    width,
+    height,
+    format: "png",
+    animation: { duration: 300, fps: 10 },
+  });
+  const img = PNG.sync.read(Buffer.from(data));
+  return {
+    img,
+    at: (x: number, y: number): Rgb => {
+      const i = (img.width * y + x) * 4;
+      return [img.data[i], img.data[i + 1], img.data[i + 2]];
+    },
+  };
+}
+
+// Number of opaque pixels matching the predicate.
+function countPixels(
+  img: PNG,
+  match: (r: number, g: number, b: number) => boolean,
+): number {
+  let n = 0;
+  for (let i = 0; i < img.data.length; i += 4) {
+    if (
+      img.data[i + 3] > 0 &&
+      match(img.data[i], img.data[i + 1], img.data[i + 2])
+    ) {
+      n++;
+    }
+  }
+  return n;
+}
+
+const isReddish = (r: number, g: number, b: number) =>
+  r > 120 && r - g > 40 && r - b > 40;
+const isBluish = (r: number, g: number, b: number) =>
+  b > 120 && b - r > 40 && b - g > 40;
+const isBlackish = (r: number, g: number, b: number) =>
+  r < 100 && g < 100 && b < 100;
 
 describe("regression: layout and paint probes", () => {
   it("column flex container with auto height honours min-height (flex-grow fills it)", async () => {
@@ -608,7 +678,94 @@ describe("regression: layout and paint probes", () => {
     );
   });
 
+  it("sampled @keyframes transform animation moves the element across the frames", async () => {
+    // The box slides from x=60 to x=0. Without the transform sampling the
+    // document is static, so no frame is produced at all.
+    const html = `<html><head><style>
+      @keyframes move { from { transform: translate(60px, 0px) } to { transform: translate(0px, 0px) } }
+      .box { width: 40px; height: 40px; background: #00f; animation-name: move; }
+    </style></head><body style="margin:0;background:#fff"><div class="box"></div></body></html>`;
+
+    // The first sampled frame (progress 0) paints the box at its transformed
+    // place, not at its static one.
+    const first = await renderFirstFrame(html, 120, 60);
+    expect(near(first.at(70, 20), BLUE)).toBe(true);
+    expect(isWhite(first.at(30, 20))).toBe(true);
+
+    const animated = await render({
+      value: html,
+      width: 120,
+      height: 60,
+      format: "webp",
+      animation: { duration: 300, fps: 10 },
+    });
+    expect(animated.animation).toBe(true);
+    const frames = webpFrames(new Uint8Array(animated.data as Uint8Array));
+    expect(frames.length).toBe(3);
+    // Every sampled frame carries different pixel content.
+    expect(new Set(frames.map((frame) => frame.hash)).size).toBe(3);
+    // The box really moves: the stored (changed) region follows it to the
+    // left - x=60..100 for the first step, x=40..80 for the second one.
+    expect(frames[1].x + frames[1].width).toBeGreaterThan(96);
+    expect(frames[1].x + frames[1].width).toBeLessThan(104);
+    expect(frames[2].x + frames[2].width).toBeGreaterThan(76);
+    expect(frames[2].x + frames[2].width).toBeLessThan(84);
+  });
+
+  it("sampled @keyframes color animation recolours the element across the frames", async () => {
+    // `border-color: currentColor` follows the animated `color`, so the probe
+    // needs no font rendering.
+    const html = `<html><head><style>
+      @keyframes tint { from { color: #ff0000 } to { color: #0000ff } }
+      .box { width: 40px; height: 40px; border: 4px solid currentColor; animation-name: tint; }
+    </style></head><body style="margin:0;background:#fff"><div class="box"></div></body></html>`;
+
+    // The first sampled frame (progress 0) paints the border red; the static
+    // document keeps the default (black) colour.
+    const first = await renderFirstFrame(html, 120, 60);
+    expect(countPixels(first.img, isReddish)).toBeGreaterThan(50);
+    expect(countPixels(first.img, isBlackish)).toBe(0);
+    expect(countPixels(first.img, isBluish)).toBe(0);
+
+    const animated = await render({
+      value: html,
+      width: 120,
+      height: 60,
+      format: "webp",
+      animation: { duration: 300, fps: 10 },
+    });
+    expect(animated.animation).toBe(true);
+    const frames = webpFrames(new Uint8Array(animated.data as Uint8Array));
+    expect(frames.length).toBe(3);
+    expect(new Set(frames.map((frame) => frame.hash)).size).toBe(3);
+  });
+
+  it("sampled @keyframes background-color animation recolours the background across the frames", async () => {
+    const html = `<html><head><style>
+      @keyframes tint { from { background-color: #ff0000 } to { background-color: #0000ff } }
+      .box { width: 40px; height: 40px; background: #00f; animation-name: tint; }
+    </style></head><body style="margin:0;background:#fff"><div class="box"></div></body></html>`;
+
+    const first = await renderFirstFrame(html, 120, 60);
+    expect(countPixels(first.img, isReddish)).toBeGreaterThan(50);
+    expect(countPixels(first.img, isBlackish)).toBe(0);
+    expect(countPixels(first.img, isBluish)).toBe(0);
+
+    const animated = await render({
+      value: html,
+      width: 120,
+      height: 60,
+      format: "webp",
+      animation: { duration: 300, fps: 10 },
+    });
+    expect(animated.animation).toBe(true);
+    const frames = webpFrames(new Uint8Array(animated.data as Uint8Array));
+    expect(frames.length).toBe(3);
+    expect(new Set(frames.map((frame) => frame.hash)).size).toBe(3);
+  });
+
   it("unicode-bidi: bidi-override reorders inline items in an RTL line", async () => {
+
     const box = (color: string, text: string) =>
       `<span style="display:inline-block;width:20px;height:20px;color:transparent;background:${color}">${text}</span>`;
     const { at } = await renderPng(

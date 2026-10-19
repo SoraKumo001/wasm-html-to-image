@@ -29,3 +29,10 @@ target_include_directories(test_lru_cache PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/.
 target_compile_features(test_lru_cache PRIVATE cxx_std_20)
 
 add_test(NAME lru_cache COMMAND test_lru_cache)
+
+# animation_sampler.h は標準ライブラリのみのため、src/cpp を -I にするだけでホストコンパイル可
+add_executable(test_animation_sampler test_animation_sampler.cpp)
+target_include_directories(test_animation_sampler PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp")
+target_compile_features(test_animation_sampler PRIVATE cxx_std_20)
+
+add_test(NAME animation_sampler COMMAND test_animation_sampler)

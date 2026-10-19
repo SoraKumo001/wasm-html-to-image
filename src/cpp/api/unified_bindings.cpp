@@ -6,9 +6,11 @@
 #include <limits>
 #include <memory>
 
+#include <litehtml/css_parser.h>
 #include <litehtml/document.h>
 #include <litehtml/element.h>
 #include <litehtml/render_item.h>
+#include <litehtml/web_color.h>
 
 #include "../common/skia_encode.h"
 #include "core/animation_sampler.h"
@@ -118,6 +120,38 @@ litehtml::element::ptr find_inline_animation_target(const litehtml::element::ptr
     return nullptr;
 }
 
+// Resolve a raw CSS colour value through the document's colour resolution so
+// named colours, rgb()/rgba() and hsl() all work.
+bool resolve_css_color(const std::string& value, html_to_image::Rgba& out) {
+    litehtml::css_token_vector tokens = litehtml::tokenize(value);
+    tokens = litehtml::normalize(tokens, litehtml::f_componentize | litehtml::f_remove_whitespace);
+    if (tokens.size() != 1) return false;
+    litehtml::web_color color;
+    if (!litehtml::parse_color(tokens[0], color, nullptr)) return false;
+    out.r = color.red;
+    out.g = color.green;
+    out.b = color.blue;
+    out.a = color.alpha;
+    return true;
+}
+
+// Resolve the raw colour stops. A stop whose value cannot be resolved is
+// dropped (CSS treats an invalid value as "not animated at this keyframe").
+std::vector<html_to_image::ColorKeyframe> resolve_color_stops(
+    const std::vector<html_to_image::ColorStop>& raw) {
+    std::vector<html_to_image::ColorKeyframe> out;
+    out.reserve(raw.size());
+    for (const auto& stop : raw) {
+        html_to_image::Rgba color;
+        if (!resolve_css_color(stop.value, color)) continue;
+        html_to_image::ColorKeyframe keyframe;
+        keyframe.offset = stop.offset;
+        keyframe.color = color;
+        out.push_back(keyframe);
+    }
+    return out;
+}
+
 }  // namespace
 
 int satoru_render_animation_to_converter_val(SatoruInstance* satoru, ImageConverterInstance* converter,
@@ -131,7 +165,7 @@ int satoru_render_animation_to_converter_val(SatoruInstance* satoru, ImageConver
     SatoruRenderOptions render_options;
     parse_satoru_options(render_options, options_val);
 
-    const html_to_image::AnimationSpec spec = html_to_image::parse_opacity_animation(html);
+    const html_to_image::AnimationSpec spec = html_to_image::parse_animation(html);
     if (!spec.valid) return 0;
 
     // Ensure the document is laid out for exactly this input. After resource
@@ -158,6 +192,13 @@ int satoru_render_animation_to_converter_val(SatoruInstance* satoru, ImageConver
     const char* base_style_attr = target->get_attr("style");
     const std::string base_style = base_style_attr ? base_style_attr : "";
 
+    // Colour stops are resolved through the document's colour resolution, so
+    // named colours / rgb() / hsl() all work.
+    const std::vector<html_to_image::ColorKeyframe> color_stops =
+        resolve_color_stops(spec.color_stops);
+    const std::vector<html_to_image::ColorKeyframe> background_color_stops =
+        resolve_color_stops(spec.background_color_stops);
+
     const std::vector<html_to_image::FrameSample> schedule =
         html_to_image::build_frame_schedule(duration_ms, fps);
 
@@ -165,35 +206,66 @@ int satoru_render_animation_to_converter_val(SatoruInstance* satoru, ImageConver
         (uint64_t)std::max(width, 1) * (uint64_t)std::max(height, 1) * 4;
     uint64_t total_bytes = 0;
     float last_opacity = std::numeric_limits<float>::quiet_NaN();
+    std::string last_extra;
     int appended = 0;
+    bool style_touched = false;
 
     for (const auto& sample : schedule) {
         if ((int)converter->frames.size() >= html_to_image::k_max_animation_frames) break;
 
-        const float opacity = html_to_image::sample_opacity(spec, sample.progress);
+        // Per-frame style overrides. Only the animated properties are written,
+        // so the element keeps its static style for everything else.
+        const bool has_opacity = !spec.stops.empty();
+        const float opacity =
+            has_opacity ? html_to_image::sample_opacity(spec, sample.progress) : 1.0f;
+        std::string transform_value;
+        const bool has_transform =
+            html_to_image::sample_transform(spec, sample.progress, transform_value);
+        const bool has_color = !color_stops.empty();
+        const bool has_background_color = !background_color_stops.empty();
+
+        std::string extra;
+        if (has_transform) {
+            extra += ";transform:";
+            extra += transform_value;
+        }
+        if (has_color) {
+            extra += ";color:";
+            extra += html_to_image::format_rgba(
+                html_to_image::sample_color(color_stops, sample.progress));
+        }
+        if (has_background_color) {
+            extra += ";background-color:";
+            extra += html_to_image::format_rgba(
+                html_to_image::sample_color(background_color_stops, sample.progress));
+        }
 
         // Dedupe at the style-value level (before any draw): an unchanged
-        // opacity merges this frame's duration into the previous frame.
-        if (!std::isnan(last_opacity) && std::fabs(opacity - last_opacity) < 1e-3f &&
-            !converter->frames.empty()) {
+        // value merges this frame's duration into the previous frame.
+        const bool opacity_changed =
+            !std::isnan(last_opacity) && std::fabs(opacity - last_opacity) >= 1e-3f;
+        const bool extra_changed = (extra != last_extra);
+        if (!converter->frames.empty() && !opacity_changed && !extra_changed) {
             converter->frames.back().duration += sample.duration_ms;
             continue;
         }
 
         if (total_bytes + per_frame_bytes > html_to_image::k_max_animation_total_pixel_bytes) break;
 
-        char buf[32];
-        std::snprintf(buf, sizeof(buf), "%.4f", opacity);
         std::string style = base_style;
-        style += ";opacity:";
-        style += buf;
+        if (has_opacity) {
+            style += ";opacity:";
+            style += html_to_image::format_float(opacity);
+        }
+        style += extra;
 
         target->set_attr("style", style.c_str());
         target->refresh_styles();
         target->compute_styles(false);
-        // Paint-phase sync: re-collecting styled (now positioned at opacity<1)
-        // nodes keeps them in the positioned/stacking pass, matching a full
-        // re-render without re-parsing.
+        style_touched = true;
+        // Paint-phase sync: re-collecting styled (now positioned at opacity<1
+        // or carrying a transform) nodes keeps them in the positioned/stacking
+        // pass, matching a full re-render without re-parsing.
         satoru->doc->root_render()->fetch_positioned();
         satoru->doc->root_render()->sort_positioned();
 
@@ -206,7 +278,18 @@ int satoru_render_animation_to_converter_val(SatoruInstance* satoru, ImageConver
         frame.duration = sample.duration_ms;
         converter->frames.push_back(std::move(frame));
         last_opacity = opacity;
+        last_extra = extra;
         appended++;
+    }
+
+    // Leave the document as it was found: the caller falls back to a normal
+    // single-frame render when no frame was produced.
+    if (style_touched) {
+        target->set_attr("style", base_style.c_str());
+        target->refresh_styles();
+        target->compute_styles(false);
+        satoru->doc->root_render()->fetch_positioned();
+        satoru->doc->root_render()->sort_positioned();
     }
 
     if (converter->frames.empty()) return 0;

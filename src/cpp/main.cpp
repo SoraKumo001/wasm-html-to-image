@@ -118,7 +118,8 @@ EMSCRIPTEN_BINDINGS(html_to_image) {
     function("html_to_image", &html_to_image_val);
     function("satoru_render_to_converter", &satoru_render_to_converter_val,
              allow_raw_pointers());
-    // Animated (opacity-only) HTML -> additive converter frames. Positional:
+    // Animated (opacity / transform / color) HTML -> additive converter
+    // frames. Positional:
     // (satoruInst, converterInst, htmls, width, height, options, durationMs, fps).
     function("satoru_render_animation_to_converter", &satoru_render_animation_to_converter_val,
              allow_raw_pointers());
