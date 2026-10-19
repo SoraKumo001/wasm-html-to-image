@@ -1,5 +1,6 @@
 #include "html.h"
 #include "element.h"
+#include <functional>
 #include "document.h"
 #include "render_item.h"
 #include "render_flex.h"
@@ -205,14 +206,23 @@ std::shared_ptr<render_item> element::create_render_item(const std::shared_ptr<r
 		}
 
 		ret->parent(parent_ri);
-		for(const auto& el : m_children)
-		{
-			auto ri = el->create_render_item(ret);
-			if(ri)
+		// display:contents elements generate no box; their children take part in this container.
+		std::function<void(const element::ptr&)> add_children = [&](const element::ptr& parent_el) {
+			for(const auto& el : parent_el->m_children)
 			{
-				ret->add_child(ri);
+				if(el->css().get_display() == display_contents)
+				{
+					add_children(el);
+					continue;
+				}
+				auto ri = el->create_render_item(ret);
+				if(ri)
+				{
+					ret->add_child(ri);
+				}
 			}
-		}
+		};
+		add_children(shared_from_this());
 	}
 	return ret;
 }

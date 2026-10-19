@@ -938,6 +938,9 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             cb.height = containing_block_context::cbc_value_type_auto;
         }
         cb.size_mode |= containing_block_context::size_mode_measure;
+        // The grid's own exact-size flags (it is itself being placed into a fixed track) must not
+        // leak into sizing its items: their content height has to be measured, not forced.
+        cb.size_mode &= ~(containing_block_context::size_mode_exact_width | containing_block_context::size_mode_exact_height);
 
         item.el->measure(cb, fmt_ctx);
     }

@@ -393,4 +393,25 @@ describe("regression: layout and paint probes", () => {
     });
     expect(r.height).toBe(150); // third item goes to row 2 (was drawn over the first at 100)
   });
+  it("grid inside a grid sizes its rows from content (items are not forced to the track height)", async () => {
+    const h2 = `<h2 style="margin:0;font:18px/22px serif;background:#f00">Bollywood actor Tiger Shroff survives shooting in Mumbai</h2>`;
+    const p = `<p style="margin:0;font:14px/18px serif;background:#00f">Video published by several news outlets shows gunmen firing multiple shots at a car</p>`;
+    const { at } = await renderPng(`<div style="width:312px;display:grid"><div style="display:grid">${h2}${p}</div></div>`, 312, 140);
+    // the blue paragraph must start below the (two-line) red title, not overlap it
+    let redBottom = -1;
+    let blueTop = -1;
+    for (let y = 0; y < 140; y++) {
+      const c = at(3, y);
+      if (near(c, RED)) redBottom = y;
+      if (near(c, BLUE) && blueTop < 0) blueTop = y;
+    }
+    expect(blueTop).toBeGreaterThan(redBottom);
+  });
+  it("display:contents generates no box: its children take part in the parent's layout", async () => {
+    const h = async (b: string) => (await render({ value: `<html><body style="margin:0">${b}</body></html>`, width: 400, format: "png" })).height;
+    expect(
+      await h(`<div style="display:grid;grid-template-columns:100px 100px;width:400px"><div style="display:contents"><div style="height:30px">a</div><div style="height:30px">b</div><div style="height:40px">c</div></div></div>`),
+    ).toBe(70); // a,b share row 1; c is row 2
+    expect(await h(`<div style="display:flex"><div style="display:contents"><div style="height:30px;width:50px">a</div><div style="height:50px;width:50px">b</div></div></div>`)).toBe(50);
+  });
 });
