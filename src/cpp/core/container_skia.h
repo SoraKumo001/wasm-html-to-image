@@ -71,6 +71,7 @@ class container_skia : public litehtml::document_container {
     };
     struct TransformState {
         int depth = 0;
+        int offsetDepth = 0;
     };
     struct TextState {
         std::set<char32_t> usedCodepoints;
@@ -164,6 +165,7 @@ class container_skia : public litehtml::document_container {
         m_usedGlyphDraws.clear();
         m_filter.depth = 0;
         m_transform.depth = 0;
+        m_transform.offsetDepth = 0;
         m_clip.clipPathDepth = 0;
         m_clip.maskDepth = 0;
         m_paint.pendingTextClips.clear();
@@ -323,6 +325,16 @@ class container_skia : public litehtml::document_container {
     virtual void push_clip_path(litehtml::uint_ptr hdc, const litehtml::css_token_vector &clip_path,
                                 const litehtml::position &pos) override;
     virtual void pop_clip_path(litehtml::uint_ptr hdc) override;
+
+    virtual void push_offset_path(litehtml::uint_ptr hdc, const litehtml::css_token_vector &path,
+                                  const litehtml::css_token_vector &offset_pos,
+                                  const litehtml::css_token_vector &distance,
+                                  const litehtml::css_token_vector &rotate,
+                                  const litehtml::css_token_vector &anchor,
+                                  const litehtml::css_token_vector &transform_origin,
+                                  const litehtml::position &ref_box,
+                                  const litehtml::position &box) override;
+    virtual void pop_offset_path(litehtml::uint_ptr hdc) override;
 
     virtual void push_mask(litehtml::uint_ptr hdc, const litehtml::css_token_vector &mask,
                            const litehtml::position &pos) override;

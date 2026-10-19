@@ -89,6 +89,12 @@ namespace litehtml
                 virtual void                            push_clip_path(uint_ptr hdc, const css_token_vector& clip_path, const position& pos) {}
                 virtual void                            pop_clip_path(uint_ptr hdc) {}
 
+                // CSS Motion Path. `transform_origin` is the raw transform-origin tokens
+                // (used to resolve offset-anchor: auto); ref_box is the containing block and
+                // box is the element's border box, both in absolute output coordinates.
+                virtual void                            push_offset_path(uint_ptr hdc, const css_token_vector& path, const css_token_vector& offset_pos, const css_token_vector& distance, const css_token_vector& rotate, const css_token_vector& anchor, const css_token_vector& transform_origin, const position& ref_box, const position& box) {}
+                virtual void                            pop_offset_path(uint_ptr hdc) {}
+
                 virtual void                            push_mask(uint_ptr hdc, const css_token_vector& mask, const position& pos) {}
                 virtual void                            pop_mask(uint_ptr hdc) {}
 

@@ -1033,17 +1033,39 @@ void litehtml::render_item::draw_children(uint_ptr hdc, pixel_t x, pixel_t y, co
                 const auto& filter = el->src_el()->css().get_filter();
                 const auto& backdrop_filter = el->src_el()->css().get_backdrop_filter();
                 const auto& mask = el->src_el()->css().get_mask();
+                const auto& offset_path = el->src_el()->css().get_offset_path();
+                const auto& offset_distance = el->src_el()->css().get_offset_distance();
+                const auto& offset_rotate = el->src_el()->css().get_offset_rotate();
+                const auto& offset_anchor = el->src_el()->css().get_offset_anchor();
+                const auto& offset_position = el->src_el()->css().get_offset_position();
                 css_token_vector clip_path;
                 el->src_el()->get_custom_property(_clip_path_, clip_path);
 
                 blend_mode mix_blend = el->src_el()->css().get_mix_blend_mode();
+                bool has_offset = !offset_path.empty();
                 bool has_props = (opacity < 1.0f) || (mix_blend != blend_mode_normal) || !transform.empty() || !rotate.empty() ||
                                  !scale.empty() || !translate.empty() || !filter.empty() ||
-                                 !backdrop_filter.empty() || !clip_path.empty() || !mask.empty();
+                                 !backdrop_filter.empty() || !clip_path.empty() || !mask.empty() ||
+                                 has_offset;
 
                 if (has_props) {
                     if (opacity < 1.0f || mix_blend != blend_mode_normal) doc->container()->push_layer(hdc, opacity, mix_blend);
                     if (!backdrop_filter.empty()) doc->container()->push_backdrop_filter(hdc, el);
+
+                    if (has_offset) {
+                        // Reference box = containing block (the box that is currently drawing);
+                        // element box = the drawn border box in absolute output coordinates.
+                        position offset_ref_box = pos;
+                        position offset_box = el->pos();
+                        if (el->src_el()->css().get_position() != element_position_fixed) {
+                            offset_box.x += pos.x;
+                            offset_box.y += pos.y;
+                        }
+                        doc->container()->push_offset_path(
+                            hdc, offset_path, offset_position, offset_distance, offset_rotate,
+                            offset_anchor, el->src_el()->css().get_transform_origin(),
+                            offset_ref_box, offset_box);
+                    }
 
                     css_token_vector merged_transform;
                     if (!translate.empty()) {
@@ -1114,6 +1136,7 @@ void litehtml::render_item::draw_children(uint_ptr hdc, pixel_t x, pixel_t y, co
                     if (!clip_path.empty()) doc->container()->pop_clip_path(hdc);
                     if (!filter.empty()) doc->container()->pop_filter(hdc);
                     if (!rotate.empty() || !scale.empty() || !translate.empty() || !transform.empty()) doc->container()->pop_transform(hdc);
+                    if (has_offset) doc->container()->pop_offset_path(hdc);
                     if (!backdrop_filter.empty()) doc->container()->pop_backdrop_filter(hdc);
                     if (opacity < 1.0f || mix_blend != blend_mode_normal) doc->container()->pop_layer(hdc);
                 }

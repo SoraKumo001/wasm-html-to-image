@@ -599,6 +599,15 @@ namespace litehtml
       _device_aspect_ratio_,
       _color_index_,
       _monochrome_,
+
+      // CSS Motion Path (offset-*)
+      _offset_,
+      _offset_path_,
+      _offset_distance_,
+      _offset_rotate_,
+      _offset_anchor_,
+      _offset_position_,
+
       _inline_size_,
       _size_)
 #undef STRING_ID

@@ -186,6 +186,14 @@ namespace litehtml
     string m_container_name;
     css_token_vector m_clip;
 
+    // CSS Motion Path (offset-*). Stored as raw component values so the Skia
+    // container can resolve paths (ray()/path()/basic-shape) at paint time.
+    css_token_vector m_offset_path;
+    css_token_vector m_offset_distance;
+    css_token_vector m_offset_rotate;
+    css_token_vector m_offset_anchor;
+    css_token_vector m_offset_position;
+
   private:
     void compute_font(const element *el, const std::shared_ptr<document> &doc);
     void compute_background(const element *el, const std::shared_ptr<document> &doc);
@@ -580,6 +588,11 @@ namespace litehtml
     const css_token_vector &get_object_position() const;
     const css_token_vector &get_mask() const;
     const css_token_vector &get_clip() const;
+    const css_token_vector &get_offset_path() const;
+    const css_token_vector &get_offset_distance() const;
+    const css_token_vector &get_offset_rotate() const;
+    const css_token_vector &get_offset_anchor() const;
+    const css_token_vector &get_offset_position() const;
     blend_mode get_mix_blend_mode() const;
     void set_mix_blend_mode(blend_mode mBlendMode);
     blend_mode get_background_blend_mode() const;
@@ -1505,6 +1518,31 @@ namespace litehtml
   inline const css_token_vector &css_properties::get_clip() const
   {
     return m_clip;
+  }
+
+  inline const css_token_vector &css_properties::get_offset_path() const
+  {
+    return m_offset_path;
+  }
+
+  inline const css_token_vector &css_properties::get_offset_distance() const
+  {
+    return m_offset_distance;
+  }
+
+  inline const css_token_vector &css_properties::get_offset_rotate() const
+  {
+    return m_offset_rotate;
+  }
+
+  inline const css_token_vector &css_properties::get_offset_anchor() const
+  {
+    return m_offset_anchor;
+  }
+
+  inline const css_token_vector &css_properties::get_offset_position() const
+  {
+    return m_offset_position;
   }
 
   inline blend_mode css_properties::get_mix_blend_mode() const

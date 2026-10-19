@@ -145,6 +145,9 @@ namespace litehtml
           {__webkit_text_stroke_, {__webkit_text_stroke_width_, __webkit_text_stroke_color_}},
           {_container_, {_container_name_, _container_type_}},
           {_border_image_, {_border_image_source_, _border_image_slice_, _border_image_width_, _border_image_outset_, _border_image_repeat_}},
+          // NOTE: the `offset` shorthand covers offset-position/path/distance/rotate only.
+          // offset-anchor is NOT part of it and must not be reset by it.
+          {_offset_, {_offset_position_, _offset_path_, _offset_distance_, _offset_rotate_}},
   };
 
   void style::add(const string &txt, const string &baseurl, document_container *container, int layer, selector_specificity specificity)
@@ -258,6 +261,11 @@ namespace litehtml
     case _transform_style_:
     case _perspective_:
     case _backface_visibility_:
+    case _offset_path_:
+    case _offset_distance_:
+    case _offset_rotate_:
+    case _offset_anchor_:
+    case _offset_position_:
       add_parsed_property(name, property_value(value, important, false, m_layer, m_specificity));
       break;
 
@@ -1099,6 +1107,80 @@ namespace litehtml
         add_property(_container_name_, name_tokens, baseurl, important, container, layer, specificity);
       if (!type_tokens.empty())
         add_property(_container_type_, type_tokens, baseurl, important, container, layer, specificity);
+      break;
+    }
+
+    case _offset_:
+    {
+      // CSS Motion Path shorthand. Heuristic split of the component value list into
+      // <offset-path> / <offset-distance> / <offset-rotate> / <offset-position>.
+      // offset-anchor and explicit <position> vs <offset-distance> disambiguation are
+      // intentionally not attempted here (see docs/partial support).
+      css_token_vector path_t, dist_t, rot_t, pos_t;
+      bool have_path = false, have_dist = false, have_rot = false;
+      for (const auto& tok : value)
+      {
+        if (tok.type == WHITESPACE) continue;
+        if (tok.type == CV_FUNCTION)
+        {
+          if (!have_path) { path_t.push_back(tok); have_path = true; }
+          continue;
+        }
+        if (tok.type == IDENT)
+        {
+          string id = lowcase(tok.ident());
+          if (id == "none") { path_t.push_back(tok); have_path = true; }
+          else if (id == "auto" || id == "reverse") { rot_t.push_back(tok); have_rot = true; }
+          else if (id == "normal" || id == "left" || id == "right" || id == "top" ||
+                   id == "bottom" || id == "center")
+            pos_t.push_back(tok);
+          continue;
+        }
+        if (tok.type == DIMENSION)
+        {
+          string u = lowcase(tok.unit);
+          if (u == "deg" || u == "rad" || u == "grad" || u == "turn")
+          {
+            rot_t.push_back(tok);
+            have_rot = true;
+          }
+          else if (!have_dist) { dist_t.push_back(tok); have_dist = true; }
+          else { rot_t.push_back(tok); have_rot = true; }
+          continue;
+        }
+        if (tok.type == NUMBER)
+        {
+          rot_t.push_back(tok);
+          have_rot = true;
+          continue;
+        }
+        if (tok.type == PERCENTAGE)
+        {
+          if (!have_dist) { dist_t.push_back(tok); have_dist = true; }
+          else if (!have_rot) { rot_t.push_back(tok); have_rot = true; }
+          continue;
+        }
+      }
+      // Nothing recognized => the whole declaration is invalid, drop it.
+      if (path_t.empty() && dist_t.empty() && rot_t.empty() && pos_t.empty())
+        break;
+      // Like every CSS shorthand, `offset` resets the longhands it does not mention
+      // back to their initial value (none / normal / auto / normal).
+      auto ident_value = [](const string &id) {
+        css_token tok(IDENT, id);
+        tok.repr = id;
+        css_token_vector v;
+        v.push_back(tok);
+        return v;
+      };
+      add_parsed_property(_offset_path_, property_value(path_t.empty() ? ident_value("none") : path_t,
+                                                       important, false, m_layer, m_specificity));
+      add_parsed_property(_offset_distance_, property_value(dist_t.empty() ? ident_value("normal") : dist_t,
+                                                             important, false, m_layer, m_specificity));
+      add_parsed_property(_offset_rotate_, property_value(rot_t.empty() ? ident_value("auto") : rot_t,
+                                                           important, false, m_layer, m_specificity));
+      add_parsed_property(_offset_position_, property_value(pos_t.empty() ? ident_value("normal") : pos_t,
+                                                            important, false, m_layer, m_specificity));
       break;
     }
 

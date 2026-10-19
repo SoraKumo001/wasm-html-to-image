@@ -745,4 +745,55 @@ describe("regression: layout and paint probes", () => {
     expect(near(bg.at(49, 50), RED, 4)).toBe(true);
     expect(near(bg.at(50, 50), BLUE, 4)).toBe(true);
   });
+
+  it("offset-path: ray() + offset-distance translates the box along the ray", async () => {
+    // offset-position: auto puts the ray origin at the element's top-left; the anchor
+    // (offset-anchor: auto => transform-origin) is the box centre, so the box slides so
+    // its centre lands on the ray point at 100px to the right.
+    const { at } = await renderPng(
+      `<div style="position:absolute;left:0;top:0;width:20px;height:20px;background:#f00;
+         offset-path:ray(90deg);offset-position:auto;offset-distance:100px"></div>`,
+    );
+    expect(near(at(100, 5), RED)).toBe(true); // centre moved from (10,10) to (100,0)
+    expect(isWhite(at(10, 10))).toBe(true); // original location is empty
+  });
+
+  it("offset-path: path() places the box at offset-distance along the path", async () => {
+    const { at } = await renderPng(
+      `<div style="position:absolute;left:0;top:0;width:20px;height:20px;background:#f00;
+         offset-path:path('M 0 0 L 200 0');offset-distance:50px"></div>`,
+    );
+    expect(near(at(50, 5), RED)).toBe(true); // centre at (50,0)
+    expect(isWhite(at(10, 10))).toBe(true);
+  });
+
+  it("offset-rotate: auto rotates the box along the path direction", async () => {
+    // ray(180deg) points down, so auto rotate is +90deg. A 40x20 box becomes 20x40.
+    const { at } = await renderPng(
+      `<div style="position:absolute;left:0;top:0;width:40px;height:20px;background:#f00;
+         offset-path:ray(180deg);offset-position:auto;offset-distance:0px;offset-rotate:auto"></div>`,
+    );
+    expect(near(at(5, 10), RED)).toBe(true); // rotated box covers x[-10,10]
+    expect(isWhite(at(30, 5))).toBe(true); // would be red if it stayed unrotated
+  });
+
+  it("offset shorthand sets offset-path and offset-distance", async () => {
+    const { at } = await renderPng(
+      `<div style="position:absolute;left:0;top:0;width:20px;height:20px;background:#f00;
+         offset:path('M 0 0 L 200 0') 60px"></div>`,
+    );
+    expect(near(at(60, 5), RED)).toBe(true); // centre at (60,0)
+    expect(isWhite(at(10, 10))).toBe(true);
+  });
+
+  it("offset-rotate: an explicit 0deg angle suppresses the tangent rotation", async () => {
+    // ray(180deg) points down, so `auto` would rotate the box by +90deg. An explicit
+    // 0deg must keep the box axis-aligned even though the angle value is zero.
+    const { at } = await renderPng(
+      `<div style="position:absolute;left:0;top:0;width:40px;height:20px;background:#f00;
+         offset-path:ray(180deg);offset-position:auto;offset-distance:100px;offset-rotate:0deg"></div>`,
+    );
+    expect(near(at(0, 100), RED)).toBe(true); // unrotated box covers x[-20,20] y[90,110]
+    expect(isWhite(at(0, 85))).toBe(true); // a +90deg rotation would cover y[80,120]
+  });
 });

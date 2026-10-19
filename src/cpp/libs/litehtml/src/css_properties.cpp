@@ -349,6 +349,17 @@ void litehtml::css_properties::compute(const element* el, const document::ptr& d
                                                      offset(m_translate));
     m_transform_origin = el->get_property<css_token_vector>(
         _transform_origin_, false, css_token_vector(), offset(m_transform_origin));
+    // CSS Motion Path. Not inherited; resolved at paint time by the container.
+    m_offset_path = el->get_property<css_token_vector>(_offset_path_, false,
+                                                      css_token_vector(), offset(m_offset_path));
+    m_offset_distance = el->get_property<css_token_vector>(
+        _offset_distance_, false, css_token_vector(), offset(m_offset_distance));
+    m_offset_rotate = el->get_property<css_token_vector>(_offset_rotate_, false,
+                                                         css_token_vector(), offset(m_offset_rotate));
+    m_offset_anchor = el->get_property<css_token_vector>(_offset_anchor_, false,
+                                                         css_token_vector(), offset(m_offset_anchor));
+    m_offset_position = el->get_property<css_token_vector>(
+        _offset_position_, false, css_token_vector(), offset(m_offset_position));
     m_filter =
         el->get_property<css_token_vector>(_filter_, false, css_token_vector(), offset(m_filter));
     m_backdrop_filter = el->get_property<css_token_vector>(
