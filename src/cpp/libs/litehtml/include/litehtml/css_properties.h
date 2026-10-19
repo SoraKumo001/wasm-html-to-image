@@ -32,6 +32,7 @@ namespace litehtml
   private:
     element_position m_el_position;
     direction m_direction;
+    unicode_bidi m_unicode_bidi;
     writing_mode m_writing_mode;
     text_orientation m_text_orientation;
     // Inline axis is mirrored (sideways-lr reads bottom-to-top). Computed from the original
@@ -45,6 +46,9 @@ namespace litehtml
     text_overflow m_text_overflow;
     white_space m_white_space;
     text_wrap m_text_wrap;
+    white_space_collapse m_white_space_collapse;
+    text_wrap_mode m_text_wrap_mode;
+    text_wrap_style m_text_wrap_style;
     style_display m_display;
     visibility m_visibility;
     appearance m_appearance;
@@ -118,6 +122,9 @@ namespace litehtml
 
     length_vector m_grid_template_columns;
     length_vector m_grid_template_rows;
+    length_vector m_grid_auto_columns;
+    length_vector m_grid_auto_rows;
+    grid_auto_flow m_grid_auto_flow;
 
     css_token_vector m_grid_columns_tokens;
     css_token_vector m_grid_rows_tokens;
@@ -186,6 +193,7 @@ namespace litehtml
   public:
     css_properties() : m_el_position(element_position_static),
                        m_direction(direction_ltr),
+                       m_unicode_bidi(unicode_bidi_normal),
                        m_writing_mode(writing_mode_horizontal_tb),
                        m_text_orientation(text_orientation_mixed),
                        m_inline_reverse(false),
@@ -197,6 +205,9 @@ namespace litehtml
                        m_text_overflow(text_overflow_clip),
                        m_white_space(white_space_normal),
                        m_text_wrap(text_wrap_wrap),
+                       m_white_space_collapse(white_space_collapse_collapse),
+                       m_text_wrap_mode(text_wrap_mode_wrap),
+                       m_text_wrap_style(text_wrap_style_auto),
                        m_display(display_inline),
                        m_visibility(visibility_visible),
                        m_appearance(appearance_none),
@@ -244,6 +255,7 @@ namespace litehtml
                        m_grid_column_end(),
                        m_grid_row_start(),
                        m_grid_row_end(),
+                       m_grid_auto_flow(grid_auto_flow_row),
                        m_row_gap(0),
                        m_column_gap(0),
                        m_letter_spacing(0),
@@ -283,6 +295,9 @@ namespace litehtml
     direction get_direction() const;
     void set_direction(direction mDirection);
 
+    unicode_bidi get_unicode_bidi() const;
+    void set_unicode_bidi(unicode_bidi val);
+
     writing_mode get_writing_mode() const;
     void set_writing_mode(writing_mode mWritingMode);
 
@@ -313,6 +328,9 @@ namespace litehtml
     void set_white_space(white_space mWhiteSpace);
     text_wrap get_text_wrap() const;
     void set_text_wrap(text_wrap mTextWrap);
+    white_space_collapse get_white_space_collapse() const;
+    text_wrap_mode get_text_wrap_mode() const;
+    text_wrap_style get_text_wrap_style() const;
 
     word_break get_word_break() const;
     void set_word_break(word_break mWordBreak);
@@ -484,6 +502,9 @@ namespace litehtml
 
     const length_vector &get_grid_template_columns() const;
     const length_vector &get_grid_template_rows() const;
+    const length_vector &get_grid_auto_columns() const;
+    const length_vector &get_grid_auto_rows() const;
+    grid_auto_flow get_grid_auto_flow() const { return m_grid_auto_flow; }
     const css_token_vector &get_grid_columns_tokens() const { return m_grid_columns_tokens; }
     const css_token_vector &get_grid_rows_tokens() const { return m_grid_rows_tokens; }
     const css_token_vector &get_grid_template_areas() const { return m_grid_template_areas; }
@@ -578,6 +599,16 @@ namespace litehtml
   inline void css_properties::set_direction(direction mDirection)
   {
     m_direction = mDirection;
+  }
+
+  inline unicode_bidi css_properties::get_unicode_bidi() const
+  {
+    return m_unicode_bidi;
+  }
+
+  inline void css_properties::set_unicode_bidi(unicode_bidi val)
+  {
+    m_unicode_bidi = val;
   }
 
   inline writing_mode css_properties::get_writing_mode() const
@@ -685,6 +716,21 @@ namespace litehtml
   inline void css_properties::set_text_wrap(text_wrap mTextWrap)
   {
     m_text_wrap = mTextWrap;
+  }
+
+  inline white_space_collapse css_properties::get_white_space_collapse() const
+  {
+    return m_white_space_collapse;
+  }
+
+  inline text_wrap_mode css_properties::get_text_wrap_mode() const
+  {
+    return m_text_wrap_mode;
+  }
+
+  inline text_wrap_style css_properties::get_text_wrap_style() const
+  {
+    return m_text_wrap_style;
   }
 
   inline word_break css_properties::get_word_break() const
@@ -1205,6 +1251,16 @@ namespace litehtml
   inline const length_vector &css_properties::get_grid_template_rows() const
   {
     return m_grid_template_rows;
+  }
+
+  inline const length_vector &css_properties::get_grid_auto_columns() const
+  {
+    return m_grid_auto_columns;
+  }
+
+  inline const length_vector &css_properties::get_grid_auto_rows() const
+  {
+    return m_grid_auto_rows;
   }
 
   inline const css_token_vector &css_properties::get_grid_column_start() const

@@ -472,6 +472,41 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         if (it != names.lines.end()) gl.index = it->second;
     };
 
+    // grid-auto-columns: explicit placements past the template create implicit
+    // columns. Extend the track list now so sizing/placement see them; otherwise
+    // those items collapse into column 0 and the offsets are read out of bounds.
+    if (!is_multicol)
+    {
+        const auto& auto_cols = css().get_grid_auto_columns();
+        const int template_cols = (int)columns_template.size();
+        int required_cols = template_cols;
+        for (const auto& el : m_children)
+        {
+            if (el->src_el()->css().get_position() == element_position_absolute ||
+                el->src_el()->css().get_position() == element_position_fixed)
+                continue;
+            grid_line cs, ce;
+            cs.parse(el->src_el()->css().get_grid_column_start());
+            ce.parse(el->src_el()->css().get_grid_column_end());
+            resolve_named(cs, col_names, false);
+            resolve_named(ce, col_names, true);
+            int start = -1;
+            int span = 1;
+            if (cs.is_span) span = cs.span;
+            else if (cs.index > 0) start = cs.index - 1;
+            if (ce.is_span) span = ce.span;
+            else if (ce.index > cs.index && cs.index > 0) span = ce.index - cs.index;
+            if (start >= 0) required_cols = std::max(required_cols, start + span);
+        }
+        for (int i = template_cols; i < required_cols; i++)
+        {
+            if (auto_cols.empty())
+                columns_template.push_back(css_length::predef_value(0));
+            else
+                columns_template.push_back(auto_cols[(i - template_cols) % auto_cols.size()]);
+        }
+    }
+
     int num_columns = (int)columns_template.size();
     if (num_columns == 0) num_columns = 1;
 
@@ -566,6 +601,11 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
     int curr_row = 0;
     int curr_col = 0;
 
+    // grid-auto-flow: row dense backfills holes left behind the placement cursor.
+    const grid_auto_flow auto_flow = css().get_grid_auto_flow();
+    const bool dense = auto_flow == grid_auto_flow_row_dense ||
+                       auto_flow == grid_auto_flow_column_dense;
+
     for (const auto& el : m_children)
     {
         if (el->src_el()->css().get_position() == element_position_absolute || el->src_el()->css().get_position() == element_position_fixed)
@@ -626,6 +666,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         // Auto placement
         if (cs.index <= 0 && !cs.is_span)
         {
+            if (dense) { curr_row = 0; curr_col = 0; }
             bool found = false;
             while (!found)
             {
@@ -669,6 +710,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         }
         else if (cs.is_span && cs.index <= 0)
         {
+            if (dense) { curr_row = 0; curr_col = 0; }
             bool found = false;
             while (!found)
             {
@@ -878,14 +920,29 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
     }
 
     int num_rows = std::max((int)rows_template.size(), max_row);
+    // grid-auto-rows sizes implicit rows (those after grid-template-rows). With no
+    // value they stay auto (0 here; the measure pass grows them from content).
+    length_vector row_tracks = rows_template;
+    if (!is_multicol)
+    {
+        const auto& auto_rows = css().get_grid_auto_rows();
+        const int template_rows = (int)rows_template.size();
+        for (int i = template_rows; i < num_rows; i++)
+        {
+            if (auto_rows.empty())
+                row_tracks.push_back(css_length::predef_value(0));
+            else
+                row_tracks.push_back(auto_rows[(i - template_rows) % auto_rows.size()]);
+        }
+    }
     m_grid_layout.row_heights.assign(num_rows, 0);
     float total_row_fr = 0;
     pixel_t fixed_height = 0;
 
     // Calculate fixed and percentage rows
-    for (int i = 0; i < (int)rows_template.size(); i++)
+    for (int i = 0; i < (int)row_tracks.size(); i++)
     {
-        const auto& len = rows_template[i];
+        const auto& len = row_tracks[i];
         if (len.units() == css_units_fr)
         {
             total_row_fr += len.val();
@@ -903,9 +960,9 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
     {
         pixel_t remaining_height = render_block - fixed_height;
         if (remaining_height < 0) remaining_height = 0;
-        for (int i = 0; i < (int)rows_template.size(); i++)
+        for (int i = 0; i < (int)row_tracks.size(); i++)
         {
-            const auto& len = rows_template[i];
+            const auto& len = row_tracks[i];
             if (len.units() == css_units_fr)
             {
                 m_grid_layout.row_heights[i] = remaining_height * (len.val() / total_row_fr);

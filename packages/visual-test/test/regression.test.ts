@@ -557,4 +557,72 @@ describe("regression: layout and paint probes", () => {
       [],
     );
   });
+
+  it("unicode-bidi: bidi-override reorders inline items in an RTL line", async () => {
+    const box = (color: string, text: string) =>
+      `<span style="display:inline-block;width:20px;height:20px;color:transparent;background:${color}">${text}</span>`;
+    const { at } = await renderPng(
+      `<div style="direction:rtl;unicode-bidi:bidi-override;width:100px;font:10px/10px monospace;white-space:nowrap">${box("#f00", "A")}${box("#00f", "B")}</div>`,
+      100,
+      40,
+    );
+    // Both runs are forced to the RTL embedding level, so the line is mirrored:
+    // the blue item comes first even though it is last in the source.
+    expect(near(at(65, 10), BLUE)).toBe(true);
+    expect(near(at(85, 10), RED)).toBe(true);
+  });
+
+  it("white-space-collapse: preserve-breaks preserves newlines", async () => {
+    const r = await render({
+      value: `<html><body style="margin:0"><div style="width:100px;font:16px/20px monospace;white-space-collapse:preserve-breaks">ab\ncd</div></body></html>`,
+      width: 100,
+      format: "png",
+    });
+    expect(r.height).toBe(40); // was one collapsed line (20px)
+  });
+
+  it("text-wrap-mode: nowrap suppresses wrapping", async () => {
+    const r = await render({
+      value: `<html><body style="margin:0"><div style="width:50px;font:16px/20px monospace;text-wrap-mode:nowrap">AAAA BBBB</div></body></html>`,
+      width: 50,
+      format: "png",
+    });
+    expect(r.height).toBe(20); // was two lines (40px)
+  });
+
+  it("grid-auto-rows sizes implicit rows", async () => {
+    const r = await render({
+      value: `<html><body style="margin:0"><div style="display:grid;grid-template-columns:40px;grid-template-rows:10px;grid-auto-rows:40px;width:40px;font-size:0">
+        <div style="height:0"></div><div style="height:0"></div><div style="height:0"></div></div></body></html>`,
+      width: 40,
+      format: "png",
+    });
+    expect(r.height).toBe(90); // 10 + 40 + 40; implicit rows used to be content-sized
+  });
+
+  it("grid-auto-columns sizes columns for explicitly placed items past the template", async () => {
+    const { at } = await renderPng(
+      `<div style="display:grid;grid-template-columns:40px;grid-auto-columns:60px;width:200px;height:20px">
+         <div style="grid-column:2 / 3;background:#00f"></div>
+         <div style="grid-column:3 / 4;background:#0f0"></div>
+       </div>`,
+      200,
+      20,
+    );
+    expect(near(at(60, 10), BLUE)).toBe(true); // first implicit column spans 40..100
+    expect(near(at(110, 10), [0, 255, 0])).toBe(true); // second spans 100..160
+    expect(isWhite(at(170, 10))).toBe(true); // no phantom fourth column
+  });
+
+  it("grid-auto-flow: row dense backfills holes left by spanning items", async () => {
+    const r = await render({
+      value: `<html><body style="margin:0"><div style="display:grid;grid-template-columns:40px 40px;grid-auto-flow:row dense;grid-auto-rows:20px;width:80px">
+        <div style="background:#f00"></div>
+        <div style="grid-column:span 2;background:#00f"></div>
+        <div style="background:#0f0"></div></div></body></html>`,
+      width: 80,
+      format: "png",
+    });
+    expect(r.height).toBe(40); // the third item fills row 1's free cell; sparse put it on row 3
+  });
 });

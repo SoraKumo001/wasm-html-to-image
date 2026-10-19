@@ -28,6 +28,7 @@ namespace litehtml
       {
           {_display_, style_display_strings},
           {_direction_, direction_strings},
+          {_unicode_bidi_, unicode_bidi_strings},
           {_writing_mode_, writing_mode_strings},
           {_text_orientation_, text_orientation_strings},
           {_visibility_, visibility_strings},
@@ -45,7 +46,10 @@ namespace litehtml
           {_vertical_align_, vertical_align_strings},
           {_text_transform_, text_transform_strings},
           {_white_space_, white_space_strings},
+          {_white_space_collapse_, white_space_collapse_strings},
           {_text_wrap_, text_wrap_strings},
+          {_text_wrap_mode_, text_wrap_mode_strings},
+          {_text_wrap_style_, text_wrap_style_strings},
           {_word_break_, word_break_strings},
           {_overflow_wrap_, overflow_wrap_strings},
           {_word_wrap_, overflow_wrap_strings},
@@ -291,8 +295,54 @@ namespace litehtml
         add_parsed_property(name, property_value((int)val.n.number, important, false, m_layer, m_specificity));
       break;
 
+    // white-space is expanded into its CSS Text 4 longhands here, so that a later
+    // white-space-collapse / text-wrap-mode declaration in the same block overrides
+    // only the half it names (declaration order is preserved).
+    case _white_space_:
+    {
+      int index = value_index(ident, white_space_strings);
+      if (index < 0) break;
+      add_parsed_property(name, property_value(index, important, false, m_layer, m_specificity));
+      int collapse = white_space_collapse_collapse;
+      int mode = text_wrap_mode_wrap;
+      switch (index)
+      {
+        case white_space_nowrap: mode = text_wrap_mode_nowrap; break;
+        case white_space_pre: collapse = white_space_collapse_preserve; mode = text_wrap_mode_nowrap; break;
+        case white_space_pre_line: collapse = white_space_collapse_preserve_breaks; break;
+        case white_space_pre_wrap: collapse = white_space_collapse_preserve; break;
+        case white_space_break_spaces: collapse = white_space_collapse_break_spaces; break;
+        default: break;
+      }
+      add_parsed_property(_white_space_collapse_,
+                          property_value(collapse, important, false, m_layer, m_specificity));
+      add_parsed_property(_text_wrap_mode_,
+                          property_value(mode, important, false, m_layer, m_specificity));
+      break;
+    }
+
+    // text-wrap = <text-wrap-mode> || <text-wrap-style>. `balance`/`pretty` imply
+    // wrapping, `nowrap` only changes the mode.
+    case _text_wrap_:
+    {
+      int index = value_index(ident, text_wrap_strings);
+      if (index < 0) break;
+      add_parsed_property(name, property_value(index, important, false, m_layer, m_specificity));
+      int mode = text_wrap_mode_wrap;
+      int wrap_style = text_wrap_style_auto;
+      if (index == text_wrap_nowrap) mode = text_wrap_mode_nowrap;
+      else if (index == text_wrap_balance) wrap_style = text_wrap_style_balance;
+      else if (index == text_wrap_pretty) wrap_style = text_wrap_style_pretty;
+      add_parsed_property(_text_wrap_mode_,
+                          property_value(mode, important, false, m_layer, m_specificity));
+      add_parsed_property(_text_wrap_style_,
+                          property_value(wrap_style, important, false, m_layer, m_specificity));
+      break;
+    }
+
     case _display_:
     case _direction_:
+    case _unicode_bidi_:
     case _writing_mode_:
     case _text_orientation_:
     case _visibility_:
@@ -307,8 +357,9 @@ namespace litehtml
     case _text_align_:
     case _vertical_align_:
     case _text_transform_:
-    case _white_space_:
-    case _text_wrap_:
+    case _white_space_collapse_:
+    case _text_wrap_mode_:
+    case _text_wrap_style_:
     case _word_break_:
     case _text_combine_upright_:
     case _overflow_wrap_:
@@ -773,8 +824,33 @@ namespace litehtml
 
     case _grid_template_columns_:
     case _grid_template_rows_:
+    case _grid_auto_columns_:
+    case _grid_auto_rows_:
       parse_grid_template(name, value, important);
       break;
+
+    case _grid_auto_flow_:
+    {
+      // grid-auto-flow: row | column, optionally `dense`.
+      int flow = -1;
+      bool dense = false;
+      for (const auto& tok : value)
+      {
+        if (tok.type != IDENT) continue;
+        string id = lowcase(tok.ident());
+        if (id == "row") flow = grid_auto_flow_row;
+        else if (id == "column") flow = grid_auto_flow_column;
+        else if (id == "dense") dense = true;
+      }
+      if (flow >= 0)
+      {
+        int mapped = dense ? (flow == grid_auto_flow_column ? grid_auto_flow_column_dense
+                                                            : grid_auto_flow_row_dense)
+                           : flow;
+        add_parsed_property(name, property_value(mapped, important, false, m_layer, m_specificity));
+      }
+      break;
+    }
 
     case _grid_column_start_:
     case _grid_column_end_:
@@ -2250,8 +2326,12 @@ namespace litehtml
     if (!tracks.empty())
       add_parsed_property(name, property_value(tracks, important, false, m_layer, m_specificity));
     // Keep the raw tokens too: the grid layout reads named lines ([name]) from them.
-    add_parsed_property(name == _grid_template_columns_ ? _satoru_grid_columns_tokens_ : _satoru_grid_rows_tokens_,
-                        property_value(tokens, important, false, m_layer, m_specificity));
+    if (name == _grid_template_columns_)
+      add_parsed_property(_satoru_grid_columns_tokens_,
+                          property_value(tokens, important, false, m_layer, m_specificity));
+    else if (name == _grid_template_rows_)
+      add_parsed_property(_satoru_grid_rows_tokens_,
+                          property_value(tokens, important, false, m_layer, m_specificity));
   }
 
   void style::add_parsed_property(string_id name, const property_value &propval)

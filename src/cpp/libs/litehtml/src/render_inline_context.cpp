@@ -506,6 +506,22 @@ void litehtml::render_item_inline_context::place_inline(std::unique_ptr<line_box
         }
     }
 
+    // Phase 1: unicode-bidi override values force the line item to the embedding
+    // level of the writing direction instead of the run's first strong character.
+    // This reorders inline boxes/runs; embedding and isolate boundaries are still
+    // handled only by the existing per-run BiDi analysis (see compatibility notes).
+    {
+        unicode_bidi ub = item->get_el()->src_el()->css().get_unicode_bidi();
+        if (ub == unicode_bidi_bidi_override || ub == unicode_bidi_isolate_override)
+        {
+            direction dir = item->get_el()->src_el()->css().get_direction();
+            int level = (dir == direction_rtl)
+                ? ((base_level % 2 == 1) ? base_level : base_level + 1)
+                : ((base_level % 2 == 0) ? base_level : base_level + 1);
+            item->set_bidi_level(level);
+        }
+    }
+
     bool add_box = true;
     if(!m_line_boxes.empty())
     {

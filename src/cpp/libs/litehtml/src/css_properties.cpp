@@ -55,6 +55,8 @@ void litehtml::css_properties::compute(const element* el, const document::ptr& d
         _position_, false, element_position_static, offset(m_el_position));
     m_direction =
         (direction)el->get_property<int>(_direction_, true, direction_ltr, offset(m_direction));
+    m_unicode_bidi = (unicode_bidi)el->get_property<int>(
+        _unicode_bidi_, true, unicode_bidi_normal, offset(m_unicode_bidi));
     m_writing_mode = (writing_mode)el->get_property<int>(
         _writing_mode_, true, writing_mode_horizontal_tb, offset(m_writing_mode));
     m_text_orientation = (text_orientation)el->get_property<int>(
@@ -103,6 +105,64 @@ void litehtml::css_properties::compute(const element* el, const document::ptr& d
                                                        offset(m_white_space));
     m_text_wrap =
         (text_wrap)el->get_property<int>(_text_wrap_, true, text_wrap_wrap, offset(m_text_wrap));
+    // white-space-collapse / text-wrap-mode are the CSS Text 4 longhands behind
+    // white-space. The shorthand parser writes them too, so a longhand that comes
+    // later in the cascade wins for its own axis. Derive the longhands from the
+    // shorthand first (this also covers `inherit`), then let explicitly cascaded
+    // longhands override their axis and fold the pair back onto the legacy enums
+    // consumed by layout.
+    switch (m_white_space)
+    {
+      case white_space_pre:
+      case white_space_pre_wrap:
+        m_white_space_collapse = white_space_collapse_preserve;
+        break;
+      case white_space_pre_line:
+        m_white_space_collapse = white_space_collapse_preserve_breaks;
+        break;
+      case white_space_break_spaces:
+        m_white_space_collapse = white_space_collapse_break_spaces;
+        break;
+      default:
+        m_white_space_collapse = white_space_collapse_collapse;
+        break;
+    }
+    m_text_wrap_mode = (m_white_space == white_space_nowrap || m_white_space == white_space_pre)
+                           ? text_wrap_mode_nowrap
+                           : text_wrap_mode_wrap;
+    m_text_wrap_style = (m_text_wrap == text_wrap_balance) ? text_wrap_style_balance
+                        : (m_text_wrap == text_wrap_pretty) ? text_wrap_style_pretty
+                                                            : text_wrap_style_auto;
+    m_white_space_collapse = (white_space_collapse)el->get_property<int>(
+        _white_space_collapse_, true, m_white_space_collapse, offset(m_white_space_collapse));
+    m_text_wrap_mode = (text_wrap_mode)el->get_property<int>(
+        _text_wrap_mode_, true, m_text_wrap_mode, offset(m_text_wrap_mode));
+    m_text_wrap_style = (text_wrap_style)el->get_property<int>(
+        _text_wrap_style_, true, m_text_wrap_style, offset(m_text_wrap_style));
+    switch (m_white_space_collapse)
+    {
+      case white_space_collapse_preserve:
+        m_white_space = (m_text_wrap_mode == text_wrap_mode_nowrap) ? white_space_pre
+                                                                   : white_space_pre_wrap;
+        break;
+      case white_space_collapse_preserve_breaks:
+        m_white_space = white_space_pre_line;
+        break;
+      case white_space_collapse_preserve_spaces:
+      case white_space_collapse_break_spaces:
+        m_white_space = white_space_pre_wrap;
+        break;
+      default:
+        m_white_space = (m_text_wrap_mode == text_wrap_mode_nowrap) ? white_space_nowrap
+                                                                   : white_space_normal;
+        break;
+    }
+    if (m_text_wrap_style == text_wrap_style_balance)
+      m_text_wrap = text_wrap_balance;
+    else if (m_text_wrap_style == text_wrap_style_pretty)
+      m_text_wrap = text_wrap_pretty;
+    else
+      m_text_wrap = (m_text_wrap_mode == text_wrap_mode_nowrap) ? text_wrap_nowrap : text_wrap_wrap;
     m_word_break = (word_break)el->get_property<int>(_word_break_, true, word_break_normal,
                                                      offset(m_word_break));
     // CSS Fragmentation. Not inherited. Legacy page-break-* are remapped onto the
@@ -1209,6 +1269,12 @@ void litehtml::css_properties::compute_grid(const element* el, const document::p
             _grid_template_columns_, false, length_vector(), offset(m_grid_template_columns));
         m_grid_template_rows = el->get_property<length_vector>(
             _grid_template_rows_, false, length_vector(), offset(m_grid_template_rows));
+        m_grid_auto_columns = el->get_property<length_vector>(
+            _grid_auto_columns_, false, length_vector(), offset(m_grid_auto_columns));
+        m_grid_auto_rows = el->get_property<length_vector>(
+            _grid_auto_rows_, false, length_vector(), offset(m_grid_auto_rows));
+        m_grid_auto_flow = (grid_auto_flow)el->get_property<int>(
+            _grid_auto_flow_, false, grid_auto_flow_row, offset(m_grid_auto_flow));
 
         m_grid_columns_tokens = el->get_property<css_token_vector>(
             _satoru_grid_columns_tokens_, false, css_token_vector(), offset(m_grid_columns_tokens));
@@ -1219,6 +1285,8 @@ void litehtml::css_properties::compute_grid(const element* el, const document::p
 
         for (auto& x : m_grid_template_columns) doc->cvt_units(x, m_font_metrics, 0);
         for (auto& y : m_grid_template_rows) doc->cvt_units(y, m_font_metrics, 0);
+        for (auto& x : m_grid_auto_columns) doc->cvt_units(x, m_font_metrics, 0);
+        for (auto& y : m_grid_auto_rows) doc->cvt_units(y, m_font_metrics, 0);
 
         m_row_gap = el->get_property<css_length>(_row_gap_, false, 0, offset(m_row_gap));
         m_column_gap = el->get_property<css_length>(_column_gap_, false, 0, offset(m_column_gap));
@@ -1341,6 +1409,7 @@ litehtml::css_properties::dump_get_attrs() const {
 
     ret.emplace_back("display", index_value(m_display, style_display_strings));
     ret.emplace_back("direction", index_value(m_direction, direction_strings));
+    ret.emplace_back("unicode_bidi", index_value(m_unicode_bidi, unicode_bidi_strings));
     ret.emplace_back("writing_mode", index_value(m_writing_mode, writing_mode_strings));
     ret.emplace_back("text_orientation", index_value(m_text_orientation, text_orientation_strings));
     ret.emplace_back("text_combine_upright",
@@ -1385,6 +1454,10 @@ litehtml::css_properties::dump_get_attrs() const {
     ret.emplace_back("widows", std::to_string(m_widows));
     ret.emplace_back("overflow_wrap", index_value(m_overflow_wrap, overflow_wrap_strings));
     ret.emplace_back("text_wrap", index_value(m_text_wrap, text_wrap_strings));
+    ret.emplace_back("white_space_collapse",
+                     index_value(m_white_space_collapse, white_space_collapse_strings));
+    ret.emplace_back("text_wrap_mode", index_value(m_text_wrap_mode, text_wrap_mode_strings));
+    ret.emplace_back("text_wrap_style", index_value(m_text_wrap_style, text_wrap_style_strings));
     ret.emplace_back("opacity", std::to_string(m_opacity));
     ret.emplace_back("object_fit", index_value(m_object_fit, object_fit_strings));
     ret.emplace_back("mix_blend_mode", index_value(m_mix_blend_mode, blend_mode_strings));

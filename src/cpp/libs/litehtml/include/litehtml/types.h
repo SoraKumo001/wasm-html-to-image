@@ -414,6 +414,21 @@ namespace litehtml
 		direction_rtl
 	};
 
+// Phase 1 implements `bidi-override` / `isolate-override` as a line-item level
+// override. The embedding/isolate/plaintext values are parsed and stored; the
+// paragraph-level algorithm is documented as a remaining gap.
+#define unicode_bidi_strings            "normal;embed;isolate;bidi-override;isolate-override;plaintext"
+
+        enum unicode_bidi
+        {
+                unicode_bidi_normal,
+                unicode_bidi_embed,
+                unicode_bidi_isolate,
+                unicode_bidi_bidi_override,
+                unicode_bidi_isolate_override,
+                unicode_bidi_plaintext
+        };
+
 #define writing_mode_strings	"horizontal-tb;vertical-rl;vertical-lr;sideways-rl;sideways-lr"
 
 	enum writing_mode
@@ -948,7 +963,7 @@ namespace litehtml
                 text_transform_lowercase
         };
 
-#define white_space_strings             "normal;nowrap;pre;pre-line;pre-wrap"
+#define white_space_strings             "normal;nowrap;pre;pre-line;pre-wrap;break-spaces"
 
         enum white_space
         {
@@ -956,17 +971,50 @@ namespace litehtml
                 white_space_nowrap,
                 white_space_pre,
                 white_space_pre_line,
-                white_space_pre_wrap
+                white_space_pre_wrap,
+                white_space_break_spaces
         };
 
-#define text_wrap_strings               "wrap;nowrap;balance;pretty"
+// white-space longhands (CSS Text 4). The engine still collapses these into the
+// white_space enum above; preserve-spaces/break-spaces map to pre-wrap.
+#define white_space_collapse_strings    "collapse;preserve;preserve-breaks;preserve-spaces;break-spaces"
+
+        enum white_space_collapse
+        {
+                white_space_collapse_collapse,
+                white_space_collapse_preserve,
+                white_space_collapse_preserve_breaks,
+                white_space_collapse_preserve_spaces,
+                white_space_collapse_break_spaces
+        };
+
+#define text_wrap_mode_strings          "wrap;nowrap"
+
+        enum text_wrap_mode
+        {
+                text_wrap_mode_wrap,
+                text_wrap_mode_nowrap
+        };
+
+#define text_wrap_style_strings         "auto;balance;pretty;stable"
+
+        enum text_wrap_style
+        {
+                text_wrap_style_auto,
+                text_wrap_style_balance,
+                text_wrap_style_pretty,
+                text_wrap_style_stable
+        };
+
+#define text_wrap_strings               "wrap;nowrap;balance;pretty;auto"
 
         enum text_wrap
         {
                 text_wrap_wrap,
                 text_wrap_nowrap,
                 text_wrap_balance,
-                text_wrap_pretty
+                text_wrap_pretty,
+                text_wrap_auto
         };
 
 
@@ -1409,6 +1457,18 @@ namespace litehtml
                 flex_direction_row_reverse,
                 flex_direction_column,
                 flex_direction_column_reverse
+        };
+
+// grid-auto-flow: row | column, optionally `dense`. Phase 1 implements row
+// (sparse and dense); `column` is parsed but currently behaves like row.
+#define grid_auto_flow_strings          "row;column;row-dense;column-dense"
+
+        enum grid_auto_flow
+        {
+                grid_auto_flow_row,
+                grid_auto_flow_column,
+                grid_auto_flow_row_dense,
+                grid_auto_flow_column_dense
         };
 
 #define flex_wrap_strings               "nowrap;wrap;wrap-reverse"
