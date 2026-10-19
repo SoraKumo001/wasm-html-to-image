@@ -334,4 +334,11 @@ describe("regression: layout and paint probes", () => {
     expect(r.height).toBeGreaterThan(100);
     expect(Date.now() - t0).toBeLessThan(30000); // exponential before: minutes at this depth
   }, 60000);
+  it("closed <dialog> is hidden; open <dialog> is shown", async () => {
+    const body = (open: string) => `<dialog${open}><div style="height:200px;background:#f00"></div></dialog><div style="height:10px"></div>`;
+    const closed = await render({ value: `<html><body style="margin:0">${body("")}</body></html>`, width: 100, format: "png" });
+    expect(closed.height).toBeLessThan(40);
+    const opened = await render({ value: `<html><body style="margin:0">${body(" open")}</body></html>`, width: 100, format: "png" });
+    expect(opened.height).toBeGreaterThan(200);
+  });
 });
