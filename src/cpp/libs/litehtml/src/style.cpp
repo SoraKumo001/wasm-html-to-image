@@ -107,7 +107,8 @@ namespace litehtml
   };
   std::map<string_id, vector<string_id>> shorthands =
       {
-          {_font_, {_font_style_, _font_variant_, _font_weight_, _font_size_, _line_height_, _font_family_}},
+          {_font_, {_font_style_, _font_variant_, _font_variant_ligatures_, _font_variant_numeric_, _font_variant_east_asian_, _font_variant_caps_, _font_variant_position_, _font_feature_settings_, _font_weight_, _font_size_, _line_height_, _font_family_}},
+          {_font_variant_, {_font_variant_ligatures_, _font_variant_numeric_, _font_variant_east_asian_, _font_variant_caps_, _font_variant_position_}},
 
           {_background_, {_background_color_, _background_position_x_, _background_position_y_, _background_repeat_, _background_attachment_, _background_image_, _background_image_baseurl_, _background_size_, _background_origin_, _background_clip_}},
 
@@ -368,7 +369,6 @@ namespace litehtml
     case _break_after_:
     case _break_inside_:
     case _font_style_:
-    case _font_variant_:
     case _text_decoration_style_:
     case _list_style_type_:
     case _list_style_position_:
@@ -727,6 +727,22 @@ namespace litehtml
 
     case _font_:
       parse_font(value, important);
+      break;
+
+    case _font_variant_:
+      parse_font_variant(value, important);
+      break;
+
+    case _font_variant_ligatures_:
+    case _font_variant_numeric_:
+    case _font_variant_east_asian_:
+    case _font_variant_caps_:
+    case _font_variant_position_:
+      parse_font_variant_longhand(name, value, important);
+      break;
+
+    case _font_feature_settings_:
+      parse_font_feature_settings(value, important);
       break;
 
     case _font_family_:
@@ -1844,6 +1860,145 @@ namespace litehtml
     return true;
   }
 
+  // ── font-variant-* / font-feature-settings ──
+  static const char *font_variant_group_keywords(int group)
+  {
+    switch (group)
+    {
+      case 0: return font_variant_ligatures_strings;
+      case 1: return font_variant_numeric_strings;
+      case 2: return font_variant_east_asian_strings;
+      case 3: return font_variant_caps_strings;
+      default: return font_variant_position_strings;
+    }
+  }
+
+  static bool parse_font_variant_values(const css_token_vector &tokens, int group, string &out)
+  {
+    if (tokens.size() == 1 && lowcase(tokens[0].ident()) == "normal")
+    {
+      out = "normal";
+      return true;
+    }
+    if (tokens.empty())
+      return false;
+
+    const char *keywords = font_variant_group_keywords(group);
+    string result;
+    for (const auto &tok : tokens)
+    {
+      string kw = lowcase(tok.ident());
+      if (kw.empty() || kw == "normal" || value_index(kw, keywords) < 0)
+        return false;
+      if (!result.empty())
+        result += ' ';
+      result += kw;
+    }
+    out = result;
+    return true;
+  }
+
+  static int font_variant_group_of(const string &kw)
+  {
+    if (kw == "normal")
+      return -1;
+    for (int group = 0; group < 5; ++group)
+    {
+      if (value_index(kw, font_variant_group_keywords(group), -1) >= 0)
+        return group;
+    }
+    return -1;
+  }
+
+  void style::parse_font_variant_longhand(string_id name, const css_token_vector &tokens, bool important)
+  {
+    int group = name == _font_variant_ligatures_   ? 0
+                : name == _font_variant_numeric_   ? 1
+                : name == _font_variant_east_asian_ ? 2
+                : name == _font_variant_caps_      ? 3
+                                                   : 4;
+    string value;
+    if (parse_font_variant_values(tokens, group, value))
+      add_parsed_property(name, property_value(value, important, false, m_layer, m_specificity));
+  }
+
+  void style::parse_font_variant(const css_token_vector &tokens, bool important)
+  {
+    string values[5] = {"normal", "normal", "normal", "normal", "normal"};
+    if (!(tokens.size() == 1 && lowcase(tokens[0].ident()) == "normal"))
+    {
+      if (tokens.empty())
+        return;
+      for (const auto &tok : tokens)
+      {
+        string kw = lowcase(tok.ident());
+        if (kw == "normal")
+          return; // `normal` cannot be combined with other keywords
+        int group = font_variant_group_of(kw);
+        if (group < 0)
+          return;
+        if (values[group] == "normal")
+          values[group] = kw;
+        else
+          values[group] += " " + kw;
+      }
+    }
+    add_parsed_property(_font_variant_ligatures_,
+                        property_value(values[0], important, false, m_layer, m_specificity));
+    add_parsed_property(_font_variant_numeric_,
+                        property_value(values[1], important, false, m_layer, m_specificity));
+    add_parsed_property(_font_variant_east_asian_,
+                        property_value(values[2], important, false, m_layer, m_specificity));
+    add_parsed_property(_font_variant_caps_,
+                        property_value(values[3], important, false, m_layer, m_specificity));
+    add_parsed_property(_font_variant_position_,
+                        property_value(values[4], important, false, m_layer, m_specificity));
+  }
+
+  void style::parse_font_feature_settings(const css_token_vector &tokens, bool important)
+  {
+    if (tokens.size() == 1 && lowcase(tokens[0].ident()) == "normal")
+    {
+      add_parsed_property(_font_feature_settings_,
+                          property_value(tokens, important, false, m_layer, m_specificity));
+      return;
+    }
+    if (tokens.empty())
+      return;
+
+    size_t i = 0;
+    while (i < tokens.size())
+    {
+      if (tokens[i].type != STRING || tokens[i].str.size() != 4)
+        return;
+      ++i;
+      if (i < tokens.size() && tokens[i].type != COMMA)
+      {
+        if (tokens[i].type == IDENT)
+        {
+          string id = lowcase(tokens[i].ident());
+          if (id != "on" && id != "off")
+            return;
+        }
+        else if (tokens[i].type != NUMBER || tokens[i].n.number_type != css_number_integer)
+        {
+          return;
+        }
+        ++i;
+      }
+      if (i < tokens.size())
+      {
+        if (tokens[i].type != COMMA)
+          return;
+        ++i;
+        if (i == tokens.size())
+          return; // trailing comma
+      }
+    }
+    add_parsed_property(_font_feature_settings_,
+                        property_value(tokens, important, false, m_layer, m_specificity));
+  }
+
   void style::parse_font(css_token_vector tokens, bool important)
   {
     int style = font_style_normal;
@@ -1877,6 +2032,16 @@ namespace litehtml
     }
     add_parsed_property(_font_style_, property_value(style, important, false, m_layer, m_specificity));
     add_parsed_property(_font_variant_, property_value(variant, important, false, m_layer, m_specificity));
+    // `font` resets every font-variant longhand (font-variant-css2 only has small-caps)
+    // and font-feature-settings to their initial values.
+    add_parsed_property(_font_variant_ligatures_, property_value(string("normal"), important, false, m_layer, m_specificity));
+    add_parsed_property(_font_variant_numeric_, property_value(string("normal"), important, false, m_layer, m_specificity));
+    add_parsed_property(_font_variant_east_asian_, property_value(string("normal"), important, false, m_layer, m_specificity));
+    add_parsed_property(_font_variant_caps_, property_value(string(variant == font_variant_small_caps ? "small-caps" : "normal"), important, false, m_layer, m_specificity));
+    add_parsed_property(_font_variant_position_, property_value(string("normal"), important, false, m_layer, m_specificity));
+    css_token_vector feature_normal;
+    feature_normal.push_back(css_token(IDENT, "normal"));
+    add_parsed_property(_font_feature_settings_, property_value(feature_normal, important, false, m_layer, m_specificity));
     add_parsed_property(_font_weight_, property_value(weight, important, false, m_layer, m_specificity));
     add_parsed_property(_font_size_, property_value(size, important, false, m_layer, m_specificity));
     add_parsed_property(_line_height_, property_value(line_height, important, false, m_layer, m_specificity));

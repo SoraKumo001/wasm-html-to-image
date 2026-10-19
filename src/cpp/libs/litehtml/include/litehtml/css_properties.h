@@ -81,6 +81,12 @@ namespace litehtml
     string m_font_family;
     css_length m_font_weight;
     font_style m_font_style;
+    string m_font_variant_ligatures = "normal";
+    string m_font_variant_numeric = "normal";
+    string m_font_variant_east_asian = "normal";
+    string m_font_variant_caps = "normal";
+    string m_font_variant_position = "normal";
+    css_token_vector m_font_feature_settings;
     int m_text_decoration_line = text_decoration_line_none;
     text_decoration_style m_text_decoration_style = text_decoration_style_solid;
     css_length m_text_decoration_thickness;

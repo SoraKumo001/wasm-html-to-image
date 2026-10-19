@@ -704,6 +704,17 @@ namespace litehtml
                 font_variant_small_caps
         };
 
+        // font-variant-* longhands. Values are kept as space separated keyword lists.
+#define  font_variant_ligatures_strings "normal;none;common-ligatures;no-common-ligatures;discretionary-ligatures;no-discretionary-ligatures;historical-ligatures;no-historical-ligatures;contextual;no-contextual"
+
+#define  font_variant_numeric_strings   "normal;ordinal;slashed-zero;lining-nums;oldstyle-nums;proportional-nums;tabular-nums;diagonal-fractions;stacked-fractions"
+
+#define  font_variant_east_asian_strings "normal;jis78;jis83;jis90;jis04;simplified;traditional;full-width;proportional-width;ruby"
+
+#define  font_variant_caps_strings      "normal;small-caps;all-small-caps;petite-caps;all-petite-caps;unicase;titling-caps"
+
+#define  font_variant_position_strings  "normal;sub;super"
+
 #define  font_weight_strings    "normal;bold;bolder;lighter"
 
         enum font_weight

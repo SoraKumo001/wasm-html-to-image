@@ -1,7 +1,9 @@
 #ifndef LITEHTML_FONT_DESCRIPTION
 #define LITEHTML_FONT_DESCRIPTION
 
+#include <cstdint>
 #include <string>
+#include <vector>
 
 #include "background.h"
 #include "css_length.h"
@@ -9,6 +11,12 @@
 #include "web_color.h"
 
 namespace litehtml {
+// One resolved OpenType feature setting (font-variant-* / font-feature-settings).
+struct font_feature_setting {
+    uint32_t tag = 0;
+    uint32_t value = 1;
+};
+
 struct font_description {
     std::string family;                               // Font Family
     pixel_t size = 0;                                 // Font size
@@ -32,6 +40,10 @@ struct font_description {
     shadow_vector text_shadow;
     pixel_t text_stroke_width = 0;  // -webkit-text-stroke-width, in px
     web_color text_stroke_color = web_color::current_color;  // -webkit-text-stroke-color
+
+    // Resolved OpenType features, low priority first (font-variant-* then
+    // font-feature-settings) so later entries can override earlier ones.
+    std::vector<font_feature_setting> features;
 
     std::string hash() const {
         std::string out;
@@ -60,6 +72,9 @@ struct font_description {
         if (text_stroke_width > 0) {
             out += ":tsw=" + std::to_string(text_stroke_width);
             out += ":tsc=" + text_stroke_color.to_string();
+        }
+        for (const auto& f : features) {
+            out += ":ff=" + std::to_string(f.tag) + "=" + std::to_string(f.value);
         }
 
         return out;

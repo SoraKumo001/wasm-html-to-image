@@ -35,6 +35,18 @@ bool is_color_emoji_font(const SkFont& font) {
     std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
     return lower.find("emoji") != std::string::npos || lower.find("color") != std::string::npos;
 }
+
+// Resolved CSS features (font-variant-* / font-feature-settings) as SkShaper features.
+std::vector<SkShaper::Feature> shaperFeatures(const litehtml::font_description& desc,
+                                              size_t textLen) {
+    std::vector<SkShaper::Feature> features;
+    features.reserve(desc.features.size());
+    for (const auto& f : desc.features) {
+        features.push_back({f.tag, f.value, 0, textLen});
+    }
+    return features;
+}
+
 void replayUsedCodepoints(const MeasureResult& result, std::set<char32_t>* usedCodepoints) {
     if (!usedCodepoints) return;
     for (char32_t codepoint : result.usedCodepoints) {
@@ -346,6 +358,7 @@ MeasureResult TextLayout::measureText(SatoruContext* ctx, const char* text, font
         key.textCombineUpright = fi->desc.text_combine_upright_;
         key.letterSpacing = (float)fi->desc.letter_spacing;
         key.wordSpacing = (float)fi->desc.word_spacing;
+        key.features = fontFeatureSignature(fi->desc);
         key.fontVersion = ctx->getFontVersion();
 
         if (MeasureResult* cached = ctx->cacheManager.measureCache.get(key)) {
@@ -452,7 +465,9 @@ MeasureResult TextLayout::measureText(SatoruContext* ctx, const char* text, font
         SkShaper::MakeStdLanguageRunIterator(shape_text, shape_len);
     if (!lang) lang = std::make_unique<SkShaper::TrivialLanguageRunIterator>("en", shape_len);
 
-    shaper->shape(shape_text, shape_len, fontRuns, *bidi, *script, *lang, nullptr, 0, 1000000,
+    std::vector<SkShaper::Feature> features = shaperFeatures(fi->desc, shape_len);
+    shaper->shape(shape_text, shape_len, fontRuns, *bidi, *script, *lang,
+                  features.empty() ? nullptr : features.data(), features.size(), 1000000,
                   &handler);
 
     double measuredWidth = handler.width();
@@ -644,6 +659,7 @@ ShapedResult TextLayout::shapeText(SatoruContext* ctx, const char* text, size_t 
     key.textCombineUpright = fi->desc.text_combine_upright_;
     key.letterSpacing = (float)fi->desc.letter_spacing;
     key.wordSpacing = (float)fi->desc.word_spacing;
+    key.features = fontFeatureSignature(fi->desc);
 
     if (ShapedResult* cached = ctx->cacheManager.shapingCache.get(key)) {
         if (usedCodepoints) {
@@ -684,6 +700,7 @@ ShapedResult TextLayout::shapePreparedText(SatoruContext* ctx, const char* cache
     key.textCombineUpright = fi->desc.text_combine_upright_;
     key.letterSpacing = (float)fi->desc.letter_spacing;
     key.wordSpacing = (float)fi->desc.word_spacing;
+    key.features = fontFeatureSignature(fi->desc);
 
     if (ShapedResult* cached = ctx->cacheManager.shapingCache.get(key)) {
         return *cached;
@@ -725,7 +742,9 @@ ShapedResult TextLayout::shapePreparedText(SatoruContext* ctx, const char* cache
         SkShaper::MakeStdLanguageRunIterator(shapeText, shapeLen);
     if (!lang) lang = std::make_unique<SkShaper::TrivialLanguageRunIterator>("en", shapeLen);
 
-    shaper->shape(shapeText, shapeLen, fontRuns, *bidi, *script, *lang, nullptr, 0, 1000000,
+    std::vector<SkShaper::Feature> features = shaperFeatures(fi->desc, shapeLen);
+    shaper->shape(shapeText, shapeLen, fontRuns, *bidi, *script, *lang,
+                  features.empty() ? nullptr : features.data(), features.size(), 1000000,
                   &handler);
 
     result.blob = blobHandler.makeBlob();

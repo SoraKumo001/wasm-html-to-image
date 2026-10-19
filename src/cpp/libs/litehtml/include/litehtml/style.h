@@ -128,6 +128,9 @@ namespace litehtml
                 void parse_list_style(const css_token_vector& tokens, string baseurl, bool important);
 
                 void parse_font(css_token_vector tokens, bool important);
+                void parse_font_variant(const css_token_vector& tokens, bool important);
+                void parse_font_variant_longhand(string_id name, const css_token_vector& tokens, bool important);
+                void parse_font_feature_settings(const css_token_vector& tokens, bool important);
                 void parse_text_decoration(const css_token_vector& tokens, bool important, document_container* container);
                 bool parse_text_decoration_color(const css_token& token, bool important, document_container* container);
                 void parse_text_decoration_line(const css_token_vector& tokens, bool important);     

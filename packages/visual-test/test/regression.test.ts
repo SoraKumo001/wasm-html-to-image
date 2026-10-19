@@ -27,6 +27,20 @@ const near = (a: Rgb, b: Rgb, tol = 12) =>
 const BLUE: Rgb = [0, 0, 255];
 const RED: Rgb = [255, 0, 0];
 
+// Local probe font (same Roboto as assets/02-typography.html). Text probes below
+// compare rendered bytes, so the font only has to be stable, not reference-matched.
+const PROBE_FONT_FACE =
+  "@font-face{font-family:'RobotoProbe';src:url('https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1Mu4mxK.woff2') format('woff2')}";
+
+async function renderProbeText(body: string, width = 800) {
+  const html = `<html><head><style>${PROBE_FONT_FACE}</style></head><body style="margin:0;background:#fff">${body}</body></html>`;
+  const { data } = await render({ value: html, width, format: "png" });
+  return PNG.sync.read(Buffer.from(data));
+}
+
+const probeLine = (style: string, text: string) =>
+  `<div style="font-family:'RobotoProbe',sans-serif;font-size:60px;line-height:90px;color:#000;${style}">${text}</div>`;
+
 // One 32-bit hash per ANMF (animation frame) chunk in a RIFF/WEBP container.
 // Distinct hashes prove the sampled frames actually differ in pixel content.
 function webpFrameHashes(data: Uint8Array): number[] {
@@ -672,5 +686,42 @@ describe("regression: layout and paint probes", () => {
     expect(near(at(30, 10), BLUE)).toBe(true); // 25..60
     expect(near(at(70, 10), [0, 255, 0])).toBe(true); // 60..85 (second auto-columns value)
     expect(isWhite(at(100, 10))).toBe(true); // no phantom track
+  });
+
+  it("font-feature-settings applies OpenType features (kern off changes AV spacing)", async () => {
+    const base = await renderProbeText(probeLine("", "AVAVAVAVAV"));
+    const off = await renderProbeText(
+      probeLine("font-feature-settings:'kern' 0", "AVAVAVAVAV"),
+    );
+    expect(off.data.equals(base.data)).toBe(false);
+  });
+
+  it("font-variant-ligatures: none disables common ligatures", async () => {
+    const base = await renderProbeText(probeLine("", "office ffi fl"));
+    const none = await renderProbeText(
+      probeLine("font-variant-ligatures:none", "office ffi fl"),
+    );
+    expect(none.data.equals(base.data)).toBe(false);
+  });
+
+  it("font-variant-numeric longhands select figure sets", async () => {
+    const base = await renderProbeText(probeLine("", "1111111111"));
+    const proportional = await renderProbeText(
+      probeLine("font-variant-numeric:proportional-nums", "1111111111"),
+    );
+    const tabular = await renderProbeText(
+      probeLine("font-variant-numeric:tabular-nums", "1111111111"),
+    );
+    expect(proportional.data.equals(base.data)).toBe(false);
+    expect(proportional.data.equals(tabular.data)).toBe(false);
+  });
+
+  it("font-feature-settings is resolved per element (font cache key includes features)", async () => {
+    const img = await renderProbeText(
+      probeLine("", "AVAVAVAVAV") + probeLine("font-feature-settings:'kern' 0", "AVAVAVAVAV"),
+    );
+    const row = (y: number) => img.data.subarray(y * img.width * 4, (y + 1) * img.width * 4);
+    // Same text in both lines; only the second line has kerning disabled.
+    expect(row(45).equals(row(135))).toBe(false);
   });
 });

@@ -33,6 +33,129 @@ bool is_inline_reverse(writing_mode mode, direction direction_unused)
     (void) direction_unused;
     return mode == writing_mode_sideways_lr;
 }
+
+// ── OpenType feature resolution (font-variant-* / font-feature-settings) ──
+uint32_t ot_tag(char a, char b, char c, char d)
+{
+    return ((uint32_t)(uint8_t)a << 24) | ((uint32_t)(uint8_t)b << 16) |
+           ((uint32_t)(uint8_t)c << 8) | (uint32_t)(uint8_t)d;
+}
+
+void add_ot_feature(std::vector<font_feature_setting>& out, uint32_t tag, uint32_t value)
+{
+    out.push_back({tag, value});
+}
+
+// group: 0=ligatures 1=numeric 2=east-asian 3=caps 4=position
+void append_font_variant_features(std::vector<font_feature_setting>& out, const string& value,
+                                  int group)
+{
+    size_t pos = 0;
+    while (pos < value.size()) {
+        size_t end = value.find(' ', pos);
+        string kw = value.substr(pos, end == string::npos ? string::npos : end - pos);
+        pos = end == string::npos ? value.size() : end + 1;
+        if (kw.empty() || kw == "normal") continue;
+
+        switch (group) {
+            case 0:
+                if (kw == "none") {
+                    add_ot_feature(out, ot_tag('l', 'i', 'g', 'a'), 0);
+                    add_ot_feature(out, ot_tag('c', 'l', 'i', 'g'), 0);
+                    add_ot_feature(out, ot_tag('d', 'l', 'i', 'g'), 0);
+                    add_ot_feature(out, ot_tag('h', 'l', 'i', 'g'), 0);
+                    add_ot_feature(out, ot_tag('c', 'a', 'l', 't'), 0);
+                } else if (kw == "common-ligatures") {
+                    add_ot_feature(out, ot_tag('l', 'i', 'g', 'a'), 1);
+                    add_ot_feature(out, ot_tag('c', 'l', 'i', 'g'), 1);
+                } else if (kw == "no-common-ligatures") {
+                    add_ot_feature(out, ot_tag('l', 'i', 'g', 'a'), 0);
+                    add_ot_feature(out, ot_tag('c', 'l', 'i', 'g'), 0);
+                } else if (kw == "discretionary-ligatures") {
+                    add_ot_feature(out, ot_tag('d', 'l', 'i', 'g'), 1);
+                } else if (kw == "no-discretionary-ligatures") {
+                    add_ot_feature(out, ot_tag('d', 'l', 'i', 'g'), 0);
+                } else if (kw == "historical-ligatures") {
+                    add_ot_feature(out, ot_tag('h', 'l', 'i', 'g'), 1);
+                } else if (kw == "no-historical-ligatures") {
+                    add_ot_feature(out, ot_tag('h', 'l', 'i', 'g'), 0);
+                } else if (kw == "contextual") {
+                    add_ot_feature(out, ot_tag('c', 'a', 'l', 't'), 1);
+                } else if (kw == "no-contextual") {
+                    add_ot_feature(out, ot_tag('c', 'a', 'l', 't'), 0);
+                }
+                break;
+            case 1:
+                if (kw == "ordinal") add_ot_feature(out, ot_tag('o', 'r', 'd', 'n'), 1);
+                else if (kw == "slashed-zero") add_ot_feature(out, ot_tag('z', 'e', 'r', 'o'), 1);
+                else if (kw == "lining-nums") add_ot_feature(out, ot_tag('l', 'n', 'u', 'm'), 1);
+                else if (kw == "oldstyle-nums") add_ot_feature(out, ot_tag('o', 'n', 'u', 'm'), 1);
+                else if (kw == "proportional-nums") add_ot_feature(out, ot_tag('p', 'n', 'u', 'm'), 1);
+                else if (kw == "tabular-nums") add_ot_feature(out, ot_tag('t', 'n', 'u', 'm'), 1);
+                else if (kw == "diagonal-fractions") add_ot_feature(out, ot_tag('f', 'r', 'a', 'c'), 1);
+                else if (kw == "stacked-fractions") add_ot_feature(out, ot_tag('a', 'f', 'r', 'c'), 1);
+                break;
+            case 2:
+                if (kw == "jis78") add_ot_feature(out, ot_tag('j', 'p', '7', '8'), 1);
+                else if (kw == "jis83") add_ot_feature(out, ot_tag('j', 'p', '8', '3'), 1);
+                else if (kw == "jis90") add_ot_feature(out, ot_tag('j', 'p', '9', '0'), 1);
+                else if (kw == "jis04") add_ot_feature(out, ot_tag('j', 'p', '0', '4'), 1);
+                else if (kw == "simplified") add_ot_feature(out, ot_tag('s', 'm', 'p', 'l'), 1);
+                else if (kw == "traditional") add_ot_feature(out, ot_tag('t', 'r', 'a', 'd'), 1);
+                else if (kw == "full-width") add_ot_feature(out, ot_tag('f', 'w', 'i', 'd'), 1);
+                else if (kw == "proportional-width") add_ot_feature(out, ot_tag('p', 'w', 'i', 'd'), 1);
+                else if (kw == "ruby") add_ot_feature(out, ot_tag('r', 'u', 'b', 'y'), 1);
+                break;
+            case 3:
+                if (kw == "small-caps") add_ot_feature(out, ot_tag('s', 'm', 'c', 'p'), 1);
+                else if (kw == "all-small-caps") {
+                    add_ot_feature(out, ot_tag('s', 'm', 'c', 'p'), 1);
+                    add_ot_feature(out, ot_tag('c', '2', 's', 'c'), 1);
+                } else if (kw == "petite-caps") add_ot_feature(out, ot_tag('p', 'c', 'a', 'p'), 1);
+                else if (kw == "all-petite-caps") {
+                    add_ot_feature(out, ot_tag('p', 'c', 'a', 'p'), 1);
+                    add_ot_feature(out, ot_tag('c', '2', 'p', 'c'), 1);
+                } else if (kw == "unicase") add_ot_feature(out, ot_tag('u', 'n', 'i', 'c'), 1);
+                else if (kw == "titling-caps") add_ot_feature(out, ot_tag('t', 'i', 't', 'l'), 1);
+                break;
+            case 4:
+                if (kw == "sub") add_ot_feature(out, ot_tag('s', 'u', 'b', 's'), 1);
+                else if (kw == "super") add_ot_feature(out, ot_tag('s', 'u', 'p', 's'), 1);
+                break;
+            default:
+                break;
+        }
+    }
+}
+
+void append_font_feature_settings(std::vector<font_feature_setting>& out,
+                                  const css_token_vector& tokens)
+{
+    size_t i = 0;
+    while (i < tokens.size()) {
+        if (tokens[i].type != STRING) {
+            ++i;
+            continue;
+        }
+        const string& tag = tokens[i].str;
+        uint32_t value = 1;
+        size_t j = i + 1;
+        if (j < tokens.size() && tokens[j].type != COMMA) {
+            if (tokens[j].type == IDENT) {
+                string id = lowcase(tokens[j].ident());
+                if (id == "off") value = 0;
+            } else if (tokens[j].type == NUMBER) {
+                value = (uint32_t)(int)tokens[j].n.number;
+            }
+            ++j;
+        }
+        if (tag.size() == 4) {
+            add_ot_feature(out, ot_tag(tag[0], tag[1], tag[2], tag[3]), value);
+        }
+        while (j < tokens.size() && tokens[j].type != STRING) ++j;
+        i = j;
+    }
+}
 }  // namespace
 }  // namespace litehtml
 
@@ -939,6 +1062,18 @@ void litehtml::css_properties::compute_font(const element* el, const document::p
         _font_weight_, true, css_length::predef_value(font_weight_normal), offset(m_font_weight));
     m_font_style = (font_style)el->get_property<int>(_font_style_, true, font_style_normal,
                                                      offset(m_font_style));
+    m_font_variant_ligatures = el->get_property<string>(
+        _font_variant_ligatures_, true, "normal", offset(m_font_variant_ligatures));
+    m_font_variant_numeric = el->get_property<string>(
+        _font_variant_numeric_, true, "normal", offset(m_font_variant_numeric));
+    m_font_variant_east_asian = el->get_property<string>(
+        _font_variant_east_asian_, true, "normal", offset(m_font_variant_east_asian));
+    m_font_variant_caps = el->get_property<string>(_font_variant_caps_, true, "normal",
+                                                   offset(m_font_variant_caps));
+    m_font_variant_position = el->get_property<string>(
+        _font_variant_position_, true, "normal", offset(m_font_variant_position));
+    m_font_feature_settings = el->get_property<css_token_vector>(
+        _font_feature_settings_, true, css_token_vector(), offset(m_font_feature_settings));
     bool propagate_decoration =
         !is_one_of(m_display, display_inline_block, display_inline_table, display_inline_flex, display_inline_grid) &&
         m_float == float_none &&
@@ -1080,6 +1215,13 @@ void litehtml::css_properties::compute_font(const element* el, const document::p
     descr.text_shadow = m_text_shadow;
     descr.text_stroke_width = text_stroke_width;
     descr.text_stroke_color = text_stroke_color;
+
+    append_font_variant_features(descr.features, m_font_variant_ligatures, 0);
+    append_font_variant_features(descr.features, m_font_variant_numeric, 1);
+    append_font_variant_features(descr.features, m_font_variant_east_asian, 2);
+    append_font_variant_features(descr.features, m_font_variant_caps, 3);
+    append_font_variant_features(descr.features, m_font_variant_position, 4);
+    append_font_feature_settings(descr.features, m_font_feature_settings);
 
     m_font = doc->get_font(descr, &m_font_metrics);
 }

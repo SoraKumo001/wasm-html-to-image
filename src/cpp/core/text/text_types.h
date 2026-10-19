@@ -15,6 +15,18 @@
 
 namespace satoru {
 
+// Stable signature of the resolved OpenType features, used in shaping/measure cache keys.
+inline std::string fontFeatureSignature(const litehtml::font_description& desc) {
+    std::string sig;
+    for (const auto& f : desc.features) {
+        sig += std::to_string(f.tag);
+        sig += '=';
+        sig += std::to_string(f.value);
+        sig += ',';
+    }
+    return sig;
+}
+
 struct CharFont {
     size_t len;
     SkFont font;
@@ -91,6 +103,7 @@ struct MeasureKey {
     litehtml::text_combine_upright textCombineUpright;
     float letterSpacing;
     float wordSpacing;
+    std::string features;
     uint64_t fontVersion;
 
     bool operator==(const MeasureKey& other) const {
@@ -99,7 +112,7 @@ struct MeasureKey {
                font_family == other.font_family && text == other.text && mode == other.mode &&
                orientation == other.orientation && textCombineUpright == other.textCombineUpright &&
                letterSpacing == other.letterSpacing && wordSpacing == other.wordSpacing &&
-               fontVersion == other.fontVersion;
+               features == other.features && fontVersion == other.fontVersion;
     }
 };
 
@@ -116,6 +129,7 @@ struct MeasureKeyHash {
         h ^= std::hash<int>{}(k.textCombineUpright) + 0x9e3779b9 + (h << 6) + (h >> 2);
         h ^= std::hash<float>{}(k.letterSpacing) + 0x9e3779b9 + (h << 6) + (h >> 2);
         h ^= std::hash<float>{}(k.wordSpacing) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        h ^= std::hash<std::string>{}(k.features) + 0x9e3779b9 + (h << 6) + (h >> 2);
         h ^= std::hash<uint64_t>{}(k.fontVersion) + 0x9e3779b9 + (h << 6) + (h >> 2);
         return h;
     }
@@ -139,13 +153,15 @@ struct ShapingKey {
     litehtml::text_combine_upright textCombineUpright;
     float letterSpacing;
     float wordSpacing;
+    std::string features;
 
     bool operator==(const ShapingKey& other) const {
         return font_size == other.font_size && font_weight == other.font_weight &&
                italic == other.italic && is_rtl == other.is_rtl &&
                font_family == other.font_family && text == other.text && mode == other.mode &&
                orientation == other.orientation && textCombineUpright == other.textCombineUpright &&
-               letterSpacing == other.letterSpacing && wordSpacing == other.wordSpacing;
+               letterSpacing == other.letterSpacing && wordSpacing == other.wordSpacing &&
+               features == other.features;
     }
 };
 
@@ -162,6 +178,7 @@ struct ShapingKeyHash {
         h ^= std::hash<int>{}(k.textCombineUpright) + 0x9e3779b9 + (h << 6) + (h >> 2);
         h ^= std::hash<float>{}(k.letterSpacing) + 0x9e3779b9 + (h << 6) + (h >> 2);
         h ^= std::hash<float>{}(k.wordSpacing) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        h ^= std::hash<std::string>{}(k.features) + 0x9e3779b9 + (h << 6) + (h >> 2);
         return h;
     }
 };
