@@ -1581,6 +1581,15 @@ namespace litehtml
 		object_fit_scale_down
 	};
 
+#define image_rendering_strings "auto;smooth;pixelated"
+
+	enum image_rendering
+	{
+		image_rendering_auto,
+		image_rendering_smooth,
+		image_rendering_pixelated
+	};
+
 #define caption_side_strings            "top;bottom"
 
         enum caption_side

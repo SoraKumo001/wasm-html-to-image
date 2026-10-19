@@ -67,6 +67,14 @@ static SkColor lighten(litehtml::web_color c, float fraction) {
         (uint8_t)std::min(255.0f, (float)c.blue + ((255.0f - (float)c.blue) * fraction)));
 }
 
+// CSS image-rendering: pixelated disables interpolation when scaling; smooth/auto keep the
+// linear filter used for ordinary images.
+static SkSamplingOptions image_sampling(litehtml::image_rendering rendering) {
+    return rendering == litehtml::image_rendering_pixelated
+               ? SkSamplingOptions(SkFilterMode::kNearest, SkMipmapMode::kNone)
+               : SkSamplingOptions(SkFilterMode::kLinear, SkMipmapMode::kNone);
+}
+
 SkRRect get_background_rrect(const litehtml::background_layer& layer) {
     litehtml::position intersect_box = layer.border_box.intersect(layer.clip_box);
     if (intersect_box.width <= 0 || intersect_box.height <= 0) {
@@ -163,7 +171,8 @@ void container_skia::draw_box_shadow(litehtml::uint_ptr hdc, const litehtml::sha
 void container_skia::draw_image(litehtml::uint_ptr hdc, const litehtml::background_layer& layer,
                                 const std::string& url, const std::string& base_url,
                                 litehtml::object_fit fit,
-                                const litehtml::css_token_vector& object_position) {
+                                const litehtml::css_token_vector& object_position,
+                                litehtml::image_rendering rendering) {
     if (!m_canvas) return;
     flush();
     if (m_tagging) {
@@ -223,8 +232,7 @@ void container_skia::draw_image(litehtml::uint_ptr hdc, const litehtml::backgrou
                                  (float)layer.origin_box.width, (float)layer.origin_box.height);
 
             if (layer.repeat == litehtml::background_repeat_no_repeat) {
-                m_canvas->drawImageRect(it->second.skImage, dst,
-                                        SkSamplingOptions(SkFilterMode::kLinear), &p);
+                m_canvas->drawImageRect(it->second.skImage, dst, image_sampling(rendering), &p);
             } else {
                 SkTileMode tileX = SkTileMode::kRepeat;
                 SkTileMode tileY = SkTileMode::kRepeat;
@@ -256,7 +264,7 @@ void container_skia::draw_image(litehtml::uint_ptr hdc, const litehtml::backgrou
                                          (float)layer.origin_box.y);
 
                 p.setShader(it->second.skImage->makeShader(
-                    tileX, tileY, SkSamplingOptions(SkFilterMode::kLinear), &matrix));
+                    tileX, tileY, image_sampling(rendering), &matrix));
 
                 m_canvas->drawRect(
                     SkRect::MakeXYWH((float)layer.clip_box.x, (float)layer.clip_box.y,

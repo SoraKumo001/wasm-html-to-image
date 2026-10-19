@@ -672,7 +672,7 @@ litehtml::background::layer_type litehtml::background::get_layer_type(int idx) c
 	return type_none;
 }
 
-void litehtml::background::draw_layer(uint_ptr hdc, int idx, const background_layer& layer, document_container* container) const
+void litehtml::background::draw_layer(uint_ptr hdc, int idx, const background_layer& layer, document_container* container, image_rendering rendering) const
 {
 	switch (get_layer_type(idx))
 	{
@@ -691,7 +691,7 @@ void litehtml::background::draw_layer(uint_ptr hdc, int idx, const background_la
 				auto image_layer = get_image_layer(idx);
 				if(image_layer)
 				{
-					container->draw_image(hdc, layer, image_layer->url, image_layer->base_url);
+					container->draw_image(hdc, layer, image_layer->url, image_layer->base_url, object_fit_fill, css_token_vector(), rendering);
 				}
 			}
 			break;

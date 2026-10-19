@@ -321,6 +321,8 @@ void litehtml::css_properties::compute(const element* el, const document::ptr& d
                                                          offset(m_caption_side));
     m_object_fit = (object_fit)el->get_property<int>(_object_fit_, false, object_fit_fill,
                                                      offset(m_object_fit));
+    m_image_rendering = (image_rendering)el->get_property<int>(
+        _image_rendering_, true, image_rendering_auto, offset(m_image_rendering));
     m_table_layout = (table_layout)el->get_property<int>(_table_layout_, true, table_layout_auto,
                                                          offset(m_table_layout));
 
@@ -1602,6 +1604,7 @@ litehtml::css_properties::dump_get_attrs() const {
     ret.emplace_back("text_wrap_style", index_value(m_text_wrap_style, text_wrap_style_strings));
     ret.emplace_back("opacity", std::to_string(m_opacity));
     ret.emplace_back("object_fit", index_value(m_object_fit, object_fit_strings));
+    ret.emplace_back("image_rendering", index_value(m_image_rendering, image_rendering_strings));
     ret.emplace_back("mix_blend_mode", index_value(m_mix_blend_mode, blend_mode_strings));
     ret.emplace_back("background_blend_mode",
                      index_value(m_background_blend_mode, blend_mode_strings));

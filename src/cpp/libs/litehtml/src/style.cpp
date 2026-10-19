@@ -94,6 +94,7 @@ namespace litehtml
 
           {_caption_side_, caption_side_strings},
           {_object_fit_, object_fit_strings},
+          {_image_rendering_, image_rendering_strings},
 
           {__webkit_box_orient_, box_orient_strings},
           {_text_decoration_style_, style_text_decoration_style_strings},
@@ -390,6 +391,7 @@ namespace litehtml
     case _align_content_:
     case _caption_side_:
     case _object_fit_:
+    case _image_rendering_:
     case __webkit_box_orient_:
     case _container_type_:
     case _mix_blend_mode_:

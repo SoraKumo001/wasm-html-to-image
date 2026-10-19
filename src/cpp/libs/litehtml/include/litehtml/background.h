@@ -155,7 +155,7 @@ namespace litehtml
                 std::unique_ptr<background_layer::linear_gradient> get_linear_gradient_layer(int idx, const background_layer& layer) const;
                 std::unique_ptr<background_layer::radial_gradient> get_radial_gradient_layer(int idx, const background_layer& layer) const;
                 std::unique_ptr<background_layer::conic_gradient> get_conic_gradient_layer(int idx, const background_layer& layer) const;
-                void draw_layer(uint_ptr hdc, int idx, const background_layer& layer, document_container* container) const;
+                void draw_layer(uint_ptr hdc, int idx, const background_layer& layer, document_container* container, image_rendering rendering = image_rendering_auto) const;
 
                 static void EndPointsFromAngle(float angle_deg,
                                                const size& size,

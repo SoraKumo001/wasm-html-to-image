@@ -724,4 +724,25 @@ describe("regression: layout and paint probes", () => {
     // Same text in both lines; only the second line has kerning disabled.
     expect(row(45).equals(row(135))).toBe(false);
   });
+
+  it("image-rendering: pixelated keeps scaled images unfiltered (img and background)", async () => {
+    // 2x1 source: pure red then pure blue. Upscaled, nearest sampling preserves a hard
+    // boundary at the halfway point; the default linear filter blends across it.
+    const png = new PNG({ width: 2, height: 1 });
+    png.data.set([255, 0, 0, 255, 0, 0, 255, 255]);
+    const url = "data:image/png;base64," + PNG.sync.write(png).toString("base64");
+
+    const img = await renderPng(
+      `<img src="${url}" style="display:block;width:100px;height:100px;image-rendering:pixelated">`,
+    );
+    expect(near(img.at(49, 50), RED, 4)).toBe(true);
+    expect(near(img.at(50, 50), BLUE, 4)).toBe(true);
+
+    const bg = await renderPng(
+      `<div style="width:100px;height:100px;image-rendering:pixelated;
+         background-image:url('${url}');background-size:100px 100px;background-repeat:no-repeat"></div>`,
+    );
+    expect(near(bg.at(49, 50), RED, 4)).toBe(true);
+    expect(near(bg.at(50, 50), BLUE, 4)).toBe(true);
+  });
 });

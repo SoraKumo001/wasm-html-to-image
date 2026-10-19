@@ -430,6 +430,7 @@ namespace litehtml
       _caption_side_,
       _object_fit_,
       _object_position_,
+      _image_rendering_,
       _fill_,
       _contain_,
       _cover_,

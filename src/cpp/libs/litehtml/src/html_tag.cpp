@@ -1290,7 +1290,7 @@ void litehtml::html_tag::draw_background(uint_ptr hdc, pixel_t x, pixel_t y, con
                                         layer.clip_box.round();
                                         layer.origin_box.round();
 
-                                        bg->draw_layer(hdc, i, layer, get_document()->container());  
+                                        bg->draw_layer(hdc, i, layer, get_document()->container(), m_css.get_image_rendering());  
                                 }
                         }
 
@@ -1337,7 +1337,7 @@ void litehtml::html_tag::draw_background(uint_ptr hdc, pixel_t x, pixel_t y, con
                                                 layer.clip_box.round();
                                                 layer.origin_box.round();
 
-                                                bg->draw_layer(hdc, i, layer, get_document()->container());  
+                                                bg->draw_layer(hdc, i, layer, get_document()->container(), m_css.get_image_rendering());  
                                         }
                                 }
                                 if(!m_css.get_box_shadow().empty())

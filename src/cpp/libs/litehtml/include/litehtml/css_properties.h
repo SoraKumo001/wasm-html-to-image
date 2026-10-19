@@ -152,6 +152,7 @@ namespace litehtml
     caption_side m_caption_side;
     object_fit m_object_fit;
     css_token_vector m_object_position;
+    image_rendering m_image_rendering;
     shadow_vector m_box_shadow;
     shadow_vector m_text_shadow;
 
@@ -278,6 +279,7 @@ namespace litehtml
                        m_backdrop_filter(),
                        m_mask(),
                        m_clip(),
+                       m_image_rendering(image_rendering_auto),
                        m_word_break(word_break_normal),
                        m_overflow_wrap(overflow_wrap_normal),
                        m_break_before(break_flow_auto),
@@ -488,6 +490,8 @@ namespace litehtml
 
     object_fit get_object_fit() const;
     void set_object_fit(object_fit fit);
+    image_rendering get_image_rendering() const;
+    void set_image_rendering(image_rendering rendering);
 
     float get_flex_grow() const;
     float get_flex_shrink() const;
@@ -1331,6 +1335,16 @@ namespace litehtml
   inline void css_properties::set_object_fit(object_fit fit)
   {
     m_object_fit = fit;
+  }
+
+  inline image_rendering css_properties::get_image_rendering() const
+  {
+    return m_image_rendering;
+  }
+
+  inline void css_properties::set_image_rendering(image_rendering rendering)
+  {
+    m_image_rendering = rendering;
   }
 
   inline int css_properties::get_order() const
