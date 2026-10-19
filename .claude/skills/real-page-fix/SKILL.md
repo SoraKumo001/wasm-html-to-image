@@ -11,7 +11,7 @@ Run scripts from `packages/visual-test`; keep scratch scripts in `packages/visua
 
 ## 1. Measure
 
-- Our render: `render({ url, baseUrl: url, width: 1000, format: "png" })` from `wasm-html-to-image/single` (use `value:` for raw HTML; `css:` injects extra CSS). Compare heights first: a page 2x+ taller than Chromium has a layout bug, shorter/blank has a paint or fetch bug.
+- Our render: `render({ url, width: 1000, format: "png" })` from `wasm-html-to-image/single` (use `value:` for raw HTML; `css:` injects extra CSS). Do not pass `baseUrl: url` for URL inputs: it pins resource resolution to the request host and defeats post-redirect base following (only pass `baseUrl` to intentionally pin). Compare heights first: a page 2x+ taller than Chromium has a layout bug, shorter/blank has a paint or fetch bug.
 - Chromium height: `page.evaluate("document.documentElement.scrollHeight")` (nojs context, viewport 1000 wide).
 - Look at pictures, not only numbers: crop our PNG at several y offsets (composite alpha over white). Downscaled contact sheets (6000px slices, 1/4 scale) show where a tall page goes wrong.
 - Run each URL in its own process with a timeout (`timeout 150 node ...`); a hang must not kill the batch.
