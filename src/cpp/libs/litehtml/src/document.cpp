@@ -3,6 +3,7 @@
 #include "stylesheet.h"
 #include "html_tag.h"
 #include "el_text.h"
+#include <functional>
 #include "el_para.h"
 #include "el_space.h"
 #include "el_body.h"
@@ -359,6 +360,57 @@ void document::create_node(void* gnode, elements_list& elements, bool parseTextN
 						{
 							ret->appendChild(txt);
 						}
+					}
+				}
+				if (!strcmp(tag, "select"))
+				{
+					// Show the selected (or first) option's label and size the box to the longest option.
+					string label, first_label;
+					bool have_selected = false;
+					float widest = 0;
+					std::function<void(GumboNode*)> scan = [&](GumboNode* n) {
+						for (unsigned int i = 0; i < n->v.element.children.length; i++)
+						{
+							auto* c = static_cast<GumboNode*>(n->v.element.children.data[i]);
+							if (c->type != GUMBO_NODE_ELEMENT) continue;
+							if (c->v.element.tag == GUMBO_TAG_OPTGROUP) { scan(c); continue; }
+							if (c->v.element.tag != GUMBO_TAG_OPTION) continue;
+							string t;
+							for (unsigned int k = 0; k < c->v.element.children.length; k++)
+							{
+								auto* tn = static_cast<GumboNode*>(c->v.element.children.data[k]);
+								if (tn->type == GUMBO_NODE_TEXT || tn->type == GUMBO_NODE_WHITESPACE) t += tn->v.text.text;
+							}
+							while (!t.empty() && isspace((unsigned char)t.back())) t.pop_back();
+							size_t b = 0;
+							while (b < t.size() && isspace((unsigned char)t[b])) b++;
+							t = t.substr(b);
+							float w = 0;
+							for (size_t k = 0; k < t.size(); k++)
+							{
+								unsigned char ch = (unsigned char)t[k];
+								if ((ch & 0xC0) == 0x80) continue;
+								w += ch >= 0xE0 ? 1.0f : 0.55f;
+							}
+							widest = std::max(widest, w);
+							if (first_label.empty()) first_label = t;
+							if (!have_selected && gumbo_get_attribute(&c->v.element.attributes, "selected"))
+							{
+								have_selected = true;
+								label = t;
+							}
+						}
+					};
+					scan(node);
+					if (!have_selected) label = first_label;
+					if (!label.empty()) ret->appendChild(std::make_shared<el_text>(label.c_str(), shared_from_this()));
+					const char* st = ret->get_attr("style");
+					if (!st || !strstr(st, "width"))
+					{
+						char buf[64];
+						snprintf(buf, sizeof(buf), "width:%.2fem", widest + 2.6f + 1.8f);
+						string ns = st ? string(st) + ";" : string();
+						ret->set_attr("style", (ns + buf).c_str());
 					}
 				}
 				elements.push_back(ret);

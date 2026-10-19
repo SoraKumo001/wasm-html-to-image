@@ -1054,6 +1054,31 @@ void litehtml::html_tag::parse_presentational_hints()
 		const char* str = get_attr("width");
 		if (str) map_to_dimension_property_ignoring_zero(_width_, str);
 	}
+	else if (m_tag == _input_ || m_tag == _textarea_)
+	{
+		// Control size from the size / cols / rows attributes (average glyph width approximated).
+		auto px = [](float v) { return css_token{DIMENSION, v, css_number_number, "px"}; };
+		auto positive = [this](const char* name, float def) {
+			const char* a = get_attr(name);
+			float v = a ? (float)atof(a) : 0;
+			return v > 0 ? v : def;
+		};
+		if (m_tag == _input_)
+		{
+			string type = get_attr("type", "text");
+			for (auto& c : type) c = (char)tolower((unsigned char)c);
+			if (type == "text" || type == "search" || type == "email" || type == "url" || type == "tel" ||
+				type == "number" || type == "password")
+			{
+				m_style.add_property(_width_, {px(positive("size", 20) * 7.6f + 17)});
+			}
+		}
+		else
+		{
+			m_style.add_property(_width_, {px(positive("cols", 20) * 8.f + 19)});
+			m_style.add_property(_height_, {px(positive("rows", 2) * 15.f + 6)});
+		}
+	}
 }
 
 void litehtml::html_tag::get_text( string& text ) const

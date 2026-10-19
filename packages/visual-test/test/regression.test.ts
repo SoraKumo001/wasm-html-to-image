@@ -378,4 +378,11 @@ describe("regression: layout and paint probes", () => {
     expect(await draw('type="text" placeholder="WWWW"')).not.toBe(empty);
     expect(await draw('type="submit" value="WWWW"')).not.toBe(await draw('type="submit" value=""'));
   });
+  it("textarea, select and checkbox/radio get default boxes; size/cols/rows are honored", async () => {
+    const h = async (body: string) => (await render({ value: `<html><body style="margin:0;font:14px sans-serif">${body}</body></html>`, width: 600, format: "png" })).height;
+    expect(await h('<textarea style="display:block"></textarea>')).toBe(36); // rows=2 default
+    expect(await h('<textarea rows="5" style="display:block"></textarea>')).toBe(81);
+    expect(await h('<select style="display:block"><option>One</option><option>Two</option></select>')).toBeGreaterThan(15);
+    expect(await h('<input type="checkbox" style="display:block;margin:0">')).toBe(13);
+  });
 });
