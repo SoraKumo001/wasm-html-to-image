@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import http from "node:http";
 import { render } from "wasm-html-to-image/single";
 import { PNG } from "pngjs";
 
@@ -449,5 +450,44 @@ describe("regression: layout and paint probes", () => {
       await h(`<div style="display:grid;grid-template-columns:100px 100px;width:400px"><div style="display:contents"><div style="height:30px">a</div><div style="height:30px">b</div><div style="height:40px">c</div></div></div>`),
     ).toBe(70); // a,b share row 1; c is row 2
     expect(await h(`<div style="display:flex"><div style="display:contents"><div style="height:30px;width:50px">a</div><div style="height:50px;width:50px">b</div></div></div>`)).toBe(50);
+  });
+  it("resolves relative stylesheets against the post-redirect final URL", async () => {
+    // A 301 to another path must move the base used for relative resources:
+    // otherwise `style.css` is requested against the stale URL and 404s.
+    const html = `<html><head><link rel="stylesheet" href="style.css"></head><body style="margin:0"><div class="box"></div></body></html>`;
+    const css = `.box{width:120px;height:80px;background:#00f}`;
+    const server = http.createServer((req, res) => {
+      if (req.url === "/old") {
+        res.writeHead(301, { location: "/base/final.html" });
+        res.end();
+      } else if (req.url === "/base/final.html") {
+        res.writeHead(200, { "content-type": "text/html" });
+        res.end(html);
+      } else if (req.url === "/base/style.css") {
+        res.writeHead(200, { "content-type": "text/css" });
+        res.end(css);
+      } else {
+        res.writeHead(404);
+        res.end();
+      }
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const port = (server.address() as { port: number }).port;
+    try {
+      const { data } = await render({
+        url: `http://127.0.0.1:${port}/old`,
+        width: 200,
+        height: 120,
+        format: "png",
+      });
+      const img = PNG.sync.read(Buffer.from(data));
+      const at = (x: number, y: number): Rgb => {
+        const i = (img.width * y + x) * 4;
+        return [img.data[i], img.data[i + 1], img.data[i + 2]];
+      };
+      expect(near(at(60, 40), BLUE)).toBe(true);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
   });
 });

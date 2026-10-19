@@ -347,6 +347,91 @@ describe("htmlToImage: resource discovery loop", () => {
     }
   });
 
+  it("resolves relative resources against the post-redirect final URL", async () => {
+    const imgBytes = new Uint8Array([1, 2, 3, 4]);
+    const fetchMock = vi.fn(async (target: string) => {
+      if (target === "https://old.example/news/") {
+        return {
+          ok: true,
+          url: "https://new.example/newsweb",
+          text: async () => '<img src="a.png">',
+          arrayBuffer: async () => new ArrayBuffer(0),
+        };
+      }
+      if (target === "https://new.example/a.png") {
+        return {
+          ok: true,
+          url: target,
+          arrayBuffer: async () => imgBytes.buffer,
+        };
+      }
+      return { ok: false, status: 404 };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const bin = pendingBin([{ type: 2, url: "a.png" }]);
+    const { mod, calls } = withDiscovery({
+      satoru_get_pending_resources: vi
+        .fn(async () => null)
+        .mockResolvedValueOnce(bin as never),
+    });
+    // No explicit `baseUrl`: the base must follow the 301 to `new.example`.
+    await htmlToImage(mod, { width: 100, url: "https://old.example/news/" });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://new.example/a.png",
+      expect.anything(),
+    );
+    expect(calls.satoru_add_resource).toHaveBeenCalledWith(
+      { tag: "satoru" },
+      "a.png",
+      2,
+      imgBytes,
+    );
+  });
+
+  it("keeps an explicit baseUrl over the post-redirect final URL", async () => {
+    const imgBytes = new Uint8Array([5, 6, 7, 8]);
+    const fetchMock = vi.fn(async (target: string) => {
+      if (target === "https://old.example/news/") {
+        return {
+          ok: true,
+          url: "https://new.example/newsweb",
+          text: async () => '<img src="a.png">',
+          arrayBuffer: async () => new ArrayBuffer(0),
+        };
+      }
+      if (target === "https://explicit.example/base/a.png") {
+        return {
+          ok: true,
+          url: target,
+          arrayBuffer: async () => imgBytes.buffer,
+        };
+      }
+      return { ok: false, status: 404 };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const bin = pendingBin([{ type: 2, url: "a.png" }]);
+    const { mod, calls } = withDiscovery({
+      satoru_get_pending_resources: vi
+        .fn(async () => null)
+        .mockResolvedValueOnce(bin as never),
+    });
+    await htmlToImage(mod, {
+      width: 100,
+      url: "https://old.example/news/",
+      baseUrl: "https://explicit.example/base/",
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://explicit.example/base/a.png",
+      expect.anything(),
+    );
+    expect(calls.satoru_add_resource).toHaveBeenCalledWith(
+      { tag: "satoru" },
+      "a.png",
+      2,
+      imgBytes,
+    );
+  });
+
   it("proceeds when fetch fails for a resource", async () => {
     vi.stubGlobal(
       "fetch",

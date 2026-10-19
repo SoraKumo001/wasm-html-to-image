@@ -310,11 +310,16 @@ export async function resolveHtmlSource(
   if (typeof url === "string") {
     const headers = { "User-Agent": userAgent ?? DEFAULT_USER_AGENT };
     const fetchStart = now();
+    // Post-redirect document URL (`Response.url`). Relative resources must
+    // resolve against the final URL, not the stale request URL: a 301 to a new
+    // host otherwise leaves every stylesheet/font/image on the old host.
+    let finalUrl: string | undefined;
     let htmls: string;
     if (resolveResource) {
       const fallbackFetch = async (): Promise<Uint8Array | null> => {
         const res = await fetch(url, { headers });
         if (!res.ok) return null;
+        if (res.url) finalUrl = res.url;
         return toBytes(await res.arrayBuffer());
       };
       const raw = await resolveResource(url, fallbackFetch);
@@ -331,7 +336,13 @@ export async function resolveHtmlSource(
           `wasm-html-to-image: failed to fetch HTML from URL: ${url} (${res.status})`,
         );
       }
+      if (res.url) finalUrl = res.url;
       htmls = await res.text();
+    }
+    // An explicit `baseUrl` always wins; otherwise adopt the document URL so
+    // relative resource resolution follows redirects.
+    if (orch.baseUrl === undefined && finalUrl !== undefined) {
+      orch.baseUrl = finalUrl;
     }
     addTime("fetchHtml", now() - fetchStart);
     return htmls;
