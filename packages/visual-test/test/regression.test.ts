@@ -54,6 +54,22 @@ describe("regression: layout and paint probes", () => {
     expect(isWhite(at(50, 120))).toBe(true);
   });
 
+  it("a flex item's auto-width wrapper sizes a width:100% image to the item, not its intrinsic width", async () => {
+    // An auto-width block inside a flex item fills the item's content box (597px), so a
+    // width:100% image is 597px wide, not its 800px intrinsic width. The min-content
+    // contribution of a percentage-width replaced element is 0, which lets flex-shrink
+    // bring the item down to the container instead of clamping it at the intrinsic width.
+    const svg = "data:image/svg+xml," + encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' width='800' height='450'><rect width='800' height='450' fill='#e68c28'/></svg>");
+    const img = `<img src="${svg}" style="width:100%;display:block;aspect-ratio:800/450">`;
+    const { at } = await renderPng(
+      `<div style="display:flex;width:597px"><div style="flex:1"><div>${img}</div></div></div>`,
+      700,
+      500,
+    );
+    expect(near(at(580, 20), [230, 140, 40], 30)).toBe(true); // inside the 597px-wide image
+    expect(isWhite(at(650, 20))).toBe(true); // at the 800px intrinsic width this would be painted
+  });
+
   it("radial-gradient(circle <length>) draws and clamps to the last stop outside the radius", async () => {
     const { at } = await renderPng(
       `<div style="width:150px;height:100px;background:radial-gradient(circle 40px,#f00,#00f)"></div>`,

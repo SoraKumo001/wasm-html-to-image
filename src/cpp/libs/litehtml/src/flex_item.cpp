@@ -167,7 +167,13 @@ void litehtml::flex_item_row_direction::direction_specific_init(const litehtml::
             
             containing_block_context::typed_pixel tp_content_offset(content_offset, containing_block_context::cbc_value_type_auto);
             containing_block_context measure_cb = m_container_wm.update_logical(self_size, tp_content_offset, std::nullopt);
-            measure_cb.size_mode = containing_block_context::size_mode_content | containing_block_context::size_mode_measure;
+            // The automatic minimum size is the item's min-content size, not its max-content size:
+            // measure with size_mode_min_content so cyclic percentage widths (e.g. an image with
+            // width:100% inside an auto-width wrapper) contribute 0 instead of their intrinsic
+            // width. Otherwise flex-shrink could never bring the item down to the container.
+            measure_cb.size_mode = containing_block_context::size_mode_content |
+                                   containing_block_context::size_mode_min_content |
+                                   containing_block_context::size_mode_measure;
             el->measure(measure_cb, fmt_ctx ? &fmt_ctx_copy : nullptr);
 
 			min_main_size = get_el_main_size();

@@ -141,7 +141,7 @@ litehtml::pixel_t litehtml::render_item_inline_context::_render_content(pixel_t 
                 // Shift lines for vertical-rl to fit into the new width
                 // ONLY when in shrink-to-fit mode (size_mode_content)
                 if ((self_size.mode == writing_mode_vertical_rl || self_size.mode == writing_mode_sideways_rl) && 
-                    (self_size.size_mode & containing_block_context::size_mode_content))
+                    (self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content)))
                 {
                     pixel_t shift = self_size.render_block_size() - m_pos.width;
                     if (shift != 0)
@@ -419,7 +419,7 @@ void litehtml::render_item_inline_context::place_inline(std::unique_ptr<line_box
     // annotation are never split, and never re-measure it at the min-content size.
     bool ruby_atomic = self_size.mode != writing_mode_horizontal_tb &&
                        satoru_is_ruby_box(item->get_el());
-    uint32_t cb_size_mode = self_size.size_mode & containing_block_context::size_mode_content;
+    uint32_t cb_size_mode = self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content);
     if (ruby_atomic)
     {
         cb_size_mode |= containing_block_context::size_mode_content;
@@ -443,7 +443,7 @@ void litehtml::render_item_inline_context::place_inline(std::unique_ptr<line_box
     {
     // Re-measure at the content's own size. A hair of slack keeps content that exactly fits
     // from wrapping because of floating point rounding of the glyph advances.
-    auto cb2 = self_size.new_inline_size(min_rendered_width + 0.01f, self_size.size_mode & containing_block_context::size_mode_content);
+    auto cb2 = self_size.new_inline_size(min_rendered_width + 0.01f, self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content));
     item->get_el()->measure(cb2, fmt_ctx);
     if (!(self_size.size_mode & containing_block_context::size_mode_measure))
     {

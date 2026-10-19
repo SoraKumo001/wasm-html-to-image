@@ -18,6 +18,19 @@ litehtml::pixel_t litehtml::render_item_image::_measure(
 
     bool is_content_size =
         (containing_block_size.size_mode & containing_block_context::size_mode_content) != 0;
+    bool is_min_content =
+        (containing_block_size.size_mode & containing_block_context::size_mode_min_content) != 0;
+
+    // A percentage inline size is cyclic while the containing block is being sized from content
+    // (shrink-to-fit / min-content): it contributes 0 to the min-content size instead of falling
+    // back to the intrinsic size. This is what lets a flex item shrink below its image's natural
+    // width (Chromium: the min-content contribution of a percentage-width replaced element is 0).
+    if (is_min_content && css().get_width().units() == css_units_percentage) {
+        m_pos.width = 0;
+        m_pos.height = 0;
+        src_el()->css_w().line_height_w().computed_value = height();
+        return content_offset_width();
+    }
 
     if (self_size.width.type != containing_block_context::cbc_value_type_auto) {
         m_pos.width = self_size.render_width;

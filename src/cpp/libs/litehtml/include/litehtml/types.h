@@ -451,6 +451,11 @@ namespace litehtml
                         size_mode_exact_height = 0x02,
                         size_mode_content = 0x04,
 						size_mode_measure = 0x08,
+                        // Min-content sizing: like size_mode_content, but a percentage that is
+                        // cyclic (the containing block size depends on this element) contributes
+                        // 0 instead of the element's intrinsic size. Used for a flex item's
+                        // automatic minimum size (min-content contribution).
+                        size_mode_min_content = 0x10,
                 };
 
                 struct typed_pixel

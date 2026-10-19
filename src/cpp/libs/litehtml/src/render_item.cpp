@@ -1510,6 +1510,7 @@ litehtml::containing_block_context litehtml::render_item::calculate_containing_b
 
     ret.mode = css().get_writing_mode();
     ret.size_mode = cb_context.size_mode & (containing_block_context::size_mode_content |
+                                            containing_block_context::size_mode_min_content |
                                             containing_block_context::size_mode_exact_width |
                                             containing_block_context::size_mode_exact_height);
     ret.context_idx = cb_context.context_idx + 1;
@@ -1672,7 +1673,8 @@ litehtml::containing_block_context litehtml::render_item::calculate_containing_b
     // so the shrink-to-fit mode inherited from the document root must not reach them.
     if (ret.mode != writing_mode_horizontal_tb &&
         ret.height.type == containing_block_context::cbc_value_type_absolute) {
-        ret.size_mode &= ~containing_block_context::size_mode_content;
+        ret.size_mode &= ~(containing_block_context::size_mode_content |
+                           containing_block_context::size_mode_min_content);
     }
 
     return ret;
