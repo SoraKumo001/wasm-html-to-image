@@ -301,7 +301,6 @@ namespace litehtml
     case _clear_:
     case _appearance_:
     case _box_sizing_:
-    case _overflow_:
     case _overflow_x_:
     case _overflow_y_:
     case _text_overflow_:
@@ -784,6 +783,28 @@ namespace litehtml
     case _grid_template_areas_:
       add_parsed_property(name, property_value(value, important, false, m_layer, m_specificity));
       break;
+
+    case _overflow_:
+    {
+      // overflow: <x> [<y>]
+      css_token_vector axes;
+      for (const auto& tok : value)
+        if (tok.type != WHITESPACE) axes.push_back(tok);
+      if (axes.size() == 2 && axes[0].type == IDENT && axes[1].type == IDENT)
+      {
+        int ix = value_index(lowcase(axes[0].ident()), m_valid_values[name]);
+        int iy = value_index(lowcase(axes[1].ident()), m_valid_values[name]);
+        if (ix >= 0 && iy >= 0)
+        {
+          add_parsed_property(_overflow_, property_value(ix, important, false, m_layer, m_specificity));
+          add_parsed_property(_overflow_x_, property_value(ix, important, false, m_layer, m_specificity));
+          add_parsed_property(_overflow_y_, property_value(iy, important, false, m_layer, m_specificity));
+        }
+      }
+      else if (int index = value_index(ident, m_valid_values[name]); index >= 0)
+        add_parsed_property(name, property_value(index, important, false, m_layer, m_specificity));
+      break;
+    }
 
     case _grid_area_:
     {

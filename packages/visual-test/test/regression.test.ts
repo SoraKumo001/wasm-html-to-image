@@ -262,4 +262,30 @@ describe("regression: layout and paint probes", () => {
     expect(near(lines.at(250, 10), RED)).toBe(true);
     expect(near(lines.at(10, 10), BLUE)).toBe(true);
   });
+  it("overflow accepts two values and per-axis longhands, and clips", async () => {
+    for (const style of ["overflow:hidden auto", "overflow-x:hidden;overflow-y:auto", "overflow-y:hidden"]) {
+      const { at } = await renderPng(
+        `<div style="height:40px;${style}"><div style="height:200px;background:#f00"></div></div>`,
+        100,
+        120,
+      );
+      expect(near(at(5, 20), RED)).toBe(true);
+      expect(isWhite(at(5, 100))).toBe(true); // clipped below the 40px box
+    }
+  });
+
+  it("calc() resolves viewport units mixed with lengths", async () => {
+    const body = (h: string) => `<div style="max-height:${h}"><div style="height:100px"></div></div><div style="height:10px"></div>`;
+    const r = await render({ value: `<html><body style="margin:0">${body("calc(-48px + 100vh)")}</body></html>`, width: 100, format: "png" });
+    expect(r.height).toBe(110); // a dropped vh term made max-height negative and collapsed the box
+  });
+
+  it("an absolutely positioned inline-flex box is blockified out of the line box", async () => {
+    const r = await render({
+      value: `<html><body style="margin:0"><div style="display:flex;width:300px"><h1 style="margin:0;font-size:16px">Title text here</h1><div><input type="checkbox" style="position:absolute;display:inline-flex;width:100%;height:100%"></div></div></body></html>`,
+      width: 300,
+      format: "png",
+    });
+    expect(r.height).toBeLessThan(30); // the heading stayed on one line
+  });
 });

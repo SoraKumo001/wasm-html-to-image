@@ -87,6 +87,10 @@ void litehtml::css_properties::compute(const element* el, const document::ptr& d
         (overflow)el->get_property<int>(_overflow_x_, false, m_overflow, offset(m_overflow_x));
     m_overflow_y =
         (overflow)el->get_property<int>(_overflow_y_, false, m_overflow, offset(m_overflow_y));
+    // A clipping axis makes the other axis clip too (visible computes to auto), and layout only
+    // looks at m_overflow, so promote it when only overflow-x/-y were given.
+    if (m_overflow == overflow_visible)
+        m_overflow = m_overflow_x != overflow_visible ? m_overflow_x : m_overflow_y;
     m_text_overflow = (text_overflow)el->get_property<int>(
         _text_overflow_, false, text_overflow_clip, offset(m_text_overflow));
     m_text_align = (text_align)el->get_property<int>(_text_align_, true, text_align_start,
@@ -236,8 +240,11 @@ void litehtml::css_properties::compute(const element* el, const document::ptr& d
 
             if (m_display == display_inline_table) {
                 m_display = display_table;
-            } else if (m_display == display_inline || m_display == display_grid ||
-                       m_display == display_inline_grid || m_display == display_table_row_group ||
+            } else if (m_display == display_inline_flex) {
+                m_display = display_flex;
+            } else if (m_display == display_inline_grid) {
+                m_display = display_grid;
+            } else if (m_display == display_inline || m_display == display_table_row_group ||
                        m_display == display_table_column ||
                        m_display == display_table_column_group ||
                        m_display == display_table_header_group ||
@@ -254,6 +261,10 @@ void litehtml::css_properties::compute(const element* el, const document::ptr& d
             //    according to the table below.
             if (m_display == display_inline_table) {
                 m_display = display_table;
+            } else if (m_display == display_inline_flex) {
+                m_display = display_flex;
+            } else if (m_display == display_inline_grid) {
+                m_display = display_grid;
             } else if (m_display == display_inline || m_display == display_table_row_group ||
                        m_display == display_table_column ||
                        m_display == display_table_column_group ||

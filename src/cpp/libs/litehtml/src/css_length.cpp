@@ -7,6 +7,10 @@ namespace litehtml
 
 namespace
 {
+	// Viewport size used to resolve vw/vh/vmin/vmax terms inside calc(); set by the document.
+	float g_viewport_width = 0;
+	float g_viewport_height = 0;
+
 	struct calc_value
 	{
 		float px = 0;
@@ -41,6 +45,10 @@ namespace
 			if (unit == "px") res.px = t.n.number;
 			else if (unit == "rem") res.rem = t.n.number;
 			else if (unit == "em") res.px = t.n.number * 16.0f; // Temporary fallback
+			else if (unit == "vw") res.px = g_viewport_width * t.n.number / 100.0f;
+			else if (unit == "vh") res.px = g_viewport_height * t.n.number / 100.0f;
+			else if (unit == "vmin") res.px = std::min(g_viewport_width, g_viewport_height) * t.n.number / 100.0f;
+			else if (unit == "vmax") res.px = std::max(g_viewport_width, g_viewport_height) * t.n.number / 100.0f;
 			// For now only px and rem are supported without document context in calc
 		}
 		else if (t.type == PERCENTAGE)
@@ -101,6 +109,12 @@ namespace
 		}
 		return res;
 	}
+}
+
+void css_length::set_viewport(float width, float height)
+{
+	g_viewport_width = width;
+	g_viewport_height = height;
 }
 
 bool css_length::from_token(const css_token& token, int options, const string& keywords)

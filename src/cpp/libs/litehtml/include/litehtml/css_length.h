@@ -64,6 +64,7 @@ namespace litehtml
 		bool		from_token(const css_token& token, int options, const string& predefined_keywords = "");
 		string		to_string() const;
 
+		static void set_viewport(float width, float height);
 		void        set_calc(float px, float percent, float rem) { m_px = px; m_percent = percent; m_rem = rem; m_is_calc = true; m_is_predefined = false; m_op = op_none; m_operands.clear(); }
 		void        set_math(math_op op, std::vector<css_length>&& operands) { m_px = 0; m_percent = 0; m_rem = 0; m_op = op; m_operands = std::move(operands); m_is_calc = true; m_is_predefined = false; }
 		bool        is_calc() const { return m_is_calc; }

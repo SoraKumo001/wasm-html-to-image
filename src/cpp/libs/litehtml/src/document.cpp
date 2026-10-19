@@ -104,6 +104,7 @@ document::ptr document::createFromString(
 	if (doc->m_root)
 	{
 		doc->container()->get_media_features(doc->m_media);
+		css_length::set_viewport((float) doc->m_media.width, (float) doc->m_media.height);
 
 		doc->m_root->set_pseudo_class(_root_, true);
 
@@ -953,6 +954,7 @@ void document::add_fixed_box( const position& pos )
 bool document::media_changed()
 {
 	container()->get_media_features(m_media);
+	css_length::set_viewport((float) m_media.width, (float) m_media.height);
 	if (update_media_lists(m_media))
 	{
 		m_root->refresh_styles();
