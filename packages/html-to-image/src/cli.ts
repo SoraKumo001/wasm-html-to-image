@@ -2,12 +2,8 @@
 import { program } from "commander";
 import fs from "node:fs/promises";
 import path from "node:path";
-import {
-  render,
-  type HtmlToImageOptions,
-  type OutputFormat,
-} from "./single.js";
-import { isImageInput } from "./core.js";
+import { render, type OutputFormat } from "./single.js";
+import { buildRenderOptions, isUrlInput, type CliFlags } from "./cli-options.js";
 
 const OUTPUT_FORMATS = [
   "svg",
@@ -24,23 +20,6 @@ const OUTPUT_FORMATS = [
 
 function isOutputFormat(value: string): value is OutputFormat {
   return (OUTPUT_FORMATS as readonly string[]).includes(value);
-}
-
-/**
- * Read a local input file as binary; image files (magic-byte sniffed) are
- * passed through as bytes, everything else as UTF-8 text (HTML).
- */
-async function readInput(
-  input: string,
-): Promise<{ value: string | Uint8Array; baseUrl: string }> {
-  const data = await fs.readFile(input);
-  let value: string | Uint8Array = data.toString("utf-8");
-  try {
-    if (isImageInput(data)) value = data;
-  } catch {
-    // Unknown binary magic -> treat as text and let rendering decide.
-  }
-  return { value, baseUrl: path.dirname(path.resolve(input)) };
 }
 
 program
@@ -66,7 +45,11 @@ program
     (v) => parseFloat(v),
     85,
   )
-  .action(async (input: string, options) => {
+  .option(
+    "--base-url <url>",
+    "base URL for relative resources (URL input: defaults to the post-redirect document URL; file input: defaults to the file's directory)",
+  )
+  .action(async (input: string, options: CliFlags) => {
     try {
       const format = String(options.format).toLowerCase();
       if (!isOutputFormat(format)) {
@@ -76,11 +59,7 @@ program
         process.exit(1);
       }
 
-      const isWindowsPath = /^[a-zA-Z]:[\\/]/.test(input);
-      const isUrl =
-        !isWindowsPath &&
-        /^[a-z][a-z0-9+.-]*:/i.test(input) &&
-        !input.startsWith("data:");
+      const isUrl = isUrlInput(input);
 
       let outputPath: string | undefined = options.output;
       if (!outputPath) {
@@ -94,15 +73,16 @@ program
             });
       }
 
-      const renderOptions: HtmlToImageOptions = {
+      const flags: CliFlags = {
+        output: options.output,
         width: options.width,
         height: options.height,
         format,
         quality: options.quality,
-        ...(isUrl ? { url: input, baseUrl: input } : await readInput(input)),
+        baseUrl: options.baseUrl,
       };
 
-      const result = await render(renderOptions);
+      const result = await render(await buildRenderOptions(input, flags));
       await fs.writeFile(
         outputPath,
         typeof result.data === "string"

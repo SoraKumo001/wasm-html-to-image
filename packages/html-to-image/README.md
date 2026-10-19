@@ -267,6 +267,10 @@ npx wasm-html-to-image template.html -o banner.webp -w 1200 -h 630 -f webp -q 90
 # Capture screenshot from URL
 npx wasm-html-to-image https://example.com -o site.png -w 1280 -h 720
 
+# Pin the base for relative resources (default: URL input follows redirects,
+# file input uses the file's own directory)
+npx wasm-html-to-image https://example.com/news -o news.png --base-url https://example.com/
+
 # Convert and resize an image
 npx wasm-html-to-image photo.jpg -o photo.avif -w 800 -f avif -q 80
 ```

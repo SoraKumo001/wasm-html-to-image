@@ -28,6 +28,7 @@ npx wasm-html-to-image <input> [options]
 | `--height <number>`  |  `-h`  | 自動 (`auto`) | ビューポート高さ（px）                                                     |
 | `--format <format>`  |  `-f`  |     `png`     | 出力形式 (`svg`, `png`, `pdf`, `jpeg`, `webp`, `avif`, `jxl`, `raw`, `thumbhash`) |
 | `--quality <number>` |  `-q`  |     `85`      | 圧縮品質 (0〜100、エンコード形式のみ有効)                                  |
+| `--base-url <url>`   |   -    | 入力から自動  | 相対リソース解決のベース URL。URL 入力ではリダイレクト後の URL、ファイル入力ではそのディレクトリが既定。明示指定時はそれを優先 |
 
 ---
 

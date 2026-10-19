@@ -22,6 +22,7 @@ npx wasm-html-to-image <input> [options]
 | `--height <number>`  | `-h` |   `auto`    | Viewport height                                                          |
 | `--format <format>`  | `-f` |    `png`    | Format (`svg`, `png`, `pdf`, `jpeg`, `webp`, `avif`, `jxl`, `raw`, `thumbhash`) |
 | `--quality <number>` | `-q` |    `85`     | Encode quality 0–100                                                     |
+| `--base-url <url>`   |  -   |  From input | Base URL for relative resources; defaults to the post-redirect URL (URL input) or the file's directory, explicit wins |
 
 ## Examples
 
