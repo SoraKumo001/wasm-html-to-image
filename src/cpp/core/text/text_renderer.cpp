@@ -525,12 +525,13 @@ void TextRenderer::drawText(SatoruContext* ctx, SkCanvas* canvas, const char* te
     if (has_stroke && !tagging && batcher) batcher->flush();
 
     // text-decoration-skip-ink needs the ink geometry of the drawn glyphs.
-    // Only the underline is affected and only in horizontal writing modes.
+    // The underline, the overline and the line-through are all affected, but
+    // only the horizontal writing modes collect their ink yet.
     const bool is_vertical_mode = mode == litehtml::writing_mode_vertical_rl ||
                                   mode == litehtml::writing_mode_vertical_lr;
     const bool want_glyph_ink =
-        !tagging && !is_vertical_mode &&
-        (fi->desc.decoration_line & litehtml::text_decoration_line_underline) &&
+        !is_vertical_mode &&
+        fi->desc.decoration_line != litehtml::text_decoration_line_none &&
         fi->desc.decoration_skip_ink != litehtml::text_decoration_skip_ink_none;
     std::vector<DecorationGlyphInk> glyph_ink;
 
@@ -684,6 +685,11 @@ double TextRenderer::drawTextInternal(SatoruContext* ctx, SkCanvas* canvas, cons
                     float run_baseline_shift =
                         is_vertical ? 0.0f : baselineShiftForRun(fi, run.font);
                     float logical_run_start = (float)current_l_pos.inline_offset;
+                    // The glyphs are painted as paths here, so the ink has to be
+                    // collected explicitly for text-decoration-skip-ink.
+                    if (glyphInk) {
+                        collectGlyphInk(glyphInk, run, logical_run_start, run_baseline_shift);
+                    }
                     for (int i = 0; i < run.count; ++i) {
                         auto p = geom.getGlyphPlacement(logical_run_start + run.positions[i].fX,
                                                         run.positions[i].fY, is_upright,

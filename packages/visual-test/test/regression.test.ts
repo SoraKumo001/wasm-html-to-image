@@ -88,6 +88,16 @@ const decorationLine = (img: PNG) => {
   return { row, count };
 };
 
+// Total number of (red) decoration pixels, used when the decoration covers
+// more than one row (a thick line, for instance).
+const redPixels = (img: PNG) => {
+  let count = 0;
+  for (let y = 0; y < img.height; y++) {
+    for (let x = 0; x < img.width; x++) if (isRedPixel(img, x, y)) count++;
+  }
+  return count;
+};
+
 // Columns that carry the (red) decoration line, used for vertical writing modes.
 const redColumns = (img: PNG) => {
   const cols: number[] = [];
@@ -1329,5 +1339,65 @@ describe("regression: layout and paint probes", () => {
     expect(left.length).toBeGreaterThan(0);
     // vertical-rl: `right` hugs the right edge of the column, `left` the left one.
     expect(left[0]).toBeLessThan(right[0]);
+  });
+
+  it("text-decoration-skip-ink: all also skips the ink on the line-through", async () => {
+    // The line-through crosses the x-height, so `all` has ink to skip there.
+    const base =
+      "text-decoration:line-through;text-decoration-color:#f00;text-decoration-skip-ink:none";
+    const none = decorationLine(await renderProbeText(probeLine(base, "Hxg")));
+    const all = decorationLine(
+      await renderProbeText(probeLine(`${base};text-decoration-skip-ink:all`, "Hxg")),
+    );
+    expect(all.row).toBe(none.row);
+    expect(all.count).toBeLessThan(none.count);
+  });
+
+  it("text-decoration-skip-ink: all also skips the ink on the overline", async () => {
+    // The overline is painted at the top of the text box, i.e. above the
+    // ascent, so its band only reaches the glyph ink when it is thick enough.
+    const overline = (skip: string) =>
+      `<div style="font-family:'RobotoProbe',sans-serif;font-size:30px;line-height:35px;padding-top:30px;color:#000;text-decoration:overline;text-decoration-color:#f00;text-decoration-thickness:20px;text-decoration-skip-ink:${skip}">Hxg</div>`;
+    const none = decorationLine(await renderProbeText(overline("none")));
+    const all = decorationLine(await renderProbeText(overline("all")));
+    expect(all.row).toBe(none.row);
+    expect(all.count).toBeLessThan(none.count);
+  });
+
+  it("text-decoration-thickness: from-font uses the underline thickness of the font", async () => {
+    const base =
+      "text-decoration:underline;text-decoration-color:#f00;text-decoration-skip-ink:none";
+    const auto_ = await renderProbeText(probeLine(base, "Hxg"));
+    const fromFont = await renderProbeText(
+      probeLine(`${base};text-decoration-thickness:from-font`, "Hxg"),
+    );
+    // The font's own underline is thicker than the 1px `auto` default, so it
+    // covers more pixels ...
+    expect(redPixels(fromFont)).toBeGreaterThan(redPixels(auto_));
+    // ... and it sits lower, because the underline hangs below the baseline by
+    // its own thickness.
+    expect(decorationLine(fromFont).row).toBeGreaterThan(decorationLine(auto_).row);
+  });
+
+  it("text-decoration-skip-ink: the SVG output skips the ink as well", async () => {
+    // The SVG renderer draws the glyphs as paths, so the decoration has to
+    // gather the ink on that path as well.
+    const underline = async (skip: string) => {
+      const body = probeLine(
+        `text-decoration:underline;text-decoration-color:#f00;text-decoration-skip-ink:${skip}`,
+        "gjpq",
+      );
+      const html = `<html><head><style>${PROBE_FONT_FACE}</style></head><body style="margin:0;background:#fff">${body}</body></html>`;
+      const { data } = await render({ value: html, width: 800, format: "svg" });
+      // The decoration line is the only stroked path in the document (the
+      // glyphs are filled paths in <defs>).
+      return (data as string).match(/<path[^>]*stroke="[^"]*"[^>]*>/g) ?? [];
+    };
+    const none = await underline("none");
+    const auto_ = await underline("auto");
+    // Without the ink the underline is a single segment, with it the descenders
+    // cut it into several pieces.
+    expect(none.length).toBeGreaterThan(0);
+    expect(auto_.length).toBeGreaterThan(none.length);
   });
 });

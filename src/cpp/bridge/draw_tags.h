@@ -36,10 +36,14 @@ struct font_info {
     int fm_ascent;
     int fm_height;
     float fm_ascent_raw;
-    // Font-provided underline metrics (text-underline-position: from-font).
+    // Font-provided underline metrics (text-underline-position: from-font and
+    // text-decoration-thickness: from-font).
     // fm_underline_position is the distance from the baseline to the top of the
     // underline stroke; it is 0 when the font does not provide it.
     float fm_underline_position = 0.0f;
+    // fm_underline_thickness is the thickness of the font's own underline
+    // stroke; it is 0 when the font does not provide it.
+    float fm_underline_thickness = 0.0f;
     bool fake_bold;
     bool fake_italic;
     bool is_rtl;

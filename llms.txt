@@ -229,7 +229,7 @@ The rendering engine couples **litehtml** (HTML/CSS layout) and **Google Skia** 
 - **Text Stroke & Shadow**:
   - Stroke: `-webkit-text-stroke: <width> <color>` (also `-webkit-text-stroke-width`, `-webkit-text-stroke-color`, `-webkit-text-fill-color`).
   - Text Shadow: `text-shadow: offset-x offset-y blur-radius color` (multiple comma-separated shadows supported).
-  - Text Decoration: `text-decoration` (`underline`, `line-through`, `none`, style, color, thickness, `text-underline-offset`, `text-decoration-skip-ink`, `text-underline-position`).
+  - Text Decoration: `text-decoration` (`underline`, `overline`, `line-through`, `none`, style, color, thickness, `text-underline-offset`, `text-decoration-skip-ink`, `text-underline-position`).
   - Text Emphasis: `text-emphasis` (`style`, `color`, `position`).
 - **Vertical Writing & Advanced Internationalization**:
   - `writing-mode`: `horizontal-tb`, `vertical-rl`, `vertical-lr`.

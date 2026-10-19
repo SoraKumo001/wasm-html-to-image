@@ -290,12 +290,18 @@ litehtml::uint_ptr container_skia::create_font(const litehtml::font_description&
     fi->fm_ascent_raw = ascent;
     fi->fm_height = (int)css_line_height;
 
-    // Font underline metrics (used by text-underline-position: from-font).
+    // Font underline metrics (used by text-underline-position: from-font and
+    // text-decoration-thickness: from-font).
     // Skia reports the underline position as the distance from the baseline to
     // the top of the underline stroke; it is only valid when the flag is set.
     fi->fm_underline_position = 0.0f;
     if (skfm.hasUnderlinePosition(&skfm.fUnderlinePosition) && skfm.fUnderlinePosition > 0) {
         fi->fm_underline_position = skfm.fUnderlinePosition;
+    }
+    fi->fm_underline_thickness = 0.0f;
+    if (skfm.hasUnderlineThickness(&skfm.fUnderlineThickness) &&
+        skfm.fUnderlineThickness > 0) {
+        fi->fm_underline_thickness = skfm.fUnderlineThickness;
     }
 
     if (requestedFamilies.empty()) {

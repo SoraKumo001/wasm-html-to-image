@@ -19,6 +19,15 @@ struct InlineGap {
     float end;
 };
 
+// Which half of the glyph ink the `auto` mode of text-decoration-skip-ink
+// skips. `all` skips every ink and `none` skips nothing, so the distinction
+// only matters for `auto`.
+//   Descender: the ink below the baseline (the underline case).
+//   Ascender:  the ink above the baseline (the overline case).
+// The line-through is drawn inside the text body, so it keeps the underline
+// rule: only the descenders that hang below it are skipped.
+enum class SkipInkSide { Descender, Ascender };
+
 }  // namespace
 
 void TextDecorationRenderer::drawDecoration(SkCanvas* canvas, font_info* fi,
@@ -27,7 +36,18 @@ void TextDecorationRenderer::drawDecoration(SkCanvas* canvas, font_info* fi,
                                             litehtml::writing_mode mode,
                                             const std::vector<DecorationGlyphInk>& glyph_ink) {
     float inline_size = (float)finalWidth;
+
+    // text-decoration-thickness:
+    //   from-font: the underline thickness the font itself reports.
+    //   <length>:  the resolved length.
+    //   auto:      1px (the user agent default).
     float thickness = (float)fi->desc.decoration_thickness.val();
+    if (fi->desc.decoration_thickness.is_predefined() &&
+        fi->desc.decoration_thickness.predef() ==
+            litehtml::text_decoration_thickness_from_font &&
+        fi->fm_underline_thickness > 0) {
+        thickness = fi->fm_underline_thickness;
+    }
     if (thickness == 0) thickness = 1.0f;
 
     litehtml::web_color dec_color = fi->desc.decoration_color;
@@ -124,9 +144,9 @@ void TextDecorationRenderer::drawDecoration(SkCanvas* canvas, font_info* fi,
 
     // text-decoration-skip-ink: collect the inline-axis intervals in which the
     // decoration line would be covered by the ink of the text.
-    //   auto: only the ink below the baseline (descenders) is skipped.
+    //   auto: only the ink on one side of the baseline is skipped.
     //   all:  every glyph ink that reaches the line is skipped.
-    auto collect_skip_gaps = [&](float block_offset) {
+    auto collect_skip_gaps = [&](float block_offset, SkipInkSide auto_side) {
         std::vector<InlineGap> gaps;
         if (fi->desc.decoration_skip_ink == litehtml::text_decoration_skip_ink_none) return gaps;
         if (glyph_ink.empty()) return gaps;
@@ -139,8 +159,12 @@ void TextDecorationRenderer::drawDecoration(SkCanvas* canvas, font_info* fi,
             float top = g.baseline + g.ink_top;
             float bottom = g.baseline + g.ink_bottom;
             if (!skip_all_ink) {
-                // auto: the descender ink (below the baseline) only.
-                top = std::max(top, g.baseline);
+                // auto: only the ink on the selected side of the baseline counts.
+                if (auto_side == SkipInkSide::Descender) {
+                    top = std::max(top, g.baseline);
+                } else {
+                    bottom = std::min(bottom, g.baseline);
+                }
             }
             if (bottom < band_top || top > band_bottom) continue;
             if (g.inline_end <= g.inline_start) continue;
@@ -206,7 +230,8 @@ void TextDecorationRenderer::drawDecoration(SkCanvas* canvas, font_info* fi,
             underline_offset = (float)fi->fm_ascent + user_offset + thickness;
         }
 
-        draw_with_gaps(underline_offset, collect_skip_gaps(underline_offset));
+        draw_with_gaps(underline_offset,
+                       collect_skip_gaps(underline_offset, SkipInkSide::Descender));
     }
     if (fi->desc.decoration_line & litehtml::text_decoration_line_overline) {
         float overline_offset = 0;
@@ -214,10 +239,14 @@ void TextDecorationRenderer::drawDecoration(SkCanvas* canvas, font_info* fi,
             // Mirror of underline: just inside the block-end edge.
             overline_offset = (float)wm_ctx.container_width() - thickness;
         }
-        draw_logical_line(overline_offset, 0.0f, inline_size);
+        // The overline is drawn above the text, so only the ascender ink can
+        // reach it.
+        draw_with_gaps(overline_offset, collect_skip_gaps(overline_offset, SkipInkSide::Ascender));
     }
     if (fi->desc.decoration_line & litehtml::text_decoration_line_line_through) {
-        draw_logical_line((float)fi->fm_ascent * 0.65f, 0.0f, inline_size);
+        float strike_offset = (float)fi->fm_ascent * 0.65f;
+        draw_with_gaps(strike_offset,
+                       collect_skip_gaps(strike_offset, SkipInkSide::Descender));
     }
 }
 
