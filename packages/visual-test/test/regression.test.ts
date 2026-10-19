@@ -625,4 +625,52 @@ describe("regression: layout and paint probes", () => {
     });
     expect(r.height).toBe(40); // the third item fills row 1's free cell; sparse put it on row 3
   });
+
+  it("grid-auto-flow: column places items down each column before moving right", async () => {
+    const { at } = await renderPng(
+      `<div style="display:grid;grid-auto-flow:column;grid-template-rows:20px 20px;grid-auto-columns:30px;width:90px">
+         <div style="background:#f00"></div><div style="background:#00f"></div>
+         <div style="background:#0f0"></div><div style="background:#ff0"></div>
+         <div style="background:#f0f"></div>
+       </div>`,
+      120,
+      60,
+    );
+    expect(near(at(15, 10), RED)).toBe(true); // col 0, row 0
+    expect(near(at(15, 30), BLUE)).toBe(true); // col 0, row 1
+    expect(near(at(45, 10), [0, 255, 0])).toBe(true); // col 1, row 0
+    expect(near(at(45, 30), [255, 255, 0])).toBe(true); // col 1, row 1
+    expect(near(at(75, 10), [255, 0, 255])).toBe(true); // col 2, row 0
+  });
+
+  it("grid-auto-flow: column dense backfills holes in a column", async () => {
+    const { at } = await renderPng(
+      `<div style="display:grid;grid-auto-flow:column dense;grid-template-rows:20px 20px;grid-auto-columns:30px;width:120px">
+         <div style="background:#00f"></div>
+         <div style="grid-row:span 2;background:#f00"></div>
+         <div style="background:#0f0"></div>
+       </div>`,
+      150,
+      60,
+    );
+    expect(near(at(15, 10), BLUE)).toBe(true);
+    expect(near(at(45, 10), RED)).toBe(true); // the 2-row item wraps to column 1
+    expect(near(at(45, 30), RED)).toBe(true);
+    expect(near(at(15, 30), [0, 255, 0])).toBe(true); // dense fills the hole; sparse put it in column 2
+  });
+
+  it("grid-auto-flow: column sizes auto-placement implicit columns from grid-auto-columns", async () => {
+    const { at } = await renderPng(
+      `<div style="display:grid;grid-auto-flow:column;grid-template-rows:20px;grid-auto-columns:25px 35px;width:200px">
+         <div style="background:#f00"></div><div style="background:#00f"></div>
+         <div style="background:#0f0"></div>
+       </div>`,
+      200,
+      40,
+    );
+    expect(near(at(10, 10), RED)).toBe(true); // 0..25
+    expect(near(at(30, 10), BLUE)).toBe(true); // 25..60
+    expect(near(at(70, 10), [0, 255, 0])).toBe(true); // 60..85 (second auto-columns value)
+    expect(isWhite(at(100, 10))).toBe(true); // no phantom track
+  });
 });

@@ -472,6 +472,43 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         if (it != names.lines.end()) gl.index = it->second;
     };
 
+    // Flow axis for auto-placement. Row flow wraps at the column count; column
+    // flow fills a column top-to-bottom, wraps at the row count and grows the
+    // implicit columns instead.
+    const grid_auto_flow auto_flow = css().get_grid_auto_flow();
+    const bool column_flow = auto_flow == grid_auto_flow_column ||
+                             auto_flow == grid_auto_flow_column_dense;
+    const bool dense = auto_flow == grid_auto_flow_row_dense ||
+                       auto_flow == grid_auto_flow_column_dense;
+
+    // Rows in the column-flow grid: the explicit count, or the largest definite
+    // row / row span, and at least one. Column flow never creates implicit rows.
+    int flow_rows = std::max((int)rows_template.size(), 1);
+    if (column_flow)
+    {
+        for (const auto& el : m_children)
+        {
+            auto pos = el->src_el()->css().get_position();
+            if (pos == element_position_absolute || pos == element_position_fixed) continue;
+            grid_line rs, re;
+            rs.parse(el->src_el()->css().get_grid_row_start());
+            re.parse(el->src_el()->css().get_grid_row_end());
+            resolve_named(rs, row_names, false);
+            resolve_named(re, row_names, true);
+            int start = -1;
+            int span = 1;
+            if (rs.is_span) span = rs.span;
+            else if (rs.index > 0) start = rs.index - 1;
+            if (re.is_span) span = re.span;
+            else if (re.index > rs.index && rs.index > 0) span = re.index - rs.index;
+            flow_rows = std::max(flow_rows, start >= 0 ? start + span : span);
+        }
+    }
+
+    // Number of explicit tracks; implicit tracks added below continue to cycle
+    // grid-auto-columns from this offset.
+    const int explicit_col_count = (int)columns_template.size();
+
     // grid-auto-columns: explicit placements past the template create implicit
     // columns. Extend the track list now so sizing/placement see them; otherwise
     // those items collapse into column 0 and the offsets are read out of bounds.
@@ -510,73 +547,8 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
     int num_columns = (int)columns_template.size();
     if (num_columns == 0) num_columns = 1;
 
-    m_grid_layout.column_widths.assign(num_columns, 0);
-    float total_fr = 0;
-    pixel_t fixed_width = 0;
-
-    // First pass: Calculate fixed widths and identify fr units
-    for (int i = 0; i < num_columns; i++)
-    {
-        const auto& len = columns_template[i];
-        if (len.units() == css_units_fr)
-        {
-            total_fr += len.val();
-        }
-        else if (len.is_calc() && len.get_op() == css_length::op_minmax)
-        {
-            // minmax(min, max)
-            const auto& min_len = len.get_operands()[0];
-            const auto& max_len = len.get_operands()[1];
-            
-            m_grid_layout.column_widths[i] = min_len.calc_percent(render_inline);
-            fixed_width += m_grid_layout.column_widths[i];
-
-            if (max_len.units() == css_units_fr)
-            {
-                total_fr += max_len.val();
-            }
-        }
-        else if (!len.is_predefined())
-        {
-            m_grid_layout.column_widths[i] = len.calc_percent(render_inline);
-            fixed_width += m_grid_layout.column_widths[i];
-        }
-    }
-
-    fixed_width += m_grid_layout.column_gap * (num_columns - 1);
-
-    // Distribute remaining space to fr columns
-    if (total_fr > 0)
-    {
-        pixel_t remaining_width = render_inline - fixed_width;
-        if (remaining_width < 0) remaining_width = 0;
-
-        for (int i = 0; i < num_columns; i++)
-        {
-            const auto& len = columns_template[i];
-            if (len.units() == css_units_fr)
-            {
-                m_grid_layout.column_widths[i] = (pixel_t)(remaining_width * (len.val() / total_fr));
-            }
-            else if (len.is_calc() && len.get_op() == css_length::op_minmax)
-            {
-                const auto& max_len = len.get_operands()[1];
-                if (max_len.units() == css_units_fr)
-                {
-                    m_grid_layout.column_widths[i] += (pixel_t)(remaining_width * (max_len.val() / total_fr));
-                }
-            }
-        }
-    }
-    else if (columns_template.empty())
-    {
-        // The implicit single column is sized after items are known (see below).
-        // Block grids fill the available inline size; inline grids shrink-to-fit.
-        if (src_el()->css().get_display() != display_inline_grid)
-        {
-            m_grid_layout.column_widths[0] = render_inline;
-        }
-    }
+    // Column sizing is deferred until after placement: column flow can create
+    // implicit columns while it auto-places items.
 
     // Determine placements and number of rows
     int max_row = 0;
@@ -590,21 +562,20 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         return false;
     };
     auto mark_occupied = [&](int r, int c, int rs, int cs) {
+        // Column flow grows the implicit grid sideways, so the map width follows
+        // the placed item rather than the initial template count.
+        if (c + cs > num_columns) num_columns = c + cs;
         if (r + rs > (int)occupied.size()) occupied.resize(r + rs, vector<bool>(num_columns, false));
         for (int i = r; i < r + rs; i++) {
+            if ((int)occupied[i].size() < num_columns) occupied[i].resize(num_columns, false);
             for (int j = c; j < c + cs; j++) {
-                if (j < num_columns) occupied[i][j] = true;
+                occupied[i][j] = true;
             }
         }
     };
 
     int curr_row = 0;
     int curr_col = 0;
-
-    // grid-auto-flow: row dense backfills holes left behind the placement cursor.
-    const grid_auto_flow auto_flow = css().get_grid_auto_flow();
-    const bool dense = auto_flow == grid_auto_flow_row_dense ||
-                       auto_flow == grid_auto_flow_column_dense;
 
     for (const auto& el : m_children)
     {
@@ -664,7 +635,89 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         }
 
         // Auto placement
-        if (cs.index <= 0 && !cs.is_span)
+        if (column_flow)
+        {
+            if (cs.index > 0 && rs.index <= 0)
+            {
+                // Definite column, auto row: the item is locked to its column in either flow.
+                if (item_col_start < curr_col) curr_row++;
+                curr_col = item_col_start;
+                for (;;)
+                {
+                    bool conflict = false;
+                    for (int r = curr_row; r < curr_row + item_row_span && !conflict; r++)
+                        for (int c = item_col_start; c < item_col_start + item_col_span; c++)
+                            if (is_occupied(r, c)) { conflict = true; break; }
+                    if (!conflict) break;
+                    curr_row++;
+                }
+                item_row_start = curr_row;
+            }
+            else if (rs.index > 0 && cs.index <= 0)
+            {
+                // Definite row, auto column: moves to the next column when the row is
+                // behind the cursor, then right until the cells are free.
+                if (item_row_start < curr_row) curr_col++;
+                curr_row = item_row_start;
+                for (;;)
+                {
+                    bool conflict = false;
+                    for (int r = item_row_start; r < item_row_start + item_row_span && !conflict; r++)
+                        for (int c = curr_col; c < curr_col + item_col_span; c++)
+                            if (is_occupied(r, c)) { conflict = true; break; }
+                    if (!conflict) break;
+                    curr_col++;
+                }
+                item_col_start = curr_col;
+            }
+            else if (rs.index <= 0)
+            {
+                // Both axes auto: fill the current column top-to-bottom, then wrap to
+                // the next (implicit) column. Dense restarts the search per item.
+                if (dense) { curr_row = 0; curr_col = 0; }
+                bool found = false;
+                while (!found)
+                {
+                    if (curr_row + item_row_span > flow_rows)
+                    {
+                        curr_row = 0;
+                        curr_col++;
+                    }
+
+                    bool conflict = false;
+                    for (int r = curr_row; r < curr_row + item_row_span; r++)
+                    {
+                        for (int c = curr_col; c < curr_col + item_col_span; c++)
+                        {
+                            if (is_occupied(r, c))
+                            {
+                                conflict = true;
+                                break;
+                            }
+                        }
+                        if (conflict) break;
+                    }
+
+                    if (!conflict)
+                    {
+                        item_col_start = curr_col;
+                        item_row_start = curr_row;
+                        found = true;
+                        curr_row += item_row_span;
+                    }
+                    else
+                    {
+                        curr_row++;
+                        if (curr_row >= flow_rows)
+                        {
+                            curr_row = 0;
+                            curr_col++;
+                        }
+                    }
+                }
+            }
+        }
+        else if (cs.index <= 0 && !cs.is_span)
         {
             if (dense) { curr_row = 0; curr_col = 0; }
             bool found = false;
@@ -778,6 +831,88 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         item.pos = { item_col_start, item_col_start + item_col_span, item_row_start, item_row_start + item_row_span };
         m_grid_layout.items.push_back(item);
         max_row = std::max(max_row, item.pos.row_end);
+    }
+
+    // Column flow creates implicit columns while auto-placing. Append their
+    // grid-auto-columns sizes before the tracks are measured.
+    if (!is_multicol && num_columns > (int)columns_template.size())
+    {
+        const auto& auto_cols = css().get_grid_auto_columns();
+        for (int i = (int)columns_template.size(); i < num_columns; i++)
+        {
+            if (auto_cols.empty())
+                columns_template.push_back(css_length::predef_value(0));
+            else
+                columns_template.push_back(auto_cols[(i - explicit_col_count) % auto_cols.size()]);
+        }
+    }
+
+    m_grid_layout.column_widths.assign(num_columns, 0);
+    float total_fr = 0;
+    pixel_t fixed_width = 0;
+
+    // First pass: Calculate fixed widths and identify fr units
+    for (int i = 0; i < num_columns; i++)
+    {
+        const auto& len = columns_template[i];
+        if (len.units() == css_units_fr)
+        {
+            total_fr += len.val();
+        }
+        else if (len.is_calc() && len.get_op() == css_length::op_minmax)
+        {
+            // minmax(min, max)
+            const auto& min_len = len.get_operands()[0];
+            const auto& max_len = len.get_operands()[1];
+            
+            m_grid_layout.column_widths[i] = min_len.calc_percent(render_inline);
+            fixed_width += m_grid_layout.column_widths[i];
+
+            if (max_len.units() == css_units_fr)
+            {
+                total_fr += max_len.val();
+            }
+        }
+        else if (!len.is_predefined())
+        {
+            m_grid_layout.column_widths[i] = len.calc_percent(render_inline);
+            fixed_width += m_grid_layout.column_widths[i];
+        }
+    }
+
+    fixed_width += m_grid_layout.column_gap * (num_columns - 1);
+
+    // Distribute remaining space to fr columns
+    if (total_fr > 0)
+    {
+        pixel_t remaining_width = render_inline - fixed_width;
+        if (remaining_width < 0) remaining_width = 0;
+
+        for (int i = 0; i < num_columns; i++)
+        {
+            const auto& len = columns_template[i];
+            if (len.units() == css_units_fr)
+            {
+                m_grid_layout.column_widths[i] = (pixel_t)(remaining_width * (len.val() / total_fr));
+            }
+            else if (len.is_calc() && len.get_op() == css_length::op_minmax)
+            {
+                const auto& max_len = len.get_operands()[1];
+                if (max_len.units() == css_units_fr)
+                {
+                    m_grid_layout.column_widths[i] += (pixel_t)(remaining_width * (max_len.val() / total_fr));
+                }
+            }
+        }
+    }
+    else if (columns_template.empty())
+    {
+        // The implicit single column is sized after items are known (see below).
+        // Block grids fill the available inline size; inline grids shrink-to-fit.
+        if (src_el()->css().get_display() != display_inline_grid)
+        {
+            m_grid_layout.column_widths[0] = render_inline;
+        }
     }
 
     // Content-sized columns (auto, min-content, max-content, fit-content()): size them from the
