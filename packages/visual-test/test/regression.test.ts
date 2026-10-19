@@ -362,4 +362,12 @@ describe("regression: layout and paint probes", () => {
     const r = await render({ value: `<html><body style="margin:0;font:14px sans-serif"><div style="width:600px">${inner}</div></body></html>`, width: 700, format: "png" });
     expect(r.height).toBeLessThan(1500); // ~12 x (list 2 rows) rows; was inflated by the exhausted budget
   }, 60000);
+  it("text inputs get a default box (size, border) instead of collapsing to nothing", async () => {
+    const r = await render({
+      value: `<html><body style="margin:0"><input type="text" style="display:block"><input style="display:block"></body></html>`,
+      width: 300,
+      format: "png",
+    });
+    expect(r.height).toBe(42); // 2 x 21px default control height
+  });
 });

@@ -60,6 +60,7 @@ const char* satoru_master_css =
     "    color: #000;\n"
     "}\n"
     "button, input, select, textarea { box-sizing: border-box; }\n"
+    "input:not([type]), input[type=\"text\"], input[type=\"search\"], input[type=\"email\"], input[type=\"password\"], input[type=\"url\"], input[type=\"tel\"], input[type=\"number\"] { display: inline-block; width: 169px; height: 21px; padding: 1px 2px; border: 2px inset #767676; background-color: #fff; color: #000; font-size: 13.333px; vertical-align: baseline; }\n"
     "svg { display: inline-block; vertical-align: middle; overflow: hidden; }\n"
     "*[dir=\"rtl\"] { direction: rtl; }\n"
     "*[dir=\"ltr\"] { direction: ltr; }\n"
