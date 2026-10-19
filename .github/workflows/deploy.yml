@@ -55,9 +55,16 @@ jobs:
           restore-keys: |
             playwright-${{ runner.os }}-
 
+      # The browser cache above stores binaries only. `playwright install --with-deps`
+      # also installs the OS packages (shared libraries and fonts such as
+      # fonts-ipafont-gothic) that the reference PNGs depend on, so the dependency
+      # install must run unconditionally instead of being tied to the cache miss.
+      - name: Install Playwright System Dependencies
+        run: pnpm --filter visual-test exec playwright install-deps chromium
+
       - name: Install Playwright Browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: pnpm --filter visual-test exec playwright install chromium --with-deps
+        run: pnpm --filter visual-test exec playwright install chromium
 
       - name: Generate Reference PNGs
         run: pnpm --filter visual-test generate-reference
