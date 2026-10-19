@@ -227,4 +227,13 @@ describe("regression: layout and paint probes", () => {
     expect(r).toBeGreaterThan(100); // ~50% mask: blue blended with the white page
     expect(r).toBeLessThan(160);
   });
+
+  it("closed <details> hides everything but its summary; open shows it", async () => {
+    const body = (open: string) =>
+      `<details${open}><summary style="height:20px;background:#00f"></summary><div style="height:200px;background:#f00"></div></details>`;
+    const closed = await render({ value: `<html><body style="margin:0">${body("")}</body></html>`, width: 100, format: "png" });
+    expect(closed.height).toBeLessThan(60);
+    const opened = await render({ value: `<html><body style="margin:0">${body(" open")}</body></html>`, width: 100, format: "png" });
+    expect(opened.height).toBeGreaterThan(200);
+  });
 });

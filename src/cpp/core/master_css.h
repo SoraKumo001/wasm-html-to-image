@@ -29,6 +29,8 @@ const char* satoru_master_css =
     "rt { display: block; font-size: 50%; line-height: normal; text-align: center; }\n"
     "rb { display: block; }\n"
     "center > table, center > div { margin-inline-start: auto; margin-inline-end: auto; }\n"
+    "details, summary { display: block; }\n"
+    "details:not([open]) > :not(summary) { display: none; }\n"
     "rp { display: none; }\n"
     "rtc, rbc { display: block; }\n"
     "rtc rt { font-size: 100%; }\n"
