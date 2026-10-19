@@ -288,4 +288,15 @@ describe("regression: layout and paint probes", () => {
     });
     expect(r.height).toBeLessThan(30); // the heading stayed on one line
   });
+  it("auto-width table with percentage cells is shrink-to-fit, not collapsed", async () => {
+    const cell = (w: string) => `<td style="width:${w}">先代<br>東京府・東京市</td>`;
+    for (const font of ["", "font-size:95%;"]) {
+      const r = await render({
+        value: `<html><body style="margin:0"><table style="border-collapse:collapse;margin:0.5em auto;${font}"><tr style="text-align:center">${cell("30%")}${cell("40%")}${cell("30%")}</tr></table></body></html>`,
+        width: 800,
+        format: "png",
+      });
+      expect(r.height).toBeLessThan(80); // text stayed on two lines instead of one character per line
+    }
+  });
 });

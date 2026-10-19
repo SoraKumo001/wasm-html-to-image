@@ -318,6 +318,38 @@ litehtml::pixel_t litehtml::table_grid::calc_table_width(pixel_t block_width, bo
 	pixel_t max_w = 0;
 	pixel_t min_w = 0;
 
+	pixel_t forced_max = 0;
+	if(is_auto)
+	{
+		// An auto-width table with percentage columns is shrink-to-fit: each percentage column
+		// needs max_width / pct of the table, and the other columns need the remaining share.
+		float percent = 0;
+		pixel_t fixed_max = 0;
+		pixel_t sum_max = 0;
+		pixel_t needed = 0;
+		for(int col = 0; col < m_cols_count; col++)
+		{
+			sum_max += m_columns[col].max_width;
+			if(!m_columns[col].css_width.is_predefined() && m_columns[col].css_width.units() == css_units_percentage && m_columns[col].css_width.val() > 0)
+			{
+				percent += m_columns[col].css_width.val();
+				needed = std::max(needed, (pixel_t) (m_columns[col].max_width * 100.0 / m_columns[col].css_width.val()));
+			} else
+			{
+				fixed_max += m_columns[col].max_width;
+			}
+		}
+		if(percent > 0)
+		{
+			if(percent < 100)
+			{
+				needed = std::max(needed, (pixel_t) (fixed_max * 100.0 / (100.0 - percent)));
+			}
+			forced_max = std::max(sum_max, needed);
+			block_width = std::min(block_width, forced_max);
+		}
+	}
+
 	for(int col = 0; col < m_cols_count; col++)
 	{
 		min_table_width += m_columns[col].min_width;
@@ -336,8 +368,11 @@ litehtml::pixel_t litehtml::table_grid::calc_table_width(pixel_t block_width, bo
 
 		cur_width += m_columns[col].width;
 	}
+	max_table_width = std::max(max_table_width, forced_max);
 
-	if(cur_width == block_width)
+	// Widths are floats; treat sub-0.01px differences as equal so the shrink loop below does not
+	// squeeze the columns to their minimum over rounding noise.
+	if(std::abs(cur_width - block_width) < 0.01f)
 	{
 		return cur_width;
 	}
@@ -397,7 +432,7 @@ litehtml::pixel_t litehtml::table_grid::calc_table_width(pixel_t block_width, bo
 			cur_width += m_columns[col].width;
 		}
 		// If the table is still too wide shrink columns with % widths
-		if(cur_width > block_width)
+		if(cur_width > block_width + 0.01f)
 		{
 			while(true)
 			{
@@ -411,14 +446,14 @@ litehtml::pixel_t litehtml::table_grid::calc_table_width(pixel_t block_width, bo
 							m_columns[col].width--;
 							cur_width--;
 							shrunk = true;
-							if(cur_width == block_width)
+							if(cur_width <= block_width + 0.01f)
 							{
 								break;
 							}
 						}
 					}
 				}
-				if(cur_width == block_width || !shrunk)
+				if(cur_width <= block_width + 0.01f || !shrunk)
 				{
 					break;
 				}
