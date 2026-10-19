@@ -83,6 +83,7 @@ target_sources(html_to_image_core PRIVATE
     src/cpp/common/skia_encode.cpp
     src/cpp/common/skia_utils.cpp
     src/cpp/common/thumbhash.cpp
+    src/cpp/common/webp_anim_encoder.cpp
     src/cpp/core/satoru_context.cpp
     src/cpp/core/image_converter_context.cpp
     src/cpp/api/satoru_api.cpp

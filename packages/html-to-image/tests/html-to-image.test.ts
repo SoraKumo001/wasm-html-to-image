@@ -209,6 +209,7 @@ describe("htmlToImage: HTML via 2-call fallback (no unified binding)", () => {
       85,
       6,
       false,
+      0, // animation loop (0 = infinite)
     );
     expect(calls.converter_destroy_instance).toHaveBeenCalledWith({
       tag: "converter",
@@ -615,6 +616,7 @@ describe("htmlToImage: image input goes straight to converter_*", () => {
       85,
       6,
       false,
+      0, // animation loop (0 = infinite)
     );
     expect(calls.converter_destroy_instance).toHaveBeenCalled();
   });
@@ -651,6 +653,7 @@ describe("htmlToImage: image input goes straight to converter_*", () => {
       85,
       6,
       false,
+      0, // animation loop (0 = infinite)
     );
   });
 

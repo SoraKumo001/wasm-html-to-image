@@ -276,6 +276,9 @@ npx wasm-html-to-image photo.jpg -o photo.avif -w 800 -f avif -q 80
 
 # Sample an opacity / transform / color @keyframes animation into an animated WebP
 npx wasm-html-to-image loader.html -o loader.webp -f webp --animation 2000 --animation-fps 20
+
+# Play the animated WebP once instead of looping forever
+npx wasm-html-to-image loader.html -o loader.webp -f webp --animation 2000 --animation-loop 1
 ```
 
 ---

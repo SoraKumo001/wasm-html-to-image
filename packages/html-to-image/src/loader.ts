@@ -136,7 +136,11 @@ export interface HtmlToImageModule {
    * (0 on failure).
    */
   satoru_render_animation_to_converter?: (...args: unknown[]) => number;
-  /** Image encode wrapper (positional: instance, format, quality, speed, animation). */
+  /**
+   * Image encode wrapper (positional: instance, format, quality, speed,
+   * animation, animationLoop). `animationLoop` is the animated WebP loop
+   * count (0 = infinite, the default).
+   */
   converter_encode?: (...args: unknown[]) => unknown;
   /**
    * Unified Bitmap-direct call (`render_bitmap_to_encoded` exposed to JS,

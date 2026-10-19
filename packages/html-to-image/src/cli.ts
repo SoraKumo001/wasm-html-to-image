@@ -51,12 +51,17 @@ program
   )
   .option(
     "--animation <duration-ms>",
-    "sample the document's @keyframes opacity / transform / color animation into an animated WebP; one loop duration in ms (webp output only; loop is fixed to infinite)",
+    "sample the document's @keyframes opacity / transform / color animation into an animated WebP; one loop duration in ms (webp output only)",
     (v) => parseInt(v, 10),
   )
   .option(
     "--animation-fps <n>",
     "animation frame rate (default 15, capped at ~75 frames total; requires --animation)",
+    (v) => parseInt(v, 10),
+  )
+  .option(
+    "--animation-loop <n>",
+    "how many times the animated WebP repeats (0 = infinite, the default; 1 = play once; requires --animation)",
     (v) => parseInt(v, 10),
   )
   .action(async (input: string, options: CliFlags) => {
@@ -92,6 +97,7 @@ program
         baseUrl: options.baseUrl,
         animation: options.animation,
         animationFps: options.animationFps,
+        animationLoop: options.animationLoop,
       };
 
       const result = await render(await buildRenderOptions(input, flags));

@@ -64,12 +64,16 @@ export interface Orchestration {
   speed: number;
   animation: boolean;
   /**
-   * HTML animated-output request (`animation: { duration, fps }`). When set,
-   * the HTML pipeline samples the document's `@keyframes` animation
+   * HTML animated-output request (`animation: { duration, fps, loop }`). When
+   * set, the HTML pipeline samples the document's `@keyframes` animation
    * (opacity / transform / color) into converter frames before encoding.
-   * Loop is fixed to infinite.
    */
-  animationFrames: { duration: number; fps?: number } | undefined;
+  animationFrames: { duration: number; fps?: number; loop?: number } | undefined;
+  /**
+   * Animated WebP loop count handed to the encode stage (libwebp
+   * `anim_params.loop_count`). `0` = infinite (the historical default).
+   */
+  animationLoop: number;
   width: number;
   height: number | undefined;
   crop: HtmlToImageOptions["crop"];
@@ -175,6 +179,8 @@ export function createOrchestration(
       ? rawAnimation
       : undefined;
   const animation = animationFrames ? true : rawAnimation === true;
+  // Loop count of the produced animated WebP (0 = infinite = legacy default).
+  const animationLoop = Math.max(0, Math.trunc(animationFrames?.loop ?? 0));
   const speed = speedOption ?? defaultSpeed(format);
   const fmtInt = FORMAT_INT[format];
   const mediaTypeInt = mediaType === "print" ? 1 : 0;
@@ -268,6 +274,7 @@ export function createOrchestration(
     speed,
     animation,
     animationFrames,
+    animationLoop,
     width,
     height,
     crop,
@@ -383,6 +390,7 @@ export async function runImageInput(
     quality,
     speed,
     animation,
+    animationLoop,
     width,
     height,
     crop,
@@ -511,6 +519,7 @@ export async function runImageInput(
       quality,
       speed,
       animation,
+      animationLoop,
     )) as Uint8Array | null | undefined;
     addTime("encode", now() - encodeStart);
     if (out == null) {
@@ -557,6 +566,7 @@ export async function tryRunHtmlInstance(
     speed,
     animation,
     animationFrames,
+    animationLoop,
     width,
     height,
     baseUrl,
@@ -710,6 +720,7 @@ export async function tryRunHtmlInstance(
         quality,
         speed,
         animation,
+        animationLoop,
       )) as Uint8Array | null | undefined;
       addTime("encode", now() - encodeStart);
       if (out == null) {

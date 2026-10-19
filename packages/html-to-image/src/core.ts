@@ -115,15 +115,16 @@ export interface HtmlToImageOptions extends RenderOptions {
   /**
    * Animation handling.
    * - `true`: keep animation frames where supported (image input / encode stage).
-   * - `{ duration, fps }` (HTML input only): sample the document's `@keyframes`
-   *   animation into frames. `duration` is one loop length in ms
+   * - `{ duration, fps, loop }` (HTML input only): sample the document's
+   *   `@keyframes` animation into frames. `duration` is one loop length in ms
    *   (clamped to 5000), `fps` defaults to 15 (frame count capped at ~75).
-   *   The loop is fixed to infinite; `opacity`, `transform` (`translate` /
+   *   `loop` is how many times the animated WebP repeats: `0` (the default)
+   *   means infinite, `1` means play once. `opacity`, `transform` (`translate` /
    *   `rotate` / `scale` only) and `color` / `background-color` keyframes are
    *   animated. Per-keyframe easing, several animations on one element and
    *   `animation-direction` / `animation-fill-mode` are out of scope.
    */
-  animation?: boolean | { duration: number; fps?: number };
+  animation?: boolean | { duration: number; fps?: number; loop?: number };
   /** Crop rectangle (encode stage for image input, render options for HTML). */
   crop?: { x: number; y: number; width: number; height: number };
   /** Resize strategy (encode stage for image input, render options for HTML). */

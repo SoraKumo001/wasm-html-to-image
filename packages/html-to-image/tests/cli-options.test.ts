@@ -135,6 +135,57 @@ describe("cli options", () => {
       }
     });
 
+    it("maps --animation-loop to the animation option", async () => {
+      const options = await buildRenderOptions(
+        FIXTURE,
+        flags({ format: "webp", animation: 2000, animationLoop: 1 }),
+      );
+      expect(options.animation).toEqual({
+        duration: 2000,
+        fps: DEFAULT_ANIMATION_FPS,
+        loop: 1,
+      });
+    });
+
+    it("omits loop when --animation-loop is not given (infinite by default)", async () => {
+      const options = await buildRenderOptions(
+        FIXTURE,
+        flags({ format: "webp", animation: 2000 }),
+      );
+      expect(options.animation).toEqual({
+        duration: 2000,
+        fps: DEFAULT_ANIMATION_FPS,
+      });
+      expect(options.animation).not.toHaveProperty("loop");
+    });
+
+    it("clamps a negative --animation-loop to 0 (infinite)", async () => {
+      const options = await buildRenderOptions(
+        FIXTURE,
+        flags({ format: "webp", animation: 2000, animationLoop: -3 }),
+      );
+      expect(options.animation).toEqual({
+        duration: 2000,
+        fps: DEFAULT_ANIMATION_FPS,
+        loop: 0,
+      });
+    });
+
+    it("warns when --animation-loop is given without --animation", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        const options = await buildRenderOptions(
+          FIXTURE,
+          flags({ format: "webp", animationLoop: 1 }),
+        );
+        expect(options).not.toHaveProperty("animation");
+        expect(warn).toHaveBeenCalledOnce();
+        expect(String(warn.mock.calls[0][0])).toContain("--animation-loop");
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
     it("resolveAnimation is pure (no console side effects)", () => {
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
       try {

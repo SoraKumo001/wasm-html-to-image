@@ -5,7 +5,9 @@
 // 正本: `@node-libraries/wasm-image-optimization/src/cpp/api/image_converter_api.cpp:172-309`
 //       `ImageConverterInstance::encode` の switch 全分岐を、インスタンス非依存の
 //       フレームview + オプション受けに切り出したもの。animated WebP対応は
-//       image-opt版を正とする (animation && frames>1 のとき EncodeAnimated)。
+//       image-opt版を正とする (animation && frames>1 のときanimated WebPを生成)。
+//       animated WebP の実体は `common/webp_anim_encoder` (libwebp
+//       `WebPAnimEncoder` 直呼び。loop_count / bgcolor 指定可)。
 //
 // satoru側 renderers との対応 (いずれも下記primitiveの特殊化と等価):
 //  - png_renderer.cpp: `SkPngEncoder::Encode(&stream, bitmap.pixmap(), {})`

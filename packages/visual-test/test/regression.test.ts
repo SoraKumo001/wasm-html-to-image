@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createHash } from "node:crypto";
 import http from "node:http";
 import { render } from "wasm-html-to-image/single";
 import { PNG } from "pngjs";
@@ -152,6 +153,40 @@ function webpFrames(data: Uint8Array): WebpFrame[] {
 // Distinct hashes prove the sampled frames actually differ in pixel content.
 function webpFrameHashes(data: Uint8Array): number[] {
   return webpFrames(data).map((frame) => frame.hash);
+}
+
+// ANIM chunk parameters of a RIFF/WEBP container:
+//  - bgcolor   : canvas background colour (0xAARRGGBB)
+//  - loopCount : number of animation repeats (0 = infinite)
+// Returns null when the container carries no ANIM chunk (not animated).
+function webpAnimParams(
+  data: Uint8Array,
+): { bgcolor: number; loopCount: number } | null {
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  const fourcc = (o: number) =>
+    String.fromCharCode(
+      view.getUint8(o),
+      view.getUint8(o + 1),
+      view.getUint8(o + 2),
+      view.getUint8(o + 3),
+    );
+  let o = 12;
+  while (o + 8 <= data.byteLength) {
+    const size = view.getUint32(o + 4, true);
+    if (fourcc(o) === "ANIM") {
+      return {
+        bgcolor: view.getUint32(o + 8, true),
+        loopCount: view.getUint16(o + 12, true),
+      };
+    }
+    o += 8 + size + (size & 1);
+  }
+  return null;
+}
+
+// SHA-256 of the encoded bytes (used to pin the animated WebP output).
+function sha256(data: Uint8Array): string {
+  return createHash("sha256").update(data).digest("hex");
 }
 
 // A still encode of an animated document keeps the first sampled frame
@@ -697,6 +732,98 @@ describe("regression: layout and paint probes", () => {
     expect(webpFrameHashes(new Uint8Array(still.data as Uint8Array))).toEqual(
       [],
     );
+  });
+
+  it("animated WebP loops infinitely by default and keeps the legacy bytes", async () => {
+    // The libwebp `WebPAnimEncoder` path replaced Skia's `EncodeAnimated`.
+    // With the default options (loop_count 0 / opaque white background) the
+    // output must stay byte-identical to the previous implementation, so the
+    // hash below pins that regression.
+    const html = `<html><head><style>
+      @keyframes fade { from { opacity: 0 } to { opacity: 1 } }
+      .box { width: 80px; height: 80px; background: #00f; animation-name: fade; }
+    </style></head><body style="margin:0;background:#fff"><div class="box"></div></body></html>`;
+
+    const animated = await render({
+      value: html,
+      width: 120,
+      height: 120,
+      format: "webp",
+      animation: { duration: 300, fps: 10 },
+    });
+    expect(animated.animation).toBe(true);
+    const data = new Uint8Array(animated.data as Uint8Array);
+    const params = webpAnimParams(data);
+    expect(params).not.toBeNull();
+    // 0 = infinite loop, 0xFFFFFFFF = opaque white canvas background.
+    expect(params?.loopCount).toBe(0);
+    expect(params?.bgcolor).toBe(0xffffffff);
+    expect(sha256(data)).toBe(
+      "4ecc75ff99acf161a95eded90a3022ef6de1905fbb100f78a9fbe1ddb1b36164",
+    );
+  });
+
+  it("animation.loop writes a finite loop count into the ANIM chunk", async () => {
+    // `loop: 1` = play once. Only the ANIM chunk differs from the infinite
+    // variant: the frames (count, durations, pixels) stay the same.
+    const html = `<html><head><style>
+      @keyframes fade { from { opacity: 0 } to { opacity: 1 } }
+      .box { width: 80px; height: 80px; background: #00f; animation-name: fade; }
+    </style></head><body style="margin:0;background:#fff"><div class="box"></div></body></html>`;
+
+    const infinite = await render({
+      value: html,
+      width: 120,
+      height: 120,
+      format: "webp",
+      animation: { duration: 300, fps: 10 },
+    });
+    const once = await render({
+      value: html,
+      width: 120,
+      height: 120,
+      format: "webp",
+      animation: { duration: 300, fps: 10, loop: 1 },
+    });
+    expect(once.animation).toBe(true);
+
+    const infiniteData = new Uint8Array(infinite.data as Uint8Array);
+    const onceData = new Uint8Array(once.data as Uint8Array);
+    expect(webpAnimParams(infiniteData)?.loopCount).toBe(0);
+    expect(webpAnimParams(onceData)?.loopCount).toBe(1);
+    // The frame payload is untouched by the loop count.
+    expect(webpFrames(onceData)).toEqual(webpFrames(infiniteData));
+    expect(onceData.byteLength).toBe(infiniteData.byteLength);
+  });
+
+  it("animation.loop accepts a repeat count and clamps negative values", async () => {
+    const html = `<html><head><style>
+      @keyframes fade { from { opacity: 0 } to { opacity: 1 } }
+      .box { width: 80px; height: 80px; background: #00f; animation-name: fade; }
+    </style></head><body style="margin:0;background:#fff"><div class="box"></div></body></html>`;
+
+    const three = await render({
+      value: html,
+      width: 120,
+      height: 120,
+      format: "webp",
+      animation: { duration: 300, fps: 10, loop: 3 },
+    });
+    expect(
+      webpAnimParams(new Uint8Array(three.data as Uint8Array))?.loopCount,
+    ).toBe(3);
+
+    // A negative count is meaningless: it falls back to the infinite default.
+    const negative = await render({
+      value: html,
+      width: 120,
+      height: 120,
+      format: "webp",
+      animation: { duration: 300, fps: 10, loop: -5 },
+    });
+    expect(
+      webpAnimParams(new Uint8Array(negative.data as Uint8Array))?.loopCount,
+    ).toBe(0);
   });
 
   it("sampled @keyframes transform animation moves the element across the frames", async () => {

@@ -49,7 +49,7 @@ Returns a `string` for `svg` format, and `Uint8Array` for all other formats (`pn
 | `speed`     | `number`                                                  | AVIF: `8` / other: `6` | Encoding speed 0–10 (AVIF and JXL). AVIF at 8 is several times faster than 6 for ~15–20% larger files; pass `speed: 6` for the smallest output |
 | `fit`       | `"contain" \| "cover" \| "fill"`                          |    -    | Resize fit strategy                          |
 | `crop`      | `{ x: number, y: number, width: number, height: number }` |    -    | Cropping bounding rectangle                  |
-| `animation` | `boolean`                                                 | `false` | Preserve animation frames where supported    |
+| `animation` | `boolean \| { duration: number; fps?: number; loop?: number }` | `false` | Preserve animation frames where supported. For HTML input, `{ duration, fps, loop }` samples `@keyframes`; `loop` is the repeat count (`0` = infinite = the default, `1` = play once) |
 
 ### Fonts & Styling
 

@@ -6,9 +6,9 @@
 
 #include "skia_utils.h"
 #include "thumbhash.h"
+#include "webp_anim_encoder.h"
 #include "avif/avif.h"
 #include "include/core/SkStream.h"
-#include "include/encode/SkEncoder.h"
 #include "include/encode/SkJpegEncoder.h"
 #include "include/encode/SkPngEncoder.h"
 #include "include/encode/SkWebpEncoder.h"
@@ -227,25 +227,26 @@ EncodeResult encode_frames(const EncodeFrameView* frames, size_t count,
         case RenderFormat::WebP: {
             out.format_name = "webp";
             if (options.animation && count > 1) {
-                std::vector<SkEncoder::Frame> sk_frames;
-                sk_frames.reserve(count);
+                // libwebp `WebPAnimEncoder` 直呼び (loop_count / bgcolor 指定可)。
+                // loop_count=0・bgcolor=白 の既定値は Skia `EncodeAnimated` と
+                // 同一の libwebp 呼び出し列なので、出力は従来とバイト一致する。
+                std::vector<WebpAnimFrame> anim_frames;
+                anim_frames.reserve(count);
                 for (size_t i = 0; i < count; ++i) {
                     if (frames[i].bitmap == nullptr) return out;
-                    sk_frames.push_back({frames[i].bitmap->pixmap(), frames[i].duration});
+                    anim_frames.push_back(
+                        {frames[i].bitmap->pixmap(), frames[i].duration});
                 }
-                SkDynamicMemoryWStream stream;
-                SkWebpEncoder::Options woptions;
-                woptions.fQuality = (int)options.quality;
-                if (options.quality >= 100.0f) {
-                    woptions.fCompression = SkWebpEncoder::Compression::kLossless;
-                } else {
-                    woptions.fCompression = SkWebpEncoder::Compression::kLossy;
-                }
-                if (SkWebpEncoder::EncodeAnimated(
-                        &stream, SkSpan<const SkEncoder::Frame>(sk_frames.data(), sk_frames.size()),
-                        woptions)) {
+                const bool lossless = options.quality >= 100.0f;
+                // Skia の `SkWebpEncoder::Options::fQuality` は int なので、
+                // quality も同じく整数へ切り捨ててから libwebp へ渡す
+                // (Skia と同じ config を作るため)。
+                const float quality = (float)(int)options.quality;
+                out.data = encode_webp_animated(
+                    anim_frames.data(), anim_frames.size(), quality, lossless,
+                    options.animation_loop, options.animation_bgcolor);
+                if (out.data) {
                     out.is_animation = true;
-                    out.data = stream.detachAsData();
                 }
                 return out;
             }

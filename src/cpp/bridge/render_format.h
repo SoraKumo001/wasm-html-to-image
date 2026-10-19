@@ -33,6 +33,12 @@ struct ConverterEncodeOptions {
     int speed = 6;
     bool animation = false;
     FitMode fit = FitMode::Contain;
+    // animated WebP の再生回数 (libwebp の anim_params.loop_count)。
+    // 0 = 無限回 (Skia `SkWebpEncoder::EncodeAnimated` 従来値)。
+    int animation_loop = 0;
+    // animated WebP の canvas背景色 (libwebp の anim_params.bgcolor, 0xAARRGGBB)。
+    // 既定は libwebp と同じ不透明白 (0xFFFFFFFF)。
+    uint32_t animation_bgcolor = 0xFFFFFFFFu;
 };
 
 void html_to_image_log(LogLevel level, const char* message);

@@ -3,11 +3,13 @@
 using namespace emscripten;
 
 // image-opt版 encode_val の改名移設。converter_api_encode (実在・実働) に接続。
+// `animation_loop` は animated WebP の再生回数 (0 = 無限回)。
 val converter_encode_val(ImageConverterInstance* inst, int format, float quality, int speed,
-                         bool animation) {
+                         bool animation, int animation_loop) {
     if (!inst) return val::null();
     int size = 0;
-    const uint8_t* data = converter_api_encode(inst, format, quality, speed, animation, size);
+    const uint8_t* data =
+        converter_api_encode(inst, format, quality, speed, animation, animation_loop, size);
     if (!data || size == 0) return val::null();
     return val(typed_memory_view(size, data));
 }

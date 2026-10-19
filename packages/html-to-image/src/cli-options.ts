@@ -22,6 +22,11 @@ export interface CliFlags {
   animation?: number;
   /** `--animation-fps <n>`; defaults to 15 when `--animation` is set. */
   animationFps?: number;
+  /**
+   * `--animation-loop <n>`; how many times the animated WebP repeats.
+   * Absent means infinite (libwebp loop_count 0 = the historical default).
+   */
+  animationLoop?: number;
 }
 
 /** Default frame rate for `--animation` when `--animation-fps` is omitted. */
@@ -38,27 +43,38 @@ export const DEFAULT_ANIMATION_FPS = 15;
  */
 export interface AnimationResolution {
   /** Resolved `render()` animation option, or absent when disabled/ignored. */
-  animation?: { duration: number; fps: number };
+  animation?: { duration: number; fps: number; loop?: number };
   /** Human-readable reason the flag was dropped; callers warn on stderr. */
   warning?: string;
 }
 
-/** Map `--animation` / `--animation-fps` to the `render()` animation option. */
+/** Map `--animation` / `--animation-fps` / `--animation-loop` to the `render()` animation option. */
 export function resolveAnimation(flags: CliFlags): AnimationResolution {
   if (flags.animation === undefined) {
-    return flags.animationFps === undefined
-      ? {}
-      : { warning: "--animation-fps requires --animation; ignoring." };
+    if (flags.animationFps !== undefined) {
+      return { warning: "--animation-fps requires --animation; ignoring." };
+    }
+    if (flags.animationLoop !== undefined) {
+      return { warning: "--animation-loop requires --animation; ignoring." };
+    }
+    return {};
   }
   if (flags.format !== "webp") {
     return {
       warning: `--animation is only supported for webp output; ignoring (format=${flags.format}).`,
     };
   }
+  // `loop` stays absent unless requested: the render() default (0) is the
+  // historical infinite loop, so the option object keeps its old shape.
+  const loop =
+    flags.animationLoop === undefined
+      ? undefined
+      : Math.max(0, Math.trunc(flags.animationLoop));
   return {
     animation: {
       duration: flags.animation,
       fps: flags.animationFps ?? DEFAULT_ANIMATION_FPS,
+      ...(loop === undefined ? {} : { loop }),
     },
   };
 }

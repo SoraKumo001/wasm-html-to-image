@@ -39,8 +39,9 @@ class ImageConverterInstance {
     ~ImageConverterInstance();
 
     bool load_image(const uint8_t* data, size_t size);
+    // `animation_loop`: animated WebP の再生回数 (0 = 無限回 / libwebp loop_count)。
     const uint8_t* encode(RenderFormat format, float quality, int speed, bool animation,
-                          int& out_size);
+                          int animation_loop, int& out_size);
     const uint8_t* encode(const ConverterEncodeOptions& options, int& out_size);
     bool crop(int x, int y, int width, int height);
     bool resize(int width, int height, FitMode fit = FitMode::Contain);
@@ -68,7 +69,8 @@ void converter_api_destroy_instance(ImageConverterInstance* inst);
 const uint8_t* converter_api_load_image(ImageConverterInstance* inst, const uint8_t* data,
                                         size_t size);
 const uint8_t* converter_api_encode(ImageConverterInstance* inst, int format, float quality,
-                                    int speed, bool animation, int& out_size);
+                                    int speed, bool animation, int animation_loop,
+                                    int& out_size);
 bool converter_api_crop(ImageConverterInstance* inst, int x, int y, int width, int height);
 bool converter_api_resize(ImageConverterInstance* inst, int width, int height, int fit = 0);
 

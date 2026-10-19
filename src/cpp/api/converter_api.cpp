@@ -50,12 +50,14 @@ bool ImageConverterInstance::load_image(const uint8_t* data, size_t size) {
 }
 
 const uint8_t* ImageConverterInstance::encode(RenderFormat format, float quality, int speed,
-                                              bool animation, int& out_size) {
+                                              bool animation, int animation_loop,
+                                              int& out_size) {
     ConverterEncodeOptions options;
     options.format = format;
     options.quality = quality;
     options.speed = speed;
     options.animation = animation;
+    options.animation_loop = animation_loop;
     return encode(options, out_size);
 }
 
@@ -228,12 +230,14 @@ const uint8_t* converter_api_load_image(ImageConverterInstance* inst, const uint
 }
 
 const uint8_t* converter_api_encode(ImageConverterInstance* inst, int format, float quality,
-                                    int speed, bool animation, int& out_size) {
+                                    int speed, bool animation, int animation_loop,
+                                    int& out_size) {
     if (!inst) {
         out_size = 0;
         return nullptr;
     }
-    return inst->encode((RenderFormat)format, quality, speed, animation, out_size);
+    return inst->encode((RenderFormat)format, quality, speed, animation, animation_loop,
+                        out_size);
 }
 
 bool converter_api_crop(ImageConverterInstance* inst, int x, int y, int width, int height) {
