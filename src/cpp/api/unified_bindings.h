@@ -32,4 +32,21 @@ bool satoru_render_to_converter_val(SatoruInstance* satoru, ImageConverterInstan
                                     emscripten::val htmls, int width, int height,
                                     emscripten::val options_val);
 
+// Animated (opacity-only) HTML -> converter frames, additive: appends one
+// frame per sampled style value without touching any existing frames.
+//
+// The animation is defined in the document itself: a `@keyframes <name>`
+// block carrying `opacity` stops, bound to an element via
+// `animation-name: <name>` (or the `animation` shorthand / inline style).
+// `duration_ms`/`fps` drive the sampler (fixed interval + boundary snap);
+// the loop is fixed to infinite and only opacity is animated.
+//
+// Frames are deduped at the style-value level (an unchanged opacity merges
+// its duration into the previous frame) and capped by
+// `k_max_animation_frames` plus `k_max_animation_total_pixel_bytes`.
+// Returns the number of frames appended (0 on failure/no animation).
+int satoru_render_animation_to_converter_val(SatoruInstance* satoru, ImageConverterInstance* converter,
+                                             emscripten::val htmls, int width, int height,
+                                             emscripten::val options_val, int duration_ms, int fps);
+
 #endif  // HTML_TO_IMAGE_UNIFIED_BINDINGS_H

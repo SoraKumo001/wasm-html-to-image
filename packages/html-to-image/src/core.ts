@@ -112,8 +112,16 @@ export interface HtmlToImageOptions extends RenderOptions {
   quality?: number;
   /** Encode speed 0-10, mainly for AVIF (encode stage only; default 8 for AVIF, 6 otherwise). */
   speed?: number;
-  /** Keep animation frames where supported (encode stage only). */
-  animation?: boolean;
+  /**
+   * Animation handling.
+   * - `true`: keep animation frames where supported (image input / encode stage).
+   * - `{ duration, fps }` (HTML input only): sample the document's `@keyframes`
+   *   opacity animation into frames. `duration` is one loop length in ms
+   *   (clamped to 5000), `fps` defaults to 15 (frame count capped at ~75).
+   *   The loop is fixed to infinite and only `opacity` keyframes are animated;
+   *   `transform`/`color` are out of scope.
+   */
+  animation?: boolean | { duration: number; fps?: number };
   /** Crop rectangle (encode stage for image input, render options for HTML). */
   crop?: { x: number; y: number; width: number; height: number };
   /** Resize strategy (encode stage for image input, render options for HTML). */

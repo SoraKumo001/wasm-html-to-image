@@ -27,6 +27,36 @@ const near = (a: Rgb, b: Rgb, tol = 12) =>
 const BLUE: Rgb = [0, 0, 255];
 const RED: Rgb = [255, 0, 0];
 
+// One 32-bit hash per ANMF (animation frame) chunk in a RIFF/WEBP container.
+// Distinct hashes prove the sampled frames actually differ in pixel content.
+function webpFrameHashes(data: Uint8Array): number[] {
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  const fourcc = (o: number) =>
+    String.fromCharCode(
+      view.getUint8(o),
+      view.getUint8(o + 1),
+      view.getUint8(o + 2),
+      view.getUint8(o + 3),
+    );
+  if (data.byteLength < 12 || fourcc(0) !== "RIFF" || fourcc(8) !== "WEBP") {
+    return [];
+  }
+  const hashes: number[] = [];
+  let o = 12;
+  while (o + 8 <= data.byteLength) {
+    const size = view.getUint32(o + 4, true);
+    if (fourcc(o) === "ANMF") {
+      let hash = 0;
+      for (let i = o + 8; i < o + 8 + size && i < data.byteLength; i++) {
+        hash = (hash * 31 + data[i]) >>> 0;
+      }
+      hashes.push(hash);
+    }
+    o += 8 + size + (size & 1);
+  }
+  return hashes;
+}
+
 describe("regression: layout and paint probes", () => {
   it("column flex container with auto height honours min-height (flex-grow fills it)", async () => {
     const { at } = await renderPng(
@@ -489,5 +519,42 @@ describe("regression: layout and paint probes", () => {
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
+  });
+
+  it("sampled @keyframes opacity animation yields a multi-frame animated WebP", async () => {
+    // The document carries the animation; `animation: { duration, fps }` asks
+    // the renderer to sample it into frames (loop fixed to infinite, opacity
+    // only). Without the option the same document is a single static frame.
+    const html = `<html><head><style>
+      @keyframes fade { from { opacity: 0 } to { opacity: 1 } }
+      .box { width: 80px; height: 80px; background: #00f; animation-name: fade; }
+    </style></head><body style="margin:0;background:#fff"><div class="box"></div></body></html>`;
+
+    const animated = await render({
+      value: html,
+      width: 120,
+      height: 120,
+      format: "webp",
+      animation: { duration: 300, fps: 10 },
+    });
+    expect(animated.animation).toBe(true);
+    const frames = webpFrameHashes(
+      new Uint8Array(animated.data as Uint8Array),
+    );
+    expect(frames.length).toBeGreaterThan(1);
+    // Fade frames must have distinct pixel content (style override + paint
+    // sync applied), not just distinct frame metadata.
+    expect(new Set(frames).size).toBe(frames.length);
+
+    const still = await render({
+      value: html,
+      width: 120,
+      height: 120,
+      format: "webp",
+    });
+    expect(still.animation).toBeFalsy();
+    expect(webpFrameHashes(new Uint8Array(still.data as Uint8Array))).toEqual(
+      [],
+    );
   });
 });

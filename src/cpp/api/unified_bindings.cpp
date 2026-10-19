@@ -1,8 +1,19 @@
 #include "unified_bindings.h"
 
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
+#include <limits>
 #include <memory>
 
+#include <litehtml/document.h>
+#include <litehtml/element.h>
+#include <litehtml/render_item.h>
+
 #include "../common/skia_encode.h"
+#include "core/animation_sampler.h"
+#include "core/container_skia.h"
+#include "renderers/png_renderer.h"
 #include "converter_api.h"
 #include "satoru_api.h"
 #include "satoru_bindings.h"
@@ -84,4 +95,124 @@ bool satoru_render_to_converter_val(SatoruInstance* satoru, ImageConverterInstan
     frame.bitmap = std::move(bitmap);
     converter->frames.push_back(std::move(frame));
     return true;
+}
+
+namespace {
+
+// Recursively find the element whose inline `style` binds `name_l` via the
+// `animation`/`animation-name` property. Used when no <style> selector binds
+// the keyframes.
+litehtml::element::ptr find_inline_animation_target(const litehtml::element::ptr& el,
+                                                    const std::string& name_l) {
+    if (!el) return nullptr;
+    const char* style = el->get_attr("style");
+    if (style) {
+        const std::string s = html_to_image::detail::to_lower(style);
+        if (s.find("animation") != std::string::npos && s.find(name_l) != std::string::npos) {
+            return el;
+        }
+    }
+    for (const auto& child : el->children()) {
+        if (auto found = find_inline_animation_target(child, name_l)) return found;
+    }
+    return nullptr;
+}
+
+}  // namespace
+
+int satoru_render_animation_to_converter_val(SatoruInstance* satoru, ImageConverterInstance* converter,
+                                             val htmls, int width, int height, val options_val,
+                                             int duration_ms, int fps) {
+    if (!satoru || !converter) return 0;
+    std::vector<std::string> html_vector = val_to_html_vector(htmls);
+    if (html_vector.empty()) return 0;
+    const std::string& html = html_vector[0];
+
+    SatoruRenderOptions render_options;
+    parse_satoru_options(render_options, options_val);
+
+    const html_to_image::AnimationSpec spec = html_to_image::parse_opacity_animation(html);
+    if (!spec.valid) return 0;
+
+    // Ensure the document is laid out for exactly this input. After resource
+    // resolution this is normally a no-op (the collect phase already built it).
+    if (!satoru->document_ready_for(html, width, height, render_options.mediaType)) {
+        satoru->collect_resources(html, width, height, render_options.mediaType);
+    }
+    if (!satoru->doc || !satoru->render_container || !satoru->doc->root() ||
+        !satoru->doc->root_render()) {
+        return 0;
+    }
+
+    // Resolve the animated element: selector from <style>, else inline style.
+    litehtml::element::ptr target;
+    if (!spec.selector.empty()) {
+        target = satoru->doc->root()->select_one(spec.selector);
+    }
+    if (!target) {
+        target = find_inline_animation_target(satoru->doc->root(),
+                                              html_to_image::detail::to_lower(spec.name));
+    }
+    if (!target) return 0;
+
+    const char* base_style_attr = target->get_attr("style");
+    const std::string base_style = base_style_attr ? base_style_attr : "";
+
+    const std::vector<html_to_image::FrameSample> schedule =
+        html_to_image::build_frame_schedule(duration_ms, fps);
+
+    const uint64_t per_frame_bytes =
+        (uint64_t)std::max(width, 1) * (uint64_t)std::max(height, 1) * 4;
+    uint64_t total_bytes = 0;
+    float last_opacity = std::numeric_limits<float>::quiet_NaN();
+    int appended = 0;
+
+    for (const auto& sample : schedule) {
+        if ((int)converter->frames.size() >= html_to_image::k_max_animation_frames) break;
+
+        const float opacity = html_to_image::sample_opacity(spec, sample.progress);
+
+        // Dedupe at the style-value level (before any draw): an unchanged
+        // opacity merges this frame's duration into the previous frame.
+        if (!std::isnan(last_opacity) && std::fabs(opacity - last_opacity) < 1e-3f &&
+            !converter->frames.empty()) {
+            converter->frames.back().duration += sample.duration_ms;
+            continue;
+        }
+
+        if (total_bytes + per_frame_bytes > html_to_image::k_max_animation_total_pixel_bytes) break;
+
+        char buf[32];
+        std::snprintf(buf, sizeof(buf), "%.4f", opacity);
+        std::string style = base_style;
+        style += ";opacity:";
+        style += buf;
+
+        target->set_attr("style", style.c_str());
+        target->refresh_styles();
+        target->compute_styles(false);
+        // Paint-phase sync: re-collecting styled (now positioned at opacity<1)
+        // nodes keeps them in the positioned/stacking pass, matching a full
+        // re-render without re-parsing.
+        satoru->doc->root_render()->fetch_positioned();
+        satoru->doc->root_render()->sort_positioned();
+
+        SkBitmap bitmap;
+        if (!renderDocumentToBitmap(satoru, width, height, render_options, bitmap)) break;
+
+        total_bytes += per_frame_bytes;
+        ConverterImageFrame frame;
+        frame.bitmap = std::move(bitmap);
+        frame.duration = sample.duration_ms;
+        converter->frames.push_back(std::move(frame));
+        last_opacity = opacity;
+        appended++;
+    }
+
+    if (converter->frames.empty()) return 0;
+    converter->original_width = converter->frames[0].bitmap.width();
+    converter->original_height = converter->frames[0].bitmap.height();
+    converter->original_animation = converter->frames.size() > 1;
+    converter->original_format = "png";
+    return appended;
 }

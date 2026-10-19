@@ -63,6 +63,12 @@ export interface Orchestration {
   quality: number;
   speed: number;
   animation: boolean;
+  /**
+   * HTML animated-output request (`animation: { duration, fps }`). When set,
+   * the HTML pipeline samples the document's `@keyframes` opacity animation
+   * into converter frames before encoding. Loop is fixed to infinite.
+   */
+  animationFrames: { duration: number; fps?: number } | undefined;
   width: number;
   height: number | undefined;
   crop: HtmlToImageOptions["crop"];
@@ -129,7 +135,6 @@ export function createOrchestration(
     format = "png",
     quality = 85,
     speed: speedOption,
-    animation = false,
     width,
     height,
     crop,
@@ -160,6 +165,15 @@ export function createOrchestration(
     pdfHeader,
     pdfFooter,
   } = options;
+  // `animation` accepts a boolean (image input: keep frames) or, for HTML
+  // input, an object requesting keyframe sampling. The object form turns on
+  // the boolean flag for the encode stage and enables the frame path.
+  const rawAnimation = options.animation;
+  const animationFrames =
+    rawAnimation !== null && typeof rawAnimation === "object"
+      ? rawAnimation
+      : undefined;
+  const animation = animationFrames ? true : rawAnimation === true;
   const speed = speedOption ?? defaultSpeed(format);
   const fmtInt = FORMAT_INT[format];
   const mediaTypeInt = mediaType === "print" ? 1 : 0;
@@ -252,6 +266,7 @@ export function createOrchestration(
     quality,
     speed,
     animation,
+    animationFrames,
     width,
     height,
     crop,
@@ -540,6 +555,7 @@ export async function tryRunHtmlInstance(
     quality,
     speed,
     animation,
+    animationFrames,
     width,
     height,
     baseUrl,
@@ -625,8 +641,34 @@ export async function tryRunHtmlInstance(
     const renderStart = now();
     const cInst = module.converter_create_instance();
     try {
+      // Animated HTML: sample the document's @keyframes opacity animation
+      // straight into the converter's frames (additive). Falls back to the
+      // single-frame path when no frames were produced.
+      let renderedFrames = false;
+      const renderAnimationToConverter =
+        module.satoru_render_animation_to_converter;
+      if (
+        animationFrames &&
+        typeof renderAnimationToConverter === "function"
+      ) {
+        const frames = (await renderAnimationToConverter(
+          sInst,
+          cInst,
+          htmls,
+          width,
+          height ?? 0,
+          satoruOpts,
+          animationFrames.duration,
+          animationFrames.fps ?? 15,
+        )) as number;
+        addTime("render", now() - renderStart);
+        renderedFrames = frames > 0;
+      }
+
       const renderToConverter = module.satoru_render_to_converter;
-      if (typeof renderToConverter === "function") {
+      if (renderedFrames) {
+        // converter already holds the sampled frames.
+      } else if (typeof renderToConverter === "function") {
         // Bitmap goes straight into the converter: no PNG encode/decode.
         const ok = await renderToConverter(
           sInst,
@@ -659,10 +701,6 @@ export async function tryRunHtmlInstance(
       }
       const outWidth = module.converter_get_width?.(cInst) ?? width;
       const outHeight = module.converter_get_height?.(cInst) ?? height ?? 0;
-      const outAnimation =
-        module.converter_is_animation?.(cInst) ?? animation;
-      const outFormat =
-        (module.converter_get_format?.(cInst) as OutputFormat) || format;
 
       const encodeStart = now();
       const out = (await encodeBinding(
@@ -676,6 +714,12 @@ export async function tryRunHtmlInstance(
       if (out == null) {
         throw logged("wasm-html-to-image: failed to encode image");
       }
+      // Read the post-encode metadata: `is_animation`/`get_format` are only
+      // meaningful after `converter_encode` has run.
+      const outAnimation =
+        module.converter_is_animation?.(cInst) ?? animation;
+      const outFormat =
+        (module.converter_get_format?.(cInst) as OutputFormat) || format;
       addTime("total", now() - t0);
       emitLog(LogLevel.Info, `render done: format=${format}`);
       deliverReport();

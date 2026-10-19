@@ -128,6 +128,13 @@ export interface HtmlToImageModule {
    * Returns false on failure. Probed at runtime; PNG path is the fallback.
    */
   satoru_render_to_converter?: (...args: unknown[]) => boolean;
+  /**
+   * Animated (opacity-only) HTML render into a converter's frames, additive:
+   * `(satoruInst, converterInst, htmls, width, height, options, durationMs, fps)`.
+   * Frames come from `@keyframes` + `animation` in the document (opacity only,
+   * loop infinite); returns the number of frames appended (0 on failure).
+   */
+  satoru_render_animation_to_converter?: (...args: unknown[]) => number;
   /** Image encode wrapper (positional: instance, format, quality, speed, animation). */
   converter_encode?: (...args: unknown[]) => unknown;
   /**
