@@ -31,6 +31,36 @@ std::shared_ptr<render_item> render_item_grid::init()
     std::vector<std::shared_ptr<render_item>> items;
     decltype(m_children) current_inlines;
 
+    // CSS columns break between the blocks inside a list, but this emulation only distributes
+    // direct children. A list container (ol/ul/dl) holding all items would stay in one column, so
+    // its items are hoisted into the flow instead. Each item gets an anonymous wrapper carrying
+    // the container's left indent, so list markers keep their place; numbering comes from the DOM
+    // parent and is unaffected.
+    auto hoist_list_items = [&](const std::shared_ptr<render_item>& container,
+                                std::vector<std::shared_ptr<render_item>>& out) -> bool
+    {
+        const char* tag = container->src_el()->get_tagName();
+        if (!tag || !(!strcmp(tag, "ol") || !strcmp(tag, "ul") || !strcmp(tag, "dl"))) return false;
+        if (container->children().size() < 2) return false;
+        const auto& css = container->src_el()->css();
+        auto doc = src_el()->get_document();
+        pixel_t indent = doc->to_pixels(css.get_padding().left, css.get_font_metrics(), 0) +
+                         doc->to_pixels(css.get_margins().left, css.get_font_metrics(), 0);
+        for (const auto& child : container->children())
+        {
+            auto anon_el = std::make_shared<el_div>(doc);
+            anon_el->parent(src_el());
+            string style = "display: block; padding-left: " + std::to_string((int)indent) + "px";
+            anon_el->set_attr("style", style.c_str());
+            anon_el->compute_styles(false);
+            auto anon_ri = std::make_shared<render_item_block>(anon_el);
+            anon_ri->add_child(child);
+            child->parent(anon_ri);
+            out.push_back(anon_ri->init());
+        }
+        return true;
+    };
+
     auto flush_inlines = [&]()
     {
         if(!current_inlines.empty())
@@ -92,7 +122,9 @@ std::shared_ptr<render_item> render_item_grid::init()
         {
             flush_inlines();
             el->parent(shared_from_this());
-            items.push_back(el->init());
+            auto inited = el->init();
+            if (flow_split && hoist_list_items(inited, items)) continue;
+            items.push_back(inited);
         }
     }
     flush_inlines();

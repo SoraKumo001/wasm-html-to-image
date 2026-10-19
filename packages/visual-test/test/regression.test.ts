@@ -341,4 +341,15 @@ describe("regression: layout and paint probes", () => {
     const opened = await render({ value: `<html><body style="margin:0">${body(" open")}</body></html>`, width: 100, format: "png" });
     expect(opened.height).toBeGreaterThan(200);
   });
+  it("multicol splits a list's items across columns instead of keeping the list in one column", async () => {
+    const li = Array.from({ length: 10 }, (_, i) => `<li style="height:30px">r ${i}</li>`).join("");
+    for (const style of ["column-count:2", "column-width:200px"]) {
+      const r = await render({
+        value: `<html><body style="margin:0"><div style="${style}"><ol style="margin:0">${li}</ol></div></body></html>`,
+        width: 600,
+        format: "png",
+      });
+      expect(r.height).toBe(150); // 10 items x 30px in 2 balanced columns (was 300 in one column)
+    }
+  });
 });
