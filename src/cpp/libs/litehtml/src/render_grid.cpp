@@ -711,6 +711,24 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             }
         }
 
+        else if (cs.index > 0 && rs.index <= 0)
+        {
+            // Definite column, auto row: sparse packing moves to the next row when the column is
+            // behind the cursor, then down until the cells are free.
+            if (item_col_start < curr_col) curr_row++;
+            curr_col = item_col_start;
+            for (;;)
+            {
+                bool conflict = false;
+                for (int r = curr_row; r < curr_row + item_row_span && !conflict; r++)
+                    for (int c = item_col_start; c < item_col_start + item_col_span; c++)
+                        if (is_occupied(r, c)) { conflict = true; break; }
+                if (!conflict) break;
+                curr_row++;
+            }
+            item_row_start = curr_row;
+        }
+
         mark_occupied(item_row_start, item_col_start, item_row_span, item_col_span);
         
         grid_item item;

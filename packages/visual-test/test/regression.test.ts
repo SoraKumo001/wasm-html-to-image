@@ -254,7 +254,7 @@ describe("regression: layout and paint probes", () => {
     const lines = await renderPng(
       g(
         "--c:[a] 100px [b] 1fr [c];grid-template-columns:var(--c)",
-        `<div style="grid-column:b / c;background:#f00"></div><div style="grid-column:a / b;background:#00f"></div>`,
+        `<div style="grid-column:b / c;grid-row:1;background:#f00"></div><div style="grid-column:a / b;grid-row:1;background:#00f"></div>`,
       ),
       320,
       100,
@@ -384,5 +384,13 @@ describe("regression: layout and paint probes", () => {
     expect(await h('<textarea rows="5" style="display:block"></textarea>')).toBe(81);
     expect(await h('<select style="display:block"><option>One</option><option>Two</option></select>')).toBeGreaterThan(15);
     expect(await h('<input type="checkbox" style="display:block;margin:0">')).toBe(13);
+  });
+  it("grid: definite column with auto row is auto-placed into a free row", async () => {
+    const r = await render({
+      value: `<html><body style="margin:0"><div style="display:grid;grid-template-columns:repeat(24,1fr);column-gap:8px;width:960px"><div style="grid-column:1 / span 16;height:100px"></div><div style="grid-column:17 / span 8;grid-row:1 / span 3;height:100px"></div><div style="grid-column:1 / span 1;height:50px"></div></div></body></html>`,
+      width: 960,
+      format: "png",
+    });
+    expect(r.height).toBe(150); // third item goes to row 2 (was drawn over the first at 100)
   });
 });
