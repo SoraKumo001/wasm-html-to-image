@@ -18,6 +18,49 @@ export interface CliFlags {
   quality: number;
   /** Explicit `--base-url`; absent means "let the source decide". */
   baseUrl?: string;
+  /** `--animation <duration-ms>`; absent means "no keyframe animation". */
+  animation?: number;
+  /** `--animation-fps <n>`; defaults to 15 when `--animation` is set. */
+  animationFps?: number;
+}
+
+/** Default frame rate for `--animation` when `--animation-fps` is omitted. */
+export const DEFAULT_ANIMATION_FPS = 15;
+
+/**
+ * Animation flags resolved against the output format.
+ *
+ * Animated WebP is the only animated output the pipeline supports, so
+ * `--animation` is ignored (with a warning) for every other format. The
+ * boolean `animation: true` image-input path is intentionally not reachable
+ * from the CLI: there the object form requests `@keyframes` sampling, which
+ * is what `--animation` means.
+ */
+export interface AnimationResolution {
+  /** Resolved `render()` animation option, or absent when disabled/ignored. */
+  animation?: { duration: number; fps: number };
+  /** Human-readable reason the flag was dropped; callers warn on stderr. */
+  warning?: string;
+}
+
+/** Map `--animation` / `--animation-fps` to the `render()` animation option. */
+export function resolveAnimation(flags: CliFlags): AnimationResolution {
+  if (flags.animation === undefined) {
+    return flags.animationFps === undefined
+      ? {}
+      : { warning: "--animation-fps requires --animation; ignoring." };
+  }
+  if (flags.format !== "webp") {
+    return {
+      warning: `--animation is only supported for webp output; ignoring (format=${flags.format}).`,
+    };
+  }
+  return {
+    animation: {
+      duration: flags.animation,
+      fps: flags.animationFps ?? DEFAULT_ANIMATION_FPS,
+    },
+  };
 }
 
 /**
@@ -64,6 +107,8 @@ export async function buildRenderOptions(
   const source = isUrlInput(input)
     ? { url: input }
     : await readInput(input);
+  const { animation, warning } = resolveAnimation(flags);
+  if (warning) console.warn(`wasm-html-to-image: ${warning}`);
   return {
     width: flags.width,
     height: flags.height,
@@ -71,5 +116,6 @@ export async function buildRenderOptions(
     quality: flags.quality,
     ...source,
     ...(flags.baseUrl !== undefined ? { baseUrl: flags.baseUrl } : {}),
+    ...(animation ? { animation } : {}),
   };
 }

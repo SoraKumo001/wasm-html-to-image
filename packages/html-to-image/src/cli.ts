@@ -49,6 +49,16 @@ program
     "--base-url <url>",
     "base URL for relative resources (URL input: defaults to the post-redirect document URL; file input: defaults to the file's directory)",
   )
+  .option(
+    "--animation <duration-ms>",
+    "sample the document's @keyframes opacity animation into an animated WebP; one loop duration in ms (webp output only; loop is fixed to infinite)",
+    (v) => parseInt(v, 10),
+  )
+  .option(
+    "--animation-fps <n>",
+    "animation frame rate (default 15, capped at ~75 frames total; requires --animation)",
+    (v) => parseInt(v, 10),
+  )
   .action(async (input: string, options: CliFlags) => {
     try {
       const format = String(options.format).toLowerCase();
@@ -80,6 +90,8 @@ program
         format,
         quality: options.quality,
         baseUrl: options.baseUrl,
+        animation: options.animation,
+        animationFps: options.animationFps,
       };
 
       const result = await render(await buildRenderOptions(input, flags));

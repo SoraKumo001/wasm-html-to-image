@@ -29,6 +29,8 @@ npx wasm-html-to-image <input> [options]
 | `--format <format>`  |  `-f`  |     `png`     | 出力形式 (`svg`, `png`, `pdf`, `jpeg`, `webp`, `avif`, `jxl`, `raw`, `thumbhash`) |
 | `--quality <number>` |  `-q`  |     `85`      | 圧縮品質 (0〜100、エンコード形式のみ有効)                                  |
 | `--base-url <url>`   |   -    | 入力から自動  | 相対リソース解決のベース URL。URL 入力ではリダイレクト後の URL、ファイル入力ではそのディレクトリが既定。明示指定時はそれを優先 |
+| `--animation <duration-ms>` | - | 無効 | `@keyframes` の **opacity** アニメーションをサンプリングしてアニメーション WebP を出力（1 ループの長さを ms で指定、`webp` 出力時のみ有効。ループは無限固定、5000ms にクランプ） |
+| `--animation-fps <n>` | - | `15` | アニメーションのサンプリング fps（`--animation` 指定時に有効。上限約 75 フレーム） |
 
 ---
 
@@ -56,4 +58,10 @@ npx wasm-html-to-image banner.png -o banner.avif -w 800 -f avif -q 80
 
 ```bash
 npx wasm-html-to-image invoice.html -o invoice.pdf -w 800 -f pdf
+```
+
+### 5. HTML の opacity アニメーションをアニメーション WebP に変換
+
+```bash
+npx wasm-html-to-image loader.html -o loader.webp -f webp --animation 2000 --animation-fps 20
 ```

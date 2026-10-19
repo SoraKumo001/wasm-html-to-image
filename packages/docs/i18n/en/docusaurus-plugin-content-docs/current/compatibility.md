@@ -33,6 +33,8 @@ Supported input types, output formats, CSS properties, and runtime environments.
 | `svg`       | `string`     | Skia vector stream                             | Wraps in `<image>` SVG        |
 | `pdf`       | `Uint8Array` | SkPDFDocument vector PDF                       | Single-page centered PDF      |
 
+> `webp` produces an animated WebP when `animation: { duration, fps }` (CLI: `--animation`) is set. Only `opacity` `@keyframes` are sampled; the loop is fixed to infinite with a default of 15 fps and caps of 5 s (`duration` is clamped to 5000 ms) / ~75 frames.
+
 ---
 
 ## 2. CSS & Layout Features
@@ -55,7 +57,7 @@ Supported input types, output formats, CSS properties, and runtime environments.
 `wasm-html-to-image` is a lightweight static renderer based on **litehtml** and **Skia**, not a headless browser. Keep the following constraints in mind when writing templates:
 
 1. **NO JavaScript**: `<script>` tags, DOM event listeners, and DOM APIs do not run.
-2. **NO CSS Animations/Transitions**: `@keyframes` and `transition` are not evaluated dynamically; only static styles are painted.
+2. **Partial CSS Animation Support**: `transition` is not evaluated. `@keyframes` are ignored by default (only static styles paint), but passing `animation: { duration, fps }` (CLI: `--animation`) samples **`opacity` `@keyframes` only** into an animated WebP. The loop is fixed to infinite; defaults are 15 fps with caps of 5 s (`duration` is clamped to 5000 ms) / ~75 frames. Animations other than `opacity` (e.g. `transform`, `color`) are out of scope.
 3. **NO Canvas Scripting**: `<canvas>` element 2D/WebGL contexts do not execute. Use inline `<svg>` or CSS shapes instead.
 4. **NO Interactive States**: `:hover`, `:active`, and `:focus` states do not trigger.
 5. **NO Browser Web Storage**: `window`, `document`, `localStorage`, and `IndexedDB` are unavailable.
