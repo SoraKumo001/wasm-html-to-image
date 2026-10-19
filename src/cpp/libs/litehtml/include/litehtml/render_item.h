@@ -78,6 +78,11 @@ namespace litehtml
         pixel_t m_cached_parent_width = -1;
         bool m_is_measured = false;
         bool m_measured_once = false;
+    public:
+        // Memo of pure width queries (table intrinsic-size probes) valid for one layout pass.
+        unsigned m_query_epoch = ~0u;
+        std::vector<std::pair<containing_block_context, pixel_t>> m_query_cache;
+    protected:
         bool m_placed_once = false;
         int m_cached_bidi_base_level = -1;
         int m_cached_bidi_level = 0;

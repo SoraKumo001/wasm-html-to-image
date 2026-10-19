@@ -58,7 +58,8 @@ namespace litehtml
 		// Counts one measure() call; true once the per-pass budget is used up (see render_item::measure).
 		bool measure_budget_exhausted() { return ++m_measure_calls > k_measure_budget; }
 		bool measure_budget_over() const { return m_measure_calls > k_measure_budget; }
-		void reset_measure_budget() { m_measure_calls = 0; }
+		void reset_measure_budget() { m_measure_calls = 0; ++m_layout_epoch; }
+		unsigned layout_epoch() const { return m_layout_epoch; }
 		typedef std::shared_ptr<document>	ptr;
 		typedef std::weak_ptr<document>		weak_ptr;
 	private:
@@ -79,6 +80,7 @@ namespace litehtml
 		media_query_list_list::vector		m_media_lists;
 		media_features						m_media;
 		long								m_measure_calls = 0;
+		unsigned							m_layout_epoch = 0;
 		static constexpr long				k_measure_budget = 1000000;
 		string								m_lang;
 		string								m_culture;

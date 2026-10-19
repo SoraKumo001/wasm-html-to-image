@@ -10,8 +10,26 @@
 // reports its inline size (physical height) from measure(), but the column needs its block size.
 static litehtml::pixel_t measure_cell_width(const std::shared_ptr<litehtml::render_item>& el, const litehtml::containing_block_context& cb, litehtml::formatting_context* fmt_ctx)
 {
+    const bool horizontal = el->css().get_writing_mode() == litehtml::writing_mode_horizontal_tb;
+    // The probe result is a pure function of (element, cb) within a layout pass, and the cell is
+    // measured again for real afterwards; memoizing it keeps nested tables from re-probing the same
+    // subtree at every level (3^depth).
+    litehtml::document* doc = el->src_el()->get_document().get();
+    if (horizontal)
+    {
+        if (el->m_query_epoch != doc->layout_epoch())
+        {
+            el->m_query_epoch = doc->layout_epoch();
+            el->m_query_cache.clear();
+        }
+        for (auto& e : el->m_query_cache)
+            if (e.first == cb) return e.second;
+    }
     litehtml::pixel_t inline_size = el->measure(cb, fmt_ctx);
-    return el->css().get_writing_mode() == litehtml::writing_mode_horizontal_tb ? inline_size : el->width();
+    if (!horizontal) return el->width();
+    if (el->m_query_cache.size() >= 6) el->m_query_cache.erase(el->m_query_cache.begin());
+    el->m_query_cache.emplace_back(cb, inline_size);
+    return inline_size;
 }
 
 litehtml::render_item_table::render_item_table(std::shared_ptr<element> _src_el) :
