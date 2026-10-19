@@ -308,6 +308,59 @@ void document::create_node(void* gnode, elements_list& elements, bool parseTextN
 						}
 					);
 				}
+				if (!strcmp(tag, "input"))
+				{
+					// <input> is a void element: give its value / placeholder a text child so it is drawn.
+					string type = ret->get_attr("type", "text");
+					for (auto& c : type) c = (char)tolower((unsigned char)c);
+					const char* value = ret->get_attr("value");
+					const char* placeholder = ret->get_attr("placeholder");
+					string text;
+					bool is_placeholder = false;
+					if (type == "submit" || type == "button" || type == "reset")
+					{
+						text = value ? value : (type == "submit" ? "Submit" : (type == "reset" ? "Reset" : ""));
+					}
+					else if (type == "text" || type == "search" || type == "email" || type == "url" || type == "tel" ||
+							 type == "number" || type == "password")
+					{
+						if (value && *value)
+						{
+							text = value;
+							if (type == "password")
+							{
+								// one bullet (U+2022) per character
+								size_t n = 0;
+								for (const char* q = value; *q; q++) if (((unsigned char)*q & 0xC0) != 0x80) n++;
+								text.clear();
+								for (size_t k = 0; k < n; k++) text += "\xE2\x80\xA2";
+							}
+						}
+						else if (placeholder && *placeholder)
+						{
+							text = placeholder;
+							is_placeholder = true;
+						}
+					}
+					if (!text.empty())
+					{
+						auto txt = std::make_shared<el_text>(text.c_str(), shared_from_this());
+						if (is_placeholder)
+						{
+							element::ptr span = create_element("span", -1);
+							if (span)
+							{
+								span->set_attr("style", "color:#757575");
+								span->appendChild(txt);
+								ret->appendChild(span);
+							}
+						}
+						else
+						{
+							ret->appendChild(txt);
+						}
+					}
+				}
 				elements.push_back(ret);
 			}
 		} else

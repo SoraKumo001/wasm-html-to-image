@@ -370,4 +370,12 @@ describe("regression: layout and paint probes", () => {
     });
     expect(r.height).toBe(42); // 2 x 21px default control height
   });
+  it("input value / placeholder / button label text is drawn", async () => {
+    const draw = async (attrs: string) =>
+      Buffer.from((await render({ value: `<html><body style="margin:0"><input ${attrs}></body></html>`, width: 200, format: "png" })).data).toString("base64");
+    const empty = await draw('type="text"');
+    expect(await draw('type="text" value="WWWW"')).not.toBe(empty);
+    expect(await draw('type="text" placeholder="WWWW"')).not.toBe(empty);
+    expect(await draw('type="submit" value="WWWW"')).not.toBe(await draw('type="submit" value=""'));
+  });
 });
