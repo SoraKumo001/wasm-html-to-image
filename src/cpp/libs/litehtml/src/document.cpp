@@ -596,7 +596,7 @@ pixel_t document::render( pixel_t max_width, render_type rt )
 			m_root_render->render_positioned(rt);
 		} else
 		{
-			ret = m_root_render->measure(cb_context, nullptr); m_root_render->place(0, 0, cb_context, nullptr); anchor_vertical_rl_root(m_root_render, viewport.width);
+			reset_measure_budget(); ret = m_root_render->measure(cb_context, nullptr); m_root_render->place(0, 0, cb_context, nullptr); anchor_vertical_rl_root(m_root_render, viewport.width);
 			
 			// Container Queries support: 
 			// After the first layout, container sizes are known.
@@ -617,7 +617,7 @@ pixel_t document::render( pixel_t max_width, render_type rt )
 			}
 			
 			// Second pass
-			ret = m_root_render->measure(cb_context, nullptr); m_root_render->place(0, 0, cb_context, nullptr); anchor_vertical_rl_root(m_root_render, viewport.width);
+			reset_measure_budget(); ret = m_root_render->measure(cb_context, nullptr); m_root_render->place(0, 0, cb_context, nullptr); anchor_vertical_rl_root(m_root_render, viewport.width);
 			}
 
 			if(m_root_render->fetch_positioned())

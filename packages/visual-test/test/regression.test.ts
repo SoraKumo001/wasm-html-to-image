@@ -324,4 +324,14 @@ describe("regression: layout and paint probes", () => {
     for (let i = 0; i < img.data.length; i += 4) if (img.data[i + 3] > 0 && img.data[i] < 128) dark++;
     expect(dark).toBeGreaterThan(100);
   });
+  it("deeply nested flex-wrap trees finish in bounded time (layout work budget)", async () => {
+    const nest = (d: number): string =>
+      d === 0
+        ? "<button>x</button>"
+        : `<div style="display:flex;flex-wrap:wrap"><div style="flex:100%;max-width:100%;display:flex;flex-wrap:wrap">${nest(d - 1)}<span>a</span></div></div>`;
+    const t0 = Date.now();
+    const r = await render({ value: `<html><body>${nest(16)}</body></html>`, width: 600, format: "png" });
+    expect(r.height).toBeGreaterThan(100);
+    expect(Date.now() - t0).toBeLessThan(30000); // exponential before: minutes at this depth
+  }, 60000);
 });

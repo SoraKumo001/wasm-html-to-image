@@ -48,9 +48,20 @@ litehtml::pixel_t litehtml::render_item::measure(
                    : m_pos.height + content_offset_height();
     }
 
+    // Safety net for pathological nesting (deep flex/table trees re-measure every child several
+    // times per level, i.e. exponentially). Once a layout pass has used its measure budget, an
+    // element that already has a measured state keeps it instead of being measured again, which
+    // bounds the work at the cost of an approximate layout.
+    if (m_measured_once && src_el()->get_document()->measure_budget_exhausted()) {
+        return css().get_writing_mode() == writing_mode_horizontal_tb
+                   ? m_pos.width + content_offset_width()
+                   : m_pos.height + content_offset_height();
+    }
+
     m_cached_cb_context = containing_block_size;
     m_self_size = calculate_containing_block_context(containing_block_size);
     m_is_measured = true;
+    m_measured_once = true;
 
     pixel_t measured_size = 0;
     if (src_el()->is_block_formatting_context() || !fmt_ctx) {
@@ -100,6 +111,14 @@ void litehtml::render_item::place(pixel_t x, pixel_t y,
 
     m_pos.x = x + content_left;
     m_pos.y = y + content_top;
+
+    // Same safety net as in measure(): children are positioned relative to their parent, so once
+    // the layout budget is gone an already placed subtree is left as it is instead of being laid
+    // out again (the re-layout chain is what blows up on deeply nested flex/table trees).
+    if (m_placed_once && src_el()->get_document()->measure_budget_over()) {
+        return;
+    }
+    m_placed_once = true;
 
     m_cached_cb_context.width = containing_block_size.width;
     m_cached_cb_context.height = containing_block_size.height;

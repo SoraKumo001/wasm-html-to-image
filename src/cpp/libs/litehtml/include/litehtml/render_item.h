@@ -77,6 +77,8 @@ namespace litehtml
         containing_block_context m_self_size;
         pixel_t m_cached_parent_width = -1;
         bool m_is_measured = false;
+        bool m_measured_once = false;
+        bool m_placed_once = false;
         int m_cached_bidi_base_level = -1;
         int m_cached_bidi_level = 0;
 

@@ -55,6 +55,10 @@ namespace litehtml
 	class document : public std::enable_shared_from_this<document>
 	{
 	public:
+		// Counts one measure() call; true once the per-pass budget is used up (see render_item::measure).
+		bool measure_budget_exhausted() { return ++m_measure_calls > k_measure_budget; }
+		bool measure_budget_over() const { return m_measure_calls > k_measure_budget; }
+		void reset_measure_budget() { m_measure_calls = 0; }
 		typedef std::shared_ptr<document>	ptr;
 		typedef std::weak_ptr<document>		weak_ptr;
 	private:
@@ -74,6 +78,8 @@ namespace litehtml
 		std::list<shared_ptr<render_item>>	m_tabular_elements;
 		media_query_list_list::vector		m_media_lists;
 		media_features						m_media;
+		long								m_measure_calls = 0;
+		static constexpr long				k_measure_budget = 1000000;
 		string								m_lang;
 		string								m_culture;
 		string								m_text;
