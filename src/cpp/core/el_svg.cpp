@@ -72,15 +72,27 @@ el_svg::~el_svg() {}
 
 void el_svg::parse_attributes() {
     html_tag::parse_attributes();
+}
+
+// Presentational hints are re-applied whenever styles are recomputed; mapping width/height in
+// parse_attributes() lost them on the first refresh, so an SVG with an explicit height got an
+// aspect-ratio height instead.
+void el_svg::parse_presentational_hints() {
     const char* str_w = get_attr("width");
     const char* str_h = get_attr("height");
     if (str_w) map_to_dimension_property(_width_, str_w);
     if (str_h) map_to_dimension_property(_height_, str_h);
+    html_tag::parse_presentational_hints();
 }
 
 void el_svg::get_content_size(size& sz, pixel_t max_width) {
-    sz.width = (pixel_t)css().get_width().val();
-    sz.height = (pixel_t)css().get_height().val();
+    // Only absolute lengths are an intrinsic size; "100%" is not 100px.
+    auto absolute_px = [](const css_length& len) -> pixel_t {
+        if (len.is_predefined() || len.is_calc() || len.units() == css_units_percentage) return 0;
+        return (pixel_t)len.val();
+    };
+    sz.width = absolute_px(css().get_width());
+    sz.height = absolute_px(css().get_height());
 
     if (sz.width == 0) {
         const char* str_w = get_attr("width");

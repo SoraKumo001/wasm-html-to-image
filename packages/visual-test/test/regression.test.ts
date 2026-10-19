@@ -299,4 +299,13 @@ describe("regression: layout and paint probes", () => {
       expect(r.height).toBeLessThan(80); // text stayed on two lines instead of one character per line
     }
   });
+  it("inline SVG keeps its height attribute after a style refresh (table sibling, width:100%)", async () => {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="600" viewBox="0 0 400 600"><rect width="400" height="600" fill="#eee"/></svg>`;
+    const r = await render({
+      value: `<html><head><style>svg{width:100%}</style></head><body style="margin:0"><figure style="display:table;margin:0"><img width="500" height="100" style="display:block"></figure><div>${svg}</div></body></html>`,
+      width: 952,
+      format: "png",
+    });
+    expect(r.height).toBe(700); // the height attribute was dropped and replaced by a 6:1 aspect ratio (5800px)
+  });
 });
