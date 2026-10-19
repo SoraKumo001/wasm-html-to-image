@@ -308,4 +308,20 @@ describe("regression: layout and paint probes", () => {
     });
     expect(r.height).toBe(700); // the height attribute was dropped and replaced by a 6:1 aspect ratio (5800px)
   });
+  it("inline SVG resolves var() to its fallback in attributes and style", async () => {
+    for (const attr of [`fill="var( --x, #f00 )"`, `style="fill:var(--x,#f00)"`, `fill="var(--x, rgb(255,0,0))"`]) {
+      const { at } = await renderPng(`<svg width="100" height="40"><rect width="100" height="40" ${attr}/></svg>`, 100, 40);
+      expect(near(at(50, 20), RED)).toBe(true);
+    }
+  });
+  it("inline SVG <text> is drawn (needs a font manager that knows Satoru's fonts)", async () => {
+    const { img } = await renderPng(
+      `<svg width="200" height="40"><text x="5" y="25" font-size="16" fill="#000">Hello 世田谷区</text></svg>`,
+      200,
+      40,
+    );
+    let dark = 0;
+    for (let i = 0; i < img.data.length; i += 4) if (img.data[i + 3] > 0 && img.data[i] < 128) dark++;
+    expect(dark).toBeGreaterThan(100);
+  });
 });

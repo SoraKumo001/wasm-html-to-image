@@ -7,6 +7,10 @@
 #include "bridge/magic_tags.h"
 #include "container_skia.h"
 #include "include/core/SkCanvas.h"
+#include "include/core/SkFontMgr.h"
+#include "include/core/SkFontStyle.h"
+#include "include/core/SkTypeface.h"
+#include "satoru_context.h"
 #include "include/core/SkStream.h"
 #include "libs/litehtml/include/litehtml/render_image.h"
 #include "libs/litehtml/include/litehtml/render_item.h"
@@ -29,6 +33,70 @@ class SatoruImageAsset : public skresources::ImageAsset {
 
    private:
     sk_sp<SkImage> fImage;
+};
+
+// SkSVGDOM looks fonts up through an SkFontMgr, but Satoru's own manager is an empty custom one
+// (typefaces are registered in SatoruFontManager, not in Skia's family tables), so SVG <text>
+// resolved no typeface and drew nothing. This manager answers family lookups from the context.
+class SatoruSvgFontMgr final : public SkFontMgr {
+   public:
+    SatoruSvgFontMgr(SatoruContext& ctx, sk_sp<SkFontMgr> base)
+        : m_ctx(ctx), m_base(std::move(base)) {}
+
+   protected:
+    int onCountFamilies() const override { return 0; }
+    void onGetFamilyName(int, SkString*) const override {}
+    sk_sp<SkFontStyleSet> onCreateStyleSet(int) const override {
+        return SkFontStyleSet::CreateEmpty();
+    }
+    sk_sp<SkFontStyleSet> onMatchFamily(const char[]) const override {
+        return SkFontStyleSet::CreateEmpty();
+    }
+    sk_sp<SkTypeface> onMatchFamilyStyle(const char family[], const SkFontStyle& style) const override {
+        return lookup(family, style);
+    }
+    sk_sp<SkTypeface> onMatchFamilyStyleCharacter(const char family[], const SkFontStyle& style,
+                                                  const char*[], int, SkUnichar c) const override {
+        // Prefer the requested family, then any loaded typeface that covers the character (e.g. a
+        // CJK face after a Latin-only one).
+        auto tf = lookup(family, style);
+        if (tf && tf->unicharToGlyph(c) != 0) return tf;
+        if (auto any = m_ctx.fontManager.findTypefaceForCodepoint(c)) return any;
+        return lookup(family, style);
+    }
+    sk_sp<SkTypeface> onMakeFromData(sk_sp<SkData> d, int i) const override {
+        return m_base ? m_base->makeFromData(std::move(d), i) : nullptr;
+    }
+    sk_sp<SkTypeface> onMakeFromStreamIndex(std::unique_ptr<SkStreamAsset> s, int i) const override {
+        return m_base ? m_base->makeFromStream(std::move(s), i) : nullptr;
+    }
+    sk_sp<SkTypeface> onMakeFromStreamArgs(std::unique_ptr<SkStreamAsset> s,
+                                           const SkFontArguments& a) const override {
+        return m_base ? m_base->makeFromStream(std::move(s), a) : nullptr;
+    }
+    sk_sp<SkTypeface> onMakeFromFile(const char path[], int i) const override {
+        return m_base ? m_base->makeFromFile(path, i) : nullptr;
+    }
+    sk_sp<SkTypeface> onLegacyMakeTypeface(const char family[], SkFontStyle style) const override {
+        return lookup(family, style);
+    }
+
+   private:
+    sk_sp<SkTypeface> lookup(const char* family, const SkFontStyle& style) const {
+        SkFontStyle::Slant slant = style.slant();
+        bool fake_bold = false;
+        std::string name = family ? family : "";
+        if (!name.empty()) {
+            auto tfs = m_ctx.get_typefaces(name, style.weight(), slant, fake_bold);
+            if (!tfs.empty() && tfs.front()) return tfs.front();
+        }
+        auto tfs = m_ctx.get_typefaces("sans-serif", style.weight(), slant, fake_bold);
+        if (!tfs.empty() && tfs.front()) return tfs.front();
+        return m_ctx.fontManager.getDefaultTypeface();
+    }
+
+    SatoruContext& m_ctx;
+    sk_sp<SkFontMgr> m_base;
 };
 
 class SatoruResourceProvider : public skresources::ResourceProvider {
@@ -285,6 +353,8 @@ void el_svg::draw(uint_ptr hdc, pixel_t x, pixel_t y, const position* clip,
         reconstruct_xml(container->is_tagging() ? (int)pos.x : 0,
                         container->is_tagging() ? (int)pos.y : 0, (int)pos.width, (int)pos.height);
 
+    xml = replace_css_vars(xml);
+
     // Replace "currentColor" with actual computed color
     litehtml::web_color color = css().get_color();
     xml = replace_current_color(xml, color);
@@ -304,6 +374,9 @@ void el_svg::draw(uint_ptr hdc, pixel_t x, pixel_t y, const position* clip,
 
         SkSVGDOM::Builder builder;
         builder.setResourceProvider(proxy_rp);
+        // Without a font manager SkSVGText draws nothing at all.
+        builder.setFontManager(sk_make_sp<SatoruSvgFontMgr>(
+            container->get_context(), container->get_context().fontManager.getFontMgr()));
         auto svg_dom = builder.make(stream);
 
         if (svg_dom) {

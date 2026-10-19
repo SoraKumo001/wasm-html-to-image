@@ -64,6 +64,8 @@ class SatoruFontManager : public satoru::IFontManager {
 
     // ── Non-virtual extensions (SatoruFontManager-specific) ───────────
     sk_sp<SkFontMgr> getFontMgr() const { return m_fontMgr; }
+    // Any loaded typeface (all families, then the fallbacks) that has a glyph for @p u, or null.
+    sk_sp<SkTypeface> findTypefaceForCodepoint(SkUnichar u) const;
 
    private:
     sk_sp<SkFontMgr> m_fontMgr;

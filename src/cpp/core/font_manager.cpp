@@ -793,6 +793,18 @@ std::string SatoruFontManager::generateFontFaceCSS() const {
     return ss.str();
 }
 
+sk_sp<SkTypeface> SatoruFontManager::findTypefaceForCodepoint(SkUnichar u) const {
+    for (auto const& [name, typefaces] : m_typefaceCache) {
+        for (auto const& tc : typefaces) {
+            if (tc.typeface && tc.typeface->unicharToGlyph(u) != 0) return tc.typeface;
+        }
+    }
+    for (auto const& tf : m_fallbackTypefaces) {
+        if (tf && tf->unicharToGlyph(u) != 0) return tf;
+    }
+    return nullptr;
+}
+
 SkFont SatoruFontManager::selectFont(char32_t u, font_info* fi, SkFont* lastSelectedFont,
                                      const satoru::UnicodeService& unicode) {
     return selectFont(u, fi, lastSelectedFont, unicode, unicode.isEmoji(u), unicode.isMark(u));

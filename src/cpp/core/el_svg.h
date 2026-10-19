@@ -44,6 +44,44 @@ inline std::string replace_current_color(const std::string& xml, const web_color
     return result;
 }
 
+/// Replace every CSS var(--name, fallback) in @p xml with its fallback (trimmed). The SVG
+/// renderer does not know custom properties, so e.g. fill="var( --color-base, #000 )" would
+/// otherwise be dropped and the shape or text left unpainted. Without a fallback the function is
+/// replaced by "currentColor".
+inline std::string replace_css_vars(const std::string& xml) {
+    std::string out;
+    size_t i = 0;
+    while (i < xml.size()) {
+        size_t v = xml.find("var(", i);
+        if (v == std::string::npos) {
+            out.append(xml, i, std::string::npos);
+            break;
+        }
+        out.append(xml, i, v - i);
+        size_t p = v + 4;
+        int depth = 1;
+        size_t comma = std::string::npos;
+        while (p < xml.size() && depth > 0) {
+            char c = xml[p];
+            if (c == '(') depth++;
+            else if (c == ')') depth--;
+            else if (c == ',' && depth == 1 && comma == std::string::npos) comma = p;
+            if (depth > 0) p++;
+        }
+        if (depth != 0) {  // unbalanced: leave the rest untouched
+            out.append(xml, v, std::string::npos);
+            break;
+        }
+        std::string fallback = comma == std::string::npos ? "currentColor" : xml.substr(comma + 1, p - comma - 1);
+        size_t b = fallback.find_first_not_of(" 	");
+        size_t e = fallback.find_last_not_of(" 	");
+        fallback = b == std::string::npos ? "currentColor" : fallback.substr(b, e - b + 1);
+        out += replace_css_vars(fallback);
+        i = p + 1;
+    }
+    return out;
+}
+
 // ─────────────────────────────────────────────────
 // el_svg class
 // ─────────────────────────────────────────────────
