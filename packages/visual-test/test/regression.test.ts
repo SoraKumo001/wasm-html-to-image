@@ -352,4 +352,14 @@ describe("regression: layout and paint probes", () => {
       expect(r.height).toBe(150); // 10 items x 30px in 2 balanced columns (was 300 in one column)
     }
   });
+  it("deeply nested auto tables keep a sane height (no stale sizes from the measure budget)", async () => {
+    // Wikipedia-style navbox: th{width:1%} + td{width:100%} tables nested a dozen levels deep.
+    const leaf = "<ul><li><a>item one</a></li><li><a>item two</a></li></ul>";
+    let inner = leaf;
+    for (let i = 0; i < 12; i++) {
+      inner = `<table style="width:100%;border-spacing:0"><tbody><tr><th style="width:1%;white-space:nowrap">G${i}</th><td style="width:100%;padding:0">${inner}</td></tr><tr><td colspan="2" style="padding:0">${leaf}</td></tr></tbody></table>`;
+    }
+    const r = await render({ value: `<html><body style="margin:0;font:14px sans-serif"><div style="width:600px">${inner}</div></body></html>`, width: 700, format: "png" });
+    expect(r.height).toBeLessThan(1500); // ~12 x (list 2 rows) rows; was inflated by the exhausted budget
+  }, 60000);
 });

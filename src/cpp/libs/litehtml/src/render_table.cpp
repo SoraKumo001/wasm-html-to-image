@@ -70,7 +70,6 @@ litehtml::pixel_t litehtml::render_item_table::layout_table(pixel_t x, pixel_t y
 				} else
 				{
 					cell->min_width = cell->max_width = measure_cell_width(cell->el, self_size.new_width(self_size.render_width - table_width_spacing), fmt_ctx);
-					cell->el->place(0, 0, self_size.new_width(self_size.render_width - table_width_spacing), fmt_ctx);
 				}
                 cell->el->pos().width = cell->min_width - cell->el->content_offset_left() -
 						cell->el->content_offset_right();
@@ -105,7 +104,6 @@ litehtml::pixel_t litehtml::render_item_table::layout_table(pixel_t x, pixel_t y
 						} else
 						{
 							el_w = measure_cell_width(cell->el, self_size.new_width(css_w), fmt_ctx);
-							cell->el->place(0, 0, self_size.new_width(css_w), fmt_ctx);
 						}
                         cell->min_width = cell->max_width = std::max(css_w, el_w);
                         cell->el->pos().width = cell->min_width - cell->el->content_offset_left() -
@@ -122,10 +120,7 @@ litehtml::pixel_t litehtml::render_item_table::layout_table(pixel_t x, pixel_t y
 						} else
 						{
 							cell->min_width = measure_cell_width(cell->el, self_size.new_width(cell->el->content_offset_width()), fmt_ctx);
-							cell->el->place(0, 0, self_size.new_width(cell->el->content_offset_width()), fmt_ctx);
-							
 							cell->max_width = measure_cell_width(cell->el, self_size.new_width(self_size.render_width - table_width_spacing), fmt_ctx);
-							cell->el->place(0, 0, self_size.new_width(self_size.render_width - table_width_spacing), fmt_ctx);
 						}
                     }
                 }
