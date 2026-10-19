@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "bridge/bridge_types.h"
+#include "core/text/text_decoration_renderer.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkPath.h"
 #include "include/core/SkTextBlob.h"
@@ -91,13 +92,16 @@ class TextRenderer {
                          bool forceEllipsis = false);
 
    private:
-    // Internal helper for shaping and drawing a single run of text
+    // Internal helper for shaping and drawing a single run of text.
+    // `glyphInk` (optional) collects the ink geometry of the drawn glyphs so
+    // that text-decoration-skip-ink can interrupt the decoration line.
     static double drawTextInternal(
         SatoruContext* ctx, SkCanvas* canvas, const char* str, size_t strLen, font_info* fi,
         const litehtml::position& pos, litehtml::writing_mode mode, const SkPaint& paint,
         bool tagging, std::vector<text_draw_info>& usedTextDraws, std::vector<SkPath>& usedGlyphs,
         std::vector<glyph_draw_info>& usedGlyphDraws, std::set<char32_t>* usedCodepoints,
-        TextBatcher* batcher = nullptr, int styleTag = -1, int styleIndex = -1);
+        TextBatcher* batcher = nullptr, int styleTag = -1, int styleIndex = -1,
+        std::vector<DecorationGlyphInk>* glyphInk = nullptr);
 };
 
 }  // namespace satoru

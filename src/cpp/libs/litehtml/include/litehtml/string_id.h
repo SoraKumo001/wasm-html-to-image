@@ -303,6 +303,8 @@ namespace litehtml
       _text_decoration_color_,
       _text_decoration_thickness_,
       _text_underline_offset_,
+      _text_decoration_skip_ink_,
+      _text_underline_position_,
       _text_emphasis_,
       _text_emphasis_style_,
       _text_emphasis_color_,

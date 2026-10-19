@@ -63,6 +63,34 @@ float baselineShiftForBlob(const font_info* fi, const sk_sp<SkTextBlob>& blob) {
     return 0.0f;
 }
 
+// Collects the ink geometry of a run's glyphs for text-decoration-skip-ink.
+// `inline_origin` is the inline offset of the run inside the text box and
+// `baseline_shift` the vertical shift applied to the run's baseline.
+void collectGlyphInk(std::vector<DecorationGlyphInk>* out,
+                     const SkTextBlob::Iter::ExperimentalRun& run, float inline_origin,
+                     float baseline_shift) {
+    if (!out || run.count <= 0) return;
+
+    std::vector<SkRect> bounds;
+    bounds.resize(run.count);
+    run.font.getBounds(SkSpan<const SkGlyphID>(run.glyphs, run.count),
+                       SkSpan<SkRect>(bounds.data(), bounds.size()), nullptr);
+
+    for (int i = 0; i < run.count; ++i) {
+        const SkRect& b = bounds[i];
+        // Glyphs without ink (spaces, control characters) have empty bounds.
+        if (b.isEmpty()) continue;
+
+        DecorationGlyphInk ink;
+        ink.inline_start = inline_origin + run.positions[i].fX + b.fLeft;
+        ink.inline_end = inline_origin + run.positions[i].fX + b.fRight;
+        ink.ink_top = b.fTop;
+        ink.ink_bottom = b.fBottom;
+        ink.baseline = run.positions[i].fY + baseline_shift;
+        out->push_back(ink);
+    }
+}
+
 // text-emphasis (圏点): litehtml の css_properties が emphasis_style/color/position を
 // 解析して font_description に格納するが、描画は未対応だったためここで打つ。
 // 最小範囲: filled/open × dot/circle/double-circle(円近似)/triangle/sesame。
@@ -496,9 +524,20 @@ void TextRenderer::drawText(SatoruContext* ctx, SkCanvas* canvas, const char* te
     // stroked run so the stroke/fill are composited in the correct order.
     if (has_stroke && !tagging && batcher) batcher->flush();
 
+    // text-decoration-skip-ink needs the ink geometry of the drawn glyphs.
+    // Only the underline is affected and only in horizontal writing modes.
+    const bool is_vertical_mode = mode == litehtml::writing_mode_vertical_rl ||
+                                  mode == litehtml::writing_mode_vertical_lr;
+    const bool want_glyph_ink =
+        !tagging && !is_vertical_mode &&
+        (fi->desc.decoration_line & litehtml::text_decoration_line_underline) &&
+        fi->desc.decoration_skip_ink != litehtml::text_decoration_skip_ink_none;
+    std::vector<DecorationGlyphInk> glyph_ink;
+
     double final_width = drawTextInternal(
         ctx, canvas, draw_text, draw_text_len, fi, actual_pos, mode, paint, tagging, usedTextDraws,
-        usedGlyphs, usedGlyphDraws, usedCodepoints, batcher, (int)styleTag, styleIndex);
+        usedGlyphs, usedGlyphDraws, usedCodepoints, batcher, (int)styleTag, styleIndex,
+        want_glyph_ink ? &glyph_ink : nullptr);
 
     if (has_stroke && !tagging) {
         // WebKit paints the centered stroke ON TOP of the fill, so its inner half
@@ -516,7 +555,7 @@ void TextRenderer::drawText(SatoruContext* ctx, SkCanvas* canvas, const char* te
     }
 
     if (fi->desc.decoration_line != litehtml::text_decoration_line_none) {
-        TextDecorationRenderer::drawDecoration(canvas, fi, pos, color, final_width, mode);
+        TextDecorationRenderer::drawDecoration(canvas, fi, pos, color, final_width, mode, glyph_ink);
     }
 }
 
@@ -527,7 +566,8 @@ double TextRenderer::drawTextInternal(SatoruContext* ctx, SkCanvas* canvas, cons
                                       std::vector<SkPath>& usedGlyphs,
                                       std::vector<glyph_draw_info>& usedGlyphDraws,
                                       std::set<char32_t>* usedCodepoints, TextBatcher* batcher,
-                                      int styleTag, int styleIndex) {
+                                      int styleTag, int styleIndex,
+                                      std::vector<DecorationGlyphInk>* glyphInk) {
     if (strLen == 0) return 0.0;
 
     TextAnalysis analysis =
@@ -752,6 +792,10 @@ double TextRenderer::drawTextInternal(SatoruContext* ctx, SkCanvas* canvas, cons
                             run.positions[i].fX;
                         builder_run.pos[i * 2 + 1] =
                             (float)pos.y + run.positions[i].fY + run_baseline_shift;
+                    }
+                    if (glyphInk) {
+                        collectGlyphInk(glyphInk, run, (float)current_l_pos.inline_offset,
+                                        run_baseline_shift);
                     }
                 }
                 sk_sp<SkTextBlob> normalizedBlob = builder.make();

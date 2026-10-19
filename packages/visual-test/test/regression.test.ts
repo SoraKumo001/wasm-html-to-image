@@ -41,6 +41,42 @@ async function renderProbeText(body: string, width = 800) {
 const probeLine = (style: string, text: string) =>
   `<div style="font-family:'RobotoProbe',sans-serif;font-size:60px;line-height:90px;color:#000;${style}">${text}</div>`;
 
+// A red decoration line is anti-aliased against the white background, so a
+// partially covered pixel still counts as red when it is clearly redder.
+const isRedPixel = (img: PNG, x: number, y: number) => {
+  const i = (img.width * y + x) * 4;
+  const r = img.data[i];
+  const g = img.data[i + 1];
+  const b = img.data[i + 2];
+  return r > 140 && r - g > 40 && r - b > 40;
+};
+
+// Row of the (red) decoration line and the number of red pixels on it.
+const decorationLine = (img: PNG) => {
+  let row = -1;
+  let count = 0;
+  for (let y = 0; y < img.height; y++) {
+    let rowCount = 0;
+    for (let x = 0; x < img.width; x++) if (isRedPixel(img, x, y)) rowCount++;
+    if (rowCount > count) {
+      count = rowCount;
+      row = y;
+    }
+  }
+  return { row, count };
+};
+
+// Columns that carry the (red) decoration line, used for vertical writing modes.
+const redColumns = (img: PNG) => {
+  const cols: number[] = [];
+  for (let x = 0; x < img.width; x++) {
+    let count = 0;
+    for (let y = 0; y < img.height; y++) if (isRedPixel(img, x, y)) count++;
+    if (count > 3) cols.push(x);
+  }
+  return cols;
+};
+
 // One 32-bit hash per ANMF (animation frame) chunk in a RIFF/WEBP container.
 // Distinct hashes prove the sampled frames actually differ in pixel content.
 function webpFrameHashes(data: Uint8Array): number[] {
@@ -795,5 +831,66 @@ describe("regression: layout and paint probes", () => {
     );
     expect(near(at(0, 100), RED)).toBe(true); // unrotated box covers x[-20,20] y[90,110]
     expect(isWhite(at(0, 85))).toBe(true); // a +90deg rotation would cover y[80,120]
+  });
+
+  it("text-decoration-skip-ink: auto interrupts the underline at the descenders", async () => {
+    const base = "text-decoration:underline;text-decoration-color:#f00";
+    // `auto` is the initial value: the ink of the descenders is skipped.
+    const auto_ = decorationLine(await renderProbeText(probeLine(base, "gjpq")));
+    const none = decorationLine(
+      await renderProbeText(probeLine(`${base};text-decoration-skip-ink:none`, "gjpq")),
+    );
+    expect(auto_.row).toBe(none.row);
+    // g/j/p/q punch holes into the underline, so fewer pixels stay red.
+    expect(auto_.count).toBeLessThan(none.count);
+  });
+
+  it("text-decoration-skip-ink: all also skips the ink above the baseline", async () => {
+    // A negative text-underline-offset lifts the line above the baseline, where the
+    // glyph bodies cross it. `auto` only skips the descender ink, `all` skips any ink.
+    const base =
+      "text-decoration:underline;text-decoration-color:#f00;text-underline-offset:-14px";
+    const auto_ = decorationLine(await renderProbeText(probeLine(base, "Hxp")));
+    const all = decorationLine(
+      await renderProbeText(probeLine(`${base};text-decoration-skip-ink:all`, "Hxp")),
+    );
+    expect(auto_.row).toBe(all.row);
+    expect(all.count).toBeLessThan(auto_.count);
+  });
+
+  it("text-underline-position: under draws the underline below the descenders", async () => {
+    const base =
+      "text-decoration:underline;text-decoration-color:#f00;text-decoration-skip-ink:none";
+    const auto_ = decorationLine(await renderProbeText(probeLine(base, "Hxg")));
+    const under = decorationLine(
+      await renderProbeText(probeLine(`${base};text-underline-position:under`, "Hxg")),
+    );
+    expect(under.row).toBeGreaterThan(auto_.row);
+  });
+
+  it("text-underline-position: from-font uses the underline position of the font", async () => {
+    const base =
+      "text-decoration:underline;text-decoration-color:#f00;text-decoration-skip-ink:none";
+    const auto_ = decorationLine(await renderProbeText(probeLine(base, "Hxg")));
+    const fromFont = decorationLine(
+      await renderProbeText(probeLine(`${base};text-underline-position:from-font`, "Hxg")),
+    );
+    expect(fromFont.row).not.toBe(auto_.row);
+  });
+
+  it("text-underline-position: left/right move the underline in vertical writing modes", async () => {
+    const vertical = async (position: string) => {
+      const body = `<div style="writing-mode:vertical-rl;height:200px;width:120px;font-family:'RobotoProbe',sans-serif;font-size:20px">
+         <span style="text-decoration:underline;text-decoration-color:#f00;text-underline-position:${position}">ABC</span></div>`;
+      const html = `<html><head><style>${PROBE_FONT_FACE}</style></head><body style="margin:0;background:#fff">${body}</body></html>`;
+      const { data } = await render({ value: html, width: 200, format: "png" });
+      return redColumns(PNG.sync.read(Buffer.from(data)));
+    };
+    const right = await vertical("right");
+    const left = await vertical("left");
+    expect(right.length).toBeGreaterThan(0);
+    expect(left.length).toBeGreaterThan(0);
+    // vertical-rl: `right` hugs the right edge of the column, `left` the left one.
+    expect(left[0]).toBeLessThan(right[0]);
   });
 });

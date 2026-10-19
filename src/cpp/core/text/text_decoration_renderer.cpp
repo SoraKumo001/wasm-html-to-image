@@ -11,10 +11,21 @@
 
 namespace satoru {
 
+namespace {
+
+// Inline-axis interval in which the decoration line must not be painted.
+struct InlineGap {
+    float start;
+    float end;
+};
+
+}  // namespace
+
 void TextDecorationRenderer::drawDecoration(SkCanvas* canvas, font_info* fi,
                                             const litehtml::position& pos,
                                             const litehtml::web_color& color, double finalWidth,
-                                            litehtml::writing_mode mode) {
+                                            litehtml::writing_mode mode,
+                                            const std::vector<DecorationGlyphInk>& glyph_ink) {
     float inline_size = (float)finalWidth;
     float thickness = (float)fi->desc.decoration_thickness.val();
     if (thickness == 0) thickness = 1.0f;
@@ -32,9 +43,12 @@ void TextDecorationRenderer::drawDecoration(SkCanvas* canvas, font_info* fi,
     WritingModeContext wm_ctx(mode, pos.width, pos.height);
     LogicalCanvas l_canvas(canvas, wm_ctx, (float)pos.x, (float)pos.y);
 
-    auto draw_logical_line = [&](float block_offset) {
-        logical_pos logical_start(0, block_offset);
-        logical_pos logical_end(inline_size, block_offset);
+    // Draws the decoration line between two inline-axis positions.
+    auto draw_logical_line = [&](float block_offset, float x0, float x1) {
+        if (x1 <= x0) return;
+
+        logical_pos logical_start(x0, block_offset);
+        logical_pos logical_end(x1, block_offset);
 
         if (fi->desc.decoration_style == litehtml::text_decoration_style_dotted) {
             float intervals[] = {thickness, thickness};
@@ -46,10 +60,10 @@ void TextDecorationRenderer::drawDecoration(SkCanvas* canvas, font_info* fi,
 
         if (fi->desc.decoration_style == litehtml::text_decoration_style_double) {
             float gap = thickness + 1.0f;
-            l_canvas.drawLine(logical_pos(0, block_offset - gap / 2),
-                              logical_pos(inline_size, block_offset - gap / 2), dec_paint);
-            l_canvas.drawLine(logical_pos(0, block_offset + gap / 2),
-                              logical_pos(inline_size, block_offset + gap / 2), dec_paint);
+            l_canvas.drawLine(logical_pos(x0, block_offset - gap / 2),
+                              logical_pos(x1, block_offset - gap / 2), dec_paint);
+            l_canvas.drawLine(logical_pos(x0, block_offset + gap / 2),
+                              logical_pos(x1, block_offset + gap / 2), dec_paint);
         } else if (fi->desc.decoration_style == litehtml::text_decoration_style_wavy) {
             dec_paint.setStrokeWidth(thickness * 1.5f);
 
@@ -59,12 +73,16 @@ void TextDecorationRenderer::drawDecoration(SkCanvas* canvas, font_info* fi,
 
             bool is_vertical = wm_ctx.is_vertical();
             float phase_ref = is_vertical ? (float)pos.y : (float)pos.x;
-            float start_i = -fmodf(phase_ref, wave_wavelength);
+            // The wave is aligned to a global phase so that the segments
+            // produced by text-decoration-skip-ink keep a continuous wave.
+            float wave_origin = -fmodf(phase_ref, wave_wavelength);
+            float start_i =
+                wave_origin + floorf((x0 - wave_origin) / wave_wavelength) * wave_wavelength;
 
             SkPathBuilder wavy_builder;
             bool first = true;
 
-            for (float i = start_i; i < inline_size; i += wave_wavelength) {
+            for (float i = start_i; i < x1; i += wave_wavelength) {
                 {
                     logical_pos lp1(i, block_offset_wavy);
                     logical_pos lp2(i + wave_wavelength / 4.0f, block_offset_wavy + wave_amplitude);
@@ -95,8 +113,8 @@ void TextDecorationRenderer::drawDecoration(SkCanvas* canvas, font_info* fi,
             }
 
             l_canvas.save();
-            l_canvas.clipRect(logical_pos(0, block_offset_wavy - wave_amplitude * 2),
-                              logical_size(inline_size, wave_amplitude * 4));
+            l_canvas.clipRect(logical_pos(x0, block_offset_wavy - wave_amplitude * 2),
+                              logical_size(x1 - x0, wave_amplitude * 4));
             canvas->drawPath(wavy_builder.detach(), dec_paint);
             l_canvas.restore();
         } else {
@@ -104,17 +122,91 @@ void TextDecorationRenderer::drawDecoration(SkCanvas* canvas, font_info* fi,
         }
     };
 
+    // text-decoration-skip-ink: collect the inline-axis intervals in which the
+    // decoration line would be covered by the ink of the text.
+    //   auto: only the ink below the baseline (descenders) is skipped.
+    //   all:  every glyph ink that reaches the line is skipped.
+    auto collect_skip_gaps = [&](float block_offset) {
+        std::vector<InlineGap> gaps;
+        if (fi->desc.decoration_skip_ink == litehtml::text_decoration_skip_ink_none) return gaps;
+        if (glyph_ink.empty()) return gaps;
+
+        float band_top = block_offset - thickness * 0.5f;
+        float band_bottom = block_offset + thickness * 0.5f;
+        bool skip_all_ink = fi->desc.decoration_skip_ink == litehtml::text_decoration_skip_ink_all;
+
+        for (const auto& g : glyph_ink) {
+            float top = g.baseline + g.ink_top;
+            float bottom = g.baseline + g.ink_bottom;
+            if (!skip_all_ink) {
+                // auto: the descender ink (below the baseline) only.
+                top = std::max(top, g.baseline);
+            }
+            if (bottom < band_top || top > band_bottom) continue;
+            if (g.inline_end <= g.inline_start) continue;
+
+            InlineGap gap{g.inline_start, g.inline_end};
+            if (!gaps.empty() && gap.start <= gaps.back().end) {
+                gaps.back().end = std::max(gaps.back().end, gap.end);
+            } else {
+                gaps.push_back(gap);
+            }
+        }
+        return gaps;
+    };
+
+    // Draws the decoration line, skipping the intervals given by `gaps`.
+    auto draw_with_gaps = [&](float block_offset, const std::vector<InlineGap>& gaps) {
+        if (gaps.empty()) {
+            draw_logical_line(block_offset, 0.0f, inline_size);
+            return;
+        }
+        float cursor = 0.0f;
+        for (const auto& gap : gaps) {
+            if (gap.start > cursor) draw_logical_line(block_offset, cursor, gap.start);
+            cursor = std::max(cursor, gap.end);
+        }
+        if (cursor < inline_size) draw_logical_line(block_offset, cursor, inline_size);
+    };
+
     if (fi->desc.decoration_line & litehtml::text_decoration_line_underline) {
-        float underline_offset =
-            (float)fi->fm_ascent + (float)fi->desc.underline_offset.val() + thickness;
+        float user_offset = (float)fi->desc.underline_offset.val();
+        int position = fi->desc.underline_position;
+        float underline_offset;
+
         if (wm_ctx.is_vertical()) {
             // Chromium places the vertical underline just inside the
             // block-start edge (right for vertical-rl, left for
             // vertical-lr), not at an ascent distance from it. Flush the
             // line's outer edge with the run box's block-start edge.
-            underline_offset = (float)fi->desc.underline_offset.val() + thickness;
+            if (wm_ctx.mode() == litehtml::writing_mode_vertical_rl) {
+                // block-start is the right side; `left` moves the line to the
+                // opposite side of the text column.
+                underline_offset = (position == litehtml::text_underline_position_left)
+                                       ? (float)wm_ctx.container_width() - thickness + user_offset
+                                       : user_offset + thickness;
+            } else {
+                // vertical-lr: block-start is the left side.
+                underline_offset = (position == litehtml::text_underline_position_right)
+                                       ? (float)wm_ctx.container_width() - thickness + user_offset
+                                       : user_offset + thickness;
+            }
+        } else if (position == litehtml::text_underline_position_under) {
+            // Below the descenders: the bottom of the line box.
+            underline_offset = (float)fi->fm_height + user_offset;
+        } else if (position == litehtml::text_underline_position_from_font &&
+                   fi->fm_underline_position > 0) {
+            // The font reports the distance from the baseline to the top of
+            // its underline stroke, so the stroke is centered half a
+            // thickness below that line.
+            underline_offset = (float)fi->fm_ascent_raw + fi->fm_underline_position +
+                               thickness * 0.5f + user_offset;
+        } else {
+            // auto (left/right do not apply to horizontal writing modes).
+            underline_offset = (float)fi->fm_ascent + user_offset + thickness;
         }
-        draw_logical_line(underline_offset);
+
+        draw_with_gaps(underline_offset, collect_skip_gaps(underline_offset));
     }
     if (fi->desc.decoration_line & litehtml::text_decoration_line_overline) {
         float overline_offset = 0;
@@ -122,10 +214,10 @@ void TextDecorationRenderer::drawDecoration(SkCanvas* canvas, font_info* fi,
             // Mirror of underline: just inside the block-end edge.
             overline_offset = (float)wm_ctx.container_width() - thickness;
         }
-        draw_logical_line(overline_offset);
+        draw_logical_line(overline_offset, 0.0f, inline_size);
     }
     if (fi->desc.decoration_line & litehtml::text_decoration_line_line_through) {
-        draw_logical_line((float)fi->fm_ascent * 0.65f);
+        draw_logical_line((float)fi->fm_ascent * 0.65f, 0.0f, inline_size);
     }
 }
 

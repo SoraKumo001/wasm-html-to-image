@@ -1119,10 +1119,18 @@ void litehtml::css_properties::compute_font(const element* el, const document::p
         m_text_decoration_color =
             get_color_property(el, _text_decoration_color_, propagate_decoration,
                                web_color::current_color, offset(m_text_decoration_color));
+        m_text_decoration_skip_ink = el->get_property<int>(
+            _text_decoration_skip_ink_, propagate_decoration, text_decoration_skip_ink_auto,
+            offset(m_text_decoration_skip_ink));
+        m_text_underline_position = el->get_property<int>(
+            _text_underline_position_, propagate_decoration, text_underline_position_auto,
+            offset(m_text_underline_position));
     } else {
         m_text_decoration_thickness = css_length::predef_value(text_decoration_thickness_auto);
         m_text_underline_offset = css_length::predef_value(0);
         m_text_decoration_color = web_color::current_color;
+        m_text_decoration_skip_ink = text_decoration_skip_ink_auto;
+        m_text_underline_position = text_underline_position_auto;
     }
 
     // text-emphasis
@@ -1218,6 +1226,8 @@ void litehtml::css_properties::compute_font(const element* el, const document::p
     descr.underline_offset = m_text_underline_offset;
     descr.decoration_style = m_text_decoration_style;
     descr.decoration_color = m_text_decoration_color;
+    descr.decoration_skip_ink = m_text_decoration_skip_ink;
+    descr.underline_position = m_text_underline_position;
     descr.emphasis_style = m_text_emphasis_style;
     descr.emphasis_color = m_text_emphasis_color;
     descr.emphasis_position = m_text_emphasis_position;

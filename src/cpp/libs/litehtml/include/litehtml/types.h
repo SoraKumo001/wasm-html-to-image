@@ -192,6 +192,28 @@ namespace litehtml
                 text_decoration_thickness_from_font,
         };
 
+        #define  style_text_decoration_skip_ink_strings  "auto;none;all"
+
+        enum text_decoration_skip_ink
+        {
+                text_decoration_skip_ink_auto,
+                text_decoration_skip_ink_none,
+                text_decoration_skip_ink_all,
+                text_decoration_skip_ink_max,
+        };
+
+        #define  style_text_underline_position_strings   "auto;from-font;under;left;right"
+
+        enum text_underline_position
+        {
+                text_underline_position_auto,
+                text_underline_position_from_font,
+                text_underline_position_under,
+                text_underline_position_left,
+                text_underline_position_right,
+                text_underline_position_max,
+        };
+
         #define  style_text_emphasis_position_strings   "over;under;left;right"
 
         enum text_emphasis_position

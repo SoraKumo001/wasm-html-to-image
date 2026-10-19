@@ -92,6 +92,8 @@ namespace litehtml
     css_length m_text_decoration_thickness;
     css_length m_text_underline_offset;
     web_color m_text_decoration_color;
+    int m_text_decoration_skip_ink = text_decoration_skip_ink_auto;
+    int m_text_underline_position = text_underline_position_auto;
     string m_text_emphasis_style;
     web_color m_text_emphasis_color;
     int m_text_emphasis_position;
@@ -572,6 +574,8 @@ namespace litehtml
     const css_length &get_text_decoration_thickness() const;
     const css_length &get_text_underline_offset() const;
     const web_color &get_text_decoration_color() const;
+    int get_text_decoration_skip_ink() const;
+    int get_text_underline_position() const;
 
     string get_text_emphasis_style() const;
     web_color get_text_emphasis_color() const;
@@ -1451,6 +1455,16 @@ namespace litehtml
   inline const web_color &css_properties::get_text_decoration_color() const
   {
     return m_text_decoration_color;
+  }
+
+  inline int css_properties::get_text_decoration_skip_ink() const
+  {
+    return m_text_decoration_skip_ink;
+  }
+
+  inline int css_properties::get_text_underline_position() const
+  {
+    return m_text_underline_position;
   }
 
   inline string css_properties::get_text_emphasis_style() const

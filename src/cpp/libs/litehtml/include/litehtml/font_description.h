@@ -30,6 +30,8 @@ struct font_description {
     text_decoration_style decoration_style =
         text_decoration_style_solid;  // Decoration line style. See enum text_decoration_style
     web_color decoration_color = web_color::current_color;  // Decoration line color
+    int decoration_skip_ink = text_decoration_skip_ink_auto;  // text-decoration-skip-ink
+    int underline_position = text_underline_position_auto;    // text-underline-position
     std::string emphasis_style;                             // Text emphasis style
     web_color emphasis_color = web_color::current_color;    // Text emphasis color
     int emphasis_position = text_emphasis_position_over;
@@ -56,6 +58,8 @@ struct font_description {
         out += ":uo=" + underline_offset.to_string();
         out += ":ds=" + std::to_string(decoration_style);
         out += ":dc=" + decoration_color.to_string();
+        out += ":dsi=" + std::to_string(decoration_skip_ink);
+        out += ":up=" + std::to_string(underline_position);
         out += ":ephs=" + emphasis_style;
         out += ":ephc=" + emphasis_color.to_string();
         out += ":ephp=" + std::to_string(emphasis_position);

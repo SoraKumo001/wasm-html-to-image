@@ -98,6 +98,8 @@ namespace litehtml
 
           {__webkit_box_orient_, box_orient_strings},
           {_text_decoration_style_, style_text_decoration_style_strings},
+          {_text_decoration_skip_ink_, style_text_decoration_skip_ink_strings},
+          {_text_underline_position_, style_text_underline_position_strings},
           {_text_emphasis_position_, style_text_emphasis_position_strings},
           {_text_overflow_, text_overflow_strings},
           {_text_combine_upright_, text_combine_upright_strings},
@@ -379,6 +381,8 @@ namespace litehtml
     case _break_inside_:
     case _font_style_:
     case _text_decoration_style_:
+    case _text_decoration_skip_ink_:
+    case _text_underline_position_:
     case _list_style_type_:
     case _list_style_position_:
     case _border_top_style_:
