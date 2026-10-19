@@ -27,6 +27,19 @@ inline std::string fontFeatureSignature(const litehtml::font_description& desc) 
     return sig;
 }
 
+// Stable signature of the resolved variable font axes and font-stretch, used in
+// shaping/measure cache keys.
+inline std::string fontVariationSignature(const litehtml::font_description& desc) {
+    std::string sig = std::to_string(desc.stretch);
+    for (const auto& v : desc.variations) {
+        sig += ',';
+        sig += std::to_string(v.tag);
+        sig += '=';
+        sig += std::to_string(v.value);
+    }
+    return sig;
+}
+
 struct CharFont {
     size_t len;
     SkFont font;
@@ -104,6 +117,7 @@ struct MeasureKey {
     float letterSpacing;
     float wordSpacing;
     std::string features;
+    std::string variations;
     uint64_t fontVersion;
 
     bool operator==(const MeasureKey& other) const {
@@ -112,7 +126,8 @@ struct MeasureKey {
                font_family == other.font_family && text == other.text && mode == other.mode &&
                orientation == other.orientation && textCombineUpright == other.textCombineUpright &&
                letterSpacing == other.letterSpacing && wordSpacing == other.wordSpacing &&
-               features == other.features && fontVersion == other.fontVersion;
+               features == other.features && variations == other.variations &&
+               fontVersion == other.fontVersion;
     }
 };
 
@@ -130,6 +145,7 @@ struct MeasureKeyHash {
         h ^= std::hash<float>{}(k.letterSpacing) + 0x9e3779b9 + (h << 6) + (h >> 2);
         h ^= std::hash<float>{}(k.wordSpacing) + 0x9e3779b9 + (h << 6) + (h >> 2);
         h ^= std::hash<std::string>{}(k.features) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        h ^= std::hash<std::string>{}(k.variations) + 0x9e3779b9 + (h << 6) + (h >> 2);
         h ^= std::hash<uint64_t>{}(k.fontVersion) + 0x9e3779b9 + (h << 6) + (h >> 2);
         return h;
     }
@@ -154,6 +170,7 @@ struct ShapingKey {
     float letterSpacing;
     float wordSpacing;
     std::string features;
+    std::string variations;
 
     bool operator==(const ShapingKey& other) const {
         return font_size == other.font_size && font_weight == other.font_weight &&
@@ -161,7 +178,7 @@ struct ShapingKey {
                font_family == other.font_family && text == other.text && mode == other.mode &&
                orientation == other.orientation && textCombineUpright == other.textCombineUpright &&
                letterSpacing == other.letterSpacing && wordSpacing == other.wordSpacing &&
-               features == other.features;
+               features == other.features && variations == other.variations;
     }
 };
 
@@ -179,6 +196,7 @@ struct ShapingKeyHash {
         h ^= std::hash<float>{}(k.letterSpacing) + 0x9e3779b9 + (h << 6) + (h >> 2);
         h ^= std::hash<float>{}(k.wordSpacing) + 0x9e3779b9 + (h << 6) + (h >> 2);
         h ^= std::hash<std::string>{}(k.features) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        h ^= std::hash<std::string>{}(k.variations) + 0x9e3779b9 + (h << 6) + (h >> 2);
         return h;
     }
 };

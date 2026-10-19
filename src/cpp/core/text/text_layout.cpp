@@ -359,6 +359,7 @@ MeasureResult TextLayout::measureText(SatoruContext* ctx, const char* text, font
         key.letterSpacing = (float)fi->desc.letter_spacing;
         key.wordSpacing = (float)fi->desc.word_spacing;
         key.features = fontFeatureSignature(fi->desc);
+        key.variations = fontVariationSignature(fi->desc);
         key.fontVersion = ctx->getFontVersion();
 
         if (MeasureResult* cached = ctx->cacheManager.measureCache.get(key)) {
@@ -660,6 +661,7 @@ ShapedResult TextLayout::shapeText(SatoruContext* ctx, const char* text, size_t 
     key.letterSpacing = (float)fi->desc.letter_spacing;
     key.wordSpacing = (float)fi->desc.word_spacing;
     key.features = fontFeatureSignature(fi->desc);
+    key.variations = fontVariationSignature(fi->desc);
 
     if (ShapedResult* cached = ctx->cacheManager.shapingCache.get(key)) {
         if (usedCodepoints) {
@@ -701,6 +703,7 @@ ShapedResult TextLayout::shapePreparedText(SatoruContext* ctx, const char* cache
     key.letterSpacing = (float)fi->desc.letter_spacing;
     key.wordSpacing = (float)fi->desc.word_spacing;
     key.features = fontFeatureSignature(fi->desc);
+    key.variations = fontVariationSignature(fi->desc);
 
     if (ShapedResult* cached = ctx->cacheManager.shapingCache.get(key)) {
         return *cached;

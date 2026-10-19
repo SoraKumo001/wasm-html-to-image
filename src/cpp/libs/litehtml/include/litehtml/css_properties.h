@@ -87,6 +87,10 @@ namespace litehtml
     string m_font_variant_caps = "normal";
     string m_font_variant_position = "normal";
     css_token_vector m_font_feature_settings;
+    string m_font_kerning = "auto";
+    css_token_vector m_font_variation_settings;
+    // font-stretch, as a percentage of the normal width (100 = normal).
+    float m_font_stretch = 100.0f;
     int m_text_decoration_line = text_decoration_line_none;
     text_decoration_style m_text_decoration_style = text_decoration_style_solid;
     css_length m_text_decoration_thickness;

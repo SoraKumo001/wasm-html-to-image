@@ -164,7 +164,7 @@ litehtml::uint_ptr container_skia::create_font(const litehtml::font_description&
         if (family.empty()) continue;
 
         bool fb = false;
-        auto tfs = m_context.get_typefaces(family, desc.weight, slant, fb);
+        auto tfs = m_context.get_typefaces(family, desc.weight, slant, fb, desc.stretch);
         for (auto& tf : tfs) {
             typefaces.push_back(tf);
         }
@@ -182,7 +182,7 @@ litehtml::uint_ptr container_skia::create_font(const litehtml::font_description&
 
     if (typefaces.empty()) {
         m_text.missingFonts.insert({desc.family, desc.weight, slant});
-        typefaces = m_context.get_typefaces("sans-serif", desc.weight, slant, fake_bold);
+        typefaces = m_context.get_typefaces("sans-serif", desc.weight, slant, fake_bold, desc.stretch);
     }
 
     font_info* fi = new font_info;
@@ -195,7 +195,8 @@ litehtml::uint_ptr container_skia::create_font(const litehtml::font_description&
     fi->is_rtl = false;
 
     for (auto& typeface : typefaces) {
-        SkFont* font = m_context.fontManager.createSkFont(typeface, (float)desc.size, desc.weight);
+        SkFont* font = m_context.fontManager.createSkFont(typeface, (float)desc.size, desc.weight,
+                                                          desc.stretch, desc.variations);
         if (font) {
             fi->fonts.push_back(font);
         }
@@ -211,7 +212,8 @@ litehtml::uint_ptr container_skia::create_font(const litehtml::font_description&
             }
         }
         if (!duplicate) {
-            SkFont* font = m_context.fontManager.createSkFont(tf, (float)desc.size, desc.weight);
+            SkFont* font = m_context.fontManager.createSkFont(tf, (float)desc.size, desc.weight,
+                                                               desc.stretch, desc.variations);
             if (font) {
                 fi->fonts.push_back(font);
             }
@@ -221,8 +223,8 @@ litehtml::uint_ptr container_skia::create_font(const litehtml::font_description&
     if (fi->fonts.empty()) {
         sk_sp<SkTypeface> def = m_context.fontManager.getDefaultTypeface();
         if (def) {
-            fi->fonts.push_back(
-                m_context.fontManager.createSkFont(def, (float)desc.size, desc.weight));
+            fi->fonts.push_back(m_context.fontManager.createSkFont(def, (float)desc.size, desc.weight,
+                                                                     desc.stretch, desc.variations));
         } else {
             fi->fonts.push_back(new SkFont(SkTypeface::MakeEmpty(), (float)desc.size));
         }

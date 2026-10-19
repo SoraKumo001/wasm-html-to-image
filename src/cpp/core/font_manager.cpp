@@ -60,9 +60,12 @@ std::map<uint64_t, sk_sp<SkTypeface>> g_hash_to_typeface;
 struct global_typeface_clone_key {
     SkTypeface* base;
     int weight;
+    // Signature of the other variable font axes (font-stretch, font-variation-settings).
+    std::string axes;
     bool operator<(const global_typeface_clone_key& other) const {
         if (base != other.base) return base < other.base;
-        return weight < other.weight;
+        if (weight != other.weight) return weight < other.weight;
+        return axes < other.axes;
     }
 };
 std::map<global_typeface_clone_key, sk_sp<SkTypeface>> g_variable_clone_cache;
@@ -120,6 +123,27 @@ bool equals_ascii_ci(std::string_view a, std::string_view b) {
         if (ascii_lower(a[i]) != ascii_lower(b[i])) return false;
     }
     return true;
+}
+
+// The width of a font face as a percentage of the normal width, used to pick
+// a face for a given font-stretch. The width of a face is the OS/2 width class
+// (1 = ultra condensed ... 5 = normal ... 9 = ultra expanded).
+float width_percent(int width) {
+    static const float percent[] = {50.0f, 62.5f, 75.0f, 87.5f, 100.0f,
+                                    112.5f, 125.0f, 150.0f, 200.0f};
+    if (width < 1 || width > 9) return 100.0f;
+    return percent[width - 1];
+}
+
+// Creates an SkFont with the rendering settings used everywhere in the engine.
+SkFont* makeSkFont(sk_sp<SkTypeface> typeface, float size) {
+    SkFont* font = new SkFont(typeface, size);
+    font->setSubpixel(true);
+    font->setLinearMetrics(true);
+    font->setEmbeddedBitmaps(true);
+    font->setHinting(SkFontHinting::kNone);
+    font->setEdging(SkFont::Edging::kAntiAlias);
+    return font;
 }
 
 std::string_view css_property_value(std::string_view body, std::string_view property) {
@@ -214,8 +238,10 @@ bool SatoruFontManager::loadFont(const char* name, const uint8_t* data, int size
                     if (entry.first.family == cleaned) {
                         for (const auto& src : entry.second) {
                             if (src.url == url) {
+                                // Keep the width of the file itself, it is needed to
+                                // pick a face for a given font-stretch.
                                 intended_style =
-                                    SkFontStyle(entry.first.weight, SkFontStyle::kNormal_Width,
+                                    SkFontStyle(entry.first.weight, typeface->fontStyle().width(),
                                                 entry.first.slant);
                                 break;
                             }
@@ -555,7 +581,7 @@ std::set<char32_t> SatoruFontManager::uncoveredCodepoints(
 // ============================================================================
 
 std::vector<sk_sp<SkTypeface>> SatoruFontManager::matchFonts(const std::string& family, int weight,
-                                                             SkFontStyle::Slant slant) {
+                                                             SkFontStyle::Slant slant, int stretch) {
     std::string cleanFamily = cleanName(family);
     auto it = m_typefaceCache.find(cleanFamily);
     if (it != m_typefaceCache.end()) {
@@ -570,6 +596,12 @@ std::vector<sk_sp<SkTypeface>> SatoruFontManager::matchFonts(const std::string& 
             SkFontStyle style = c.intended_style;
             int diff = std::abs(style.weight() - weight);
             if (style.slant() != slant) diff += 1000;
+            // font-stretch picks a face by its width. The width is only taken into
+            // account when a stretch other than normal is requested, so the default
+            // selection is not affected.
+            if (stretch != 100) {
+                diff += (int)(std::abs(width_percent(style.width()) - (float)stretch) * 4);
+            }
 
             if (diff < minDiff) {
                 minDiff = diff;
@@ -625,17 +657,25 @@ int SatoruFontManager::getMatchedSlant(sk_sp<SkTypeface> typeface, const std::st
 // Section font_cache: SkFont 生成・可変フォント複製cache (将来 font_cache.cpp)
 // ============================================================================
 
-SkFont* SatoruFontManager::createSkFont(sk_sp<SkTypeface> typeface, float size, int weight) {
+SkFont* SatoruFontManager::createSkFont(sk_sp<SkTypeface> typeface, float size, int weight,
+                                         int stretch,
+                                         const std::vector<litehtml::font_variation_setting>& variations) {
     if (!typeface) return nullptr;
 
     int count = typeface->getVariationDesignPosition(
         SkSpan<SkFontArguments::VariationPosition::Coordinate>());
     if (count > 0) {
+        // Clones are shared by every request that resolves to the same axes.
+        std::string axes = std::to_string(stretch);
+        for (const auto& v : variations) {
+            axes += "," + std::to_string(v.tag) + "=" + std::to_string(v.value);
+        }
+
         // Check global cache first for variable font clones
         sk_sp<SkTypeface> varTypeface = nullptr;
         {
             std::lock_guard<std::mutex> lock(g_font_mutex);
-            global_typeface_clone_key key = {typeface.get(), weight};
+            global_typeface_clone_key key = {typeface.get(), weight, axes};
             auto it = g_variable_clone_cache.find(key);
             if (it != g_variable_clone_cache.end()) {
                 varTypeface = it->second;
@@ -643,55 +683,60 @@ SkFont* SatoruFontManager::createSkFont(sk_sp<SkTypeface> typeface, float size, 
         }
 
         if (varTypeface) {
-            SkFont* font = new SkFont(varTypeface, size);
-            font->setSubpixel(true);
-            font->setLinearMetrics(true);
-            font->setEmbeddedBitmaps(true);
-            font->setHinting(SkFontHinting::kNone);
-            font->setEdging(SkFont::Edging::kAntiAlias);
-            return font;
+            return makeSkFont(varTypeface, size);
         }
 
         std::vector<SkFontArguments::VariationPosition::Coordinate> coords(count);
         typeface->getVariationDesignPosition(SkSpan(coords));
 
-        bool found = false;
+        bool modified = false;
+        // font-weight drives the wght axis.
         for (auto& coord : coords) {
             if (coord.axis == SkSetFourByteTag('w', 'g', 'h', 't')) {
                 coord.value = (float)weight;
-                found = true;
+                modified = true;
                 break;
             }
         }
+        // font-stretch drives the wdth axis.
+        if (stretch != 100) {
+            for (auto& coord : coords) {
+                if (coord.axis == SkSetFourByteTag('w', 'd', 't', 'h')) {
+                    coord.value = (float)stretch;
+                    modified = true;
+                    break;
+                }
+            }
+        }
+        // font-variation-settings has the highest priority and may set any axis,
+        // including wght and wdth.
+        for (const auto& v : variations) {
+            for (auto& coord : coords) {
+                if (coord.axis == v.tag) {
+                    coord.value = v.value;
+                    modified = true;
+                    break;
+                }
+            }
+        }
 
-        if (found) {
+        if (modified) {
             SkFontArguments args;
             SkFontArguments::VariationPosition pos = {coords.data(), (int)coords.size()};
             args.setVariationDesignPosition(pos);
             varTypeface = typeface->makeClone(args);
             if (varTypeface) {
-                std::lock_guard<std::mutex> lock(g_font_mutex);
-                global_typeface_clone_key key = {typeface.get(), weight};
-                g_variable_clone_cache[key] = varTypeface;
-
-                SkFont* font = new SkFont(varTypeface, size);
-                font->setSubpixel(true);
-                font->setLinearMetrics(true);
-                font->setEmbeddedBitmaps(true);
-                font->setHinting(SkFontHinting::kNone);
-                font->setEdging(SkFont::Edging::kAntiAlias);
-                return font;
+                {
+                    std::lock_guard<std::mutex> lock(g_font_mutex);
+                    global_typeface_clone_key key = {typeface.get(), weight, axes};
+                    g_variable_clone_cache[key] = varTypeface;
+                }
+                return makeSkFont(varTypeface, size);
             }
         }
     }
 
-    SkFont* font = new SkFont(typeface, size);
-    font->setSubpixel(true);
-    font->setLinearMetrics(true);
-    font->setEmbeddedBitmaps(true);
-    font->setHinting(SkFontHinting::kNone);
-    font->setEdging(SkFont::Edging::kAntiAlias);
-    return font;
+    return makeSkFont(typeface, size);
 }
 
 // ============================================================================

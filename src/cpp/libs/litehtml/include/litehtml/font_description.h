@@ -17,6 +17,12 @@ struct font_feature_setting {
     uint32_t value = 1;
 };
 
+// One resolved variable-font axis setting (font-variation-settings).
+struct font_variation_setting {
+    uint32_t tag = 0;
+    float value = 0;
+};
+
 struct font_description {
     std::string family;                               // Font Family
     pixel_t size = 0;                                 // Font size
@@ -47,12 +53,19 @@ struct font_description {
     // font-feature-settings) so later entries can override earlier ones.
     std::vector<font_feature_setting> features;
 
+    // font-stretch, as a percentage of the normal width (100 = normal).
+    int stretch = 100;
+
+    // Resolved variable-font axes (font-variation-settings).
+    std::vector<font_variation_setting> variations;
+
     std::string hash() const {
         std::string out;
         out += family;
         out += ":sz=" + std::to_string(size);
         out += ":st=" + std::to_string(style);
         out += ":w=" + std::to_string(weight);
+        out += ":str=" + std::to_string(stretch);
         out += ":dl=" + std::to_string(decoration_line);
         out += ":dt=" + decoration_thickness.to_string();
         out += ":uo=" + underline_offset.to_string();
@@ -79,6 +92,9 @@ struct font_description {
         }
         for (const auto& f : features) {
             out += ":ff=" + std::to_string(f.tag) + "=" + std::to_string(f.value);
+        }
+        for (const auto& v : variations) {
+            out += ":var=" + std::to_string(v.tag) + "=" + std::to_string(v.value);
         }
 
         return out;

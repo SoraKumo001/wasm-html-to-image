@@ -238,9 +238,10 @@ class SatoruContext {
     const std::map<std::string, std::string> &getFontMap() const { return m_fontMap; }
 
     sk_sp<SkTypeface> get_typeface(const std::string &family, int weight, SkFontStyle::Slant slant,
-                                   bool &out_fake_bold);
+                                   bool &out_fake_bold, int stretch = 100);
     std::vector<sk_sp<SkTypeface>> get_typefaces(const std::string &family, int weight,
-                                                 SkFontStyle::Slant slant, bool &out_fake_bold);
+                                                 SkFontStyle::Slant slant, bool &out_fake_bold,
+                                                 int stretch = 100);
     bool get_image_size(const std::string &url, int &w, int &h);
 
     void set_last_png(sk_sp<SkData> png) { m_lastPng = std::move(png); }

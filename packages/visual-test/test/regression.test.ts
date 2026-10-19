@@ -32,14 +32,35 @@ const RED: Rgb = [255, 0, 0];
 const PROBE_FONT_FACE =
   "@font-face{font-family:'RobotoProbe';src:url('https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1Mu4mxK.woff2') format('woff2')}";
 
-async function renderProbeText(body: string, width = 800) {
-  const html = `<html><head><style>${PROBE_FONT_FACE}</style></head><body style="margin:0;background:#fff">${body}</body></html>`;
+// Variable Roboto (wght axis) and variable Roboto Flex (wdth axis). They are
+// used by the font-variation-settings / font-stretch probes.
+const VAR_PROBE_FONT_FACE =
+  "@font-face{font-family:'RobotoVar';src:url('https://cdn.jsdelivr.net/npm/@fontsource-variable/roboto@5.3.0/files/roboto-latin-wght-normal.woff2') format('woff2')}";
+
+const FLEX_PROBE_FONT_FACE =
+  "@font-face{font-family:'RobotoFlex';src:url('https://cdn.jsdelivr.net/npm/@fontsource-variable/roboto-flex@5.3.0/files/roboto-flex-latin-wdth-normal.woff2') format('woff2')}";
+
+// A family with a regular and a condensed face. The face is picked by the
+// requested font-stretch. Only fonts that keep their width class in the OS/2
+// table can be told apart (Google Fonts normalizes it to "normal").
+const REGULAR_FONT_FACE =
+  "@font-face{font-family:'StretchRegular';src:url('https://cdn.jsdelivr.net/npm/@fontsource/roboto@5.3.0/files/roboto-latin-400-normal.woff2') format('woff2')}";
+
+const CONDENSED_FONT_FACE =
+  "@font-face{font-family:'StretchCondensed';src:url('https://cdn.jsdelivr.net/npm/@fontsource/pt-sans-narrow@5.3.0/files/pt-sans-narrow-latin-400-normal.woff2') format('woff2')}";
+
+const STRETCH_PAIR_FONT_FACE =
+  "@font-face{font-family:'StretchPair';src:url('https://cdn.jsdelivr.net/npm/@fontsource/roboto@5.3.0/files/roboto-latin-400-normal.woff2') format('woff2')}" +
+  "@font-face{font-family:'StretchPair';src:url('https://cdn.jsdelivr.net/npm/@fontsource/pt-sans-narrow@5.3.0/files/pt-sans-narrow-latin-400-normal.woff2') format('woff2')}";
+
+async function renderProbeText(body: string, width = 800, fontFace = PROBE_FONT_FACE) {
+  const html = `<html><head><style>${fontFace}</style></head><body style="margin:0;background:#fff">${body}</body></html>`;
   const { data } = await render({ value: html, width, format: "png" });
   return PNG.sync.read(Buffer.from(data));
 }
 
-const probeLine = (style: string, text: string) =>
-  `<div style="font-family:'RobotoProbe',sans-serif;font-size:60px;line-height:90px;color:#000;${style}">${text}</div>`;
+const probeLine = (style: string, text: string, family = "'RobotoProbe'") =>
+  `<div style="font-family:${family},sans-serif;font-size:60px;line-height:90px;color:#000;${style}">${text}</div>`;
 
 // A red decoration line is anti-aliased against the white background, so a
 // partially covered pixel still counts as red when it is clearly redder.
@@ -916,6 +937,138 @@ describe("regression: layout and paint probes", () => {
     const row = (y: number) => img.data.subarray(y * img.width * 4, (y + 1) * img.width * 4);
     // Same text in both lines; only the second line has kerning disabled.
     expect(row(45).equals(row(135))).toBe(false);
+  });
+
+  it("font-kerning: none turns the kern feature off, normal keeps it on", async () => {
+    const base = await renderProbeText(probeLine("", "AVAVAVAVAV"));
+    const none = await renderProbeText(
+      probeLine("font-kerning:none", "AVAVAVAVAV"),
+    );
+    const normal = await renderProbeText(
+      probeLine("font-kerning:normal", "AVAVAVAVAV"),
+    );
+    // Without kerning the AV pairs are not tightened any more.
+    expect(none.data.equals(base.data)).toBe(false);
+    expect(none.data.equals(normal.data)).toBe(false);
+    // The font kerns by itself, so `normal` looks like the initial value.
+    expect(normal.data.equals(base.data)).toBe(true);
+  });
+
+  it("font-kerning is resolved per element (font cache key includes the feature)", async () => {
+    const img = await renderProbeText(
+      probeLine("", "AVAVAVAVAV") + probeLine("font-kerning:none", "AVAVAVAVAV"),
+    );
+    const row = (y: number) => img.data.subarray(y * img.width * 4, (y + 1) * img.width * 4);
+    expect(row(45).equals(row(135))).toBe(false);
+  });
+
+  it("font-variation-settings sets an axis of a variable font", async () => {
+    const base = await renderProbeText(
+      probeLine("", "Handgloves", "'RobotoVar'"),
+      800,
+      VAR_PROBE_FONT_FACE,
+    );
+    const heavy = await renderProbeText(
+      probeLine("font-variation-settings:'wght' 900", "Handgloves", "'RobotoVar'"),
+      800,
+      VAR_PROBE_FONT_FACE,
+    );
+    // The wght axis moves the glyphs to the heavy instance.
+    expect(heavy.data.equals(base.data)).toBe(false);
+  });
+
+  it("font-variation-settings ignores an axis the font does not have", async () => {
+    const base = await renderProbeText(
+      probeLine("", "Handgloves", "'RobotoVar'"),
+      800,
+      VAR_PROBE_FONT_FACE,
+    );
+    const unknown = await renderProbeText(
+      probeLine("font-variation-settings:'xxxx' 900", "Handgloves", "'RobotoVar'"),
+      800,
+      VAR_PROBE_FONT_FACE,
+    );
+    const heavy = await renderProbeText(
+      probeLine("font-variation-settings:'wght' 900", "Handgloves", "'RobotoVar'"),
+      800,
+      VAR_PROBE_FONT_FACE,
+    );
+    // The variable font is really used (the wght axis changes it) and the
+    // unknown axis is ignored.
+    expect(heavy.data.equals(base.data)).toBe(false);
+    expect(unknown.data.equals(base.data)).toBe(true);
+  });
+
+  it("font-variation-settings is resolved per element (font cache key includes the axes)", async () => {
+    const img = await renderProbeText(
+      probeLine("", "Handgloves", "'RobotoVar'") +
+        probeLine("font-variation-settings:'wght' 900", "Handgloves", "'RobotoVar'"),
+      800,
+      VAR_PROBE_FONT_FACE,
+    );
+    const row = (y: number) => img.data.subarray(y * img.width * 4, (y + 1) * img.width * 4);
+    expect(row(45).equals(row(135))).toBe(false);
+  });
+
+  it("font-stretch sets the width axis of a variable font", async () => {
+    const base = await renderProbeText(
+      probeLine("", "Handgloves", "'RobotoFlex'"),
+      800,
+      FLEX_PROBE_FONT_FACE,
+    );
+    const condensed = await renderProbeText(
+      probeLine("font-stretch:75%", "Handgloves", "'RobotoFlex'"),
+      800,
+      FLEX_PROBE_FONT_FACE,
+    );
+    const expanded = await renderProbeText(
+      probeLine("font-stretch:expanded", "Handgloves", "'RobotoFlex'"),
+      800,
+      FLEX_PROBE_FONT_FACE,
+    );
+    // The wdth axis is set from the requested width.
+    expect(condensed.data.equals(base.data)).toBe(false);
+    expect(expanded.data.equals(base.data)).toBe(false);
+    expect(condensed.data.equals(expanded.data)).toBe(false);
+  });
+
+  it("font-stretch is resolved per element (font cache key includes the width)", async () => {
+    const img = await renderProbeText(
+      probeLine("", "Handgloves", "'RobotoFlex'") +
+        probeLine("font-stretch:75%", "Handgloves", "'RobotoFlex'"),
+      800,
+      FLEX_PROBE_FONT_FACE,
+    );
+    const row = (y: number) => img.data.subarray(y * img.width * 4, (y + 1) * img.width * 4);
+    expect(row(45).equals(row(135))).toBe(false);
+  });
+
+  it("font-stretch picks the face of the family with the matching width", async () => {
+    const regular = await renderProbeText(
+      probeLine("", "Handgloves", "'StretchRegular'"),
+      800,
+      REGULAR_FONT_FACE,
+    );
+    const condensed = await renderProbeText(
+      probeLine("", "Handgloves", "'StretchCondensed'"),
+      800,
+      CONDENSED_FONT_FACE,
+    );
+    // The family holds a regular and a condensed face; the stretch has to pick
+    // the face with the matching width.
+    const pairCondensed = await renderProbeText(
+      probeLine("font-stretch:condensed", "Handgloves", "'StretchPair'"),
+      800,
+      STRETCH_PAIR_FONT_FACE,
+    );
+    const pairExpanded = await renderProbeText(
+      probeLine("font-stretch:125%", "Handgloves", "'StretchPair'"),
+      800,
+      STRETCH_PAIR_FONT_FACE,
+    );
+    expect(pairCondensed.data.equals(condensed.data)).toBe(true);
+    expect(pairExpanded.data.equals(regular.data)).toBe(true);
+    expect(pairCondensed.data.equals(regular.data)).toBe(false);
   });
 
   it("image-rendering: pixelated keeps scaled images unfiltered (img and background)", async () => {

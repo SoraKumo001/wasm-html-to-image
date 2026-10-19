@@ -100,16 +100,17 @@ void SatoruContext::loadImageFromPixels(const char *name, int width, int height,
 }
 
 sk_sp<SkTypeface> SatoruContext::get_typeface(const std::string &family, int weight,
-                                              SkFontStyle::Slant slant, bool &out_fake_bold) {
-    auto tfs = get_typefaces(family, weight, slant, out_fake_bold);
+                                              SkFontStyle::Slant slant, bool &out_fake_bold,
+                                              int stretch) {
+    auto tfs = get_typefaces(family, weight, slant, out_fake_bold, stretch);
     return tfs.empty() ? nullptr : tfs[0];
 }
 
 std::vector<sk_sp<SkTypeface>> SatoruContext::get_typefaces(const std::string &family, int weight,
                                                             SkFontStyle::Slant slant,
-                                                            bool &out_fake_bold) {
+                                                            bool &out_fake_bold, int stretch) {
     out_fake_bold = false;
-    auto result = fontManager.matchFonts(family, weight, slant);
+    auto result = fontManager.matchFonts(family, weight, slant, stretch);
 
     if (!result.empty()) {
         // Fake bold check (only for non-variable fonts, though this flag will be

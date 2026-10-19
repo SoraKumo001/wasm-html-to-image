@@ -220,7 +220,7 @@ The rendering engine couples **litehtml** (HTML/CSS layout) and **Google Skia** 
 - **Floats & Clear**: `float: left | right | none`, `clear: left | right | both | none`.
 
 ### 2. Typography & Text Shaping
-- **Fonts**: `font-family`, `font-size`, `font-weight` (100–900, `bold`, `normal`), `font-style` (`italic`, `normal`), `font-variant`, `line-height`, `letter-spacing`, `word-spacing`.
+- **Fonts**: `font-family`, `font-size`, `font-weight` (100–900, `bold`, `normal`), `font-style` (`italic`, `normal`), `font-variant`, `font-variant-*` longhands, `font-feature-settings`, `font-kerning` (`auto`, `normal`, `none`), `font-variation-settings` (variable font axes), `font-stretch` (keywords and percentages), `line-height`, `letter-spacing`, `word-spacing`.
 - **Text Alignment & Flow**: `text-align` (`left`, `right`, `center`, `justify`), `vertical-align`, `text-transform` (`uppercase`, `lowercase`, `capitalize`, `none`).
 - **Wrapping & Breaking**: `white-space` (`normal`, `nowrap`, `pre`, `pre-wrap`, `pre-line`), `text-wrap` (`wrap`, `nowrap`, `balance`), `word-break` (`normal`, `break-all`, `keep-all`), `overflow-wrap` (`normal`, `break-word`, `anywhere`).
 - **Ellipsis & Multi-line Clamping**:

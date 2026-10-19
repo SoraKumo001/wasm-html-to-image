@@ -110,7 +110,7 @@ namespace litehtml
   };
   std::map<string_id, vector<string_id>> shorthands =
       {
-          {_font_, {_font_style_, _font_variant_, _font_variant_ligatures_, _font_variant_numeric_, _font_variant_east_asian_, _font_variant_caps_, _font_variant_position_, _font_feature_settings_, _font_weight_, _font_size_, _line_height_, _font_family_}},
+          {_font_, {_font_style_, _font_variant_, _font_variant_ligatures_, _font_variant_numeric_, _font_variant_east_asian_, _font_variant_caps_, _font_variant_position_, _font_feature_settings_, _font_stretch_, _font_weight_, _font_size_, _line_height_, _font_family_}},
           {_font_variant_, {_font_variant_ligatures_, _font_variant_numeric_, _font_variant_east_asian_, _font_variant_caps_, _font_variant_position_}},
 
           {_background_, {_background_color_, _background_position_x_, _background_position_y_, _background_repeat_, _background_attachment_, _background_image_, _background_image_baseurl_, _background_size_, _background_origin_, _background_clip_}},
@@ -757,6 +757,18 @@ namespace litehtml
 
     case _font_feature_settings_:
       parse_font_feature_settings(value, important);
+      break;
+
+    case _font_kerning_:
+      parse_font_kerning(value, important);
+      break;
+
+    case _font_variation_settings_:
+      parse_font_variation_settings(value, important);
+      break;
+
+    case _font_stretch_:
+      parse_font_stretch(value, important);
       break;
 
     case _font_family_:
@@ -1874,15 +1886,58 @@ namespace litehtml
     return false;
   }
 
+  // ── font-stretch / font-kerning / font-variation-settings ──
+  // Percentage of the normal width for each font-stretch keyword. The order
+  // matches font_stretch_strings.
+  static const float font_stretch_keyword_percent[] = {
+      50.0f,   // ultra-condensed
+      62.5f,   // extra-condensed
+      75.0f,   // condensed
+      87.5f,   // semi-condensed
+      100.0f,  // normal
+      112.5f,  // semi-expanded
+      125.0f,  // expanded
+      150.0f,  // extra-expanded
+      200.0f,  // ultra-expanded
+  };
+
+  // A font-stretch keyword (percentages are not allowed in the `font` shorthand,
+  // where they would be ambiguous with the font-size percentage).
+  bool parse_font_stretch_keyword(const css_token &tok, float &out)
+  {
+    if (tok.type != IDENT) return false;
+    int idx = value_index(lowcase(tok.ident()), font_stretch_strings);
+    if (idx < 0) return false;
+    out = font_stretch_keyword_percent[idx];
+    return true;
+  }
+
+  // A font-stretch keyword or percentage.
+  bool parse_font_stretch_value(const css_token &tok, float &out)
+  {
+    if (parse_font_stretch_keyword(tok, out)) return true;
+    if (tok.type == PERCENTAGE)
+    {
+      out = tok.n.number;
+      if (out < 50.0f) out = 50.0f;
+      if (out > 200.0f) out = 200.0f;
+      return true;
+    }
+    return false;
+  }
+
   bool parse_font_style_variant_weight(const css_token_vector &tokens, int &index,
-                                       int &style, int &variant, css_length &weight)
+                                       int &style, int &variant, css_length &weight,
+                                       float &stretch)
   {
     bool style_found = false;
     bool variant_found = false;
     bool weight_found = false;
+    bool stretch_found = false;
     bool res = false;
+    // style, variant, weight and stretch can each appear once.
     int i = index, count = 0;
-    while (i < (int)tokens.size() && count++ < 3)
+    while (i < (int)tokens.size() && count++ < 4)
     {
       const auto &tok = tokens[i++];
       if (tok.ident() == "normal")
@@ -1905,6 +1960,12 @@ namespace litehtml
       else if (!weight_found && parse_font_weight(tok, weight))
       {
         weight_found = true;
+        index++;
+        res = true;
+      }
+      else if (!stretch_found && parse_font_stretch_keyword(tok, stretch))
+      {
+        stretch_found = true;
         index++;
         res = true;
       }
@@ -2087,6 +2148,59 @@ namespace litehtml
                         property_value(tokens, important, false, m_layer, m_specificity));
   }
 
+  void style::parse_font_kerning(const css_token_vector &tokens, bool important)
+  {
+    if (tokens.size() != 1 || tokens[0].type != IDENT) return;
+    string kw = lowcase(tokens[0].ident());
+    if (value_index(kw, font_kerning_strings) < 0) return;
+    add_parsed_property(_font_kerning_,
+                        property_value(kw, important, false, m_layer, m_specificity));
+  }
+
+  void style::parse_font_stretch(const css_token_vector &tokens, bool important)
+  {
+    if (tokens.size() != 1) return;
+    float percent = 0;
+    if (!parse_font_stretch_value(tokens[0], percent)) return;
+    add_parsed_property(_font_stretch_,
+                        property_value(percent, important, false, m_layer, m_specificity));
+  }
+
+  // font-variation-settings: normal | <string> <number> [, <string> <number>]*
+  void style::parse_font_variation_settings(const css_token_vector &tokens, bool important)
+  {
+    if (tokens.size() == 1 && lowcase(tokens[0].ident()) == "normal")
+    {
+      add_parsed_property(_font_variation_settings_,
+                          property_value(tokens, important, false, m_layer, m_specificity));
+      return;
+    }
+    if (tokens.empty()) return;
+
+    size_t i = 0;
+    while (i < tokens.size())
+    {
+      // The axis tag is a 4 character string of printable ASCII.
+      if (tokens[i].type != STRING || tokens[i].str.size() != 4) return;
+      for (char c : tokens[i].str)
+      {
+        if ((unsigned char)c < 0x20 || (unsigned char)c > 0x7E) return;
+      }
+      ++i;
+      // The axis value is a number.
+      if (i >= tokens.size() || tokens[i].type != NUMBER) return;
+      ++i;
+      if (i < tokens.size())
+      {
+        if (tokens[i].type != COMMA) return;
+        ++i;
+        if (i == tokens.size()) return; // trailing comma
+      }
+    }
+    add_parsed_property(_font_variation_settings_,
+                        property_value(tokens, important, false, m_layer, m_specificity));
+  }
+
   void style::parse_font(css_token_vector tokens, bool important)
   {
     int style = font_style_normal;
@@ -2094,6 +2208,7 @@ namespace litehtml
     css_length weight = css_length::predef_value(font_weight_normal);
     css_length size = css_length::predef_value(font_size_medium);
     css_length line_height = css_length::predef_value(line_height_normal);
+    float stretch = 100.0f;
     string font_family;
 
     if (tokens.size() == 1 && (tokens[0].type == STRING || tokens[0].type == IDENT) && value_in_list(tokens[0].str, font_system_family_name_strings))
@@ -2103,7 +2218,7 @@ namespace litehtml
     else
     {
       int index = 0;
-      parse_font_style_variant_weight(tokens, index, style, variant, weight);
+      parse_font_style_variant_weight(tokens, index, style, variant, weight, stretch);
       if (!size.from_token(at(tokens, index), f_length_percentage | f_positive, font_size_strings))
         return;
       index++;
@@ -2120,13 +2235,14 @@ namespace litehtml
     }
     add_parsed_property(_font_style_, property_value(style, important, false, m_layer, m_specificity));
     add_parsed_property(_font_variant_, property_value(variant, important, false, m_layer, m_specificity));
-    // `font` resets every font-variant longhand (font-variant-css2 only has small-caps)
-    // and font-feature-settings to their initial values.
+    // `font` resets every font-variant longhand (font-variant-css2 only has small-caps),
+    // font-stretch and font-feature-settings to their initial values.
     add_parsed_property(_font_variant_ligatures_, property_value(string("normal"), important, false, m_layer, m_specificity));
     add_parsed_property(_font_variant_numeric_, property_value(string("normal"), important, false, m_layer, m_specificity));
     add_parsed_property(_font_variant_east_asian_, property_value(string("normal"), important, false, m_layer, m_specificity));
     add_parsed_property(_font_variant_caps_, property_value(string(variant == font_variant_small_caps ? "small-caps" : "normal"), important, false, m_layer, m_specificity));
     add_parsed_property(_font_variant_position_, property_value(string("normal"), important, false, m_layer, m_specificity));
+    add_parsed_property(_font_stretch_, property_value(stretch, important, false, m_layer, m_specificity));
     css_token_vector feature_normal;
     feature_normal.push_back(css_token(IDENT, "normal"));
     add_parsed_property(_font_feature_settings_, property_value(feature_normal, important, false, m_layer, m_specificity));

@@ -156,6 +156,30 @@ void append_font_feature_settings(std::vector<font_feature_setting>& out,
         i = j;
     }
 }
+
+// font-variation-settings: a list of <string> <number> pairs. The tag is a
+// 4 character axis name (e.g. "wght"), the value the position on that axis.
+void append_font_variation_settings(std::vector<font_variation_setting>& out,
+                                    const css_token_vector& tokens)
+{
+    size_t i = 0;
+    while (i < tokens.size()) {
+        if (tokens[i].type != STRING || tokens[i].str.size() != 4) {
+            ++i;
+            continue;
+        }
+        const string& tag = tokens[i].str;
+        float value = 0;
+        size_t j = i + 1;
+        if (j < tokens.size() && tokens[j].type == NUMBER) {
+            value = tokens[j].n.number;
+            ++j;
+        }
+        out.push_back({ot_tag(tag[0], tag[1], tag[2], tag[3]), value});
+        while (j < tokens.size() && tokens[j].type != STRING) ++j;
+        i = j;
+    }
+}
 }  // namespace
 }  // namespace litehtml
 
@@ -1087,6 +1111,12 @@ void litehtml::css_properties::compute_font(const element* el, const document::p
         _font_variant_position_, true, "normal", offset(m_font_variant_position));
     m_font_feature_settings = el->get_property<css_token_vector>(
         _font_feature_settings_, true, css_token_vector(), offset(m_font_feature_settings));
+    m_font_kerning =
+        el->get_property<string>(_font_kerning_, true, "auto", offset(m_font_kerning));
+    m_font_variation_settings = el->get_property<css_token_vector>(
+        _font_variation_settings_, true, css_token_vector(), offset(m_font_variation_settings));
+    m_font_stretch =
+        el->get_property<float>(_font_stretch_, true, 100.0f, offset(m_font_stretch));
     bool propagate_decoration =
         !is_one_of(m_display, display_inline_block, display_inline_table, display_inline_flex, display_inline_grid) &&
         m_float == float_none &&
@@ -1239,12 +1269,24 @@ void litehtml::css_properties::compute_font(const element* el, const document::p
     descr.text_stroke_width = text_stroke_width;
     descr.text_stroke_color = text_stroke_color;
 
+    // font-kerning maps onto the `kern` OpenType feature. `auto` leaves the
+    // kerning of the font itself alone, `normal` turns it on and `none` turns
+    // it off. It is applied before font-variant-* / font-feature-settings so
+    // that font-feature-settings can still override it.
+    if (m_font_kerning == "normal")
+        add_ot_feature(descr.features, ot_tag('k', 'e', 'r', 'n'), 1);
+    else if (m_font_kerning == "none")
+        add_ot_feature(descr.features, ot_tag('k', 'e', 'r', 'n'), 0);
+
     append_font_variant_features(descr.features, m_font_variant_ligatures, 0);
     append_font_variant_features(descr.features, m_font_variant_numeric, 1);
     append_font_variant_features(descr.features, m_font_variant_east_asian, 2);
     append_font_variant_features(descr.features, m_font_variant_caps, 3);
     append_font_variant_features(descr.features, m_font_variant_position, 4);
     append_font_feature_settings(descr.features, m_font_feature_settings);
+
+    descr.stretch = (int)std::lround(m_font_stretch);
+    append_font_variation_settings(descr.variations, m_font_variation_settings);
 
     m_font = doc->get_font(descr, &m_font_metrics);
 }

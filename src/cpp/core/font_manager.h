@@ -42,11 +42,12 @@ class SatoruFontManager : public satoru::IFontManager {
         const std::set<char32_t>& codepoints) const override;
 
     std::vector<sk_sp<SkTypeface>> matchFonts(const std::string& family, int weight,
-                                              SkFontStyle::Slant slant) override;
+                                              SkFontStyle::Slant slant, int stretch = 100) override;
     int getMatchedWeight(sk_sp<SkTypeface> typeface, const std::string& family) override;
     int getMatchedSlant(sk_sp<SkTypeface> typeface, const std::string& family) override;
 
-    SkFont* createSkFont(sk_sp<SkTypeface> typeface, float size, int weight) override;
+    SkFont* createSkFont(sk_sp<SkTypeface> typeface, float size, int weight, int stretch = 100,
+                          const std::vector<litehtml::font_variation_setting>& variations = {}) override;
 
     void addFallbackTypeface(sk_sp<SkTypeface> tf) override { m_fallbackTypefaces.push_back(tf); }
     const std::vector<sk_sp<SkTypeface>>& getFallbackTypefaces() const override {

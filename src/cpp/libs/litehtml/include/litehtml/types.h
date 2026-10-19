@@ -737,6 +737,13 @@ namespace litehtml
 
 #define  font_variant_position_strings  "normal;sub;super"
 
+// font-stretch keywords. The values are percentages of the normal width and
+// are listed in the same order as font_stretch_keyword_percent (style.cpp).
+#define  font_stretch_strings "ultra-condensed;extra-condensed;condensed;semi-condensed;normal;semi-expanded;expanded;extra-expanded;ultra-expanded"
+
+// font-kerning keywords.
+#define  font_kerning_strings "auto;normal;none"
+
 #define  font_weight_strings    "normal;bold;bolder;lighter"
 
         enum font_weight

@@ -39,12 +39,18 @@ class IFontManager {
 
     // ── Font matching ──────────────────────────────────────────────────
     virtual std::vector<sk_sp<SkTypeface>> matchFonts(const std::string& family, int weight,
-                                                      SkFontStyle::Slant slant) = 0;
+                                                      SkFontStyle::Slant slant,
+                                                      int stretch = 100) = 0;
     virtual int getMatchedWeight(sk_sp<SkTypeface> typeface, const std::string& family) = 0;
     virtual int getMatchedSlant(sk_sp<SkTypeface> typeface, const std::string& family) = 0;
 
     // ── SkFont instance creation (with Variable Font axis support) ────
-    virtual SkFont* createSkFont(sk_sp<SkTypeface> typeface, float size, int weight) = 0;
+    // `stretch` is the font-stretch percentage (100 = normal) and `variations`
+    // holds the font-variation-settings axes. They are applied on top of the
+    // `weight` axis of the font.
+    virtual SkFont* createSkFont(sk_sp<SkTypeface> typeface, float size, int weight,
+                                 int stretch = 100,
+                                 const std::vector<litehtml::font_variation_setting>& variations = {}) = 0;
 
     // ── Fallback typefaces ─────────────────────────────────────────────
     virtual void addFallbackTypeface(sk_sp<SkTypeface> tf) = 0;
