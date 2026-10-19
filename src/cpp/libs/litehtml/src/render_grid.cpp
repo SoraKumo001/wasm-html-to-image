@@ -1,3 +1,5 @@
+#include <sstream>
+#include <map>
 #include <cmath>
 #include "html.h"
 #include "render_grid.h"
@@ -169,6 +171,7 @@ struct grid_line
     int index = 0;
     int span = 1;
     bool is_span = false;
+    string name;  // <custom-ident> naming a line or an area (resolved by the grid layout)
 
     void parse(const css_token_vector& tokens)
     {
@@ -186,9 +189,98 @@ struct grid_line
                 if (is_span) span = (int)tok.n.number;
                 else index = (int)tok.n.number;
             }
+            else if (tok.type == IDENT && !is_span)
+            {
+                string id = lowcase(tok.ident());
+                if (id != "auto") name = tok.ident();
+            }
         }
     }
 };
+
+// Named grid lines ([name] groups in grid-template-columns/rows) and areas
+// (grid-template-areas), resolved to 1-based line numbers.
+struct grid_names
+{
+    std::map<string, int> lines;  // name -> first 1-based line number
+
+    // Walks the raw template tokens; every track-size token advances the line counter.
+    void collect(const css_token_vector& tokens, int& line)
+    {
+        for (const auto& tok : tokens)
+        {
+            if (tok.type == WHITESPACE) continue;
+            if (tok.type == SQUARE_BLOCK)
+            {
+                for (const auto& t : tok.value)
+                {
+                    if (t.type == IDENT && !lines.count(t.ident())) lines[t.ident()] = line;
+                }
+            }
+            else if (tok.type == CV_FUNCTION && lowcase(tok.name) == "repeat")
+            {
+                int count = 1;
+                bool seen_comma = false;
+                css_token_vector inner;
+                for (const auto& t : tok.value)
+                {
+                    if (t.type == ',') { seen_comma = true; continue; }
+                    if (!seen_comma)
+                    {
+                        if (t.type == NUMBER) count = std::max(1, (int)t.n.number);
+                    }
+                    else
+                    {
+                        inner.push_back(t);
+                    }
+                }
+                for (int i = 0; i < count; i++) collect(inner, line);
+            }
+            else
+            {
+                line++;
+            }
+        }
+    }
+};
+
+struct grid_area_rect
+{
+    int row_start, row_end, col_start, col_end;  // 0-based, end exclusive
+};
+
+// grid-template-areas: one string per row, cells separated by whitespace, '.' for an empty cell.
+void parse_grid_areas(const css_token_vector& tokens, std::map<string, grid_area_rect>& areas, int& rows, int& cols)
+{
+    rows = 0;
+    cols = 0;
+    for (const auto& tok : tokens)
+    {
+        if (tok.type != STRING) continue;
+        int c = 0;
+        std::istringstream iss(tok.str);
+        string cell;
+        while (iss >> cell)
+        {
+            if (cell.find_first_not_of('.') != string::npos)
+            {
+                auto it = areas.find(cell);
+                if (it == areas.end())
+                {
+                    areas[cell] = { rows, rows + 1, c, c + 1 };
+                }
+                else
+                {
+                    it->second.row_end = std::max(it->second.row_end, rows + 1);
+                    it->second.col_end = std::max(it->second.col_end, c + 1);
+                }
+            }
+            c++;
+        }
+        cols = std::max(cols, c);
+        rows++;
+    }
+}
 }
 
 void litehtml::render_item_grid::calculate_grid_layout(const containing_block_context& self_size, formatting_context* fmt_ctx)
@@ -316,6 +408,38 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         }
     }
 
+    // Named lines and grid-template-areas
+    grid_names col_names, row_names;
+    {
+        int line = 1;
+        col_names.collect(css().get_grid_columns_tokens(), line);
+        line = 1;
+        row_names.collect(css().get_grid_rows_tokens(), line);
+    }
+    std::map<string, grid_area_rect> areas;
+    int area_rows = 0, area_cols = 0;
+    parse_grid_areas(css().get_grid_template_areas(), areas, area_rows, area_cols);
+    for (const auto& a : areas)
+    {
+        // an area X implies the lines X-start / X-end on both axes
+        col_names.lines.emplace(a.first + "-start", a.second.col_start + 1);
+        col_names.lines.emplace(a.first + "-end", a.second.col_end + 1);
+        row_names.lines.emplace(a.first + "-start", a.second.row_start + 1);
+        row_names.lines.emplace(a.first + "-end", a.second.row_end + 1);
+    }
+    // The areas grid defines at least that many (implicit, auto-sized) tracks.
+    if (!is_multicol)
+    {
+        while ((int)columns_template.size() < area_cols) columns_template.push_back(css_length::predef_value(0));
+    }
+    while ((int)rows_template.size() < area_rows) rows_template.push_back(css_length::predef_value(0));
+    auto resolve_named = [&](grid_line& gl, const grid_names& names, bool is_end) {
+        if (gl.name.empty() || gl.index != 0 || gl.is_span) return;
+        auto it = names.lines.find(gl.name);
+        if (it == names.lines.end()) it = names.lines.find(gl.name + (is_end ? "-end" : "-start"));
+        if (it != names.lines.end()) gl.index = it->second;
+    };
+
     int num_columns = (int)columns_template.size();
     if (num_columns == 0) num_columns = 1;
 
@@ -420,6 +544,10 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         ce.parse(el->src_el()->css().get_grid_column_end());
         rs.parse(el->src_el()->css().get_grid_row_start());
         re.parse(el->src_el()->css().get_grid_row_end());
+        resolve_named(cs, col_names, false);
+        resolve_named(ce, col_names, true);
+        resolve_named(rs, row_names, false);
+        resolve_named(re, row_names, true);
 
         int item_col_start = 0;
         int item_col_span = 1;

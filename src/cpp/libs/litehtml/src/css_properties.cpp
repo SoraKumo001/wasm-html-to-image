@@ -1199,6 +1199,13 @@ void litehtml::css_properties::compute_grid(const element* el, const document::p
         m_grid_template_rows = el->get_property<length_vector>(
             _grid_template_rows_, false, length_vector(), offset(m_grid_template_rows));
 
+        m_grid_columns_tokens = el->get_property<css_token_vector>(
+            _satoru_grid_columns_tokens_, false, css_token_vector(), offset(m_grid_columns_tokens));
+        m_grid_rows_tokens = el->get_property<css_token_vector>(
+            _satoru_grid_rows_tokens_, false, css_token_vector(), offset(m_grid_rows_tokens));
+        m_grid_template_areas = el->get_property<css_token_vector>(
+            _grid_template_areas_, false, css_token_vector(), offset(m_grid_template_areas));
+
         for (auto& x : m_grid_template_columns) doc->cvt_units(x, m_font_metrics, 0);
         for (auto& y : m_grid_template_rows) doc->cvt_units(y, m_font_metrics, 0);
 

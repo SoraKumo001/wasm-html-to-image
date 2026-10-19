@@ -24,6 +24,7 @@ const near = (a: Rgb, b: Rgb, tol = 12) =>
   a.every((v, i) => Math.abs(v - b[i]) <= tol);
 
 const BLUE: Rgb = [0, 0, 255];
+const RED: Rgb = [255, 0, 0];
 
 describe("regression: layout and paint probes", () => {
   it("column flex container with auto height honours min-height (flex-grow fills it)", async () => {
@@ -235,5 +236,30 @@ describe("regression: layout and paint probes", () => {
     expect(closed.height).toBeLessThan(60);
     const opened = await render({ value: `<html><body style="margin:0">${body(" open")}</body></html>`, width: 100, format: "png" });
     expect(opened.height).toBeGreaterThan(200);
+  });
+  it("grid named lines, grid-template-areas and grid-area place items", async () => {
+    const g = (style: string, items: string) =>
+      `<div style="display:grid;width:300px;height:100px;${style}">${items}</div>`;
+    const areas = await renderPng(
+      g(
+        "grid-template-areas:'header header' 'side main';grid-template-columns:100px 1fr;grid-template-rows:40px 1fr",
+        `<div style="grid-area:header;background:#f00"></div><div style="grid-area:side;background:#00f"></div><div style="grid-area:main;background:#0f0"></div>`,
+      ),
+      320,
+      100,
+    );
+    expect(near(areas.at(250, 10), RED)).toBe(true);
+    expect(near(areas.at(10, 80), BLUE)).toBe(true);
+    expect(near(areas.at(250, 80), [0, 255, 0])).toBe(true);
+    const lines = await renderPng(
+      g(
+        "--c:[a] 100px [b] 1fr [c];grid-template-columns:var(--c)",
+        `<div style="grid-column:b / c;background:#f00"></div><div style="grid-column:a / b;background:#00f"></div>`,
+      ),
+      320,
+      100,
+    );
+    expect(near(lines.at(250, 10), RED)).toBe(true);
+    expect(near(lines.at(10, 10), BLUE)).toBe(true);
   });
 });

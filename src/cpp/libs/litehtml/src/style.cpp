@@ -124,6 +124,7 @@ namespace litehtml
           {_flex_, {_flex_grow_, _flex_shrink_, _flex_basis_}},
           {_flex_flow_, {_flex_direction_, _flex_wrap_}},
           {_gap_, {_row_gap_, _column_gap_}},
+          {_grid_area_, {_grid_row_start_, _grid_column_start_, _grid_row_end_, _grid_column_end_}},
           {_grid_column_, {_grid_column_start_, _grid_column_end_}},
           {_grid_row_, {_grid_row_start_, _grid_row_end_}},
           {_grid_gap_, {_row_gap_, _column_gap_}},
@@ -780,8 +781,36 @@ namespace litehtml
     case _grid_column_end_:
     case _grid_row_start_:
     case _grid_row_end_:
+    case _grid_template_areas_:
       add_parsed_property(name, property_value(value, important, false, m_layer, m_specificity));
       break;
+
+    case _grid_area_:
+    {
+      // grid-area: <row-start> [/ <column-start> [/ <row-end> [/ <column-end>]]]
+      std::vector<css_token_vector> parts;
+      css_token_vector cur;
+      for (const auto& tok : value)
+      {
+        if (tok.ch == '/') { parts.push_back(cur); cur.clear(); }
+        else if (tok.type != WHITESPACE) cur.push_back(tok);
+      }
+      parts.push_back(cur);
+      auto is_name = [](const css_token_vector& v) {
+        if (v.size() != 1 || v[0].type != IDENT) return false;
+        string id = lowcase(v[0].ident());
+        return id != "auto" && id != "span";
+      };
+      css_token_vector rs = parts[0], cs, re, ce;
+      if (parts.size() > 1) cs = parts[1]; else if (is_name(rs)) cs = rs;
+      if (parts.size() > 2) re = parts[2]; else if (is_name(rs)) re = rs;
+      if (parts.size() > 3) ce = parts[3]; else if (is_name(cs)) ce = cs;
+      if (!rs.empty()) add_property(_grid_row_start_, rs, baseurl, important, container, layer, specificity);
+      if (!cs.empty()) add_property(_grid_column_start_, cs, baseurl, important, container, layer, specificity);
+      if (!re.empty()) add_property(_grid_row_end_, re, baseurl, important, container, layer, specificity);
+      if (!ce.empty()) add_property(_grid_column_end_, ce, baseurl, important, container, layer, specificity);
+      return;
+    }
 
     case _column_rule_width_:
     case _outline_width_:
@@ -2199,6 +2228,9 @@ namespace litehtml
     }
     if (!tracks.empty())
       add_parsed_property(name, property_value(tracks, important, false, m_layer, m_specificity));
+    // Keep the raw tokens too: the grid layout reads named lines ([name]) from them.
+    add_parsed_property(name == _grid_template_columns_ ? _satoru_grid_columns_tokens_ : _satoru_grid_rows_tokens_,
+                        property_value(tokens, important, false, m_layer, m_specificity));
   }
 
   void style::add_parsed_property(string_id name, const property_value &propval)

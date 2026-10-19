@@ -119,6 +119,10 @@ namespace litehtml
     length_vector m_grid_template_columns;
     length_vector m_grid_template_rows;
 
+    css_token_vector m_grid_columns_tokens;
+    css_token_vector m_grid_rows_tokens;
+    css_token_vector m_grid_template_areas;
+
     css_token_vector m_grid_column_start;
     css_token_vector m_grid_column_end;
     css_token_vector m_grid_row_start;
@@ -480,6 +484,9 @@ namespace litehtml
 
     const length_vector &get_grid_template_columns() const;
     const length_vector &get_grid_template_rows() const;
+    const css_token_vector &get_grid_columns_tokens() const { return m_grid_columns_tokens; }
+    const css_token_vector &get_grid_rows_tokens() const { return m_grid_rows_tokens; }
+    const css_token_vector &get_grid_template_areas() const { return m_grid_template_areas; }
 
     const css_token_vector &get_grid_column_start() const;
     void set_grid_column_start(const char* val);

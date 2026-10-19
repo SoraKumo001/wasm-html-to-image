@@ -402,6 +402,10 @@ namespace litehtml
 
       _grid_template_columns_,
       _grid_template_rows_,
+      _grid_template_areas_,
+      _grid_area_,
+      _satoru_grid_columns_tokens_,
+      _satoru_grid_rows_tokens_,
       _grid_column_,
       _grid_column_start_,
       _grid_column_end_,
