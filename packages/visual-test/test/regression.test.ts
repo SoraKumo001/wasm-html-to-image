@@ -767,6 +767,37 @@ describe("regression: layout and paint probes", () => {
     expect(near(first.at(10, 110), RED)).toBe(true); // .b starts red
   });
 
+  it("several animations on one element are layered (shorthand list and longhand lists)", async () => {
+    const html = (rule: string) => `<html><head><style>
+      @keyframes fade { from { opacity: 0.1 } to { opacity: 1 } }
+      @keyframes tint { from { background-color: #f00 } to { background-color: #00f } }
+      @keyframes lift { from { transform: translate(0, 0) } to { transform: translate(0, 20px) } }
+      .a { width: 40px; height: 40px; margin: 30px 10px 0; background: #000; ${rule} }
+    </style></head><body style="margin:0;background:#fff"><div class="a"></div></body></html>`;
+    const rules = [
+      "animation: fade 400ms infinite, tint 400ms infinite;",
+      "animation-name: fade, tint; animation-duration: 400ms, 400ms; animation-iteration-count: infinite;",
+    ];
+    for (const rule of rules) {
+      const first = await renderFirstFrame(html(rule), 80, 120);
+      // Both layered: red background at 10% opacity over white = (255, 230, 230). Only fade would
+      // give a grey, only tint a saturated red.
+      const [r0, g0, b0] = first.at(20, 40);
+      expect(r0).toBeGreaterThan(g0 + 10);
+      expect(g0).toBeGreaterThan(200);
+      expect(b0).toBeGreaterThan(200);
+      const r = await render({ value: html(rule), width: 80, height: 120, format: "webp", animation: { duration: 400, fps: 10 } });
+      expect(r.animation).toBe(true);
+    }
+    // A unitless zero is a valid translate length and the element really moves.
+    const lift = async (progressRule: string) => {
+      const r = await render({ value: html(progressRule), width: 80, height: 120, format: "apng", animation: { duration: 400, fps: 5 } });
+      return Buffer.from(r.data as Uint8Array);
+    };
+    const apng = await lift("animation: lift 400ms infinite;");
+    expect(apng.includes("acTL")).toBe(true);
+  });
+
   it("float margin box (not the border box) narrows the first line", async () => {
     const squares = '<i style="display:inline-block;width:16px;height:16px;background:#00f"></i>'.repeat(30);
     const { at } = await renderPng(

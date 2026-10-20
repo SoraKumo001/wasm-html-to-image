@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdio>
 #include <limits>
+#include <map>
 #include <memory>
 
 #include <litehtml/css_parser.h>
@@ -421,14 +422,21 @@ int satoru_render_animation_to_converter_val(SatoruInstance* satoru, ImageConver
         // Per-frame style of every animated element. Only the animated properties are written,
         // so each element keeps its static style for everything else.
         const double time_ms = (double)sample.progress * (double)span_ms;
-        std::vector<std::string> styles;
-        styles.reserve(units.size());
-        std::string key;
+        // Animations on the same element (several keyframes bound by one rule, or several
+        // rules) are layered in order: the later one wins where they animate the same property.
+        std::vector<litehtml::element*> order;
+        std::map<litehtml::element*, std::string> styles;
         for (const auto& unit : units) {
             const html_to_image::AnimationPhase phase =
                 html_to_image::resolve_animation_phase(unit.timing, time_ms);
             const bool animated = phase.applies;
-            std::string style = unit.base_style;
+            litehtml::element* el = unit.target.get();
+            auto it = styles.find(el);
+            if (it == styles.end()) {
+                it = styles.emplace(el, unit.base_style).first;
+                order.push_back(el);
+            }
+            std::string& style = it->second;
             if (animated && !unit.spec.stops.empty()) {
                 style += ";opacity:";
                 style += html_to_image::format_float(
@@ -449,9 +457,11 @@ int satoru_render_animation_to_converter_val(SatoruInstance* satoru, ImageConver
                 style += html_to_image::format_rgba(
                     html_to_image::sample_color(unit.background_color_stops, phase.progress));
             }
-            key += style;
+        }
+        std::string key;
+        for (auto* el : order) {
+            key += styles[el];
             key += '\n';
-            styles.push_back(std::move(style));
         }
 
         // Dedupe at the style-value level (before any draw): an unchanged
@@ -463,10 +473,11 @@ int satoru_render_animation_to_converter_val(SatoruInstance* satoru, ImageConver
 
         if (total_bytes + per_frame_bytes > html_to_image::k_max_animation_total_pixel_bytes) break;
 
-        for (size_t k = 0; k < units.size(); ++k) {
-            units[k].target->set_attr("style", styles[k].c_str());
-            units[k].target->refresh_styles();
-            units[k].target->compute_styles(false);
+        for (const auto& unit : units) {
+            const std::string& style = styles[unit.target.get()];
+            unit.target->set_attr("style", style.c_str());
+            unit.target->refresh_styles();
+            unit.target->compute_styles(false);
         }
         style_touched = true;
         // Paint-phase sync: re-collecting styled (now positioned at opacity<1

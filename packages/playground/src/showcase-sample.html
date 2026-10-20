@@ -38,6 +38,11 @@
     50%  { color: #ffffff; }
     100% { color: #fde68a; }
   }
+  @keyframes blink {
+    0%   { opacity: 1; }
+    50%  { opacity: 0.55; }
+    100% { opacity: 1; }
+  }
   @keyframes glow {
     0%   { background-color: #dcfce7; }
     50%  { background-color: #fde68a; }
@@ -61,14 +66,15 @@
   }
   .card.a { animation: float-a 3s infinite ease-in-out; }
   .card.b { animation: float-b 3s infinite ease-in-out; }
-  .shape { animation: pop 2s infinite ease-in-out; }
+  /* 1 つの要素に複数アニメーション: 拡大縮小 + 点滅 */
+  .shape { animation: pop 2s infinite ease-in-out, blink 3s infinite ease-in-out; }
   .star { animation: turn 4s infinite linear; }
   .join { animation: amber 3s infinite ease-in-out; }
   .vertical p { animation: ink 3s infinite ease-in-out; }
   tfoot td { animation: glow 2s infinite ease-in-out; }
   .clamp { animation: tint 3s infinite ease-in-out; }
   .floated { animation: slide-in 2s infinite ease-in-out; }
-  .hero p { animation: ink 3s infinite ease-in-out; }
+  .hero p { animation: ink 3s infinite ease-in-out, slide-in 3s infinite ease-in-out; }
   * { box-sizing: border-box; }
   body {
     margin: 0;
@@ -286,7 +292,7 @@
     <div class="card b wide">
       <h2>アニメーション (@keyframes → animated WebP / APNG / GIF)</h2>
       <span class="tag">transform / opacity / color / background-color</span>
-      <p style="margin:0;font-size:13px">ページ内の各要素が別々の <code>@keyframes</code> で動いています: カードの浮き沈み(透明度 + 移動)、図形の拡大縮小、星の回転、文字色・背景色の変化、float の移動、ページ背景色。</p>
+      <p style="margin:0;font-size:13px">ページ内の各要素が別々の <code>@keyframes</code> で動いています(図形とヒーロー文は 1 要素に複数アニメーション): カードの浮き沈み(透明度 + 移動)、図形の拡大縮小、星の回転、文字色・背景色の変化、float の移動、ページ背景色。</p>
     </div>
   </div>
 </div>

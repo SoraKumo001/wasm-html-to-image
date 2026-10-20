@@ -827,7 +827,7 @@ inline bool parse_transform_value(const std::string& value,
         size_t name_start = i;
         while (i < value.size() && is_ident_char(value[i])) ++i;
         if (i == name_start) return false;
-        const std::string name = to_lower(value.substr(name_start, i - name_start));
+        std::string name = to_lower(value.substr(name_start, i - name_start));
         skip_ws(value, i);
         if (i >= value.size() || value[i] != '(') return false;
         ++i;
@@ -874,16 +874,24 @@ inline bool parse_transform_value(const std::string& value,
             args.push_back(arg_out);
         }
 
-        if (name == "translate") {
-            if (args.empty() || args.size() > 2) return false;
-            for (const auto& a : args) {
+        if (name == "translate" || name == "translatex" || name == "translatey") {
+            const bool axis_only = name != "translate";
+            if (args.empty() || args.size() > (axis_only ? 1u : 2u)) return false;
+            for (auto& a : args) {
+                // A unitless zero is a valid length (translate(0, -8px)).
+                if (a.unit.empty() && a.value == 0.0f) a.unit = "px";
                 if (a.unit != "px" && a.unit != "%") return false;
             }
-            if (args.size() == 1) {
+            if (name == "translatey") {
+                TransformArg zero;
+                zero.unit = args[0].unit;
+                args.insert(args.begin(), zero);
+            } else if (args.size() == 1) {
                 TransformArg zero;
                 zero.unit = args[0].unit;
                 args.push_back(zero);
             }
+            name = "translate";
         } else if (name == "rotate") {
             if (args.size() != 1) return false;
             const std::string& unit = args[0].unit;
@@ -1154,6 +1162,60 @@ struct AnimationBinding {
     AnimationTimingDecl timing;
 };
 
+// Split a value at its top-level commas (items trimmed).
+inline std::vector<std::string> split_top_level_commas(const std::string& value) {
+    std::vector<std::string> out;
+    int depth = 0;
+    size_t start = 0;
+    for (size_t i = 0; i <= value.size(); ++i) {
+        const char c = i < value.size() ? value[i] : ',';
+        if (c == '(') ++depth;
+        else if (c == ')' && depth > 0) --depth;
+        else if (c == ',' && depth == 0) {
+            out.push_back(trim(value.substr(start, i - start)));
+            start = i + 1;
+        }
+    }
+    return out;
+}
+
+// Reduce the animation declarations of a rule that animates several keyframes
+// (`animation: a 2s, b 3s` or `animation-name: a, b; animation-duration: 2s, 3s`) to the
+// single-animation declarations that belong to `name_l`. A rule with one animation is unchanged.
+inline std::string select_animation_item(const std::string& decls_raw, const std::string& name_l) {
+    std::vector<std::pair<std::string, std::string>> props;
+    split_declarations(decls_raw, props);
+    size_t index = 0;
+    for (const auto& prop : props) {
+        if (prop.first != "animation-name") continue;
+        const auto items = split_top_level_commas(to_lower(prop.second));
+        for (size_t i = 0; i < items.size(); ++i) {
+            if (items[i] == name_l) index = i;
+        }
+    }
+    std::string out;
+    for (const auto& prop : props) {
+        const std::string& key = prop.first;
+        if (key == "animation") {
+            const auto items = split_top_level_commas(prop.second);
+            for (const auto& item : items) {
+                for (const auto& token : split_value_tokens(to_lower(item))) {
+                    if (token == name_l) {
+                        out += "animation:" + item + ";";
+                        break;
+                    }
+                }
+            }
+        } else if (key == "animation-duration" || key == "animation-delay" ||
+                   key == "animation-iteration-count" || key == "animation-timing-function" ||
+                   key == "animation-direction" || key == "animation-fill-mode") {
+            const auto items = split_top_level_commas(prop.second);
+            if (!items.empty()) out += key + ":" + items[index % items.size()] + ";";
+        }
+    }
+    return out;
+}
+
 // Find the first qualified rule that binds `name`.
 inline AnimationBinding find_animation_binding(const std::string& css,
                                                 const std::string& name) {
@@ -1193,11 +1255,12 @@ inline AnimationBinding find_animation_binding(const std::string& css,
         if (an != std::string::npos) {
             size_t c = decls.find(':', an + 13);
             if (c != std::string::npos) {
-                size_t v = c + 1;
-                skip_ws(decls, v);
-                size_t ve = v;
-                while (ve < decls.size() && is_ident_char(decls[ve])) ++ve;
-                if (decls.substr(v, ve - v) == name_l) match = true;
+                // `animation-name: a, b` lists several animations: any item may match.
+                size_t ve = decls.find(';', c);
+                if (ve == std::string::npos) ve = decls.size();
+                for (const auto& item : split_top_level_commas(decls.substr(c + 1, ve - (c + 1)))) {
+                    if (item == name_l) match = true;
+                }
             }
         }
         if (!match) {
@@ -1226,7 +1289,7 @@ inline AnimationBinding find_animation_binding(const std::string& css,
         }
         if (match) {
             binding.selector = sel;
-            binding.timing = find_animation_timing(decls_raw);
+            binding.timing = find_animation_timing(select_animation_item(decls_raw, name_l));
             return binding;
         }
     }
