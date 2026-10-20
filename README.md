@@ -7,27 +7,31 @@
 [![Documentation](https://img.shields.io/badge/Docs-Docusaurus-blue)](https://sorakumo001.github.io/wasm-html-to-image/master/docs/)
 [![Samples](https://img.shields.io/badge/Examples-GitHub-green)](https://github.com/SoraKumo001/wasm-html-to-image-samples)
 
-A high-performance, WebAssembly-powered HTML-to-image renderer and image optimization engine. It consolidates HTML rendering (**Satoru** / **Skia** / **litehtml**) and native image encoding (**WebP / AVIF / JPEG**) into a single, unified WASM binary.
+A high-performance HTML-to-image renderer and image processing engine powered by a single WebAssembly module.  
+Supports modern CSS, **vertical writing (`writing-mode: vertical-rl`)**, and **CSS animations** (`@keyframes` to animated WebP / APNG / GIF).
 
-No headless browsers (Chromium, Puppeteer, or Playwright) required. Runs seamlessly across Node.js, Cloudflare Workers, Edge runtimes, browsers, and the CLI.
+**No Chromium / Puppeteer.** **No native dependencies (Sharp / ImageMagick).**  
+Runs seamlessly across **Node.js**, **Cloudflare Workers**, **Edge runtimes**, **browsers**, and the **CLI**.
 
 ---
 
-## ✨ Features
+## ⚡ What Can It Do?
 
-- ⚡ **Single Unified WASM Binary**: HTML parsing, CSS layout, vector painting, and image encoding execute entirely inside WebAssembly without copying intermediate framebuffers across JS boundaries.
-- 🎨 **Versatile Inputs**: Renders HTML strings, remote Web URLs, multi-page HTML arrays, or raw image buffers (PNG, JPEG, WebP, GIF, AVIF, JXL, BMP, Data URLs; JPEG XL also works in `<img>`).
-- 📦 **Rich Output Formats**: Direct SVG vector streams, high-quality PNG, JPEG, WebP, AVIF, JXL, animated WebP / APNG / GIF, uncompressed RAW pixels, ThumbHash placeholders, and multi-page vector PDFs.
-- 🚀 **Zero-Config Single Bundle**: Use `wasm-html-to-image/single` to call `render()` immediately without manual WASM loading or build setup.
-- 🌐 **Edge & Serverless Native**: Dedicated subpaths (`/workerd` for Cloudflare Workers, `/edge-light` for Vercel Edge) tailored for strict serverless constraints.
-- 🧵 **Multi-Threaded Worker Pool**: Process thousands of images in parallel using `wasm-html-to-image/workers` (Node.js worker threads / Web Workers).
-- ⚛️ **Ecosystem Ready**: First-class support for React / Preact JSX components and Tailwind CSS inlined styling.
+| Feature | Description | Formats |
+| :--- | :--- | :--- |
+| 🌐 **HTML / React to Image** | Render HTML/CSS strings or React JSX directly to high-quality images | PNG, JPEG, WebP, AVIF, JXL, SVG |
+| ⛩️ **Vertical Writing** | Full CJK vertical text support (`writing-mode: vertical-rl` / `vertical-lr`) with HarfBuzz shaping | PNG, JPEG, WebP, AVIF, PDF |
+| 🎬 **CSS Animation to WebP / GIF** | Record CSS `@keyframes` animations directly into animated image formats | Animated WebP, APNG, GIF |
+| 🔗 **URL to Screenshot** | Capture remote web pages without launching a browser | PNG, WebP, JPEG, AVIF |
+| 📑 **Multi-Page Vector PDF** | Generate crisp, selectable vector PDFs from HTML or images | PDF |
+| 🖼️ **Image Resizing & Optimization** | Fast format conversion, crop, and resize (Sharp alternative) | WebP, AVIF, JXL, PNG, JPEG |
+| 🪶 **ThumbHash Blur Placeholder** | Generate compact blur placeholders for instant progressive loading | ThumbHash |
 
 ---
 
 ## 📦 Installation
 
-```bash npm2yarn
+```bash
 npm install wasm-html-to-image
 ```
 
@@ -35,153 +39,126 @@ npm install wasm-html-to-image
 
 ## 🚀 Quick Start
 
-### Zero-Config Rendering (`wasm-html-to-image`)
-
-The easiest way to get started. WASM is embedded and loaded automatically (in Cloudflare Workers, the workerd-optimized module is automatically selected):
+One single function — `render()` — handles HTML rendering, vertical text, animations, URL capturing, and image processing:
 
 ```typescript
 import { render } from "wasm-html-to-image";
 
-// 1. Render HTML to PNG (returns RenderResult with .data and dimensions)
+// 1. Render HTML (Supports modern CSS & Vertical Writing)
 const result = await render({
-  value: `<div style="background: linear-gradient(135deg, #667eea, #764ba2); padding: 40px; color: white; border-radius: 16px; font-family: sans-serif;">
-    <h1 style="margin: 0; font-size: 32px;">Hello wasm-html-to-image</h1>
-    <p style="margin-top: 8px; opacity: 0.9;">High-performance serverless rendering</p>
+  value: `<div style="writing-mode: vertical-rl; font-family: sans-serif; padding: 40px; background: #0f172a; color: white;">
+    <h1 style="margin: 0; font-size: 28px;">日本語縦書きレイアウト</h1>
+    <p style="opacity: 0.8;">Vertical writing with HarfBuzz text shaping</p>
   </div>`,
-  width: 800,
+  width: 500,
+  height: 600,
   format: "png",
 });
-
 console.log(result.data); // Uint8Array
-console.log(result.width, result.height); // 800, 600
+console.log(result.width, result.height); // 500, 600
 
-// 2. Convert and resize image with the same render() function
-const webp = await render({
-  value: result.data, // Pass raw image buffer directly
-  width: 400, // Target resized width
+// 2. Record CSS Animation -> Animated WebP / APNG / GIF
+const animated = await render({
+  value: `<style>
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { width: 80px; height: 80px; border: 8px solid #f3f3f3; border-top: 8px solid #6366f1; border-radius: 50%; animation: spin 1.5s linear infinite; }
+  </style><div class="spinner"></div>`,
   format: "webp",
+  animation: 1500, // duration in ms
+  animationFps: 20,
+});
+
+// 3. Capture a URL screenshot
+const screenshot = await render({
+  url: "https://example.com",
+  width: 1200,
+  height: 630,
+  format: "webp",
+});
+
+// 4. Convert & Resize an image (JPEG -> AVIF)
+const avif = await render({
+  value: imageBuffer, // Pass raw Uint8Array / Buffer directly
+  width: 400,
+  format: "avif",
   quality: 80,
 });
-
-console.log(webp.originalWidth, webp.originalHeight); // Original image dimensions
-console.log(webp.width, webp.height); // Output image dimensions
 ```
 
 ---
 
-## 🖼️ Image-to-Image Conversion & Optimization
+## 💻 CLI Usage
 
-`wasm-html-to-image` is not only an HTML renderer — it also serves as a high-speed, self-contained **image-to-image converter, resizer, and compressor** without requiring heavy native libraries like Sharp or ImageMagick.
+Render from your terminal without writing code:
 
-Simply pass raw image bytes (`Uint8Array` or `Buffer`) or a `data:image/...` URL to `render()`. It automatically identifies input magic bytes, skips the HTML layout pass, and routes straight into the native Skia image pipeline. Every call returns rich metadata (`width`, `height`, `originalWidth`, `originalHeight`, `format`, `isAnimated`) along with the output data in `.data`:
+```bash
+# Render HTML to WebP
+npx wasm-html-to-image template.html -o banner.webp -w 1200 -h 630 -f webp -q 90
 
-```typescript
-import fs from "node:fs/promises";
-import { render } from "wasm-html-to-image/single";
+# Render HTML with vertical writing
+npx wasm-html-to-image tategaki.html -o tategaki.png -w 600 -h 800
 
-const imageBuffer = await fs.readFile("photo.jpg");
+# Convert CSS animation into Animated WebP or GIF
+npx wasm-html-to-image loader.html -o loader.webp -f webp --animation 2000 --animation-fps 20
+npx wasm-html-to-image loader.html -o loader.gif -f gif --animation 2000
 
-// 1. Convert JPEG -> AVIF (highest compression)
-const avif = await render({
-  value: imageBuffer,
-  width: 800,
-  format: "avif",
-  quality: 75,
-  speed: 6, // 0 (best quality) - 10 (fastest). AVIF default is 8; 6 trades time for ~15-20% smaller files
-});
-await fs.writeFile("photo.avif", Buffer.from(avif.data));
+# Capture screenshot from URL
+npx wasm-html-to-image https://example.com -o site.png -w 1280 -h 720
 
-// 2. Crop & Resize -> PNG
-const cropped = await render({
-  value: imageBuffer,
-  crop: { x: 50, y: 50, width: 300, height: 300 },
-  width: 150,
-  height: 150,
-  format: "png",
-});
-await fs.writeFile("cropped.png", Buffer.from(cropped.data));
-
-// 3. Generate ThumbHash Blur Placeholder
-const thumbhash = await render({
-  value: imageBuffer,
-  width: 100,
-  format: "thumbhash",
-});
-console.log("ThumbHash bytes:", thumbhash.data);
-
-// 4. Convert Image -> Single-Page Vector PDF
-const pdf = await render({
-  value: imageBuffer,
-  format: "pdf",
-});
-await fs.writeFile("photo.pdf", Buffer.from(pdf.data));
-
-// 5. Convert Animated GIF -> Animated WebP
-const animatedWebp = await render({
-  value: await fs.readFile("animation.gif"),
-  format: "webp",
-  animation: true,
-});
-await fs.writeFile("animation.webp", Buffer.from(animatedWebp.data));
+# Convert and resize an image (JPEG -> AVIF)
+npx wasm-html-to-image photo.jpg -o photo.avif -w 800 -f avif -q 80
 ```
 
 ---
 
-## 📊 Format Matrix
+## 📊 Supported Formats
 
 ### Inputs (`value` / `url`)
-
-| Input Type                  | Detection                        | Description                                                |
-| --------------------------- | -------------------------------- | ---------------------------------------------------------- |
-| **HTML String**             | Text starting with tags / markup | Standard HTML/CSS rendering                                |
-| **HTML Array (`string[]`)** | Array of HTML strings            | Multi-page PDF generation (one page per item)              |
-| **URL (`url`)**             | `http://` or `https://`          | Automatically fetches and renders remote web pages         |
-| **Image Buffer**            | `Uint8Array` / `Buffer`          | Magic-byte recognition for PNG, JPEG, WebP, GIF, AVIF, BMP |
-| **Data URL**                | `data:image/*;base64,...`        | Inlined image data URL, routed straight to image pipeline  |
+- **HTML String**: Standard HTML & CSS (Flexbox, Grid, gradients, custom fonts, **vertical writing (`writing-mode: vertical-rl` / `vertical-lr`)**, `@keyframes` animations).
+- **HTML Array (`string[]`)**: Multi-page PDF generation (one page per array item).
+- **URL (`url`)**: Automatically fetches and renders remote web pages.
+- **Image Buffer / Data URL**: `PNG`, `JPEG`, `WebP`, `GIF`, `AVIF`, `JXL`, `BMP`.
 
 ### Outputs (`format`)
+`png`, `jpeg`, `webp`, `avif`, `jxl`, `apng`, `gif`, `svg`, `pdf`, `thumbhash`, `raw` (uncompressed RGBA).
 
-All formats return a `RenderResult<T>` object containing `.data` (`Uint8Array` or `string` for SVG) and metadata (`width`, `height`, `originalWidth`, `originalHeight`, `format`, `isAnimated`):
-
-| Format      | `result.data` Type | HTML Input                                     | Image Input                   |
-| ----------- | ------------------ | ---------------------------------------------- | ----------------------------- |
-| `png`       | `Uint8Array`       | Skia render → PNG encode                       | Decodes and converts to PNG   |
-| `jpeg`      | `Uint8Array`       | Skia render → JPEG encode (`quality`)          | Decodes and compresses JPEG   |
-| `webp`      | `Uint8Array`       | Skia render → WebP encode (`quality`)          | Decodes and compresses WebP   |
-| `apng`      | `Uint8Array`       | Skia render → PNG (animated with `animation`)  | Decodes and converts to PNG   |
-| `gif`       | `Uint8Array`       | Skia render → GIF (256 colors, dithered; animated with `animation`) | Decodes and converts to GIF |
-| `avif`      | `Uint8Array`       | Skia render → AVIF encode (`quality`, `speed`) | Decodes and compresses AVIF   |
-| `jxl`       | `Uint8Array`       | Skia render → JXL encode (`quality`, `speed`)  | Decodes and compresses JXL    |
-| `raw`       | `Uint8Array`       | Uncompressed RGBA pixel bytes                  | Uncompressed RGBA pixel bytes |
-| `thumbhash` | `Uint8Array`       | Computes ThumbHash from render                 | Computes ThumbHash from image |
-| `svg`       | `string`           | Skia vector drawing stream                     | Single `<image>` wrapper SVG  |
-| `pdf`       | `Uint8Array`       | SkPDFDocument vector PDF                       | Single-page centered PDF      |
+Every call returns a `RenderResult` object:
+```typescript
+interface RenderResult {
+  data: Uint8Array | string; // Binary bytes (or string for SVG)
+  width: number;
+  height: number;
+  originalWidth: number;
+  originalHeight: number;
+  format: string;
+  isAnimated: boolean;
+}
+```
 
 ---
 
-## 🧩 Subpaths & Usage
+## 🌐 Environments & Subpaths
 
-Choose the optimal entry point for your application and environment:
-
-| Subpath                         | Target Environment                       | Highlights                                                             |
-| ------------------------------- | ---------------------------------------- | ---------------------------------------------------------------------- |
-| `wasm-html-to-image`            | Universal (Node, Edge, Cloudflare, Deno) | Zero-config default: auto routes to single/workerd, instant `render()` |
-| `wasm-html-to-image/single`     | Node.js, Bundlers                        | Single bundled WASM entry point                                        |
-| `wasm-html-to-image/index`      | High-throughput servers                  | Explicit `loadHtmlToImageModule()` & manual instance reuse             |
-| `wasm-html-to-image/workerd`    | Cloudflare Workers                       | WebAssembly.Module compilation compatible                              |
-| `wasm-html-to-image/edge-light` | Vercel Edge Runtime                      | Optimized for Edge Runtime constraints                                 |
-| `wasm-html-to-image/workers`    | Node.js, Browsers                        | Multi-threaded worker pool for high concurrency                        |
-| `wasm-html-to-image/react`      | React integration                        | Directly render React JSX element trees                                |
-| `wasm-html-to-image/preact`     | Preact integration                       | Directly render Preact JSX element trees                               |
-| `wasm-html-to-image/tailwind`   | Utility styling                          | UnoCSS / Tailwind v4 utilities as CSS (`createCSS`, `tailwind()` for `tw` / `@theme` / `@apply`)                                      |
+| Subpath | Target Environment | Highlights |
+| :--- | :--- | :--- |
+| `wasm-html-to-image` | Universal (Node, Edge, Cloudflare, Deno) | **Zero-config default**: auto-routes to single or workerd |
+| `wasm-html-to-image/single` | Node.js, Bundlers | Single bundled WASM binary |
+| `wasm-html-to-image/index` | High-throughput servers | Explicit `loadHtmlToImageModule()` & instance reuse |
+| `wasm-html-to-image/workerd` | Cloudflare Workers | Optimized for `WebAssembly.Module` compilation |
+| `wasm-html-to-image/edge-light` | Vercel Edge Runtime | Tailored for strict Edge constraints |
+| `wasm-html-to-image/workers` | Node.js, Web Workers | Multi-threaded worker pool for high concurrency |
+| `wasm-html-to-image/react` | React integration | Directly render React JSX element trees |
+| `wasm-html-to-image/preact` | Preact integration | Directly render Preact JSX element trees |
+| `wasm-html-to-image/tailwind` | Utility styling | UnoCSS / Tailwind v4 utilities (`createCSS`, `tailwind()`) |
 
 ---
 
-## 💡 Practical Examples
+## 💡 Advanced Examples
 
-### 1. High-Throughput Node.js Server (Instance Reuse)
+<details>
+<summary><b>1. High-Throughput Node.js Server (Module Instance Reuse)</b></summary>
 
-Reuse the WASM module across incoming HTTP requests for maximum performance:
+Reuse the compiled WASM module across incoming HTTP requests for maximum performance:
 
 ```typescript
 import { loadHtmlToImageModule, htmlToImage } from "wasm-html-to-image";
@@ -204,19 +181,13 @@ app.get("/ogp", async (req, res) => {
 
 app.listen(3000);
 ```
+</details>
 
-### 2. Cloudflare Workers (`workerd`)
-
-Generate dynamic social preview images at the edge:
+<details>
+<summary><b>2. Cloudflare Workers (Edge OGP Generator)</b></summary>
 
 ```typescript
-// wrangler.jsonc: no "rules" needed on current Wrangler (v3/v4) —
-// `import ... from "*.wasm"` is bundled as WebAssembly.Module by default.
-// Minimal wrangler.jsonc: { "main": "src/index.ts", "compatibility_date": "2026-09-01" }
-// (Only configure "rules" yourself if you customize bundling rules or use a very old Wrangler.
-// Note: @cloudflare/vite-plugin ignores "rules".)
-
-import { render } from "wasm-html-to-image"; // auto-selects the workerd build on Cloudflare ("wasm-html-to-image/workerd" also works)
+import { render } from "wasm-html-to-image"; // auto-selects the workerd build
 
 export default {
   async fetch(request: Request): Promise<Response> {
@@ -238,10 +209,12 @@ export default {
   },
 };
 ```
+</details>
 
-### 3. Multi-Threaded Batch Generation (`workers`)
+<details>
+<summary><b>3. Multi-Threaded Batch Generation (`workers`)</b></summary>
 
-Leverage multi-core CPUs to process large batches of images in parallel:
+Leverage multi-core CPUs with worker threads to render hundreds of images in parallel:
 
 ```typescript
 import { render } from "wasm-html-to-image/workers";
@@ -257,37 +230,35 @@ const tasks = items.map((item) =>
 
 const images = await Promise.all(tasks);
 ```
+</details>
 
-### 4. Command Line Interface (CLI)
+<details>
+<summary><b>4. Image Cropping & ThumbHash</b></summary>
 
-Render directly from your shell without writing code:
+```typescript
+import { render } from "wasm-html-to-image";
 
-```bash
-# Render HTML to WebP
-npx wasm-html-to-image template.html -o banner.webp -w 1200 -h 630 -f webp -q 90
+// Crop and resize
+const cropped = await render({
+  value: imageBuffer,
+  crop: { x: 50, y: 50, width: 300, height: 300 },
+  width: 150,
+  height: 150,
+  format: "png",
+});
 
-# Capture screenshot from URL
-npx wasm-html-to-image https://example.com -o site.png -w 1280 -h 720
-
-# Convert and resize an image
-npx wasm-html-to-image photo.jpg -o photo.avif -w 800 -f avif -q 80
-
-# Sample an opacity / transform / color @keyframes animation into an animated WebP
-npx wasm-html-to-image loader.html -o loader.webp -f webp --animation 2000 --animation-fps 20
-
-# Play the animated WebP once instead of looping forever
-npx wasm-html-to-image loader.html -o loader.webp -f webp --animation 2000 --animation-loop 1
-
-# The same animation as APNG or GIF
-npx wasm-html-to-image loader.html -o loader.png -f apng --animation 2000
-npx wasm-html-to-image loader.html -o loader.gif -f gif --animation 2000
+// Generate ThumbHash blur placeholder
+const thumbhash = await render({
+  value: imageBuffer,
+  width: 100,
+  format: "thumbhash",
+});
 ```
+</details>
 
 ---
 
 ## 📖 Documentation & Examples
-
-For full guides, architecture deep-dives, font management, and advanced recipes:
 
 👉 **[Read the Official Documentation](https://sorakumo001.github.io/wasm-html-to-image/master/docs/)**  
 👉 **[Sample Code & Projects (GitHub)](https://github.com/SoraKumo001/wasm-html-to-image-samples)**
