@@ -79,10 +79,61 @@ void test_transform_signature_mismatch_is_static() {
 
 void test_transform_unsupported_function_is_static() {
     const AnimationSpec spec = parse_animation(
+        doc("@keyframes move { from { transform: skewX(0deg) }"
+            " to { transform: skewX(30deg) } }"
+            ".box { animation-name: move; }"));
+    check(spec.transform_stops.empty(), "skewX is not supported");
+}
+
+void test_translate_axis_functions_and_unitless_zero() {
+    // translateX / translateY are accepted and interpolated as translate(x, y).
+    const AnimationSpec x = parse_animation(
         doc("@keyframes move { from { transform: translateX(0px) }"
             " to { transform: translateX(100px) } }"
             ".box { animation-name: move; }"));
-    check(spec.transform_stops.empty(), "translateX is not supported");
+    check(x.transform_stops.size() == 2, "translateX is parsed");
+    std::string value;
+    check(sample_transform(x, 0.5f, value), "translateX is sampled");
+    check(value == "translate(50px, 0px)", "translateX becomes translate(x,0px)");
+    const AnimationSpec y = parse_animation(
+        doc("@keyframes move { from { transform: translateY(0px) }"
+            " to { transform: translateY(10px) } }"
+            ".box { animation-name: move; }"));
+    check(sample_transform(y, 1.0f, value) && value == "translate(0px, 10px)",
+          "translateY becomes translate(0px,y)");
+    // A unitless zero is a valid length: translate(0, -8px) must still animate.
+    const AnimationSpec z = parse_animation(
+        doc("@keyframes move { from { transform: translate(0, 0) }"
+            " to { transform: translate(0, -8px) } }"
+            ".box { animation-name: move; }"));
+    check(z.transform_stops.size() == 2, "a unitless zero length is accepted");
+}
+
+void test_one_keyframes_bound_by_several_rules() {
+    const std::vector<AnimationSpec> specs = parse_animations(
+        doc("@keyframes tint { from { color: #ff0000 } to { color: #0000ff } }"
+            ".a { animation: tint 2s; } .b { animation: tint 4s; }"));
+    check(specs.size() == 2, "one spec per binding rule");
+    check(specs.size() == 2 && specs[0].selector == ".a" && specs[1].selector == ".b",
+          "each spec keeps its selector");
+    check(specs.size() == 2 && specs[0].timing.duration == "2s" && specs[1].timing.duration == "4s",
+          "each spec keeps its own timing");
+}
+
+void test_animation_lists_select_the_item_of_the_keyframes() {
+    const std::vector<AnimationSpec> specs = parse_animations(
+        doc("@keyframes a { from { opacity: 0 } to { opacity: 1 } }"
+            "@keyframes b { from { color: #ff0000 } to { color: #0000ff } }"
+            ".box { animation: a 2s, b 3s; }"));
+    check(specs.size() == 2, "both keyframes of the list are bound");
+    check(specs.size() == 2 && specs[0].timing.duration == "2s" && specs[1].timing.duration == "3s",
+          "each keyframes takes its own list item");
+    const std::vector<AnimationSpec> longhand = parse_animations(
+        doc("@keyframes a { from { opacity: 0 } to { opacity: 1 } }"
+            "@keyframes b { from { color: #ff0000 } to { color: #0000ff } }"
+            ".box { animation-name: a, b; animation-duration: 2s, 3s; }"));
+    check(longhand.size() == 2 && longhand[1].timing.duration == "3s",
+          "longhand lists are matched by index");
 }
 
 void test_color_stops() {
@@ -563,6 +614,9 @@ int main() {
     test_transform_stops();
     test_transform_signature_mismatch_is_static();
     test_transform_unsupported_function_is_static();
+    test_translate_axis_functions_and_unitless_zero();
+    test_one_keyframes_bound_by_several_rules();
+    test_animation_lists_select_the_item_of_the_keyframes();
     test_color_stops();
     test_background_color_stops();
     test_colour_interpolation();
