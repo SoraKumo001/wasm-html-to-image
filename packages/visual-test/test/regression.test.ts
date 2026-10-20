@@ -747,6 +747,26 @@ describe("regression: layout and paint probes", () => {
     expect(gap).toBeGreaterThan(5);
   });
 
+  it("every @keyframes block animates its own elements (several animations, class selectors)", async () => {
+    const html = `<html><head><style>
+      @keyframes fade { from { opacity: 0.1 } to { opacity: 1 } }
+      @keyframes tint { from { background-color: #f00 } to { background-color: #00f } }
+      .a { width: 40px; height: 40px; background: #000; animation: fade 400ms infinite; }
+      .b { width: 40px; height: 40px; animation: tint 400ms infinite; }
+    </style></head><body style="margin:0;background:#fff">
+      <div class="a"></div><div class="a" style="margin-top:10px"></div><div class="b" style="margin-top:10px"></div>
+    </body></html>`;
+    const r = await render({ value: html, width: 60, height: 150, format: "webp", animation: { duration: 400, fps: 10 } });
+    expect(r.animation).toBe(true);
+    const frames = webpFrameHashes(new Uint8Array(r.data as Uint8Array));
+    expect(frames.length).toBeGreaterThan(2);
+    // The still render of the first frame already reflects both animations at progress 0.
+    const first = await renderFirstFrame(html, 60, 150);
+    expect(first.at(10, 10)[0]).toBeGreaterThan(180); // .a faded (10% black over white)
+    expect(first.at(10, 60)[0]).toBeGreaterThan(180); // second .a (same keyframes, second element)
+    expect(near(first.at(10, 110), RED)).toBe(true); // .b starts red
+  });
+
   it("float margin box (not the border box) narrows the first line", async () => {
     const squares = '<i style="display:inline-block;width:16px;height:16px;background:#00f"></i>'.repeat(30);
     const { at } = await renderPng(

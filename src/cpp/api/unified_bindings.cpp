@@ -320,6 +320,18 @@ html_to_image::AnimationTiming resolve_animation_timing(
 
 }  // namespace
 
+// One animated element: its own copy of the keyframes (var() resolved against the element),
+// timing and colour stops.
+struct AnimationUnit {
+    litehtml::element::ptr target;
+    std::string base_style;
+    html_to_image::AnimationSpec spec;
+    html_to_image::AnimationTiming timing;
+    std::vector<html_to_image::ColorKeyframe> color_stops;
+    std::vector<html_to_image::ColorKeyframe> background_color_stops;
+    int span_ms = 0;
+};
+
 int satoru_render_animation_to_converter_val(SatoruInstance* satoru, ImageConverterInstance* converter,
                                              val htmls, int width, int height, val options_val,
                                              int duration_ms, int fps) {
@@ -331,10 +343,9 @@ int satoru_render_animation_to_converter_val(SatoruInstance* satoru, ImageConver
     SatoruRenderOptions render_options;
     parse_satoru_options(render_options, options_val);
 
-    html_to_image::AnimationSpec spec = html_to_image::parse_animation(html);
-    // A block that is only animatable after a var() resolution is kept:
-    // the document (and its custom properties) is needed to resolve it.
-    if (!spec.valid && !spec.needs_resolution) return 0;
+    // Every @keyframes block of the document animates its own element(s).
+    const std::vector<html_to_image::AnimationSpec> specs = html_to_image::parse_animations(html);
+    if (specs.empty()) return 0;
 
     // Ensure the document is laid out for exactly this input. After resource
     // resolution this is normally a no-op (the collect phase already built it).
@@ -346,46 +357,53 @@ int satoru_render_animation_to_converter_val(SatoruInstance* satoru, ImageConver
         return 0;
     }
 
-    // Resolve the animated element: selector from <style>, else inline style.
-    litehtml::element::ptr target;
-    if (!spec.selector.empty()) {
-        target = satoru->doc->root()->select_one(spec.selector);
+    // Resolve the animated elements: every match of the <style> selector, else the inline binding.
+    std::vector<AnimationUnit> units;
+    for (const auto& base_spec : specs) {
+        std::vector<litehtml::element::ptr> targets;
+        if (!base_spec.selector.empty()) {
+            for (const auto& el : satoru->doc->root()->select_all(base_spec.selector)) targets.push_back(el);
+        }
+        if (targets.empty()) {
+            if (auto inline_target = find_inline_animation_target(
+                    satoru->doc->root(), html_to_image::detail::to_lower(base_spec.name))) {
+                targets.push_back(inline_target);
+            }
+        }
+        for (const auto& target : targets) {
+            AnimationUnit unit;
+            unit.target = target;
+            unit.spec = base_spec;
+            const char* base_style_attr = target->get_attr("style");
+            unit.base_style = base_style_attr ? base_style_attr : "";
+
+            // The element's inline style wins over the <style> rule (CSS cascade):
+            // its `animation-timing-function` becomes the default of the stops.
+            const html_to_image::AnimationTimingDecl inline_timing =
+                html_to_image::find_animation_timing(unit.base_style);
+            if (!inline_timing.timing_function.empty()) {
+                unit.spec.timing.timing_function = inline_timing.timing_function;
+            }
+            // Resolve the var() references of the stop values (the document owns the
+            // custom properties) and rebuild the animatable stops from them.
+            resolve_animation_vars(unit.spec, target);
+            if (!unit.spec.valid) continue;
+
+            unit.timing = resolve_animation_timing(unit.spec, unit.base_style, target, duration_ms,
+                                                   unit.span_ms);
+            unit.color_stops = resolve_color_stops(unit.spec.color_stops, unit.spec);
+            unit.background_color_stops =
+                resolve_color_stops(unit.spec.background_color_stops, unit.spec);
+            units.push_back(std::move(unit));
+        }
     }
-    if (!target) {
-        target = find_inline_animation_target(satoru->doc->root(),
-                                              html_to_image::detail::to_lower(spec.name));
-    }
-    if (!target) return 0;
+    if (units.empty()) return 0;
 
-    const char* base_style_attr = target->get_attr("style");
-    const std::string base_style = base_style_attr ? base_style_attr : "";
-
-    // The element's inline style wins over the <style> rule (CSS cascade):
-    // its `animation-timing-function` becomes the default of the stops.
-    const html_to_image::AnimationTimingDecl inline_timing =
-        html_to_image::find_animation_timing(base_style);
-    if (!inline_timing.timing_function.empty()) {
-        spec.timing.timing_function = inline_timing.timing_function;
-    }
-
-    // Resolve the var() references of the stop values (the document owns the
-    // custom properties) and rebuild the animatable stops from them.
-    resolve_animation_vars(spec, target);
-    if (!spec.valid) return 0;
-
-    // The timing: the CSS longhands (duration / delay / iteration count /
-    // direction / fill mode) drive the timeline, the duration requested
-    // through the API is an upper bound on the sampled span.
+    // One timeline for the whole document: the longest animation sets the span, every other
+    // animation keeps looping inside it with its own duration / delay.
     int span_ms = 0;
-    const html_to_image::AnimationTiming timing =
-        resolve_animation_timing(spec, base_style, target, duration_ms, span_ms);
-
-    // Colour stops are resolved through the document's colour resolution, so
-    // named colours / rgb() / hsl() all work.
-    const std::vector<html_to_image::ColorKeyframe> color_stops =
-        resolve_color_stops(spec.color_stops, spec);
-    const std::vector<html_to_image::ColorKeyframe> background_color_stops =
-        resolve_color_stops(spec.background_color_stops, spec);
+    for (const auto& unit : units) span_ms = std::max(span_ms, unit.span_ms);
+    if (duration_ms > 0 && span_ms > duration_ms) span_ms = duration_ms;
 
     const std::vector<html_to_image::FrameSample> schedule =
         html_to_image::build_frame_schedule(span_ms, fps);
@@ -393,71 +411,63 @@ int satoru_render_animation_to_converter_val(SatoruInstance* satoru, ImageConver
     const uint64_t per_frame_bytes =
         (uint64_t)std::max(width, 1) * (uint64_t)std::max(height, 1) * 4;
     uint64_t total_bytes = 0;
-    float last_opacity = std::numeric_limits<float>::quiet_NaN();
-    std::string last_extra;
+    std::string last_key;
     int appended = 0;
     bool style_touched = false;
 
     for (const auto& sample : schedule) {
         if ((int)converter->frames.size() >= html_to_image::k_max_animation_frames) break;
 
-        // Timeline position of this frame, then the direction / fill / delay
-        // resolved local state. Outside the active interval without a fill the
-        // element keeps its static style.
+        // Per-frame style of every animated element. Only the animated properties are written,
+        // so each element keeps its static style for everything else.
         const double time_ms = (double)sample.progress * (double)span_ms;
-        const html_to_image::AnimationPhase phase =
-            html_to_image::resolve_animation_phase(timing, time_ms);
-        const bool animated = phase.applies;
-
-        // Per-frame style overrides. Only the animated properties are written,
-        // so the element keeps its static style for everything else.
-        const bool has_opacity = animated && !spec.stops.empty();
-        const float opacity =
-            has_opacity ? html_to_image::sample_opacity(spec, phase.progress) : 1.0f;
-        std::string transform_value;
-        const bool has_transform =
-            animated && html_to_image::sample_transform(spec, phase.progress, transform_value);
-        const bool has_color = animated && !color_stops.empty();
-        const bool has_background_color = animated && !background_color_stops.empty();
-
-        std::string extra;
-        if (has_transform) {
-            extra += ";transform:";
-            extra += transform_value;
-        }
-        if (has_color) {
-            extra += ";color:";
-            extra += html_to_image::format_rgba(
-                html_to_image::sample_color(color_stops, phase.progress));
-        }
-        if (has_background_color) {
-            extra += ";background-color:";
-            extra += html_to_image::format_rgba(
-                html_to_image::sample_color(background_color_stops, phase.progress));
+        std::vector<std::string> styles;
+        styles.reserve(units.size());
+        std::string key;
+        for (const auto& unit : units) {
+            const html_to_image::AnimationPhase phase =
+                html_to_image::resolve_animation_phase(unit.timing, time_ms);
+            const bool animated = phase.applies;
+            std::string style = unit.base_style;
+            if (animated && !unit.spec.stops.empty()) {
+                style += ";opacity:";
+                style += html_to_image::format_float(
+                    html_to_image::sample_opacity(unit.spec, phase.progress));
+            }
+            std::string transform_value;
+            if (animated && html_to_image::sample_transform(unit.spec, phase.progress, transform_value)) {
+                style += ";transform:";
+                style += transform_value;
+            }
+            if (animated && !unit.color_stops.empty()) {
+                style += ";color:";
+                style += html_to_image::format_rgba(
+                    html_to_image::sample_color(unit.color_stops, phase.progress));
+            }
+            if (animated && !unit.background_color_stops.empty()) {
+                style += ";background-color:";
+                style += html_to_image::format_rgba(
+                    html_to_image::sample_color(unit.background_color_stops, phase.progress));
+            }
+            key += style;
+            key += '\n';
+            styles.push_back(std::move(style));
         }
 
         // Dedupe at the style-value level (before any draw): an unchanged
-        // value merges this frame's duration into the previous frame.
-        const bool opacity_changed =
-            !std::isnan(last_opacity) && std::fabs(opacity - last_opacity) >= 1e-3f;
-        const bool extra_changed = (extra != last_extra);
-        if (!converter->frames.empty() && !opacity_changed && !extra_changed) {
+        // frame merges its duration into the previous one.
+        if (!converter->frames.empty() && key == last_key) {
             converter->frames.back().duration += sample.duration_ms;
             continue;
         }
 
         if (total_bytes + per_frame_bytes > html_to_image::k_max_animation_total_pixel_bytes) break;
 
-        std::string style = base_style;
-        if (has_opacity) {
-            style += ";opacity:";
-            style += html_to_image::format_float(opacity);
+        for (size_t k = 0; k < units.size(); ++k) {
+            units[k].target->set_attr("style", styles[k].c_str());
+            units[k].target->refresh_styles();
+            units[k].target->compute_styles(false);
         }
-        style += extra;
-
-        target->set_attr("style", style.c_str());
-        target->refresh_styles();
-        target->compute_styles(false);
         style_touched = true;
         // Paint-phase sync: re-collecting styled (now positioned at opacity<1
         // or carrying a transform) nodes keeps them in the positioned/stacking
@@ -473,17 +483,18 @@ int satoru_render_animation_to_converter_val(SatoruInstance* satoru, ImageConver
         frame.bitmap = std::move(bitmap);
         frame.duration = sample.duration_ms;
         converter->frames.push_back(std::move(frame));
-        last_opacity = opacity;
-        last_extra = extra;
+        last_key = key;
         appended++;
     }
 
     // Leave the document as it was found: the caller falls back to a normal
     // single-frame render when no frame was produced.
     if (style_touched) {
-        target->set_attr("style", base_style.c_str());
-        target->refresh_styles();
-        target->compute_styles(false);
+        for (const auto& unit : units) {
+            unit.target->set_attr("style", unit.base_style.c_str());
+            unit.target->refresh_styles();
+            unit.target->compute_styles(false);
+        }
         satoru->doc->root_render()->fetch_positioned();
         satoru->doc->root_render()->sort_positioned();
     }

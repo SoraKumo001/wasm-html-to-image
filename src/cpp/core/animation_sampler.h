@@ -1512,6 +1512,30 @@ inline AnimationSpec parse_animation(const std::string& html) {
     return result;
 }
 
+// Every animatable @keyframes block of the document with its binding rule, in source order.
+// Blocks bound by a <style> rule carry the rule's selector (matching any number of elements);
+// a block without a rule keeps an empty selector and is resolved through inline styles.
+// Blocks that are only animatable after a var() resolution are kept for the binding layer.
+inline std::vector<AnimationSpec> parse_animations(const std::string& html) {
+    std::vector<AnimationSpec> result;
+    const std::string css = detail::collect_style_text(html);
+    if (css.empty()) return result;
+
+    std::vector<AnimationSpec> specs;
+    detail::parse_all_keyframes(css, specs);
+    for (const auto& candidate : specs) {
+        if (!candidate.has_declarations) continue;
+        AnimationSpec spec = candidate;
+        const detail::AnimationBinding binding = detail::find_animation_binding(css, spec.name);
+        spec.selector = binding.selector;
+        spec.timing = binding.timing;
+        spec.duration_value = binding.timing.duration;
+        detail::build_stops_from_raw(spec);
+        if (spec.valid || spec.needs_resolution) result.push_back(std::move(spec));
+    }
+    return result;
+}
+
 namespace detail {
 
 // Locate the interval of the (sorted) `stops` that contains `progress`.
