@@ -16,17 +16,23 @@ namespace satoru {
 // Used by `text-decoration-skip-ink` to find the parts of the decoration line
 // that would be covered by the ink of the text.
 //   inline_start/inline_end: inline-axis extent of the ink, measured from the
-//                             origin of the text run (the run's inline offset).
-//   ink_top/ink_bottom:      vertical extent of the ink, relative to the
-//                             baseline of the run (negative = above).
-//   baseline:                offset of the run's baseline from the top of the
-//                             text box.
+//                             inline start of the text box.
+//   block_start/block_end:   block-axis extent of the ink, measured from the
+//                             block start of the text box. In a vertical
+//                             writing mode the ink of a turned glyph is
+//                             rotated by 90 degrees, so the block axis is the
+//                             horizontal one.
+//   baseline:                block-axis offset of the text baseline.
+//   has_baseline:            false when the ink has no block-axis side to
+//                             pick (the upright glyphs of a vertical writing
+//                             mode), in which case the whole ink counts.
 struct DecorationGlyphInk {
     float inline_start = 0;
     float inline_end = 0;
-    float ink_top = 0;
-    float ink_bottom = 0;
+    float block_start = 0;
+    float block_end = 0;
     float baseline = 0;
+    bool has_baseline = true;
 };
 
 class TextDecorationRenderer {

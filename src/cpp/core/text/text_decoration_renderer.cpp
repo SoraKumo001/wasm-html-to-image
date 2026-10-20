@@ -19,14 +19,16 @@ struct InlineGap {
     float end;
 };
 
-// Which half of the glyph ink the `auto` mode of text-decoration-skip-ink
+// Which side of the text baseline the `auto` mode of text-decoration-skip-ink
 // skips. `all` skips every ink and `none` skips nothing, so the distinction
 // only matters for `auto`.
-//   Descender: the ink below the baseline (the underline case).
-//   Ascender:  the ink above the baseline (the overline case).
+//   BlockEnd:   the ink on the block-end side of the baseline (the underline
+//               case of a horizontal writing mode).
+//   BlockStart: the ink on the block-start side of the baseline (the overline
+//               case of a horizontal writing mode).
 // The line-through is drawn inside the text body, so it keeps the underline
-// rule: only the descenders that hang below it are skipped.
-enum class SkipInkSide { Descender, Ascender };
+// rule: only the ink that hangs below it is skipped.
+enum class SkipInkSide { BlockEnd, BlockStart };
 
 }  // namespace
 
@@ -63,6 +65,15 @@ void TextDecorationRenderer::drawDecoration(SkCanvas* canvas, font_info* fi,
     WritingModeContext wm_ctx(mode, pos.width, pos.height);
     LogicalCanvas l_canvas(canvas, wm_ctx, (float)pos.x, (float)pos.y);
 
+    // The parameters of the wavy decoration. The wave oscillates around
+    // `block_offset + wave_amplitude`, so it is painted between `block_offset`
+    // and `block_offset + 2 * wave_amplitude` and is stroked with a wider pen
+    // than a solid line of the same thickness.
+    const bool is_wavy = fi->desc.decoration_style == litehtml::text_decoration_style_wavy;
+    const float wave_wavelength = std::max(8.0f, thickness * 8.0f);
+    const float wave_amplitude = std::max(2.0f, thickness * 2.0f);
+    const float wave_stroke = thickness * 1.5f;
+
     // Draws the decoration line between two inline-axis positions.
     auto draw_logical_line = [&](float block_offset, float x0, float x1) {
         if (x1 <= x0) return;
@@ -85,10 +96,8 @@ void TextDecorationRenderer::drawDecoration(SkCanvas* canvas, font_info* fi,
             l_canvas.drawLine(logical_pos(x0, block_offset + gap / 2),
                               logical_pos(x1, block_offset + gap / 2), dec_paint);
         } else if (fi->desc.decoration_style == litehtml::text_decoration_style_wavy) {
-            dec_paint.setStrokeWidth(thickness * 1.5f);
+            dec_paint.setStrokeWidth(wave_stroke);
 
-            float wave_wavelength = std::max(8.0f, thickness * 8.0f);
-            float wave_amplitude = std::max(2.0f, thickness * 2.0f);
             float block_offset_wavy = block_offset + wave_amplitude;
 
             bool is_vertical = wm_ctx.is_vertical();
@@ -146,21 +155,29 @@ void TextDecorationRenderer::drawDecoration(SkCanvas* canvas, font_info* fi,
     // decoration line would be covered by the ink of the text.
     //   auto: only the ink on one side of the baseline is skipped.
     //   all:  every glyph ink that reaches the line is skipped.
-    auto collect_skip_gaps = [&](float block_offset, SkipInkSide auto_side) {
+    auto collect_skip_gaps = [&](float block_offset, SkipInkSide side) {
         std::vector<InlineGap> gaps;
         if (fi->desc.decoration_skip_ink == litehtml::text_decoration_skip_ink_none) return gaps;
         if (glyph_ink.empty()) return gaps;
 
+        // The part of the block axis the decoration covers. A wavy decoration
+        // oscillates around the block offset, so it reaches further down than
+        // a solid line of the same thickness and its band has to grow with
+        // the amplitude of the wave.
         float band_top = block_offset - thickness * 0.5f;
         float band_bottom = block_offset + thickness * 0.5f;
+        if (is_wavy) {
+            band_top = block_offset - wave_stroke * 0.5f;
+            band_bottom = block_offset + wave_amplitude * 2.0f + wave_stroke * 0.5f;
+        }
         bool skip_all_ink = fi->desc.decoration_skip_ink == litehtml::text_decoration_skip_ink_all;
 
         for (const auto& g : glyph_ink) {
-            float top = g.baseline + g.ink_top;
-            float bottom = g.baseline + g.ink_bottom;
-            if (!skip_all_ink) {
+            float top = g.block_start;
+            float bottom = g.block_end;
+            if (!skip_all_ink && g.has_baseline) {
                 // auto: only the ink on the selected side of the baseline counts.
-                if (auto_side == SkipInkSide::Descender) {
+                if (side == SkipInkSide::BlockEnd) {
                     top = std::max(top, g.baseline);
                 } else {
                     bottom = std::min(bottom, g.baseline);
@@ -230,8 +247,12 @@ void TextDecorationRenderer::drawDecoration(SkCanvas* canvas, font_info* fi,
             underline_offset = (float)fi->fm_ascent + user_offset + thickness;
         }
 
-        draw_with_gaps(underline_offset,
-                       collect_skip_gaps(underline_offset, SkipInkSide::Descender));
+        // The underline hangs below the baseline in a horizontal writing mode
+        // and hugs the block-start edge in a vertical one, so the side of the
+        // ink that may be skipped differs.
+        SkipInkSide side =
+            wm_ctx.is_vertical() ? SkipInkSide::BlockStart : SkipInkSide::BlockEnd;
+        draw_with_gaps(underline_offset, collect_skip_gaps(underline_offset, side));
     }
     if (fi->desc.decoration_line & litehtml::text_decoration_line_overline) {
         float overline_offset = 0;
@@ -239,14 +260,16 @@ void TextDecorationRenderer::drawDecoration(SkCanvas* canvas, font_info* fi,
             // Mirror of underline: just inside the block-end edge.
             overline_offset = (float)wm_ctx.container_width() - thickness;
         }
-        // The overline is drawn above the text, so only the ascender ink can
-        // reach it.
-        draw_with_gaps(overline_offset, collect_skip_gaps(overline_offset, SkipInkSide::Ascender));
+        // The overline is drawn above the text, so only the ink on the
+        // block-start side of the baseline can reach it.
+        SkipInkSide side =
+            wm_ctx.is_vertical() ? SkipInkSide::BlockEnd : SkipInkSide::BlockStart;
+        draw_with_gaps(overline_offset, collect_skip_gaps(overline_offset, side));
     }
     if (fi->desc.decoration_line & litehtml::text_decoration_line_line_through) {
         float strike_offset = (float)fi->fm_ascent * 0.65f;
         draw_with_gaps(strike_offset,
-                       collect_skip_gaps(strike_offset, SkipInkSide::Descender));
+                       collect_skip_gaps(strike_offset, SkipInkSide::BlockEnd));
     }
 }
 

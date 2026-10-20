@@ -1140,8 +1140,13 @@ void litehtml::css_properties::compute_font(const element* el, const document::p
             _text_underline_offset_, propagate_decoration, css_length::predef_value(0),
             offset(m_text_underline_offset));
 
-        doc->cvt_units(m_text_decoration_thickness, m_font_metrics, font_size);
-        doc->cvt_units(m_text_underline_offset, m_font_metrics, font_size);
+        // A percentage of text-decoration-thickness / text-underline-offset
+        // refers to the font size of the element (CSS Text Decoration 3).
+        // cvt_units() leaves percentages untouched because their reference is
+        // property specific, so the raw percentage number would otherwise be
+        // used as a pixel value.
+        doc->cvt_units(m_text_decoration_thickness, m_font_metrics, font_size, font_size);
+        doc->cvt_units(m_text_underline_offset, m_font_metrics, font_size, font_size);
 
         m_text_decoration_style = (text_decoration_style)el->get_property<int>(
             _text_decoration_style_, propagate_decoration, text_decoration_style_solid,

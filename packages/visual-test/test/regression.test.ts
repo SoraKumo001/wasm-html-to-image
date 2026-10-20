@@ -1379,6 +1379,53 @@ describe("regression: layout and paint probes", () => {
     expect(decorationLine(fromFont).row).toBeGreaterThan(decorationLine(auto_).row);
   });
 
+  it("text-decoration-thickness: a percentage is relative to the font size", async () => {
+    const base =
+      "text-decoration:underline;text-decoration-color:#f00;text-decoration-skip-ink:none";
+    // A percentage of text-decoration-thickness refers to the font size of
+    // the element, so 50% of the 60px probe font is 30px.
+    const percent = await renderProbeText(
+      probeLine(`${base};text-decoration-thickness:50%`, "Hxg"),
+    );
+    const length = await renderProbeText(
+      probeLine(`${base};text-decoration-thickness:30px`, "Hxg"),
+    );
+    expect(decorationLine(percent).row).toBe(decorationLine(length).row);
+    expect(redPixels(percent)).toBe(redPixels(length));
+  });
+
+  it("text-decoration-skip-ink: the wavy underline skips the ink the wave crosses", async () => {
+    // The wave oscillates around the underline position, so it reaches further
+    // down than a solid line of the same thickness. The ink that crosses the
+    // wave has to be skipped as well, not only the ink that crosses the
+    // nominal band of the decoration.
+    const base =
+      "text-decoration:underline wavy;text-decoration-color:#f00;text-underline-offset:-2px";
+    const none = await renderProbeText(
+      probeLine(`${base};text-decoration-skip-ink:none`, "gjpq"),
+    );
+    const auto_ = await renderProbeText(
+      probeLine(`${base};text-decoration-skip-ink:auto`, "gjpq"),
+    );
+    expect(redPixels(auto_)).toBeLessThan(redPixels(none));
+  });
+
+  it("text-decoration-skip-ink: the vertical underline skips the ink it crosses", async () => {
+    // In a vertical writing mode the underline runs along the inline axis, so
+    // the ink of the glyphs has to be rotated by 90 degrees to find the part
+    // of the line the ink crosses.
+    const vertical = async (skip: string) => {
+      const body = `<div style="writing-mode:vertical-rl;height:200px;width:120px;font-family:'RobotoProbe',sans-serif;font-size:20px">
+         <span style="text-decoration:underline;text-decoration-color:#f00;text-underline-offset:8px;text-decoration-skip-ink:${skip}">ABC</span></div>`;
+      const html = `<html><head><style>${PROBE_FONT_FACE}</style></head><body style="margin:0;background:#fff">${body}</body></html>`;
+      const { data } = await render({ value: html, width: 200, format: "png" });
+      return PNG.sync.read(Buffer.from(data));
+    };
+    const none = await vertical("none");
+    const auto_ = await vertical("auto");
+    expect(redPixels(auto_)).toBeLessThan(redPixels(none));
+  });
+
   it("text-decoration-skip-ink: the SVG output skips the ink as well", async () => {
     // The SVG renderer draws the glyphs as paths, so the decoration has to
     // gather the ink on that path as well.

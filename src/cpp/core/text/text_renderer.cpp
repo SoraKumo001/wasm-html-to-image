@@ -84,11 +84,73 @@ void collectGlyphInk(std::vector<DecorationGlyphInk>* out,
         DecorationGlyphInk ink;
         ink.inline_start = inline_origin + run.positions[i].fX + b.fLeft;
         ink.inline_end = inline_origin + run.positions[i].fX + b.fRight;
-        ink.ink_top = b.fTop;
-        ink.ink_bottom = b.fBottom;
+        // The baseline and the ink of the run are measured from the top of the
+        // text box, like the block offsets of the decoration.
         ink.baseline = run.positions[i].fY + baseline_shift;
+        ink.block_start = ink.baseline + b.fTop;
+        ink.block_end = ink.baseline + b.fBottom;
         out->push_back(ink);
     }
+}
+
+// Collects the ink of a single glyph of a vertical writing mode.
+// `bounds` is the box of the glyph in the horizontal text frame (relative to
+// the glyph origin on the baseline), `p` the physical position of the glyph
+// origin and `rotated` whether the glyph is turned by 90 degrees.
+// The ink is rotated into the logical frame with it: the inline axis of a
+// vertical writing mode runs downwards and the block axis runs from the
+// block-start edge (the right edge in vertical-rl) towards the block-end one.
+void collectVerticalGlyphInk(std::vector<DecorationGlyphInk>* out, const SkRect& bounds,
+                             const GlyphPlacement& p, bool rotated,
+                             const litehtml::position& pos, litehtml::writing_mode mode) {
+    if (!out || bounds.isEmpty()) return;
+
+    // The physical box of the ink. A turned glyph is rotated by 90 degrees
+    // clockwise, so its local x axis points downwards and its local y axis
+    // points to the left.
+    float px0, px1, py0, py1;
+    if (rotated) {
+        px0 = p.x - bounds.fBottom;
+        px1 = p.x - bounds.fTop;
+        py0 = p.y + bounds.fLeft;
+        py1 = p.y + bounds.fRight;
+    } else {
+        px0 = p.x + bounds.fLeft;
+        px1 = p.x + bounds.fRight;
+        py0 = p.y + bounds.fTop;
+        py1 = p.y + bounds.fBottom;
+    }
+
+    DecorationGlyphInk ink;
+    ink.inline_start = py0 - (float)pos.y;
+    ink.inline_end = py1 - (float)pos.y;
+    if (mode == litehtml::writing_mode_vertical_rl) {
+        // The block-start edge is the right edge of the text box.
+        const float block_start_edge = (float)(pos.x + pos.width);
+        ink.block_start = block_start_edge - px1;
+        ink.block_end = block_start_edge - px0;
+        ink.baseline = block_start_edge - p.x;
+    } else {
+        // vertical-lr: the block-start edge is the left edge of the text box.
+        ink.block_start = px0 - (float)pos.x;
+        ink.block_end = px1 - (float)pos.x;
+        ink.baseline = p.x - (float)pos.x;
+    }
+    // An upright glyph is not turned, so it has no descender side to pick:
+    // the whole ink counts.
+    ink.has_baseline = rotated;
+    out->push_back(ink);
+}
+
+// The ink boxes of a run's glyphs, relative to the glyph origins on the
+// baseline. The boxes of the glyphs without ink (spaces, control characters)
+// are empty.
+std::vector<SkRect> glyphInkBounds(const SkTextBlob::Iter::ExperimentalRun& run) {
+    std::vector<SkRect> bounds;
+    bounds.resize(run.count);
+    run.font.getBounds(SkSpan<const SkGlyphID>(run.glyphs, run.count),
+                       SkSpan<SkRect>(bounds.data(), bounds.size()), nullptr);
+    return bounds;
 }
 
 // text-emphasis (圏点): litehtml の css_properties が emphasis_style/color/position を
@@ -525,12 +587,9 @@ void TextRenderer::drawText(SatoruContext* ctx, SkCanvas* canvas, const char* te
     if (has_stroke && !tagging && batcher) batcher->flush();
 
     // text-decoration-skip-ink needs the ink geometry of the drawn glyphs.
-    // The underline, the overline and the line-through are all affected, but
-    // only the horizontal writing modes collect their ink yet.
-    const bool is_vertical_mode = mode == litehtml::writing_mode_vertical_rl ||
-                                  mode == litehtml::writing_mode_vertical_lr;
+    // The underline, the overline and the line-through are all affected, in
+    // the horizontal as well as in the vertical writing modes.
     const bool want_glyph_ink =
-        !is_vertical_mode &&
         fi->desc.decoration_line != litehtml::text_decoration_line_none &&
         fi->desc.decoration_skip_ink != litehtml::text_decoration_skip_ink_none;
     std::vector<DecorationGlyphInk> glyph_ink;
@@ -686,14 +745,25 @@ double TextRenderer::drawTextInternal(SatoruContext* ctx, SkCanvas* canvas, cons
                         is_vertical ? 0.0f : baselineShiftForRun(fi, run.font);
                     float logical_run_start = (float)current_l_pos.inline_offset;
                     // The glyphs are painted as paths here, so the ink has to be
-                    // collected explicitly for text-decoration-skip-ink.
+                    // collected explicitly for text-decoration-skip-ink. In a
+                    // vertical writing mode the ink is rotated into the logical
+                    // frame with the glyphs, so it is collected per glyph.
+                    std::vector<SkRect> ink_bounds;
                     if (glyphInk) {
-                        collectGlyphInk(glyphInk, run, logical_run_start, run_baseline_shift);
+                        if (is_vertical) {
+                            ink_bounds = glyphInkBounds(run);
+                        } else {
+                            collectGlyphInk(glyphInk, run, logical_run_start, run_baseline_shift);
+                        }
                     }
                     for (int i = 0; i < run.count; ++i) {
                         auto p = geom.getGlyphPlacement(logical_run_start + run.positions[i].fX,
                                                         run.positions[i].fY, is_upright,
                                                         is_punctuation, run.font, run.glyphs[i]);
+                        if (glyphInk && is_vertical) {
+                            collectVerticalGlyphInk(glyphInk, ink_bounds[i], p,
+                                                    p.rotation != 0.0f, pos, mode);
+                        }
                         tagging_ctx.drawGlyph(run.font, run.glyphs[i], p.x,
                                               p.y + run_baseline_shift, p.rotation, paint);
                     }
@@ -755,6 +825,10 @@ double TextRenderer::drawTextInternal(SatoruContext* ctx, SkCanvas* canvas, cons
                 SkTextBlob::Iter::ExperimentalRun run;
                 while (it.experimentalNext(&run)) {
                     float logical_run_start = (float)current_l_pos.inline_offset;
+                    // The ink of the turned glyphs is rotated into the logical
+                    // frame with them, so it is collected per glyph.
+                    std::vector<SkRect> ink_bounds;
+                    if (glyphInk) ink_bounds = glyphInkBounds(run);
                     if (is_upright) {
                         auto builder_run = builder.allocRunPos(run.font, run.count);
                         memcpy(builder_run.glyphs, run.glyphs, run.count * sizeof(uint16_t));
@@ -764,6 +838,9 @@ double TextRenderer::drawTextInternal(SatoruContext* ctx, SkCanvas* canvas, cons
                                 is_punctuation, run.font, run.glyphs[i]);
                             builder_run.pos[i * 2] = p.x;
                             builder_run.pos[i * 2 + 1] = p.y;
+                            if (glyphInk) {
+                                collectVerticalGlyphInk(glyphInk, ink_bounds[i], p, false, pos, mode);
+                            }
                         }
                     } else {
                         auto builder_run = builder.allocRunRSXform(run.font, run.count);
@@ -774,6 +851,9 @@ double TextRenderer::drawTextInternal(SatoruContext* ctx, SkCanvas* canvas, cons
                                                             run.font, run.glyphs[i]);
                             // Rotate 90 deg CW: cos=0, sin=1
                             builder_run.xforms()[i] = SkRSXform::Make(0, 1, p.x, p.y);
+                            if (glyphInk) {
+                                collectVerticalGlyphInk(glyphInk, ink_bounds[i], p, true, pos, mode);
+                            }
                         }
                     }
                 }

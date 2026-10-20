@@ -98,6 +98,10 @@ namespace litehtml
 		void							draw(uint_ptr hdc, pixel_t x, pixel_t y, const position* clip);
 		web_color						get_def_color()	{ return m_def_color; }
 		void 							cvt_units(css_length& val, const font_metrics& metrics, pixel_t size) const;
+		// Same, but percentages are resolved against `percent_base` instead of
+		// being left untouched (the reference of a percentage is property
+		// specific, so it cannot be handled by the generic conversion).
+		void 							cvt_units(css_length& val, const font_metrics& metrics, pixel_t size, pixel_t percent_base) const;
 		pixel_t							to_pixels(const css_length& val, const font_metrics& metrics, pixel_t size) const;
 		pixel_t							width() const;
 		pixel_t							height() const;

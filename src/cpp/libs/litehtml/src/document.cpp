@@ -833,6 +833,25 @@ void document::cvt_units( css_length& val, const font_metrics& metrics, pixel_t 
 	}
 }
 
+void document::cvt_units( css_length& val, const font_metrics& metrics, pixel_t size, pixel_t percent_base ) const
+{
+	if(val.is_predefined())
+	{
+		return;
+	}
+	if(val.units() == css_units_percentage)
+	{
+		// The reference of a percentage is property specific, so it is given
+		// by the caller (the font size for the text decoration properties).
+		val.set_value(val.val() * (float)percent_base / 100.0f, css_units_px);
+		return;
+	}
+	if(val.units() != css_units_fr)
+	{
+		val.set_value((float)to_pixels(val, metrics, size), css_units_px);
+	}
+}
+
 pixel_t document::width() const
 {
 	return m_size.width;
