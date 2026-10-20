@@ -29,7 +29,7 @@ Supported input types, output formats, CSS properties, and runtime environments.
 | `apng`      | `Uint8Array` | Skia render → PNG (animated with `animation`)  | Decodes and converts to PNG   |
 | `gif`       | `Uint8Array` | Skia render → GIF (256 colors, dithered; animated with `animation`) | Decodes and converts to GIF |
 | `avif`      | `Uint8Array` | Skia render → AVIF encode (`quality`, `speed`) | Decodes and compresses AVIF   |
-| `jxl`       | `Uint8Array` | Skia render → JXL encode (`quality`, `speed`)  | Decodes and compresses JXL (output-only; JXL input decoding is not supported) |
+| `jxl`       | `Uint8Array` | Skia render → JXL encode (`quality`, `speed`)  | Decodes and compresses JXL (JXL input is decoded with libjxl too, for `<img>` and image inputs) |
 | `raw`       | `Uint8Array` | Uncompressed RGBA pixels                       | Uncompressed RGBA pixels      |
 | `thumbhash` | `Uint8Array` | Computes ThumbHash from render                 | Computes ThumbHash from image |
 | `svg`       | `string`     | Skia vector stream                             | Wraps in `<image>` SVG        |

@@ -29,7 +29,7 @@ title: 互換性と仕様
 | `apng`       | `Uint8Array` | Skia 描画 → PNG (`animation` 指定でアニメーション) | 画像をデコードして PNG 化 |
 | `gif`        | `Uint8Array` | Skia 描画 → GIF (256 色・ディザ。`animation` 指定でアニメーション) | 画像をデコードして GIF 化 |
 | `avif`       | `Uint8Array` | Skia 描画 → AVIF 圧縮 (`quality`, `speed`) | 画像をデコードして AVIF 圧縮      |
-| `jxl`        | `Uint8Array` | Skia 描画 → JXL 圧縮 (`quality`, `speed`)  | 画像をデコードして JXL 圧縮（出力のみ。JXL 入力のデコードは未対応） |
+| `jxl`        | `Uint8Array` | Skia 描画 → JXL 圧縮 (`quality`, `speed`)  | 画像をデコードして JXL 圧縮（JXL 入力も libjxl でデコードでき、`<img>` や画像入力として使えます） |
 | `raw`        | `Uint8Array` | RGBA 非圧縮ピクセルデータ                  | RGBA 非圧縮ピクセルデータ         |
 | `thumbhash`  | `Uint8Array` | 描画結果から ThumbHash を生成              | 画像から ThumbHash を生成         |
 | `svg`        | `string`     | Skia ベクター描画ストリーム                | `<image>` タグでラップした SVG    |
