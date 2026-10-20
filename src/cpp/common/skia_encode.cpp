@@ -3,6 +3,9 @@
 #include <algorithm>
 #include <cstring>
 #include <jxl/encode.h>
+#include <zlib.h>
+
+#include <vector>
 
 #include "skia_utils.h"
 #include "thumbhash.h"
@@ -19,7 +22,143 @@
 // image-opt版 `utils/thumbhash.h` のグローバル関数を同ロジックで移植したもの。
 namespace html_to_image {
 
-sk_sp<SkData> encode_png(const SkPixmap& pixmap) {
+// ---- indexed (palette) PNG for images of at most 256 colors ---------------------------------
+//
+// Flat UI renders (OG cards, diagrams, list markers) often hold fewer than 256 distinct colors.
+// Stored as one palette index per pixel they deflate to a fraction of the RGBA size (about 30%
+// of it on the visual-test assets that qualify). The check is cheap: a row sample (every 16th
+// row) rejects richer images after a small part of the pixels.
+
+namespace {
+
+struct ColorTable {
+    static constexpr int kSlots = 1024;  // power of two, > 2 * 256
+    uint32_t keys[kSlots];
+    int16_t index[kSlots];
+    int count = 0;
+
+    ColorTable() { std::fill(index, index + kSlots, (int16_t)-1); }
+
+    // Palette index of `color`, adding it; -1 when the 257th color shows up.
+    int add(uint32_t color) {
+        uint32_t h = (color * 2654435761u) >> 22;  // 10 bits
+        for (;;) {
+            const int16_t i = index[h];
+            if (i < 0) {
+                if (count >= 256) return -1;
+                keys[h] = color;
+                index[h] = (int16_t)count;
+                return count++;
+            }
+            if (keys[h] == color) return i;
+            h = (h + 1) & (kSlots - 1);
+        }
+    }
+};
+
+void put_be32(std::vector<uint8_t>& out, uint32_t v) {
+    out.push_back((uint8_t)(v >> 24));
+    out.push_back((uint8_t)(v >> 16));
+    out.push_back((uint8_t)(v >> 8));
+    out.push_back((uint8_t)v);
+}
+
+void put_chunk(std::vector<uint8_t>& out, const char type[4], const uint8_t* data, size_t len) {
+    put_be32(out, (uint32_t)len);
+    const size_t start = out.size();
+    out.insert(out.end(), type, type + 4);
+    out.insert(out.end(), data, data + len);
+    uLong crc = crc32(0L, out.data() + start, (uInt)(out.size() - start));
+    put_be32(out, (uint32_t)crc);
+}
+
+sk_sp<SkData> encode_png_indexed(const SkPixmap& pixmap) {
+    const int width = pixmap.width(), height = pixmap.height();
+    if (width <= 0 || height <= 0) return nullptr;
+    if (pixmap.colorType() != kRGBA_8888_SkColorType && pixmap.colorType() != kBGRA_8888_SkColorType)
+        return nullptr;
+
+    // 1. Reject rich images early: every 16th row is enough to see more than 256 colors.
+    {
+        ColorTable sample;
+        for (int y = 0; y < height; y += 16) {
+            const uint32_t* row = (const uint32_t*)pixmap.addr32(0, y);
+            for (int x = 0; x < width; ++x)
+                if (sample.add(row[x]) < 0) return nullptr;
+        }
+    }
+
+    // 2. PNG stores straight (unpremultiplied) RGBA: convert once, then index every pixel.
+    SkBitmap straight;
+    if (!straight.tryAllocPixels(SkImageInfo::Make(width, height, kRGBA_8888_SkColorType,
+                                                   kUnpremul_SkAlphaType)) ||
+        !pixmap.readPixels(straight.pixmap())) {
+        return nullptr;
+    }
+    ColorTable table;
+    std::vector<uint32_t> colors;  // palette entries (RGBA8888 straight)
+    colors.reserve(256);
+    std::vector<uint8_t> raw((size_t)(width + 1) * height);
+    uint32_t prev_color = 0;
+    int prev_index = -1;
+    for (int y = 0; y < height; ++y) {
+        const uint32_t* row = (const uint32_t*)straight.getAddr32(0, y);
+        uint8_t* out = &raw[(size_t)y * (width + 1)];
+        *out++ = 0;  // filter: none (indices deflate best unfiltered)
+        for (int x = 0; x < width; ++x) {
+            const uint32_t c = row[x];
+            if (prev_index < 0 || c != prev_color) {
+                const int before = table.count;
+                const int idx = table.add(c);
+                if (idx < 0) return nullptr;
+                if (table.count != before) colors.push_back(c);
+                prev_color = c;
+                prev_index = idx;
+            }
+            *out++ = (uint8_t)prev_index;
+        }
+    }
+
+    // 3. Chunks.
+    std::vector<uint8_t> png = {0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
+    uint8_t ihdr[13];
+    for (int i = 0; i < 4; ++i) {
+        ihdr[i] = (uint8_t)((uint32_t)width >> (24 - 8 * i));
+        ihdr[4 + i] = (uint8_t)((uint32_t)height >> (24 - 8 * i));
+    }
+    ihdr[8] = 8;   // bit depth
+    ihdr[9] = 3;   // color type: indexed
+    ihdr[10] = 0;  // compression
+    ihdr[11] = 0;  // filter
+    ihdr[12] = 0;  // no interlace
+    put_chunk(png, "IHDR", ihdr, 13);
+
+    std::vector<uint8_t> plte, trns;
+    bool has_alpha = false;
+    for (uint32_t c : colors) {
+        // RGBA8888 in memory order: R, G, B, A (little endian uint32 -> bytes r,g,b,a).
+        const uint8_t r = (uint8_t)(c & 0xFF), g = (uint8_t)((c >> 8) & 0xFF),
+                      b = (uint8_t)((c >> 16) & 0xFF), a = (uint8_t)(c >> 24);
+        plte.push_back(r);
+        plte.push_back(g);
+        plte.push_back(b);
+        trns.push_back(a);
+        has_alpha = has_alpha || a != 255;
+    }
+    put_chunk(png, "PLTE", plte.data(), plte.size());
+    if (has_alpha) put_chunk(png, "tRNS", trns.data(), trns.size());
+
+    uLongf bound = compressBound((uLong)raw.size());
+    std::vector<uint8_t> idat(bound);
+    if (compress2(idat.data(), &bound, raw.data(), (uLong)raw.size(), 6) != Z_OK) return nullptr;
+    put_chunk(png, "IDAT", idat.data(), bound);
+    put_chunk(png, "IEND", nullptr, 0);
+    return SkData::MakeWithCopy(png.data(), png.size());
+}
+
+}  // namespace
+
+sk_sp<SkData> encode_png_rgba(const SkPixmap& pixmap) {
     SkDynamicMemoryWStream stream;
     SkPngEncoder::Options options;
     // Up filter only: trying all five filters per row (Skia default) cost 20-40%
@@ -28,6 +167,13 @@ sk_sp<SkData> encode_png(const SkPixmap& pixmap) {
     options.fFilterFlags = SkPngEncoder::FilterFlag::kUp;
     if (!SkPngEncoder::Encode(&stream, pixmap, options)) return nullptr;
     return stream.detachAsData();
+}
+
+sk_sp<SkData> encode_png(const SkPixmap& pixmap) {
+    // Images of at most 256 colors are stored indexed (about 3x smaller); everything else
+    // takes the regular RGBA path.
+    if (sk_sp<SkData> indexed = encode_png_indexed(pixmap)) return indexed;
+    return encode_png_rgba(pixmap);
 }
 
 std::string encode_png_data_url(const SkBitmap& bitmap) {

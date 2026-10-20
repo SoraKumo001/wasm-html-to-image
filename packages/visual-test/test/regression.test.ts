@@ -986,6 +986,45 @@ describe("regression: layout and paint probes", () => {
     });
   });
 
+  it("PNG output of an image with at most 256 colors is stored indexed and decodes identically", async () => {
+    const colorType = (b: Uint8Array) => Buffer.from(b)[25];
+    const flat = await render({
+      value: `<body style="margin:0;background:#fff"><div style="width:40px;height:40px;background:#f00"></div><div style="width:40px;height:20px;background:#00f"></div></body>`,
+      width: 100,
+      height: 80,
+      format: "png",
+    });
+    expect(colorType(flat.data as Uint8Array)).toBe(3); // indexed
+    const png = PNG.sync.read(Buffer.from(flat.data as Uint8Array));
+    const at = (x: number, y: number) => Array.from(png.data.slice((png.width * y + x) * 4, (png.width * y + x) * 4 + 4));
+    expect(at(10, 10)).toEqual([255, 0, 0, 255]);
+    expect(at(10, 50)).toEqual([0, 0, 255, 255]);
+    expect(at(90, 70)).toEqual([255, 255, 255, 255]);
+
+    // A transparent background keeps its alpha through tRNS.
+    const alpha = await render({
+      value: `<body style="margin:0"><div style="width:40px;height:40px;background:rgba(255,0,0,0.5)"></div></body>`,
+      width: 100,
+      height: 80,
+      format: "png",
+    });
+    expect(colorType(alpha.data as Uint8Array)).toBe(3);
+    const ap = PNG.sync.read(Buffer.from(alpha.data as Uint8Array));
+    const a0 = (x: number, y: number) => Array.from(ap.data.slice((ap.width * y + x) * 4, (ap.width * y + x) * 4 + 4));
+    expect(a0(90, 70)[3]).toBe(0);
+    expect(a0(10, 10)[0]).toBe(255);
+    expect(Math.abs(a0(10, 10)[3] - 128)).toBeLessThanOrEqual(1);
+
+    // More than 256 colors (gradient) stays RGBA.
+    const rich = await render({
+      value: `<body style="margin:0"><div style="width:300px;height:80px;background:linear-gradient(135deg,#f00,#0f0 50%,#00f)"></div></body>`,
+      width: 300,
+      height: 80,
+      format: "png",
+    });
+    expect(colorType(rich.data as Uint8Array)).toBe(6);
+  });
+
   it("float margin box (not the border box) narrows the first line", async () => {
     const squares = '<i style="display:inline-block;width:16px;height:16px;background:#00f"></i>'.repeat(30);
     const { at } = await renderPng(

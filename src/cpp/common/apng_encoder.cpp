@@ -101,7 +101,7 @@ sk_sp<SkData> encode_apng(const ApngFrame* frames, size_t count, int loop_count)
             !frames[i].pixmap.readPixels(norm.pixmap())) {
             return nullptr;
         }
-        sk_sp<SkData> png = encode_png(norm.pixmap());
+        sk_sp<SkData> png = encode_png_rgba(norm.pixmap());
         if (!png || !split_png(png->bytes(), png->size(), parts[i])) return nullptr;
         if (i > 0 && parts[i].ihdr != parts[0].ihdr) return nullptr;
     }

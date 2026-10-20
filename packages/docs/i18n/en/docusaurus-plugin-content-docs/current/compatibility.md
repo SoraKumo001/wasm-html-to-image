@@ -35,6 +35,8 @@ Supported input types, output formats, CSS properties, and runtime environments.
 | `svg`       | `string`     | Skia vector stream                             | Wraps in `<image>` SVG        |
 | `pdf`       | `Uint8Array` | SkPDFDocument vector PDF                       | Single-page centered PDF      |
 
+> `png` output is stored as an indexed (palette) PNG automatically when the image has at most 256 colors (flat UI, diagrams): about a third of the RGBA size with identical pixels. Richer images stay RGBA.
+>
 > `webp`, `apng` and `gif` produce an animated image when (`apng` without `animation` is a plain PNG; `gif` uses a 256-color dithered palette and composites transparency over white) `animation: { duration, fps, loop }` (CLI: `--animation`) is set. `opacity`, `transform` (`translate` / `rotate` / `scale` only) and `color` / `background-color` `@keyframes` are sampled; the default is 15 fps with caps of 5 s (`duration` is clamped to 5000 ms) / ~75 frames. The repeat count is set with `loop` (CLI: `--animation-loop`) and defaults to `0` (infinite).
 
 ---

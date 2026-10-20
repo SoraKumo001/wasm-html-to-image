@@ -49,6 +49,8 @@ struct EncodeResult {
 // --- 単形式primitive (satoru renderersの使い方と1:1) ---
 
 sk_sp<SkData> encode_png(const SkPixmap& pixmap);
+// Always RGBA (no palette): for callers that need a fixed color type, e.g. APNG frames.
+sk_sp<SkData> encode_png_rgba(const SkPixmap& pixmap);
 
 // PNG encode + base64 `data:image/png` URL. Shared implementation behind
 // `encode_image_to_svg` and direct `encode_png_data_url` callers (e.g. svg_renderer.cpp).

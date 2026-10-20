@@ -35,6 +35,8 @@ title: 互換性と仕様
 | `svg`        | `string`     | Skia ベクター描画ストリーム                | `<image>` タグでラップした SVG    |
 | `pdf`        | `Uint8Array` | SkPDFDocument によるベクター PDF           | 画像を等倍 1 ページに配置した PDF |
 
+> `png` は 256 色以下の画像（フラットな UI など）を自動でインデックスカラー PNG（パレット）で出力します（RGBA 比で約 3 分の 1 のサイズ、見た目は同一）。それ以外は従来どおり RGBA です。
+>
 > `webp` / `apng` / `gif` は `animation: { duration, fps, loop }`（CLI: `--animation`）を指定するとアニメーション画像を出力します（`apng` は `animation` なしだと通常の PNG、`gif` は 256 色パレット + ディザで、透過部分は白背景に合成されます）。`opacity`・`transform`（`translate` / `rotate` / `scale` のみ）・`color` / `background-color` の `@keyframes` をサンプリングし、既定 15fps、上限は 5 秒（`duration` は内部で 5000ms にクランプ）／約 75 フレームです。再生回数は `loop`（CLI: `--animation-loop`）で指定でき、既定は `0`（無限ループ）です。キーフレームの値には `var()` を使用でき、カスタムプロパティは描画対象の要素の解決済みの値から補完されます。ループ長は CSS の `animation-duration`（`animation` ショートハンドを含む）が優先され、API の `duration` は上限クランプとして働きます。
 
 ---
