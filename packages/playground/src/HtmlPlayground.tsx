@@ -21,6 +21,9 @@ type Params = {
   animationLoop: number;
 };
 
+import SHOWCASE_SAMPLE_HTML from "./showcase-sample.html?raw";
+
+const SHOWCASE_SAMPLE_KEY = "showcase-sample";
 const ANIMATION_SAMPLE_KEY = "animation-sample";
 const ANIMATION_SAMPLE_HTML = `<!DOCTYPE html>
 <html>
@@ -346,8 +349,12 @@ const App: React.FC = () => {
 
   // Handle asset selection (Initial or when assetList is loaded)
   useEffect(() => {
-    if (params.asset === ANIMATION_SAMPLE_KEY && !params.value) {
-      loadAsset(ANIMATION_SAMPLE_KEY);
+    if (
+      (params.asset === ANIMATION_SAMPLE_KEY ||
+        params.asset === SHOWCASE_SAMPLE_KEY) &&
+      !params.value
+    ) {
+      loadAsset(params.asset);
       return;
     }
     if (assetList.length === 0 || !params.asset) return;
@@ -357,6 +364,17 @@ const App: React.FC = () => {
     loadAsset(initialAsset);
   }, []);
   const loadAsset = async (name: string) => {
+    if (name === SHOWCASE_SAMPLE_KEY) {
+      shouldRenderImmediately.current = true;
+      updateParams({
+        asset: name,
+        value: SHOWCASE_SAMPLE_HTML,
+        width: 900,
+        format: "webp",
+        anim: true,
+      });
+      return;
+    }
     if (name === ANIMATION_SAMPLE_KEY) {
       shouldRenderImmediately.current = true;
       updateParams({
@@ -872,6 +890,9 @@ const App: React.FC = () => {
             }}
           >
             <option value="">-- Select Asset --</option>
+            <option value={SHOWCASE_SAMPLE_KEY}>
+              🌟 Showcase (new CSS, vertical writing, animation)
+            </option>
             <option value={ANIMATION_SAMPLE_KEY}>
               ✨ CSS Animation (@keyframes)
             </option>
