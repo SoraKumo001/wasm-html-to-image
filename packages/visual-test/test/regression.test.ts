@@ -1438,6 +1438,23 @@ describe("regression: layout and paint probes", () => {
     }
     expect(blueTop).toBeGreaterThan(redBottom);
   });
+  it("explicit grid-template-rows tracks keep their specified size; items overflow instead", async () => {
+    // `display:grid;grid-template-rows:50px` with a 200px tall (overflow:hidden) item:
+    // Chromium keeps the grid 50px tall and clips the item. An explicitly sized row track
+    // must not be grown to its item's content.
+    const doc = (rows: string) =>
+      `<div style="display:grid;grid-template-rows:${rows};width:160px"><div style="overflow:hidden"><div style="height:200px;background:#00f"></div></div></div><div style="height:20px;background:#0f0"></div>`;
+    const fixed = await renderPng(doc("50px"), 200, 300);
+    expect(near(fixed.at(5, 25), BLUE)).toBe(true);
+    expect(near(fixed.at(5, 49), BLUE)).toBe(true);
+    // the marker is right below the 50px track, not below the 200px item (y=220 before the fix)
+    expect(near(fixed.at(5, 55), [0, 255, 0])).toBe(true);
+    expect(isWhite(fixed.at(5, 75))).toBe(true);
+    // `0fr` in an indefinite-height container stays collapsed (GitHub accordion panels).
+    const collapsed = await renderPng(doc("0fr"), 200, 300);
+    expect(near(collapsed.at(5, 15), [0, 255, 0])).toBe(true);
+    expect(isWhite(collapsed.at(5, 25))).toBe(true);
+  });
   it("display:contents generates no box: its children take part in the parent's layout", async () => {
     const h = async (b: string) => (await render({ value: `<html><body style="margin:0">${b}</body></html>`, width: 400, format: "png" })).height;
     expect(

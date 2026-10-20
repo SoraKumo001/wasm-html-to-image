@@ -1090,8 +1090,51 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
     }
     fixed_height += m_grid_layout.row_gap * (num_rows - 1);
 
+    const bool definite_block = render_block.type != containing_block_context::cbc_value_type_auto;
+
+    // Row track kinds, mirroring the column pass: 1 = content-sized, 0 = fixed.
+    // Only content-sized tracks may be grown by their items; an item that is larger than an
+    // explicitly sized track overflows it instead of resizing it. Flexible (fr) tracks are
+    // fixed once the container height gives them a definite size; with an indefinite height
+    // they behave like max-content, except that a 0fr track stays at zero (a collapsed
+    // `grid-template-rows:0fr` accordion must not expand).
+    std::vector<int> row_kinds(num_rows, 1);
+    std::vector<int> row_auto(num_rows, 1);
+    for (int i = 0; i < num_rows && i < (int)row_tracks.size(); i++)
+    {
+        const auto& len = row_tracks[i];
+        if (len.is_predefined())
+        {
+            // auto (0), min-content (1), max-content (2)
+            row_kinds[i] = 1;
+            row_auto[i] = len.predef() == 0 ? 1 : 0;
+        }
+        else if (len.units() == css_units_fr)
+        {
+            row_kinds[i] = (!definite_block && len.val() > 0) ? 1 : 0;
+            row_auto[i] = 0;
+        }
+        else if (len.is_calc())
+        {
+            const auto op = len.get_op();
+            row_kinds[i] = (op == css_length::op_fit_content || op == css_length::op_minmax) ? 1 : 0;
+            row_auto[i] = 0;
+        }
+        else if (len.units() == css_units_percentage)
+        {
+            // A percentage of an indefinite height behaves as auto.
+            row_kinds[i] = definite_block ? 0 : 1;
+            row_auto[i] = 0;
+        }
+        else
+        {
+            row_kinds[i] = 0;  // definite length
+            row_auto[i] = 0;
+        }
+    }
+
     // Distribute remaining space to fr rows
-    if (total_row_fr > 0 && render_block.type != containing_block_context::cbc_value_type_auto)
+    if (total_row_fr > 0 && definite_block)
     {
         pixel_t remaining_height = render_block - fixed_height;
         if (remaining_height < 0) remaining_height = 0;
@@ -1148,8 +1191,11 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             pixel_t total_h = vert ? item.el->width() : item.el->height();
             pixel_t min_content_h = item.el->src_el()->css().get_font_size() * 1.2f;
             // content_offset_height() already includes margins, padding, and borders
+            pixel_t content_h = total_h - (vert ? item.el->content_offset_width() : item.el->content_offset_height());
             pixel_t min_h = min_content_h + (vert ? item.el->content_offset_width() : item.el->content_offset_height());
-            if (total_h < min_h) total_h = min_h;
+            // The one-line floor only applies to content that actually laid out: an empty item
+            // (e.g. a collapsed accordion panel) has a zero height and must not reserve a line.
+            if (content_h > 0 && total_h < min_h) total_h = min_h;
 
             pixel_t current_total = 0;
             for (int i = item.pos.row_start; i < item.pos.row_end && i < num_rows; i++)
@@ -1160,13 +1206,39 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
 
             if (total_h > current_total)
             {
-                pixel_t diff = total_h - current_total;
+                // Grow only the content-sized tracks in the item's span. A fixedly sized
+                // track keeps its specified size and the item overflows it (CSS Grid §11.5).
+                int growable = 0;
                 for (int i = item.pos.row_start; i < item.pos.row_end && i < num_rows; i++)
                 {
-                    m_grid_layout.row_heights[i] += diff / span;
+                    if (row_kinds[i]) growable++;
+                }
+                if (growable > 0)
+                {
+                    pixel_t diff = (total_h - current_total) / growable;
+                    for (int i = item.pos.row_start; i < item.pos.row_end && i < num_rows; i++)
+                    {
+                        if (row_kinds[i]) m_grid_layout.row_heights[i] += diff;
+                    }
                 }
             }
 
+        }
+    }
+
+    // With a definite container height and no fr rows, `auto` tracks absorb the free
+    // space (align-content: normal stretches them), mirroring the column pass above.
+    // This is what sizes an empty item's row inside an explicitly sized grid.
+    if (definite_block && total_row_fr <= 0)
+    {
+        int autos = (int)std::count(row_auto.begin(), row_auto.end(), 1);
+        pixel_t used = num_rows > 0 ? m_grid_layout.row_gap * (num_rows - 1) : 0;
+        for (int i = 0; i < num_rows; i++) used += m_grid_layout.row_heights[i];
+        const pixel_t leftover = render_block - used;
+        if (autos > 0 && leftover > 0)
+        {
+            for (int i = 0; i < num_rows; i++)
+                if (row_auto[i]) m_grid_layout.row_heights[i] += leftover / autos;
         }
     }
 
