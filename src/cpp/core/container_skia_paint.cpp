@@ -134,6 +134,47 @@ static void draw_background(SkCanvas* canvas, const litehtml::background_layer& 
 }  // namespace
 
 // ── draw_* 8関数 (container_skia.cpp §3 から移動, P4) ──
+// box-shadow of a box with corner-shape: same geometry as the rounded-rect path below, built
+// from the shaped outline (spread grows / shrinks the box and its radii).
+static void draw_shaped_box_shadow(SkCanvas* canvas, const litehtml::shadow& s,
+                                   const litehtml::position& pos,
+                                   const litehtml::border_radiuses& radius, bool inset) {
+    auto resized = [&](float delta, litehtml::position& p, litehtml::border_radiuses& r) {
+        p = litehtml::position(pos.x - delta, pos.y - delta, pos.width + 2 * delta,
+                               pos.height + 2 * delta);
+        r = radius;
+        auto grow = [&](litehtml::pixel_t& v) { v = v > 0 ? std::max(0.0f, (float)v + delta) : 0; };
+        grow(r.top_left_x); grow(r.top_left_y); grow(r.top_right_x); grow(r.top_right_y);
+        grow(r.bottom_right_x); grow(r.bottom_right_y); grow(r.bottom_left_x); grow(r.bottom_left_y);
+    };
+    const SkPath box = make_shape_path(pos, radius);
+    SkColor color = SkColorSetARGB(s.color.alpha, s.color.red, s.color.green, s.color.blue);
+    float blur_std_dev = (float)s.blur.val() * 0.5f;
+    SkPaint p;
+    p.setAntiAlias(true);
+    p.setColor(color);
+    if (blur_std_dev > 0)
+        p.setMaskFilter(SkMaskFilter::MakeBlur(kNormal_SkBlurStyle, blur_std_dev));
+    litehtml::position sp;
+    litehtml::border_radiuses sr;
+    canvas->save();
+    if (inset) {
+        canvas->clipPath(box, true);
+        resized(-(float)s.spread.val(), sp, sr);
+        SkRect hr = SkRect::MakeXYWH((float)pos.x, (float)pos.y, (float)pos.width, (float)pos.height);
+        hr.outset(blur_std_dev * 3 + std::abs((float)s.x.val()) + 100,
+                  blur_std_dev * 3 + std::abs((float)s.y.val()) + 100);
+        canvas->translate((float)s.x.val(), (float)s.y.val());
+        canvas->drawPath(SkPathBuilder().addRect(hr).addPath(make_shape_path(sp, sr)).setFillType(SkPathFillType::kEvenOdd).detach(), p);
+    } else {
+        canvas->clipPath(box, SkClipOp::kDifference, true);
+        resized((float)s.spread.val(), sp, sr);
+        canvas->translate((float)s.x.val(), (float)s.y.val());
+        canvas->drawPath(make_shape_path(sp, sr), p);
+    }
+    canvas->restore();
+}
+
 void container_skia::draw_box_shadow(litehtml::uint_ptr hdc, const litehtml::shadow_vector& shadows,
                                      const litehtml::position& pos,
                                      const litehtml::border_radiuses& radius, bool inset) {
@@ -164,6 +205,10 @@ void container_skia::draw_box_shadow(litehtml::uint_ptr hdc, const litehtml::sha
     for (auto it = shadows.rbegin(); it != shadows.rend(); ++it) {
         const auto& s = *it;
         if (s.inset != inset) continue;
+        if (radius.has_corner_shape()) {
+            draw_shaped_box_shadow(m_canvas, s, pos, radius, inset);
+            continue;
+        }
         SkRRect box_rrect = make_rrect(pos, radius);
         SkColor shadow_color =
             SkColorSetARGB(s.color.alpha, s.color.red, s.color.green, s.color.blue);
@@ -838,10 +883,43 @@ void container_skia::draw_borders(litehtml::uint_ptr hdc, const litehtml::border
             rp.setColor(SkColorSetARGB(borders.top.color.alpha, borders.top.color.red,
                                        borders.top.color.green, borders.top.color.blue));
             rp.setAntiAlias(true);
-            m_canvas->drawPath(border_ring_path(draw_pos, borders.radius, (float)borders.left.width,
-                                                (float)borders.top.width, (float)borders.right.width,
-                                                (float)borders.bottom.width),
-                               rp);
+            const float bw = (float)borders.top.width;
+            auto inset_path = [&](float d) {
+                litehtml::position ip(draw_pos.x + d, draw_pos.y + d, draw_pos.width - 2 * d,
+                                      draw_pos.height - 2 * d);
+                litehtml::border_radiuses ir = borders.radius;
+                auto shrink = [&](litehtml::pixel_t& v) { v = std::max(0.0f, (float)v - d); };
+                shrink(ir.top_left_x); shrink(ir.top_left_y); shrink(ir.top_right_x);
+                shrink(ir.top_right_y); shrink(ir.bottom_right_x); shrink(ir.bottom_right_y);
+                shrink(ir.bottom_left_x); shrink(ir.bottom_left_y);
+                return make_shape_path(ip, ir);
+            };
+            if (borders.top.style == litehtml::border_style_dotted ||
+                borders.top.style == litehtml::border_style_dashed) {
+                rp.setStyle(SkPaint::kStroke_Style);
+                rp.setStrokeWidth(bw);
+                float intervals[2];
+                if (borders.top.style == litehtml::border_style_dotted) {
+                    intervals[0] = 0.0f;
+                    intervals[1] = 2.0f * bw;
+                    rp.setStrokeCap(SkPaint::kRound_Cap);
+                } else {
+                    intervals[0] = std::max(3.0f, 2.0f * bw);
+                    intervals[1] = bw;
+                }
+                rp.setPathEffect(SkDashPathEffect::Make(SkSpan<const float>(intervals, 2), 0));
+                m_canvas->drawPath(inset_path(bw / 2.0f), rp);
+            } else if (borders.top.style == litehtml::border_style_double) {
+                rp.setStyle(SkPaint::kStroke_Style);
+                rp.setStrokeWidth(bw / 3.0f);
+                m_canvas->drawPath(inset_path(bw / 6.0f), rp);
+                m_canvas->drawPath(inset_path(bw * 5.0f / 6.0f), rp);
+            } else {
+                m_canvas->drawPath(border_ring_path(draw_pos, borders.radius, (float)borders.left.width,
+                                                    (float)borders.top.width, (float)borders.right.width,
+                                                    (float)borders.bottom.width),
+                                   rp);
+            }
             return;
         }
 

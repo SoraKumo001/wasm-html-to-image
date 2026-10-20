@@ -824,10 +824,21 @@ void litehtml::css_properties::compute(const element* el, const document::ptr& d
         _border_bottom_right_radius_y_, false, 0, offset(m_css_borders.radius.bottom_right_y));
 
     {
-        // corner-shape: four 3-bit keywords packed by the parser (top-left first).
-        int packed = el->get_property<int>(_corner_shape_, false, 0, offset(m_corner_shape_packed));
-        m_corner_shape_packed = packed;
-        for (int i = 0; i < 4; i++) m_css_borders.radius.shape[i] = (packed >> (3 * i)) & 7;
+        // corner-shape longhands: "<keyword index>:<superellipse parameter>" per corner.
+        static const string_id ids[4] = {_corner_top_left_shape_, _corner_top_right_shape_,
+                                         _corner_bottom_right_shape_, _corner_bottom_left_shape_};
+        for (int i = 0; i < 4; i++) {
+            string v = el->get_property<string>(ids[i], false, "", offset(m_css_borders.radius.shape[i]));
+            int kw = 0;
+            float param = 0;
+            if (!v.empty()) {
+                kw = atoi(v.c_str());
+                size_t colon = v.find(':');
+                if (colon != string::npos) param = (float)atof(v.c_str() + colon + 1);
+            }
+            m_css_borders.radius.shape[i] = kw;
+            m_css_borders.radius.shape_param[i] = param;
+        }
     }
     doc->cvt_units(m_css_borders.radius.top_left_x, m_font_metrics, 0);
     doc->cvt_units(m_css_borders.radius.top_left_y, m_font_metrics, 0);

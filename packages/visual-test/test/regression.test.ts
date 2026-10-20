@@ -716,6 +716,37 @@ describe("regression: layout and paint probes", () => {
     expect(near([png.data[0], png.data[1], png.data[2]] as Rgb, RED)).toBe(true);
   });
 
+  it("corner-shape: superellipse(), per-corner longhands, box-shadow and dashed borders follow the shape", async () => {
+    const box = (style: string, outer = "") =>
+      renderPng(
+        `<div style="margin:20px;width:80px;height:80px;background:#00f;border-radius:40px;${style}"></div>${outer}`,
+        140,
+        140,
+      );
+    // superellipse(1) is a straight bevel, superellipse(2) is the squircle, superellipse(1) != round.
+    const bevel = await box("corner-shape:superellipse(0)");
+    expect(isWhite(bevel.at(32, 32))).toBe(true); // x+y < radius box diagonal: cut away
+    const squircle = await box("corner-shape:squircle");
+    const super2 = await box("corner-shape:superellipse(2)");
+    expect(near(squircle.at(28, 28), BLUE)).toBe(true);
+    expect(near(super2.at(28, 28), BLUE)).toBe(true);
+    // Longhands set one corner.
+    const longhand = await box("corner-top-left-shape:notch");
+    expect(isWhite(longhand.at(30, 30))).toBe(true); // top-left notched
+    expect(near(longhand.at(85, 45), BLUE)).toBe(true); // top-right still round
+    // Outer box-shadow follows the notch: the shadow is absent where the corner was cut away.
+    const shadow = await box("border-radius:20px;corner-shape:notch;box-shadow:0 0 0 6px #f00");
+    expect(near(shadow.at(17, 60), RED)).toBe(true); // edge shadow
+    expect(isWhite(shadow.at(24, 24))).toBe(true); // notched corner region has neither box nor shadow
+    // A dashed border on a shaped box leaves gaps (not a solid ring).
+    const dashed = await box("box-sizing:border-box;border:4px dashed #f00;background:none;corner-shape:bevel;border-radius:20px");
+    let red = 0;
+    let gap = 0;
+    for (let x = 28; x < 100; x++) (near(dashed.at(x, 21), RED, 60) ? red++ : gap++);
+    expect(red).toBeGreaterThan(5);
+    expect(gap).toBeGreaterThan(5);
+  });
+
   it("float margin box (not the border box) narrows the first line", async () => {
     const squares = '<i style="display:inline-block;width:16px;height:16px;background:#00f"></i>'.repeat(30);
     const { at } = await renderPng(

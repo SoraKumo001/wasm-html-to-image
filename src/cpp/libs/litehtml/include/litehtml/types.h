@@ -1077,7 +1077,8 @@ namespace litehtml
                 corner_shape_bevel,
                 corner_shape_notch,
                 corner_shape_squircle,
-                corner_shape_square
+                corner_shape_square,
+                corner_shape_superellipse  // superellipse(k): exponent 2^k, parameter kept separately
         };
 
 #define stroke_linejoin_strings         "miter;round;bevel;miter-clip;arcs"

@@ -149,13 +149,19 @@ SkPath make_shape_path(const litehtml::position& pos, const litehtml::border_rad
                 pb.lineTo(center);
                 pb.lineTo(end);
                 break;
-            case litehtml::corner_shape_squircle: {
-                // Superellipse with exponent 4 (CSS `squircle` = superellipse(2)).
+            case litehtml::corner_shape_squircle:
+            case litehtml::corner_shape_superellipse: {
+                // Superellipse |x|^n + |y|^n = 1 with n = 2^k (squircle = superellipse(2));
+                // k = 1 is the ordinary round corner, k < 0 curves inwards like `scoop`.
+                const float k = c.shape == litehtml::corner_shape_squircle
+                                    ? 2.0f
+                                    : std::clamp(radius.shape_param[i], -8.0f, 8.0f);
+                const float expo = 2.0f / std::pow(2.0f, k);
                 const int steps = 24;
                 for (int s = 1; s <= steps; s++) {
                     float t = (float)s / steps * 1.5707963f;
-                    float cs = std::pow(std::cos(t), 0.5f);
-                    float sn = std::pow(std::sin(t), 0.5f);
+                    float cs = std::pow(std::cos(t), expo);
+                    float sn = std::pow(std::sin(t), expo);
                     pb.lineTo(center - c.b * cs - c.a * sn);
                 }
                 break;

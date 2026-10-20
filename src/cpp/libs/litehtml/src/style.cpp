@@ -1291,27 +1291,57 @@ namespace litehtml
     }
 
     case _corner_shape_:
+    case _corner_top_left_shape_:
+    case _corner_top_right_shape_:
+    case _corner_bottom_right_shape_:
+    case _corner_bottom_left_shape_:
     {
-      // 1-4 keywords, expanded like the margin shorthand (tl, tr, br, bl).
-      int kw[4];
-      size_t n = 0;
-      bool ok = !value.empty() && value.size() <= 4;
-      for (size_t i = 0; ok && i < value.size(); i++)
+      // <corner-shape-value> = round | scoop | bevel | notch | square | squircle | superellipse(<number>)
+      // Stored per corner as "<keyword index>:<superellipse parameter>".
+      auto one = [&](const css_token &t, string &out) -> bool
       {
-        int idx = value_index(lowcase(value[i].ident()), corner_shape_strings, -1);
-        if (value[i].type != IDENT || idx < 0)
-          ok = false;
-        else
-          kw[n++] = idx;
+        int kw = -1;
+        float param = 0;
+        if (t.type == IDENT)
+        {
+          kw = value_index(lowcase(t.ident()), corner_shape_strings, -1);
+        }
+        else if (t.type == CV_FUNCTION && lowcase(t.name) == "superellipse" && t.value.size() == 1)
+        {
+          const css_token &a = t.value[0];
+          if (a.type == NUMBER) { kw = corner_shape_superellipse; param = a.n.number; }
+          else if (a.type == IDENT && lowcase(a.ident()) == "infinity") { kw = corner_shape_superellipse; param = 8; }
+          else if (a.type == IDENT && lowcase(a.ident()) == "-infinity") { kw = corner_shape_superellipse; param = -8; }
+        }
+        if (kw < 0) return false;
+        out = std::to_string(kw) + ":" + std::to_string(param);
+        return true;
+      };
+      static const string_id corner_ids[4] = {_corner_top_left_shape_, _corner_top_right_shape_,
+                                              _corner_bottom_right_shape_, _corner_bottom_left_shape_};
+      if (name == _corner_shape_)
+      {
+        // 1-4 values, expanded like the margin shorthand (tl, tr, br, bl).
+        string v[4];
+        size_t n = 0;
+        bool ok = !value.empty() && value.size() <= 4;
+        for (size_t k = 0; ok && k < value.size(); k++) ok = one(value[k], v[n++]);
+        if (ok)
+        {
+          string tl = v[0];
+          string tr = n >= 2 ? v[1] : tl;
+          string br = n >= 3 ? v[2] : tl;
+          string bl = n >= 4 ? v[3] : (n >= 2 ? tr : tl);
+          const string vals[4] = {tl, tr, br, bl};
+          for (int k = 0; k < 4; k++)
+            add_parsed_property(corner_ids[k], property_value(vals[k], important, false, m_layer, m_specificity));
+        }
       }
-      if (ok)
+      else
       {
-        int tl = kw[0];
-        int tr = n >= 2 ? kw[1] : tl;
-        int br = n >= 3 ? kw[2] : tl;
-        int bl = n >= 4 ? kw[3] : (n >= 2 ? tr : tl);
-        int packed = tl | (tr << 3) | (br << 6) | (bl << 9);
-        add_parsed_property(name, property_value(packed, important, false, m_layer, m_specificity));
+        string v;
+        if (value.size() == 1 && one(value[0], v))
+          add_parsed_property(name, property_value(v, important, false, m_layer, m_specificity));
       }
       break;
     }
