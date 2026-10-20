@@ -69,7 +69,7 @@ export interface RenderResult<T = Uint8Array | string> {
 | `baseUrl`  | `string`                                          |    -     | 相対パスのリソース解決に使用するベース URL                                 |
 | `width`    | `number`                                          | **必須** | ビューポート幅（HTML 時）、または出力幅（画像リサイズ時）                  |
 | `height`   | `number`                                          |  `auto`  | ビューポート高さ（HTML 時）、または出力高さ（画像リサイズ時）              |
-| `format`   | `OutputFormat`                                    | `"png"`  | 出力形式 (`png`, `jpeg`, `webp`, `avif`, `jxl`, `raw`, `thumbhash`, `svg`, `pdf`) |
+| `format`   | `OutputFormat`                                    | `"png"`  | 出力形式 (`png`, `jpeg`, `webp`, `apng`, `gif`, `avif`, `jxl`, `raw`, `thumbhash`, `svg`, `pdf`) |
 
 ### エンコード & リサイズ
 
@@ -79,7 +79,7 @@ export interface RenderResult<T = Uint8Array | string> {
 | `speed`     | `number`                                                  | AVIF: `8` / その他: `6` | エンコード速度 (0〜10)。AVIF・JXL で有効。AVIF は 6 より数倍速く、ファイルは約 15〜20% 大きくなります。最小サイズが必要なら `speed: 6` を指定してください |
 | `fit`       | `"contain" \| "cover" \| "fill"`                          |    -    | リサイズ戦略                                                                 |
 | `crop`      | `{ x: number, y: number, width: number, height: number }` |    -    | 切り抜き矩形                                                                 |
-| `animation` | `boolean \| { duration: number; fps?: number; loop?: number }` | `false` | アニメーションフレームを保持するか（対応形式のみ）。HTML 入力では `{ duration, fps, loop }` で `@keyframes` をサンプリング。`loop` は再生回数（`0` = 無限 = 既定、`1` = 1 回だけ）。ループ長は CSS の `animation-duration` が優先され、`duration` はその上限クランプ、`fps` は上限のフレームレート |
+| `animation` | `boolean \| { duration: number; fps?: number; loop?: number }` | `false` | アニメーションフレームを保持するか（対応形式のみ）。HTML 入力では `{ duration, fps, loop }` で `@keyframes` をサンプリング。`webp` / `apng` / `gif` で出力できます。`loop` は再生回数（`0` = 無限 = 既定、`1` = 1 回だけ）。文書内のすべての `@keyframes` が、ルールのセレクタに一致する全要素を動かします（1 要素の複数アニメーションは重ねて適用）。ループ長は CSS の `animation-duration` が優先され、`duration` はその上限クランプ、`fps` は上限のフレームレート |
 
 ### フォント & スタイル
 

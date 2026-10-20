@@ -18,7 +18,7 @@ title: API Overview
 | `wasm-html-to-image/workers`    | `createHtmlToImageWorker()`<br/>`render(options)`         | Multi-threaded worker pool                             |
 | `wasm-html-to-image/react`      | `render(options)`                                         | Wrapper for React JSX elements                         |
 | `wasm-html-to-image/preact`     | `render(options)`                                         | Wrapper for Preact JSX elements                        |
-| `wasm-html-to-image/tailwind`   | `inlineTailwind(html)`                                    | Inlines Tailwind utility classes                       |
+| `wasm-html-to-image/tailwind`   | `createCSS(html, { css })` / `tailwind(html, { css })` / `convertTw(html)` | Tailwind v4 utilities as CSS (`tw` → `class`, `@theme` → `:root` variables, `@apply` expansion)                       |
 
 ---
 

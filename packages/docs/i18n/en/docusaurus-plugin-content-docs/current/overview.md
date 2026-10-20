@@ -154,7 +154,7 @@ const result = await htmlToImage(mod, {
 | `wasm-html-to-image/workers`    | Node.js / Browsers           | Multi-threaded worker pool for high throughput                         |
 | `wasm-html-to-image/react`      | React integration            | Direct rendering wrapper for React JSX nodes                           |
 | `wasm-html-to-image/preact`     | Preact integration           | Direct rendering wrapper for Preact JSX nodes                          |
-| `wasm-html-to-image/tailwind`   | Styling pipeline             | Inlines Tailwind CSS utility classes                                   |
+| `wasm-html-to-image/tailwind`   | Styling pipeline             | UnoCSS / Tailwind v4 utilities as CSS (`tw` prop, `@theme`, `@apply`)                                   |
 
 ---
 

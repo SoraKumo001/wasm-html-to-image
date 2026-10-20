@@ -16,8 +16,8 @@ No headless browsers (Chromium, Puppeteer, or Playwright) required. Runs seamles
 ## ✨ Features
 
 - ⚡ **Single Unified WASM Binary**: HTML parsing, CSS layout, vector painting, and image encoding execute entirely inside WebAssembly without copying intermediate framebuffers across JS boundaries.
-- 🎨 **Versatile Inputs**: Renders HTML strings, remote Web URLs, multi-page HTML arrays, or raw image buffers (PNG, JPEG, WebP, GIF, AVIF, JXL, BMP, Data URLs).
-- 📦 **Rich Output Formats**: Direct SVG vector streams, high-quality PNG, JPEG, WebP, AVIF, JXL, uncompressed RAW pixels, ThumbHash placeholders, and multi-page vector PDFs.
+- 🎨 **Versatile Inputs**: Renders HTML strings, remote Web URLs, multi-page HTML arrays, or raw image buffers (PNG, JPEG, WebP, GIF, AVIF, JXL, BMP, Data URLs; JPEG XL also works in `<img>`).
+- 📦 **Rich Output Formats**: Direct SVG vector streams, high-quality PNG, JPEG, WebP, AVIF, JXL, animated WebP / APNG / GIF, uncompressed RAW pixels, ThumbHash placeholders, and multi-page vector PDFs.
 - 🚀 **Zero-Config Single Bundle**: Use `wasm-html-to-image/single` to call `render()` immediately without manual WASM loading or build setup.
 - 🌐 **Edge & Serverless Native**: Dedicated subpaths (`/workerd` for Cloudflare Workers, `/edge-light` for Vercel Edge) tailored for strict serverless constraints.
 - 🧵 **Multi-Threaded Worker Pool**: Process thousands of images in parallel using `wasm-html-to-image/workers` (Node.js worker threads / Web Workers).
@@ -173,7 +173,7 @@ Choose the optimal entry point for your application and environment:
 | `wasm-html-to-image/workers`    | Node.js, Browsers                        | Multi-threaded worker pool for high concurrency                        |
 | `wasm-html-to-image/react`      | React integration                        | Directly render React JSX element trees                                |
 | `wasm-html-to-image/preact`     | Preact integration                       | Directly render Preact JSX element trees                               |
-| `wasm-html-to-image/tailwind`   | Utility styling                          | Inlines UnoCSS / Tailwind classes                                      |
+| `wasm-html-to-image/tailwind`   | Utility styling                          | UnoCSS / Tailwind v4 utilities as CSS (`createCSS`, `tailwind()` for `tw` / `@theme` / `@apply`)                                      |
 
 ---
 
@@ -277,6 +277,10 @@ npx wasm-html-to-image loader.html -o loader.webp -f webp --animation 2000 --ani
 
 # Play the animated WebP once instead of looping forever
 npx wasm-html-to-image loader.html -o loader.webp -f webp --animation 2000 --animation-loop 1
+
+# The same animation as APNG or GIF
+npx wasm-html-to-image loader.html -o loader.png -f apng --animation 2000
+npx wasm-html-to-image loader.html -o loader.gif -f gif --animation 2000
 ```
 
 ---

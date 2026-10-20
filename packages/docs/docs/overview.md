@@ -160,7 +160,7 @@ const result = await htmlToImage(mod, {
 | `wasm-html-to-image/workers`    | Node.js / ブラウザ         | Worker スレッド / Web Worker による並列処理プール                                         |
 | `wasm-html-to-image/react`      | React 連携                 | React JSX ノードを直接描画するラッパー                                                    |
 | `wasm-html-to-image/preact`     | Preact 連携                | Preact JSX ノードを直接描画するラッパー                                                   |
-| `wasm-html-to-image/tailwind`   | スタイリング               | Tailwind CSS クラスをインラインスタイルへ展開                                             |
+| `wasm-html-to-image/tailwind`   | スタイリング               | UnoCSS / Tailwind v4 のユーティリティ CSS を生成（`tw` prop、`@theme`、`@apply`）                                             |
 
 ---
 
