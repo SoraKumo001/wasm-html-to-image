@@ -220,7 +220,7 @@ The rendering engine couples **litehtml** (HTML/CSS layout) and **Google Skia** 
 - **Floats & Clear**: `float: left | right | none`, `clear: left | right | both | none`.
 
 ### 2. Typography & Text Shaping
-- **Fonts**: `font-family`, `font-size`, `font-weight` (100–900, `bold`, `normal`), `font-style` (`italic`, `normal`), `font-variant`, `line-height`, `letter-spacing`, `word-spacing`.
+- **Fonts**: `font-family`, `font-size`, `font-weight` (100–900, `bold`, `normal`), `font-style` (`italic`, `normal`), `font-variant`, `font-variant-*` longhands, `font-feature-settings`, `font-kerning` (`auto`, `normal`, `none`), `font-variation-settings` (variable font axes), `font-stretch` (keywords and percentages), `line-height`, `letter-spacing`, `word-spacing`.
 - **Text Alignment & Flow**: `text-align` (`left`, `right`, `center`, `justify`), `vertical-align`, `text-transform` (`uppercase`, `lowercase`, `capitalize`, `none`).
 - **Wrapping & Breaking**: `white-space` (`normal`, `nowrap`, `pre`, `pre-wrap`, `pre-line`), `text-wrap` (`wrap`, `nowrap`, `balance`), `word-break` (`normal`, `break-all`, `keep-all`), `overflow-wrap` (`normal`, `break-word`, `anywhere`).
 - **Ellipsis & Multi-line Clamping**:
@@ -229,7 +229,7 @@ The rendering engine couples **litehtml** (HTML/CSS layout) and **Google Skia** 
 - **Text Stroke & Shadow**:
   - Stroke: `-webkit-text-stroke: <width> <color>` (also `-webkit-text-stroke-width`, `-webkit-text-stroke-color`, `-webkit-text-fill-color`).
   - Text Shadow: `text-shadow: offset-x offset-y blur-radius color` (multiple comma-separated shadows supported).
-  - Text Decoration: `text-decoration` (`underline`, `line-through`, `none`, style, color, thickness, `text-underline-offset`).
+  - Text Decoration: `text-decoration` (`underline`, `overline`, `line-through`, `none`, style, color, thickness, `text-underline-offset`, `text-decoration-skip-ink`, `text-underline-position`).
   - Text Emphasis: `text-emphasis` (`style`, `color`, `position`).
 - **Vertical Writing & Advanced Internationalization**:
   - `writing-mode`: `horizontal-tb`, `vertical-rl`, `vertical-lr`.
@@ -295,7 +295,7 @@ When prompting an AI agent to generate HTML/CSS templates for `wasm-html-to-imag
 ## Limitations & Unsupported Features (Do NOT Use)
 
 1. **NO JavaScript Execution**: `<script>` tags, DOM events (`onclick`, `onload`), and DOM manipulations do NOT run. Always generate fully static HTML markup.
-2. **NO CSS Keyframe Animations or Transitions**: `@keyframes`, `animation`, and `transition` are not animated. The engine renders static snapshots.
+2. **CSS Animation Is Sampled, Not Live**: `@keyframes` do not play by themselves and `transition` is not evaluated. Passing `animation: { duration, fps, loop }` (CLI: `--animation`) samples `opacity`, `transform` (`translate` / `rotate` / `scale`), and `color` / `background-color` keyframes into an animated WebP. Every other render is a static snapshot.
 3. **NO HTML5 Canvas Scripting**: `<canvas>` with `canvas.getContext('2d')` does not execute JavaScript. Use `<svg>` or CSS shapes instead.
 4. **NO Interactive State Styling**: Dynamic states like `:hover`, `:active`, and `:focus` do not trigger.
 5. **NO Browser Web Storage**: `window`, `document`, `localStorage`, `sessionStorage`, and `IndexedDB` are unavailable.
