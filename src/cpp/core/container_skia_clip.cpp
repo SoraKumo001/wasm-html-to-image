@@ -74,6 +74,10 @@ void container_skia::set_clip(const litehtml::position& pos,
             } else {
                 m_canvas->clipRRect(make_rrect(pos, bdr_radius), true);
             }
+        } else {
+            // A zero-area clip box clips everything: e.g. a collapsed
+            // `grid-template-rows:0fr` panel must not paint its content.
+            m_canvas->clipRect(SkRect::MakeEmpty());
         }
     }
     m_clip.clips.push_back({pos, bdr_radius});
