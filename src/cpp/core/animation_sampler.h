@@ -10,10 +10,26 @@
 //  - The animated element is bound by `animation-name: <name>` (or the
 //    `animation` shorthand whose value contains `<name>`) in a <style> rule,
 //    or in the element's inline `style` attribute (resolved by the caller).
-//  - Stops are interpolated linearly. Per-keyframe easing, several animations
-//    on one element, `animation-direction` and `animation-fill-mode` are out
-//    of scope.
-//  - Loop is fixed to "infinite" (one sampled cycle 0..duration).
+//  - Stops are interpolated with a per-keyframe timing function: an
+//    `animation-timing-function` declared inside a keyframe block applies to
+//    the interval that starts at that stop, and the element-level
+//    `animation-timing-function` (rule or inline style) is the default.
+//    `linear`, `ease`, `ease-in`, `ease-out`, `ease-in-out`, `step-start`,
+//    `step-end`, `cubic-bezier()` and `steps()` are understood.
+//  - `animation-direction` (normal / reverse / alternate / alternate-reverse),
+//    `animation-fill-mode` (none / forwards / backwards / both),
+//    `animation-delay` (a negative delay starts inside the first iteration)
+//    and `animation-iteration-count` (a number or `infinite`) are honoured;
+//    {@link resolve_animation_phase} maps a timeline position to the
+//    direction-adjusted iteration progress, and reports when the element
+//    keeps its static style (outside the active interval without a fill).
+//  - Several animations on one element (`animation-name: a, b`) are still out
+//    of scope: the last list item is not layered on top of the first one.
+//    See "Not implemented: several animations per element" at the end of this
+//    header for the design notes.
+//  - Loop of the encoded output is fixed to "infinite"; the sampled timeline
+//    covers the delay plus the iterations the CSS asks for (one iteration for
+//    `infinite`, two for `alternate*` so the loop reads correctly).
 //  - A `transform` whose function list differs between the stops cannot be
 //    interpolated: such an element keeps its static transform (the whole
 //    transform animation is dropped, the other properties still animate).
@@ -36,6 +52,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -51,9 +68,32 @@ inline constexpr int k_max_animation_frames = 75;  // 5s * 15fps
 inline constexpr uint64_t k_max_animation_total_pixel_bytes =
     (uint64_t)256 * 1024 * 1024;  // ~256 MiB of ARGB frame data
 
+// ---- timing functions ----------------------------------------------------
+enum class EasingKind { kLinear, kCubicBezier, kSteps };
+
+// One timing function. The keywords (`linear`, `ease`, `ease-in`,
+// `ease-out`, `ease-in-out`, `step-start`, `step-end`) are normalised into
+// one of the three forms, so sampling only ever evaluates a bezier curve or a
+// step curve.
+struct Easing {
+    EasingKind kind = EasingKind::kLinear;
+    // `cubic-bezier(x1, y1, x2, y2)` control points.
+    float x1 = 0.0f;
+    float y1 = 0.0f;
+    float x2 = 1.0f;
+    float y2 = 1.0f;
+    // `steps(n, start|end)`.
+    int steps = 1;
+    bool steps_start = false;  // jump-start / start
+};
+
+enum class AnimationDirection { kNormal, kReverse, kAlternate, kAlternateReverse };
+enum class AnimationFillMode { kNone, kForwards, kBackwards, kBoth };
+
 struct OpacityKeyframe {
-    float offset;   // 0..1
-    float opacity;  // 0..1
+    float offset;      // 0..1
+    float opacity;     // 0..1
+    Easing easing;     // timing function of the interval that starts here
 };
 
 // One argument of a transform function: the numeric value plus its unit
@@ -73,6 +113,7 @@ struct TransformFunction {
 struct TransformKeyframe {
     float offset;                        // 0..1
     std::vector<TransformFunction> functions;
+    Easing easing;                       // timing function of the following interval
 };
 
 // A colour stop keeps the raw CSS value: turning it into components needs
@@ -80,6 +121,7 @@ struct TransformKeyframe {
 struct ColorStop {
     float offset;  // 0..1
     std::string value;
+    std::string easing_value;  // raw per-keyframe animation-timing-function
 };
 
 // Resolved colour (8 bits per channel).
@@ -93,6 +135,7 @@ struct Rgba {
 struct ColorKeyframe {
     float offset;  // 0..1
     Rgba color;
+    Easing easing;  // timing function of the following interval
 };
 
 // One raw keyframe declaration value: the stop offset plus the raw CSS
@@ -101,6 +144,19 @@ struct ColorKeyframe {
 struct RawStop {
     float offset = 0.0f;
     std::string value;
+    std::string easing_value;  // raw per-keyframe animation-timing-function
+};
+
+// The timing longhands of one declaration block (a <style> rule body or an
+// inline `style` attribute). Every value is raw: it may still hold a `var()`
+// reference, which the binding layer resolves.
+struct AnimationTimingDecl {
+    std::string duration;
+    std::string delay;
+    std::string iteration_count;
+    std::string timing_function;
+    std::string direction;
+    std::string fill_mode;
 };
 
 struct AnimationSpec {
@@ -110,12 +166,16 @@ struct AnimationSpec {
     std::string name;      // @keyframes name
     std::string selector;  // binding selector from a <style> rule ("" = inline only)
     std::string duration_value;  // raw `animation-duration` of the binding rule
+    AnimationTimingDecl timing;  // every timing longhand of the binding rule
     std::vector<OpacityKeyframe> stops;             // opacity
     std::vector<TransformKeyframe> transform_stops; // transform
     std::vector<ColorStop> color_stops;             // color (raw values)
     std::vector<ColorStop> background_color_stops;  // background-color (raw values)
     std::vector<RawStop> opacity_raw;               // raw opacity values
     std::vector<RawStop> transform_raw;             // raw transform values
+    // Parsed element-level `animation-timing-function`: the default of every
+    // stop that declares no timing function of its own.
+    Easing default_easing;
 };
 
 // One sampled frame: `progress` in [0,1) (loop semantics, end exclusive) and
@@ -124,6 +184,32 @@ struct AnimationSpec {
 struct FrameSample {
     float progress;
     int duration_ms;
+};
+
+// The effective timing of one animation. The CSS values are parsed by the
+// caller (which owns the document and therefore the `var()` resolution) and
+// filled in here.
+struct AnimationTiming {
+    int duration_ms = 1000;  // one iteration
+    int delay_ms = 0;        // negative = start inside the first iteration
+    float iteration_count = 1.0f;  // `infinite` => infinity
+    AnimationDirection direction = AnimationDirection::kNormal;
+    AnimationFillMode fill_mode = AnimationFillMode::kNone;
+};
+
+// The local state of an animation at one timeline position.
+struct AnimationPhase {
+    // False when the element keeps its static style (outside the active
+    // interval and the fill mode does not cover it).
+    bool applies = true;
+    // True inside [delay, delay + iterations * duration).
+    bool active = true;
+    // True before the delay elapsed (only reachable with a positive delay).
+    bool before = false;
+    // Direction-adjusted progress within one iteration, in [0,1].
+    float progress = 0.0f;
+    // Index of the iteration the position lands in.
+    int iteration = 0;
 };
 
 namespace detail {
@@ -273,6 +359,172 @@ inline bool parse_time_ms(const std::string& value, int& out_ms) {
     return true;
 }
 
+// ---- timing functions ----------------------------------------------------
+
+// Normalise a `linear` / `ease*` / `step-start` / `step-end` keyword.
+inline bool parse_easing_keyword(const std::string& lower, Easing& out) {
+    Easing parsed;
+    if (lower == "linear") {
+        parsed.kind = EasingKind::kLinear;
+    } else if (lower == "ease") {
+        parsed.kind = EasingKind::kCubicBezier;
+        parsed.x1 = 0.25f;
+        parsed.y1 = 0.1f;
+        parsed.x2 = 0.25f;
+        parsed.y2 = 1.0f;
+    } else if (lower == "ease-in") {
+        parsed.kind = EasingKind::kCubicBezier;
+        parsed.x1 = 0.42f;
+        parsed.y1 = 0.0f;
+        parsed.x2 = 1.0f;
+        parsed.y2 = 1.0f;
+    } else if (lower == "ease-out") {
+        parsed.kind = EasingKind::kCubicBezier;
+        parsed.x1 = 0.0f;
+        parsed.y1 = 0.0f;
+        parsed.x2 = 0.58f;
+        parsed.y2 = 1.0f;
+    } else if (lower == "ease-in-out") {
+        parsed.kind = EasingKind::kCubicBezier;
+        parsed.x1 = 0.42f;
+        parsed.y1 = 0.0f;
+        parsed.x2 = 0.58f;
+        parsed.y2 = 1.0f;
+    } else if (lower == "step-start") {
+        parsed.kind = EasingKind::kSteps;
+        parsed.steps = 1;
+        parsed.steps_start = true;
+    } else if (lower == "step-end") {
+        parsed.kind = EasingKind::kSteps;
+        parsed.steps = 1;
+        parsed.steps_start = false;
+    } else {
+        return false;
+    }
+    out = parsed;
+    return true;
+}
+
+// Parse an `animation-timing-function` value: a keyword, `cubic-bezier(...)`
+// or `steps(...)`. An unparseable value returns false so the caller can fall
+// back to the default timing function (CSS ignores an invalid declaration).
+inline bool parse_easing(const std::string& value, Easing& out) {
+    const std::string text = to_lower(trim(value));
+    if (text.empty()) return false;
+    if (parse_easing_keyword(text, out)) return true;
+
+    if (text.compare(0, 13, "cubic-bezier(") == 0 && text.back() == ')') {
+        const std::string args = text.substr(13, text.size() - 14);
+        std::vector<float> numbers;
+        size_t i = 0;
+        while (i < args.size()) {
+            skip_ws(args, i);
+            if (i >= args.size()) break;
+            if (args[i] == ',') {
+                ++i;
+                continue;
+            }
+            float number = 0.0f;
+            if (!parse_number(args, i, number)) return false;
+            numbers.push_back(number);
+        }
+        // The x coordinates must stay in [0,1] (CSS requirement).
+        if (numbers.size() != 4) return false;
+        if (numbers[0] < 0.0f || numbers[0] > 1.0f) return false;
+        if (numbers[2] < 0.0f || numbers[2] > 1.0f) return false;
+        Easing parsed;
+        parsed.kind = EasingKind::kCubicBezier;
+        parsed.x1 = numbers[0];
+        parsed.y1 = numbers[1];
+        parsed.x2 = numbers[2];
+        parsed.y2 = numbers[3];
+        out = parsed;
+        return true;
+    }
+
+    if (text.compare(0, 6, "steps(") == 0 && text.back() == ')') {
+        const std::string args = text.substr(6, text.size() - 7);
+        const size_t comma = args.find(',');
+        float count = 0.0f;
+        size_t i = 0;
+        if (!parse_number(args, i, count)) return false;
+        const int steps = (int)std::lround((double)count);
+        if (steps < 1) return false;
+        bool start = false;
+        if (comma != std::string::npos) {
+            const std::string position = to_lower(trim(args.substr(comma + 1)));
+            if (position == "start" || position == "jump-start") {
+                start = true;
+            } else if (position == "end" || position == "jump-end") {
+                start = false;
+            } else {
+                // `jump-none` / `jump-both` change the step count: unsupported.
+                return false;
+            }
+        }
+        Easing parsed;
+        parsed.kind = EasingKind::kSteps;
+        parsed.steps = steps;
+        parsed.steps_start = start;
+        out = parsed;
+        return true;
+    }
+    return false;
+}
+
+// One component of a cubic-bezier curve at parameter `t`.
+inline float bezier_component(float t, float p1, float p2) {
+    const float mt = 1.0f - t;
+    return 3.0f * mt * mt * t * p1 + 3.0f * mt * t * t * p2 + t * t * t;
+}
+
+// `steps(n, start|end)` at progress `t`: the output jumps at fixed positions
+// inside [0,1].
+inline float steps_at(int steps, bool start, float t) {
+    if (steps < 1) return t;
+    const float n = (float)steps;
+    if (t <= 0.0f) return start ? 1.0f / n : 0.0f;
+    if (t >= 1.0f) return 1.0f;
+    const int k = (int)std::floor((double)t * (double)steps);
+    if (start) return std::min(1.0f, (float)(k + 1) / n);
+    return (float)k / n;
+}
+
+// Evaluate a timing function at the interval parameter `t` in [0,1].
+// An eased parameter always starts at 0 and ends at 1, so the stops are
+// reached exactly.
+inline float apply_easing(const Easing& easing, float t) {
+    if (t <= 0.0f) {
+        if (easing.kind == EasingKind::kSteps) {
+            return steps_at(easing.steps, easing.steps_start, 0.0f);
+        }
+        return 0.0f;
+    }
+    if (t >= 1.0f) return 1.0f;
+    switch (easing.kind) {
+        case EasingKind::kCubicBezier: {
+            // Solve x(u) = t by bisection (the curve is monotonic in x for
+            // control points inside [0,1]) and return y(u).
+            float lo = 0.0f;
+            float hi = 1.0f;
+            float u = t;
+            for (int i = 0; i < 40; ++i) {
+                u = (lo + hi) * 0.5f;
+                if (bezier_component(u, easing.x1, easing.x2) < t) {
+                    lo = u;
+                } else {
+                    hi = u;
+                }
+            }
+            return bezier_component(u, easing.y1, easing.y2);
+        }
+        case EasingKind::kSteps:
+            return steps_at(easing.steps, easing.steps_start, t);
+        default:
+            return t;
+    }
+}
+
 // Split a declaration block into (lower-cased property, value) pairs.
 // Only top-level ';' and ':' separate, so values may contain functions,
 // strings and nested blocks.
@@ -390,38 +642,160 @@ inline std::vector<std::string> split_top_level_tokens(const std::string& value)
     return out;
 }
 
-// The <time> component of an `animation` shorthand value. A `var()`
-// reference is returned as-is (the binding layer resolves it).
-inline std::string find_time_value(const std::string& value) {
-    for (const auto& token : split_top_level_tokens(value)) {
-        if (has_var_reference(token)) return token;
-        size_t i = 0;
-        float number = 0.0f;
-        if (!parse_number(token, i, number)) continue;
-        const std::string unit = to_lower(token.substr(i));
-        if (unit == "s" || unit == "ms") return token;
-    }
-    return "";
+// True for a <time> token ("2s", "250ms").
+inline bool is_time_token(const std::string& token) {
+    size_t i = 0;
+    float number = 0.0f;
+    if (!parse_number(token, i, number)) return false;
+    const std::string unit = to_lower(token.substr(i));
+    return unit == "s" || unit == "ms";
 }
 
-// The `animation-duration` declared in a declaration block (a <style> rule
-// body or an inline `style` attribute). The `animation` shorthand is
-// inspected as well (its <time> component) and the last declaration wins,
-// as the CSS cascade demands. Returns "" when no duration is declared.
-// The value is raw: it may still hold a var() reference.
-inline std::string find_animation_duration(const std::string& decls) {
+// True for a unitless number token ("2", "0.5"): an iteration count in the
+// `animation` shorthand.
+inline bool is_unitless_number(const std::string& token) {
+    size_t i = 0;
+    float number = 0.0f;
+    if (!parse_number(token, i, number)) return false;
+    return i == token.size();
+}
+
+inline bool is_easing_token(const std::string& lower) {
+    Easing probe;
+    if (parse_easing_keyword(lower, probe)) return true;
+    return lower.compare(0, 13, "cubic-bezier(") == 0 || lower.compare(0, 6, "steps(") == 0;
+}
+
+// Apply one `animation` shorthand value to `out`. The shorthand resets every
+// longhand it can express, so `out` starts from the initial values (the CSS
+// cascade resets them too); a later longhand overrides the component it
+// names.
+inline void apply_animation_shorthand(const std::string& value, AnimationTimingDecl& out) {
+    out = AnimationTimingDecl();
+    int times = 0;
+    for (const auto& token : split_top_level_tokens(value)) {
+        const std::string lower = to_lower(token);
+        if (has_var_reference(token)) {
+            // A bare var() may stand for any component. It can only be
+            // resolved by the binding layer, so it is kept as the duration
+            // (the only <time> the sampler needs) unless one was seen.
+            if (times == 0 && is_time_token(token)) {
+                out.duration = token;
+                ++times;
+            } else if (out.duration.empty()) {
+                out.duration = token;
+            }
+            continue;
+        }
+        if (is_time_token(token)) {
+            if (times == 0) {
+                out.duration = token;
+            } else if (times == 1) {
+                out.delay = token;
+            }
+            ++times;
+            continue;
+        }
+        if (lower == "infinite" || is_unitless_number(lower)) {
+            out.iteration_count = token;
+            continue;
+        }
+        if (lower == "normal" || lower == "reverse" || lower == "alternate" ||
+            lower == "alternate-reverse") {
+            out.direction = lower;
+            continue;
+        }
+        if (lower == "none" || lower == "forwards" || lower == "backwards" || lower == "both") {
+            out.fill_mode = lower;
+            continue;
+        }
+        if (is_easing_token(lower)) {
+            out.timing_function = token;
+            continue;
+        }
+        if (lower == "running" || lower == "paused") continue;
+        // Anything else is the animation name.
+    }
+}
+
+// The timing longhands declared in a declaration block (a <style> rule body
+// or an inline `style` attribute). A declaration later in the block wins, as
+// the CSS cascade demands; an `animation` shorthand resets the components it
+// does not name. Returns empty fields when nothing is declared. The values
+// are raw: they may still hold a var() reference.
+inline AnimationTimingDecl find_animation_timing(const std::string& decls) {
     std::vector<std::pair<std::string, std::string>> props;
     split_declarations(decls, props);
-    std::string duration;
+    AnimationTimingDecl out;
     for (const auto& prop : props) {
-        if (prop.first == "animation-duration") {
-            duration = prop.second;
-        } else if (prop.first == "animation") {
-            const std::string time = find_time_value(prop.second);
-            if (!time.empty()) duration = time;
+        if (prop.first == "animation") {
+            apply_animation_shorthand(prop.second, out);
+        } else if (prop.first == "animation-duration") {
+            out.duration = prop.second;
+        } else if (prop.first == "animation-delay") {
+            out.delay = prop.second;
+        } else if (prop.first == "animation-iteration-count") {
+            out.iteration_count = prop.second;
+        } else if (prop.first == "animation-timing-function") {
+            out.timing_function = prop.second;
+        } else if (prop.first == "animation-direction") {
+            out.direction = prop.second;
+        } else if (prop.first == "animation-fill-mode") {
+            out.fill_mode = prop.second;
         }
     }
-    return duration;
+    return out;
+}
+
+// The `animation-duration` declared in a declaration block. The `animation`
+// shorthand is inspected as well (its first <time> component). The value is
+// raw: it may still hold a var() reference.
+inline std::string find_animation_duration(const std::string& decls) {
+    return find_animation_timing(decls).duration;
+}
+
+// The first item of a comma separated longhand list (`animation: a, b`).
+inline std::string first_list_item(const std::string& value) {
+    int depth = 0;
+    for (size_t i = 0; i < value.size(); ++i) {
+        const char c = value[i];
+        if (c == '(') ++depth;
+        else if (c == ')' && depth > 0) --depth;
+        else if (c == ',' && depth == 0) return trim(value.substr(0, i));
+    }
+    return trim(value);
+}
+
+inline AnimationDirection parse_animation_direction(const std::string& value,
+                                                    AnimationDirection fallback) {
+    const std::string text = to_lower(first_list_item(value));
+    if (text == "normal") return AnimationDirection::kNormal;
+    if (text == "reverse") return AnimationDirection::kReverse;
+    if (text == "alternate") return AnimationDirection::kAlternate;
+    if (text == "alternate-reverse") return AnimationDirection::kAlternateReverse;
+    return fallback;
+}
+
+inline AnimationFillMode parse_animation_fill_mode(const std::string& value,
+                                                   AnimationFillMode fallback) {
+    const std::string text = to_lower(first_list_item(value));
+    if (text == "none") return AnimationFillMode::kNone;
+    if (text == "forwards") return AnimationFillMode::kForwards;
+    if (text == "backwards") return AnimationFillMode::kBackwards;
+    if (text == "both") return AnimationFillMode::kBoth;
+    return fallback;
+}
+
+// Parse `animation-iteration-count`: a positive number or `infinite`.
+inline float parse_iteration_count(const std::string& value, float fallback) {
+    const std::string text = to_lower(first_list_item(value));
+    if (text.empty()) return fallback;
+    if (text == "infinite") return std::numeric_limits<float>::infinity();
+    size_t i = 0;
+    float number = 0.0f;
+    if (!parse_number(text, i, number)) return fallback;
+    if (i != text.size() || number < 0.0f) return fallback;
+    return number;
 }
 
 // Parse one transform argument: a number plus an optional unit.
@@ -554,6 +928,17 @@ inline bool transform_signature_equal(const std::vector<TransformFunction>& a,
     return true;
 }
 
+// The timing function that applies to one stop: the keyframe's own
+// `animation-timing-function` (raw, may be empty), else the element-level
+// default of the spec.
+inline Easing stop_easing(const AnimationSpec& spec, const std::string& raw) {
+    if (!raw.empty()) {
+        Easing parsed;
+        if (parse_easing(first_list_item(raw), parsed)) return parsed;
+    }
+    return spec.default_easing;
+}
+
 // Build the animatable stops (opacity / transform) from the raw
 // declaration values of the spec. The raw values may have been replaced by
 // resolved ones (var() substituted) by the binding layer, so this is called
@@ -562,12 +947,30 @@ inline void build_stops_from_raw(AnimationSpec& spec) {
     spec.stops.clear();
     spec.transform_stops.clear();
 
+    // The element-level timing function is the default of every stop that
+    // does not declare one of its own. It is parsed here (after the caller
+    // may have resolved a var() reference).
+    Easing default_easing;
+    if (!spec.timing.timing_function.empty() &&
+        !has_var_reference(spec.timing.timing_function)) {
+        Easing parsed;
+        if (parse_easing(first_list_item(spec.timing.timing_function), parsed)) {
+            default_easing = parsed;
+        }
+    }
+    spec.default_easing = default_easing;
+
+    auto stop_easing_of = [&spec](const std::string& raw) -> Easing {
+        return stop_easing(spec, raw);
+    };
+
     for (const auto& raw : spec.opacity_raw) {
         float value = 0.0f;
         if (!parse_opacity_value(raw.value, value)) continue;
         OpacityKeyframe stop;
         stop.offset = raw.offset;
         stop.opacity = value;
+        stop.easing = stop_easing_of(raw.easing_value);
         spec.stops.push_back(stop);
     }
 
@@ -581,6 +984,7 @@ inline void build_stops_from_raw(AnimationSpec& spec) {
         TransformKeyframe stop;
         stop.offset = raw.offset;
         stop.functions = functions;
+        stop.easing = stop_easing_of(raw.easing_value);
         spec.transform_stops.push_back(stop);
     }
 
@@ -678,6 +1082,14 @@ inline bool parse_keyframes_block(const std::string& css, size_t at, size_t kwle
 
         std::vector<std::pair<std::string, std::string>> props;
         split_declarations(decls, props);
+        // The timing function declared inside the keyframe block applies to
+        // the interval that starts at this stop (CSS keyframe semantics).
+        std::string easing_value;
+        for (const auto& prop : props) {
+            if (prop.first == "animation-timing-function") {
+                easing_value = prop.second;
+            }
+        }
         for (const auto& prop : props) {
             if (prop.first == "opacity") {
                 // The raw value is kept: it may hold a var() reference that
@@ -685,16 +1097,18 @@ inline bool parse_keyframes_block(const std::string& css, size_t at, size_t kwle
                 RawStop raw;
                 raw.offset = off;
                 raw.value = prop.second;
+                raw.easing_value = easing_value;
                 spec.opacity_raw.push_back(raw);
             } else if (prop.first == "transform") {
                 RawStop raw;
                 raw.offset = off;
                 raw.value = prop.second;
+                raw.easing_value = easing_value;
                 spec.transform_raw.push_back(raw);
             } else if (prop.first == "color") {
-                spec.color_stops.push_back({off, prop.second});
+                spec.color_stops.push_back({off, prop.second, easing_value});
             } else if (prop.first == "background-color") {
-                spec.background_color_stops.push_back({off, prop.second});
+                spec.background_color_stops.push_back({off, prop.second, easing_value});
             }
         }
     }
@@ -733,11 +1147,11 @@ inline void parse_all_keyframes(const std::string& css, std::vector<AnimationSpe
     }
 }
 
-// The rule that binds `name`: its selector and the raw
-// `animation-duration` the rule declares ("" when it declares none).
+// The rule that binds `name`: its selector and the timing longhands the rule
+// declares (empty when it declares none).
 struct AnimationBinding {
     std::string selector;
-    std::string duration;
+    AnimationTimingDecl timing;
 };
 
 // Find the first qualified rule that binds `name`.
@@ -812,7 +1226,7 @@ inline AnimationBinding find_animation_binding(const std::string& css,
         }
         if (match) {
             binding.selector = sel;
-            binding.duration = find_animation_duration(decls_raw);
+            binding.timing = find_animation_timing(decls_raw);
             return binding;
         }
     }
@@ -877,6 +1291,169 @@ inline std::string find_animation_duration(const std::string& decls) {
     return detail::find_animation_duration(decls);
 }
 
+// Every timing longhand declared in a declaration block (a <style> rule body
+// or an inline `style` attribute). A later declaration wins and an
+// `animation` shorthand resets the components it does not name. The values
+// are raw: they may still hold a var() reference, which the binding layer
+// resolves before the timing is built.
+inline AnimationTimingDecl find_animation_timing(const std::string& decls) {
+    return detail::find_animation_timing(decls);
+}
+
+// Parse an `animation-direction` value (the first item of a list).
+inline AnimationDirection parse_animation_direction(const std::string& value,
+                                                    AnimationDirection fallback) {
+    return detail::parse_animation_direction(value, fallback);
+}
+
+// Parse an `animation-fill-mode` value (the first item of a list).
+inline AnimationFillMode parse_animation_fill_mode(const std::string& value,
+                                                   AnimationFillMode fallback) {
+    return detail::parse_animation_fill_mode(value, fallback);
+}
+
+// Parse `animation-iteration-count`: a positive number or `infinite`.
+inline float parse_iteration_count(const std::string& value, float fallback) {
+    return detail::parse_iteration_count(value, fallback);
+}
+
+// Parse an `animation-timing-function` value (a keyword, `cubic-bezier()` or
+// `steps()`). Returns false for a value the sampler cannot evaluate.
+inline bool parse_timing_function(const std::string& value, Easing& out) {
+    return detail::parse_easing(value, out);
+}
+
+// The timing function that applies to one stop of `spec`: the keyframe's own
+// raw `animation-timing-function` when it declares one, else the element-level
+// default. Used by the binding layer to resolve the colour stops.
+inline Easing stop_timing_function(const AnimationSpec& spec, const std::string& raw) {
+    return detail::stop_easing(spec, raw);
+}
+
+// Evaluate a timing function at the interval parameter `t` in [0,1].
+inline float apply_timing_function(const Easing& easing, float t) {
+    return detail::apply_easing(easing, t);
+}
+
+// True when `animation-iteration-count` is `infinite`.
+inline bool animation_iterations_infinite(const AnimationTiming& timing) {
+    return !(timing.iteration_count < 1e30f);
+}
+
+// The timeline length the animation needs: the delay plus the iterations that
+// have to be sampled. An infinite animation samples one iteration (two for
+// `alternate*`, so that the encoded loop reads correctly); a fractional
+// iteration count rounds up to the whole iteration it ends in.
+inline int animation_timeline_ms(const AnimationTiming& timing) {
+    const int duration = timing.duration_ms > 0 ? timing.duration_ms : 0;
+    int iterations = 1;
+    if (!animation_iterations_infinite(timing)) {
+        iterations = (int)std::ceil((double)timing.iteration_count - 1e-6);
+        if (iterations < 1) iterations = 1;
+    } else if (timing.direction == AnimationDirection::kAlternate ||
+               timing.direction == AnimationDirection::kAlternateReverse) {
+        iterations = 2;
+    }
+    const long long span = (long long)timing.delay_ms + (long long)iterations * duration;
+    if (span <= 0) return 0;
+    return span > (long long)std::numeric_limits<int>::max()
+               ? std::numeric_limits<int>::max()
+               : (int)span;
+}
+
+namespace detail {
+
+// The direction-adjusted progress at the start of the first iteration.
+inline float animation_start_progress(AnimationDirection direction) {
+    return (direction == AnimationDirection::kReverse ||
+            direction == AnimationDirection::kAlternateReverse)
+               ? 1.0f
+               : 0.0f;
+}
+
+// The direction-adjusted progress inside iteration `iteration` at the
+// iteration-local parameter `frac`.
+inline float animation_iteration_progress(AnimationDirection direction, int iteration,
+                                          float frac) {
+    if (frac < 0.0f) frac = 0.0f;
+    if (frac > 1.0f) frac = 1.0f;
+    const bool odd = (iteration % 2) != 0;
+    switch (direction) {
+        case AnimationDirection::kReverse:
+            return 1.0f - frac;
+        case AnimationDirection::kAlternate:
+            return odd ? 1.0f - frac : frac;
+        case AnimationDirection::kAlternateReverse:
+            return odd ? frac : 1.0f - frac;
+        default:
+            return frac;
+    }
+}
+
+}  // namespace detail
+
+// Map a timeline position (ms, measured from the start of the animation
+// including its delay) to the local state of the animation. `applies` is false
+// when the element keeps its static style: outside the active interval and a
+// fill mode that would cover it. The returned `progress` is direction-adjusted
+// and still needs the per-keyframe easing of the sampler.
+inline AnimationPhase resolve_animation_phase(const AnimationTiming& timing, double time_ms) {
+    AnimationPhase phase;
+    const double duration = timing.duration_ms > 0 ? (double)timing.duration_ms : 0.0;
+    const double delay = (double)timing.delay_ms;
+    const bool infinite = animation_iterations_infinite(timing);
+    const double count = infinite ? std::numeric_limits<double>::infinity()
+                                  : (double)timing.iteration_count;
+    const bool fill_backwards = timing.fill_mode == AnimationFillMode::kBackwards ||
+                                timing.fill_mode == AnimationFillMode::kBoth;
+    const bool fill_forwards = timing.fill_mode == AnimationFillMode::kForwards ||
+                               timing.fill_mode == AnimationFillMode::kBoth;
+
+    if (time_ms < delay) {
+        // Still in the delay: only a backwards fill paints the first frame.
+        phase.before = true;
+        phase.active = false;
+        phase.applies = fill_backwards;
+        phase.progress = detail::animation_start_progress(timing.direction);
+        return phase;
+    }
+
+    const double total = delay + count * duration;
+    if (duration <= 0.0 || time_ms >= total) {
+        // Past the last iteration (or a zero-length animation): only a
+        // forwards fill paints the final value.
+        phase.active = false;
+        phase.applies = fill_forwards;
+        int last_iteration = 0;
+        float frac = 1.0f;
+        if (!infinite && count > 0.0) {
+            const double whole = std::floor(count);
+            last_iteration = (int)whole;
+            const double remainder = count - whole;
+            if (remainder > 1e-6) {
+                frac = (float)remainder;  // a fractional count ends mid-iteration
+            } else {
+                last_iteration = (int)whole - 1;
+                frac = 1.0f;
+            }
+            if (last_iteration < 0) last_iteration = 0;
+        }
+        phase.progress = detail::animation_iteration_progress(timing.direction, last_iteration,
+                                                             frac);
+        return phase;
+    }
+
+    const double local = (time_ms - delay) / duration;
+    int iteration = (int)std::floor(local);
+    if (iteration < 0) iteration = 0;
+    float frac = (float)(local - (double)iteration);
+    if (frac < 0.0f) frac = 0.0f;
+    if (frac > 1.0f) frac = 1.0f;
+    phase.iteration = iteration;
+    phase.progress = detail::animation_iteration_progress(timing.direction, iteration, frac);
+    return phase;
+}
+
 // Parse the document's @keyframes animation that is bound to an element.
 // The first block bound by a <style> rule wins; otherwise the first block is
 // returned and the caller resolves an inline-style binding by name.
@@ -911,7 +1488,11 @@ inline AnimationSpec parse_animation(const std::string& html) {
         const detail::AnimationBinding binding =
             detail::find_animation_binding(css, spec.name);
         spec.selector = binding.selector;
-        spec.duration_value = binding.duration;
+        spec.timing = binding.timing;
+        spec.duration_value = binding.timing.duration;
+        // The element-level timing function is only known once the binding
+        // rule is found, so the stops are rebuilt to pick up the default.
+        detail::build_stops_from_raw(spec);
         const bool bound = !spec.selector.empty();
         if (spec.valid) {
             if (bound) {
@@ -931,22 +1512,41 @@ inline AnimationSpec parse_animation(const std::string& html) {
     return result;
 }
 
-// Linear interpolation over the (sorted) keyframe stops, clamped at both ends.
-inline float sample_opacity(const AnimationSpec& spec, float progress) {
-    if (spec.stops.empty()) return 1.0f;
-    if (progress <= spec.stops.front().offset) return spec.stops.front().opacity;
-    if (progress >= spec.stops.back().offset) return spec.stops.back().opacity;
-    for (size_t i = 1; i < spec.stops.size(); ++i) {
-        if (progress <= spec.stops[i].offset) {
-            const auto& a = spec.stops[i - 1];
-            const auto& b = spec.stops[i];
-            const float span = b.offset - a.offset;
-            if (span <= 0.0f) return b.opacity;
-            const float t = (progress - a.offset) / span;
-            return a.opacity + (b.opacity - a.opacity) * t;
+namespace detail {
+
+// Locate the interval of the (sorted) `stops` that contains `progress`.
+// Returns the index of the stop the interval starts at and the local
+// parameter `t` in [0,1]. A progress clamped at either end reports t = 0.
+// A zero-length interval (duplicate offsets) reports its later stop, which is
+// the value CSS uses at that offset.
+template <typename Stop>
+inline size_t locate_stop(const std::vector<Stop>& stops, float progress, float& t) {
+    t = 0.0f;
+    if (progress <= stops.front().offset) return 0;
+    if (progress >= stops.back().offset) return stops.size() - 1;
+    for (size_t i = 1; i < stops.size(); ++i) {
+        if (progress <= stops[i].offset) {
+            const float span = stops[i].offset - stops[i - 1].offset;
+            if (span <= 0.0f) return i;
+            t = (progress - stops[i - 1].offset) / span;
+            return i - 1;
         }
     }
-    return spec.stops.back().opacity;
+    return stops.size() - 1;
+}
+
+}  // namespace detail
+
+// Interpolation over the (sorted) keyframe stops with the timing function of
+// the interval, clamped at both ends.
+inline float sample_opacity(const AnimationSpec& spec, float progress) {
+    if (spec.stops.empty()) return 1.0f;
+    float t = 0.0f;
+    const size_t index = detail::locate_stop(spec.stops, progress, t);
+    const auto& a = spec.stops[index];
+    const auto& b = (index + 1 < spec.stops.size()) ? spec.stops[index + 1] : a;
+    const float eased = detail::apply_easing(a.easing, t);
+    return a.opacity + (b.opacity - a.opacity) * eased;
 }
 
 // Interpolate the transform stops into a CSS `transform` value.
@@ -957,22 +1557,9 @@ inline bool sample_transform(const AnimationSpec& spec, float progress, std::str
     const auto& stops = spec.transform_stops;
     if (stops.empty()) return false;
 
-    size_t index = 0;
     float t = 0.0f;
-    if (progress <= stops.front().offset) {
-        index = 0;
-    } else if (progress >= stops.back().offset) {
-        index = stops.size() - 1;
-    } else {
-        for (size_t i = 1; i < stops.size(); ++i) {
-            if (progress <= stops[i].offset) {
-                const float span = stops[i].offset - stops[i - 1].offset;
-                index = i - 1;
-                t = span > 0.0f ? (progress - stops[i - 1].offset) / span : 0.0f;
-                break;
-            }
-        }
-    }
+    const size_t index = detail::locate_stop(stops, progress, t);
+    t = detail::apply_easing(stops[index].easing, t);
 
     const auto& a = stops[index].functions;
     const auto& b = (index + 1 < stops.size()) ? stops[index + 1].functions : a;
@@ -992,27 +1579,15 @@ inline bool sample_transform(const AnimationSpec& spec, float progress, std::str
     return true;
 }
 
-// Linear interpolation over resolved colour stops, clamped at both ends.
+// Interpolation over resolved colour stops with the timing function of the
+// interval, clamped at both ends.
 inline Rgba sample_color(const std::vector<ColorKeyframe>& stops, float progress) {
     Rgba out;
     if (stops.empty()) return out;
 
-    size_t index = 0;
     float t = 0.0f;
-    if (progress <= stops.front().offset) {
-        index = 0;
-    } else if (progress >= stops.back().offset) {
-        index = stops.size() - 1;
-    } else {
-        for (size_t i = 1; i < stops.size(); ++i) {
-            if (progress <= stops[i].offset) {
-                const float span = stops[i].offset - stops[i - 1].offset;
-                index = i - 1;
-                t = span > 0.0f ? (progress - stops[i - 1].offset) / span : 0.0f;
-                break;
-            }
-        }
-    }
+    const size_t index = detail::locate_stop(stops, progress, t);
+    t = detail::apply_easing(stops[index].easing, t);
 
     const Rgba& a = stops[index].color;
     const Rgba& b = (index + 1 < stops.size()) ? stops[index + 1].color : a;
@@ -1053,6 +1628,39 @@ inline std::vector<FrameSample> build_frame_schedule(int duration_ms, int fps) {
     }
     return out;
 }
+
+// ---------------------------------------------------------------------------
+// Not implemented: several animations per element
+// ---------------------------------------------------------------------------
+// `animation-name: a, b` (with comma separated longhand lists) is not sampled
+// yet: only one @keyframes block is bound to an element and the produced frame
+// style carries one value per property. Design notes for the follow-up:
+//
+//  1. Parsing (header): add `parse_animation_layers(decls)` returning
+//     `std::vector<AnimationTimingDecl + name>` from the `animation-name` list
+//     and the longhand lists (a shorter list repeats cyclically, per CSS).
+//     The `animation` shorthand already splits on top-level commas, so each
+//     comma part becomes one layer; `parse_animation(html)` would return every
+//     block bound by the *same* selector, in list order, instead of the first
+//     one.
+//  2. Timing (header): the timeline length becomes the maximum of the layers
+//     (`animation_timeline_ms` per layer); every layer keeps its own
+//     direction / fill / delay / iteration count, so the per-frame value is
+//     `resolve_animation_phase(layer, t)` per layer.
+//  3. Composition (caller): sample the layers in list order into one
+//     per-frame style map so a later animation overrides an earlier one for
+//     the same property (CSS animation composition order). A layer that does
+//     not apply at this frame (`AnimationPhase::applies == false`) is simply
+//     skipped, leaving the earlier layer's value (or the static style).
+//  4. The frame dedupe in the binding layer stays keyed on the assembled
+//     style value, not on one spec, so no extra bookkeeping is needed.
+//  5. Regression probes: two layers animating the same property (the later
+//     list item must win at the midpoint), and two layers animating disjoint
+//     properties (both must move on the same frame).
+//
+// Until then `animation-name: a, b` binds the first list item that matches a
+// block: the sampler keeps one animation per element, which is what the
+// visuals in the compatibility table document.
 
 }  // namespace html_to_image
 

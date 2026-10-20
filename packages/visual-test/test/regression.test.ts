@@ -1081,6 +1081,165 @@ describe("regression: layout and paint probes", () => {
     expect(total).toBe(100);
   });
 
+  it("applies a per-keyframe animation-timing-function to the eased interval", async () => {
+    // A negative delay starts the first sampled frame (progress 0) halfway
+    // through the 300ms iteration, so the still frame shows the midpoint of
+    // the eased interval: 0.5 blue over white is rgb(128,128,255).
+    const fadeDoc = (fromExtra: string, boxExtra = "") =>
+      `<html><head><style>
+      @keyframes fade { from { opacity: 0; ${fromExtra} } to { opacity: 1 } }
+      .box { width: 80px; height: 80px; background: #00f; animation-name: fade;
+             animation-duration: 300ms; animation-delay: -150ms; ${boxExtra} }
+    </style></head><body style="margin:0;background:#fff"><div class="box"></div></body></html>`;
+
+    const linear = await renderFirstFrame(fadeDoc("animation-timing-function: linear"), 120, 120);
+    expect(near(linear.at(40, 40), [128, 128, 255], 20)).toBe(true);
+
+    // ease-in is slower than linear at the midpoint (y ~= 0.32 => R ~= 174).
+    const eased = await renderFirstFrame(fadeDoc("animation-timing-function: ease-in"), 120, 120);
+    expect(eased.at(40, 40)[0]).toBeGreaterThan(155);
+
+    // step-start jumps to the end value immediately: the midpoint is opaque.
+    const stepped = await renderFirstFrame(fadeDoc("animation-timing-function: step-start"), 120, 120);
+    expect(near(stepped.at(40, 40), BLUE)).toBe(true);
+
+    // The element-level timing function is the default of the stops...
+    const elementDefault = await renderFirstFrame(
+      fadeDoc("", "animation-timing-function: ease-in;"),
+      120,
+      120,
+    );
+    expect(elementDefault.at(40, 40)[0]).toBeGreaterThan(155);
+
+    // ...and a keyframe block overrides it for the interval it starts.
+    const overridden = await renderFirstFrame(
+      fadeDoc("animation-timing-function: linear", "animation-timing-function: ease-in;"),
+      120,
+      120,
+    );
+    expect(near(overridden.at(40, 40), [128, 128, 255], 20)).toBe(true);
+  });
+
+  it("honours animation-direction: reverse on the first sampled frame", async () => {
+    // The box slides from x=0 to x=60. Reversed, the first sampled frame
+    // (progress 0) already shows the 100% stop: the box sits at x=60.
+    const html = `<html><head><style>
+      @keyframes move { from { transform: translate(0px, 0px) } to { transform: translate(60px, 0px) } }
+      .box { width: 40px; height: 40px; background: #00f; animation-name: move;
+             animation-direction: reverse; }
+    </style></head><body style="margin:0;background:#fff"><div class="box"></div></body></html>`;
+
+    const first = await renderFirstFrame(html, 120, 60);
+    expect(near(first.at(70, 20), BLUE)).toBe(true);
+    expect(isWhite(first.at(10, 20))).toBe(true);
+  });
+
+  it("honours animation-direction: alternate across the iteration boundary", async () => {
+    // duration 100ms x 2 iterations = a 200ms timeline, sampled at 20fps:
+    // t = 0 / 50 / 100 / 150 -> progress 0 / 0.5 / 1 / 0.5. The second
+    // iteration plays backwards, so the last frame repeats the second one.
+    // Opacity keeps the changed rectangle identical, so the frame hashes of
+    // the two 0.5 frames are comparable.
+    const html = `<html><head><style>
+      @keyframes fade { from { opacity: 0 } to { opacity: 1 } }
+      .box { width: 80px; height: 80px; background: #00f; animation-name: fade;
+             animation-duration: 100ms; animation-iteration-count: 2;
+             animation-direction: alternate; }
+    </style></head><body style="margin:0;background:#fff"><div class="box"></div></body></html>`;
+
+    const animated = await render({
+      value: html,
+      width: 120,
+      height: 120,
+      format: "webp",
+      animation: { duration: 2000, fps: 20 },
+    });
+    expect(animated.animation).toBe(true);
+    const frames = webpFrames(new Uint8Array(animated.data as Uint8Array));
+    expect(frames.length).toBe(4);
+    expect(frames[1].hash).toBe(frames[3].hash);
+    expect(frames[0].hash).not.toBe(frames[2].hash);
+  });
+
+  it("honours animation-iteration-count as the sampled timeline length", async () => {
+    // Three 100ms iterations sample 300ms in total (the API duration is only
+    // an upper bound), instead of the single 100ms iteration.
+    const html = `<html><head><style>
+      @keyframes fade { from { opacity: 0 } to { opacity: 1 } }
+      .box { width: 80px; height: 80px; background: #00f; animation-name: fade;
+             animation-duration: 100ms; animation-iteration-count: 3; }
+    </style></head><body style="margin:0;background:#fff"><div class="box"></div></body></html>`;
+
+    const animated = await render({
+      value: html,
+      width: 120,
+      height: 120,
+      format: "webp",
+      animation: { duration: 1000, fps: 30 },
+    });
+    expect(animated.animation).toBe(true);
+    const frames = webpFrames(new Uint8Array(animated.data as Uint8Array));
+    expect(frames.reduce((sum, frame) => sum + frame.duration, 0)).toBe(300);
+    // Three 100ms iterations at 30fps: nine samples whose frames replay the
+    // same fade three times (the same within-iteration transition repeats).
+    expect(frames.length).toBe(9);
+    expect(frames[1].hash).toBe(frames[4].hash);
+    expect(frames[2].hash).toBe(frames[5].hash);
+  });
+
+  it("paints the backwards fill during animation-delay", async () => {
+    // The 100ms delay is not covered by fill-mode none: the element keeps its
+    // static (opaque) style. A backwards fill paints the from value (opacity 0).
+    const delayDoc = (fill: string) => `<html><head><style>
+      @keyframes fade { from { opacity: 0 } to { opacity: 1 } }
+      .box { width: 80px; height: 80px; background: #00f; animation-name: fade;
+             animation-duration: 100ms; animation-delay: 100ms;
+             animation-fill-mode: ${fill}; }
+    </style></head><body style="margin:0;background:#fff"><div class="box"></div></body></html>`;
+
+    const none = await renderFirstFrame(delayDoc("none"), 120, 120);
+    expect(near(none.at(40, 40), BLUE)).toBe(true);
+
+    const backwards = await renderFirstFrame(delayDoc("backwards"), 120, 120);
+    expect(isWhite(backwards.at(40, 40))).toBe(true);
+
+    // forwards: after the 150ms active part of the 0.5-iteration timeline the
+    // final value is kept. `both` therefore paints three identical (from)
+    // frames followed by the filled one; `none` paints the static style on
+    // every frame, which collapses into a still image.
+    const sampleDoc = (fill: string) => `<html><head><style>
+      @keyframes fade { from { opacity: 0 } to { opacity: 1 } }
+      .box { width: 80px; height: 80px; background: #00f; animation-name: fade;
+             animation-duration: 100ms; animation-delay: 100ms;
+             animation-iteration-count: 0.5; animation-fill-mode: ${fill}; }
+    </style></head><body style="margin:0;background:#fff"><div class="box"></div></body></html>`;
+
+    const both = await render({
+      value: sampleDoc("both"),
+      width: 120,
+      height: 120,
+      format: "webp",
+      animation: { duration: 300, fps: 20 },
+    });
+    expect(both.animation).toBe(true);
+    const bothFrames = webpFrames(new Uint8Array(both.data as Uint8Array));
+    expect(bothFrames.length).toBe(2);
+    expect(bothFrames[0].duration).toBe(150);
+
+    const noFill = await render({
+      value: sampleDoc("none"),
+      width: 120,
+      height: 120,
+      format: "webp",
+      animation: { duration: 300, fps: 20 },
+    });
+    // Without a forwards fill the element snaps back to its static style after
+    // the active interval, which adds a third (static) frame.
+    const noFillFrames = webpFrames(new Uint8Array(noFill.data as Uint8Array));
+    expect(noFillFrames.length).toBe(3);
+    expect(noFillFrames.reduce((sum, frame) => sum + frame.duration, 0)).toBe(200);
+  });
+
   it("unicode-bidi: bidi-override reorders inline items in an RTL line", async () => {
 
     const box = (color: string, text: string) =>

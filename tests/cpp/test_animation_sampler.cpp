@@ -2,7 +2,9 @@
 // 方式: test_lru_cache.cpp と同じ最小ランナー (標準ライブラリのみ・ctest 登録)。
 // animation_sampler.h は litehtml/Skia 非依存の純粋ヘッダなので単体で検証できる。
 
+#include <cmath>
 #include <cstdio>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -232,6 +234,327 @@ void test_find_animation_duration_of_a_declaration_block() {
           "the longhand overrides the earlier shorthand");
 }
 
+// --- per-keyframe easing ---------------------------------------------------
+// The timing function declared inside a keyframe block applies to the
+// interval that starts at that stop; the element-level value is the default.
+
+void test_per_keyframe_easing_is_applied() {
+    const AnimationSpec spec = parse_animation(
+        doc("@keyframes fade { from { opacity: 0; animation-timing-function: ease-in }"
+            " to { opacity: 1 } }"
+            ".box { animation-name: fade; }"));
+    check(spec.stops.size() == 2, "two opacity stops");
+    check(spec.stops[0].easing.kind == EasingKind::kCubicBezier,
+          "the keyframe timing function is parsed");
+    const float mid = sample_opacity(spec, 0.5f);
+    check(mid > 0.2f && mid < 0.45f, "ease-in samples below the linear midpoint");
+    check(std::fabs(sample_opacity(spec, 0.0f) - 0.0f) < 1e-4f,
+          "the eased interval still starts at the from value");
+    check(std::fabs(sample_opacity(spec, 1.0f) - 1.0f) < 1e-4f,
+          "the eased interval still reaches the to value");
+}
+
+void test_element_timing_function_is_the_default() {
+    const AnimationSpec spec = parse_animation(
+        doc("@keyframes fade { from { opacity: 0 } to { opacity: 1 } }"
+            ".box { animation-name: fade; animation-timing-function: ease-in; }"));
+    check(spec.default_easing.kind == EasingKind::kCubicBezier,
+          "the element timing function becomes the default");
+    check(spec.stops[0].easing.kind == EasingKind::kCubicBezier,
+          "a stop without a timing function inherits the default");
+    check(sample_opacity(spec, 0.5f) < 0.45f,
+          "the default timing function shapes the frame");
+}
+
+void test_keyframe_easing_overrides_the_element_default() {
+    const AnimationSpec spec = parse_animation(
+        doc("@keyframes fade { from { opacity: 0; animation-timing-function: linear }"
+            " to { opacity: 1 } }"
+            ".box { animation-name: fade; animation-timing-function: ease-in; }"));
+    check(std::fabs(sample_opacity(spec, 0.5f) - 0.5f) < 1e-4f,
+          "the per-keyframe timing function wins over the element default");
+}
+
+void test_timing_function_from_the_shorthand() {
+    const AnimationSpec spec = parse_animation(
+        doc("@keyframes fade { from { opacity: 0 } to { opacity: 1 } }"
+            ".box { animation: fade 300ms ease-in; }"));
+    check(spec.timing.timing_function == "ease-in",
+          "the shorthand timing function is captured");
+    check(spec.default_easing.kind == EasingKind::kCubicBezier,
+          "the shorthand timing function becomes the default");
+}
+
+void test_cubic_bezier_and_steps_evaluation() {
+    Easing linear;
+    check(parse_timing_function("linear", linear) && std::fabs(apply_timing_function(linear, 0.5f) - 0.5f) < 1e-4f,
+          "linear is the identity curve");
+
+    Easing bezier;
+    check(parse_timing_function("cubic-bezier(0, 0, 1, 1)", bezier),
+          "a cubic-bezier() value is parsed");
+    check(std::fabs(apply_timing_function(bezier, 0.5f) - 0.5f) < 1e-3f,
+          "the identity cubic-bezier is the identity curve");
+    check(parse_timing_function("cubic-bezier(0.25, 0.1, 0.25, 1)", bezier),
+          "the ease control points are parsed");
+    check(apply_timing_function(bezier, 0.25f) > 0.25f,
+          "ease starts faster than linear");
+
+    Easing steps;
+    check(parse_timing_function("steps(4, end)", steps), "steps() is parsed");
+    check(std::fabs(apply_timing_function(steps, 0.3f) - 0.25f) < 1e-4f,
+          "steps(4, end) holds the step value");
+    check(std::fabs(apply_timing_function(steps, 0.99f) - 0.75f) < 1e-4f,
+          "steps(4, end) keeps the last step until the end");
+    check(std::fabs(apply_timing_function(steps, 1.0f) - 1.0f) < 1e-4f,
+          "steps() still reaches the end value");
+
+    Easing start_steps;
+    check(parse_timing_function("steps(2, start)", start_steps),
+          "steps(n, start) is parsed");
+    check(std::fabs(apply_timing_function(start_steps, 0.0f) - 0.5f) < 1e-4f,
+          "steps(2, start) jumps at the beginning");
+    check(std::fabs(apply_timing_function(start_steps, 0.6f) - 1.0f) < 1e-4f,
+          "steps(2, start) reaches the last step on the second half");
+
+    Easing step_start;
+    check(parse_timing_function("step-start", step_start) &&
+              std::fabs(apply_timing_function(step_start, 0.0f) - 1.0f) < 1e-4f,
+          "step-start is steps(1, start)");
+    check(!parse_timing_function("steps(2, jump-none)", steps),
+          "an unsupported step position is rejected");
+    check(!parse_timing_function("wobble", steps), "an unknown keyword is rejected");
+}
+
+void test_eased_colour_and_transform() {
+    const AnimationSpec colour = parse_animation(
+        doc("@keyframes tint { from { color: #ff0000; animation-timing-function: ease-in }"
+            " to { color: #0000ff } }"
+            ".box { animation-name: tint; }"));
+    check(colour.color_stops.size() == 2, "two colour stops");
+    check(colour.color_stops[0].easing_value == "ease-in",
+          "the raw keyframe timing function is kept on the stop");
+
+    std::vector<ColorKeyframe> stops = {{0.0f, Rgba{0, 0, 0, 255}, Easing{}},
+                                        {1.0f, Rgba{100, 100, 100, 255}, Easing{}}};
+    check(sample_color(stops, 0.5f).r == 50, "a linear colour stop is unchanged");
+    stops[0].easing.kind = EasingKind::kSteps;
+    stops[0].easing.steps = 2;
+    check(sample_color(stops, 0.5f).r == 50, "steps(2, end) keeps the first half");
+    check(sample_color(stops, 0.25f).r == 0, "steps(2, end) holds the from colour");
+
+    const AnimationSpec move = parse_animation(
+        doc("@keyframes move { from { transform: translate(0px, 0px); animation-timing-function: steps(2, end) }"
+            " to { transform: translate(100px, 0px) } }"
+            ".box { animation-name: move; }"));
+    std::string value;
+    check(sample_transform(move, 0.25f, value) && value == "translate(0px, 0px)",
+          "a stepped transform holds the from value");
+    check(sample_transform(move, 0.75f, value) && value == "translate(50px, 0px)",
+          "a stepped transform jumps at the step boundary");
+}
+
+// --- animation-direction ---------------------------------------------------
+
+void test_direction_reverse_and_alternate() {
+    AnimationTiming timing;
+    timing.duration_ms = 100;
+
+    AnimationPhase phase = resolve_animation_phase(timing, 25.0);
+    check(std::fabs(phase.progress - 0.25f) < 1e-4f && phase.active,
+          "normal direction follows the timeline");
+
+    timing.direction = AnimationDirection::kReverse;
+    phase = resolve_animation_phase(timing, 25.0);
+    check(std::fabs(phase.progress - 0.75f) < 1e-4f,
+          "reverse plays the iteration backwards");
+    phase = resolve_animation_phase(timing, 0.0);
+    check(std::fabs(phase.progress - 1.0f) < 1e-4f,
+          "reverse starts at the end of the iteration");
+
+    timing.direction = AnimationDirection::kAlternate;
+    timing.iteration_count = 2.0f;
+    phase = resolve_animation_phase(timing, 75.0);
+    check(std::fabs(phase.progress - 0.75f) < 1e-4f && phase.iteration == 0,
+          "alternate plays the first iteration forwards");
+    phase = resolve_animation_phase(timing, 125.0);
+    check(std::fabs(phase.progress - 0.75f) < 1e-4f && phase.iteration == 1,
+          "alternate plays the second iteration backwards");
+    const AnimationSpec fade = parse_animation(
+        doc("@keyframes fade { from { opacity: 0 } to { opacity: 1 } }"
+            ".box { animation-name: fade; }"));
+    check(std::fabs(sample_opacity(fade, phase.progress) - 0.75f) < 1e-4f,
+          "the alternate phase drives the sampled value");
+
+    timing.direction = AnimationDirection::kAlternateReverse;
+    phase = resolve_animation_phase(timing, 25.0);
+    check(std::fabs(phase.progress - 0.75f) < 1e-4f,
+          "alternate-reverse starts backwards");
+    phase = resolve_animation_phase(timing, 125.0);
+    check(std::fabs(phase.progress - 0.25f) < 1e-4f,
+          "alternate-reverse plays the second iteration forwards");
+}
+
+// --- animation-fill-mode / animation-delay ---------------------------------
+
+void test_fill_mode_around_the_delay() {
+    AnimationTiming timing;
+    timing.duration_ms = 100;
+    timing.delay_ms = 100;
+
+    AnimationPhase phase = resolve_animation_phase(timing, 50.0);
+    check(phase.before && !phase.applies,
+          "fill-mode none leaves the element static during the delay");
+
+    timing.fill_mode = AnimationFillMode::kBackwards;
+    phase = resolve_animation_phase(timing, 50.0);
+    check(phase.applies && std::fabs(phase.progress) < 1e-4f,
+          "backwards fill paints the from value during the delay");
+
+    timing.fill_mode = AnimationFillMode::kForwards;
+    phase = resolve_animation_phase(timing, 50.0);
+    check(!phase.applies, "forwards fill does not cover the delay");
+    phase = resolve_animation_phase(timing, 200.0);
+    check(!phase.active && phase.applies && std::fabs(phase.progress - 1.0f) < 1e-4f,
+          "forwards fill keeps the to value after the animation");
+
+    timing.fill_mode = AnimationFillMode::kBoth;
+    phase = resolve_animation_phase(timing, 50.0);
+    check(phase.applies && std::fabs(phase.progress) < 1e-4f,
+          "both fill covers the delay");
+    phase = resolve_animation_phase(timing, 250.0);
+    check(phase.applies && std::fabs(phase.progress - 1.0f) < 1e-4f,
+          "both fill keeps the end value");
+}
+
+void test_backwards_fill_with_reverse_direction() {
+    AnimationTiming timing;
+    timing.duration_ms = 100;
+    timing.delay_ms = 50;
+    timing.direction = AnimationDirection::kReverse;
+    timing.fill_mode = AnimationFillMode::kBackwards;
+    const AnimationPhase phase = resolve_animation_phase(timing, 10.0);
+    check(phase.applies && std::fabs(phase.progress - 1.0f) < 1e-4f,
+          "a backwards fill of a reversed animation paints the 100% value");
+}
+
+void test_fill_forwards_with_a_fractional_iteration_count() {
+    AnimationTiming timing;
+    timing.duration_ms = 100;
+    timing.iteration_count = 2.5f;
+    timing.fill_mode = AnimationFillMode::kForwards;
+    AnimationPhase phase = resolve_animation_phase(timing, 240.0);
+    check(phase.active && std::fabs(phase.progress - 0.4f) < 1e-4f,
+          "a fractional iteration count stays active until it runs out");
+    phase = resolve_animation_phase(timing, 260.0);
+    check(!phase.active && phase.applies && std::fabs(phase.progress - 0.5f) < 1e-4f,
+          "the forwards fill keeps the value the last partial iteration ended on");
+}
+
+void test_negative_delay_starts_inside_the_iteration() {
+    AnimationTiming timing;
+    timing.duration_ms = 300;
+    timing.delay_ms = -150;
+    const AnimationPhase phase = resolve_animation_phase(timing, 0.0);
+    check(phase.active && std::fabs(phase.progress - 0.5f) < 1e-4f,
+          "a negative delay starts halfway through the iteration");
+    check(animation_timeline_ms(timing) == 150,
+          "the negative delay shortens the remaining timeline");
+}
+
+// --- animation-iteration-count / timeline length ---------------------------
+
+void test_iteration_count_parsing() {
+    check(std::fabs(parse_iteration_count("3", 1.0f) - 3.0f) < 1e-4f,
+          "a numeric iteration count is parsed");
+    check(std::fabs(parse_iteration_count("0.5", 1.0f) - 0.5f) < 1e-4f,
+          "a fractional iteration count is parsed");
+    check(animation_iterations_infinite(
+              AnimationTiming{1000, 0, parse_iteration_count("infinite", 1.0f),
+                              AnimationDirection::kNormal, AnimationFillMode::kNone}),
+          "infinite is detected");
+    check(std::fabs(parse_iteration_count("nope", 2.0f) - 2.0f) < 1e-4f,
+          "an invalid iteration count keeps the fallback");
+    check(std::fabs(parse_iteration_count("-2", 1.0f) - 1.0f) < 1e-4f,
+          "a negative iteration count keeps the fallback");
+}
+
+void test_timeline_length() {
+    AnimationTiming timing;
+    timing.duration_ms = 100;
+    check(animation_timeline_ms(timing) == 100, "one iteration samples one duration");
+
+    timing.iteration_count = 3.0f;
+    check(animation_timeline_ms(timing) == 300, "three iterations triple the timeline");
+
+    timing.iteration_count = 2.5f;
+    check(animation_timeline_ms(timing) == 300, "a fractional count rounds up to a whole iteration");
+
+    timing.iteration_count = std::numeric_limits<float>::infinity();
+    check(animation_timeline_ms(timing) == 100, "an infinite animation samples one iteration");
+    timing.direction = AnimationDirection::kAlternate;
+    check(animation_timeline_ms(timing) == 200,
+          "an infinite alternate animation samples two iterations");
+
+    timing.delay_ms = 250;
+    timing.iteration_count = 2.0f;
+    check(animation_timeline_ms(timing) == 450, "the delay is added to the timeline");
+}
+
+void test_direction_and_fill_parsing() {
+    check(parse_animation_direction("reverse", AnimationDirection::kNormal) ==
+              AnimationDirection::kReverse,
+          "the reverse keyword is parsed");
+    check(parse_animation_direction("alternate-reverse", AnimationDirection::kNormal) ==
+              AnimationDirection::kAlternateReverse,
+          "the alternate-reverse keyword is parsed");
+    check(parse_animation_direction("reverse, normal", AnimationDirection::kNormal) ==
+              AnimationDirection::kReverse,
+          "the first list item is used");
+    check(parse_animation_direction("sideways", AnimationDirection::kNormal) ==
+              AnimationDirection::kNormal,
+          "an unknown direction keeps the fallback");
+    check(parse_animation_fill_mode("both", AnimationFillMode::kNone) ==
+              AnimationFillMode::kBoth,
+          "the both keyword is parsed");
+    check(parse_animation_fill_mode("forwards", AnimationFillMode::kNone) ==
+              AnimationFillMode::kForwards,
+          "the forwards keyword is parsed");
+    check(parse_animation_fill_mode("sideways", AnimationFillMode::kNone) ==
+              AnimationFillMode::kNone,
+          "an unknown fill mode keeps the fallback");
+}
+
+void test_timing_longhands_are_captured() {
+    const AnimationSpec spec = parse_animation(
+        doc("@keyframes fade { from { opacity: 0 } to { opacity: 1 } }"
+            ".box { animation-name: fade; animation-duration: 2s; animation-delay: 300ms;"
+            " animation-iteration-count: 4; animation-direction: alternate;"
+            " animation-fill-mode: both; }"));
+    check(spec.timing.duration == "2s", "the duration longhand is captured");
+    check(spec.timing.delay == "300ms", "the delay longhand is captured");
+    check(spec.timing.iteration_count == "4", "the iteration count longhand is captured");
+    check(spec.timing.direction == "alternate", "the direction longhand is captured");
+    check(spec.timing.fill_mode == "both", "the fill mode longhand is captured");
+}
+
+void test_timing_from_the_shorthand() {
+    const AnimationTimingDecl timing =
+        find_animation_timing("animation: fade 1s ease-in-out 2 alternate both 100ms;");
+    check(timing.duration == "1s", "the shorthand duration is the first time");
+    check(timing.delay == "100ms", "the second time is the delay");
+    check(timing.iteration_count == "2", "the unitless number is the iteration count");
+    check(timing.direction == "alternate", "the direction keyword is captured");
+    check(timing.fill_mode == "both", "the fill keyword is captured");
+    check(timing.timing_function == "ease-in-out", "the timing function is captured");
+    // A later longhand overrides the shorthand component it names.
+    const AnimationTimingDecl overridden =
+        find_animation_timing("animation: fade 1s ease-in; animation-direction: reverse;");
+    check(overridden.direction == "reverse", "a longhand overrides the shorthand");
+    check(overridden.timing_function == "ease-in",
+          "an unnamed shorthand component is kept");
+}
+
 }  // namespace
 
 int main() {
@@ -254,6 +577,22 @@ int main() {
     test_animation_duration_with_var_is_raw();
     test_parse_time_ms();
     test_find_animation_duration_of_a_declaration_block();
+    test_per_keyframe_easing_is_applied();
+    test_element_timing_function_is_the_default();
+    test_keyframe_easing_overrides_the_element_default();
+    test_timing_function_from_the_shorthand();
+    test_cubic_bezier_and_steps_evaluation();
+    test_eased_colour_and_transform();
+    test_direction_reverse_and_alternate();
+    test_fill_mode_around_the_delay();
+    test_backwards_fill_with_reverse_direction();
+    test_fill_forwards_with_a_fractional_iteration_count();
+    test_negative_delay_starts_inside_the_iteration();
+    test_iteration_count_parsing();
+    test_timeline_length();
+    test_direction_and_fill_parsing();
+    test_timing_longhands_are_captured();
+    test_timing_from_the_shorthand();
     std::printf("%s\n", g_fail == 0 ? "ALL PASS" : "SOME FAILED");
     return g_fail == 0 ? 0 : 1;
 }

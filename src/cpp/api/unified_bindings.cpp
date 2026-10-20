@@ -140,7 +140,8 @@ bool resolve_css_color(const std::string& value, html_to_image::Rgba& out) {
 // Resolve the raw colour stops. A stop whose value cannot be resolved is
 // dropped (CSS treats an invalid value as "not animated at this keyframe").
 std::vector<html_to_image::ColorKeyframe> resolve_color_stops(
-    const std::vector<html_to_image::ColorStop>& raw) {
+    const std::vector<html_to_image::ColorStop>& raw,
+    const html_to_image::AnimationSpec& spec) {
     std::vector<html_to_image::ColorKeyframe> out;
     out.reserve(raw.size());
     for (const auto& stop : raw) {
@@ -149,6 +150,7 @@ std::vector<html_to_image::ColorKeyframe> resolve_color_stops(
         html_to_image::ColorKeyframe keyframe;
         keyframe.offset = stop.offset;
         keyframe.color = color;
+        keyframe.easing = html_to_image::stop_timing_function(spec, stop.easing_value);
         out.push_back(keyframe);
     }
     return out;
@@ -238,38 +240,82 @@ void resolve_animation_vars(html_to_image::AnimationSpec& spec,
                             const litehtml::element::ptr& el) {
     for (auto& raw : spec.opacity_raw) {
         raw.value = resolve_var_references(el, raw.value);
+        raw.easing_value = resolve_var_references(el, raw.easing_value);
     }
     for (auto& raw : spec.transform_raw) {
         raw.value = resolve_var_references(el, raw.value);
+        raw.easing_value = resolve_var_references(el, raw.easing_value);
     }
     for (auto& stop : spec.color_stops) {
         stop.value = resolve_var_references(el, stop.value);
+        stop.easing_value = resolve_var_references(el, stop.easing_value);
     }
     for (auto& stop : spec.background_color_stops) {
         stop.value = resolve_var_references(el, stop.value);
+        stop.easing_value = resolve_var_references(el, stop.easing_value);
     }
+    // The element-level timing function is the default of every stop, so it
+    // is resolved (and re-parsed by the rebuild) as well.
+    spec.timing.timing_function =
+        resolve_var_references(el, spec.timing.timing_function);
     html_to_image::build_animatable_stops(spec);
 }
 
-// The loop length of the animation: the CSS `animation-duration` wins, the
-// duration requested through the API is an upper bound (the CSS value is
-// clamped to it). The element's inline style wins over the <style> rule,
-// as the CSS cascade demands.
-int resolve_animation_duration(const html_to_image::AnimationSpec& spec,
-                               const std::string& inline_style,
-                               const litehtml::element::ptr& el,
-                               int api_duration_ms) {
-    std::string value = spec.duration_value;
-    const std::string inline_duration =
-        html_to_image::find_animation_duration(inline_style);
-    if (!inline_duration.empty()) value = inline_duration;
-    if (value.empty()) return api_duration_ms;
-    value = resolve_var_references(el, value);
-    int css_duration_ms = 0;
-    if (!html_to_image::parse_time_ms(value, css_duration_ms)) return api_duration_ms;
-    if (css_duration_ms <= 0) return api_duration_ms;
-    if (api_duration_ms <= 0) return css_duration_ms;
-    return std::min(api_duration_ms, css_duration_ms);
+// Resolve the timing of the animation. The CSS longhands win over the API
+// duration; the element's inline style wins over the <style> rule, as the CSS
+// cascade demands. `out_span_ms` receives the sampled timeline length (the
+// delay plus the iterations, clamped to the API duration).
+html_to_image::AnimationTiming resolve_animation_timing(
+    const html_to_image::AnimationSpec& spec, const std::string& inline_style,
+    const litehtml::element::ptr& el, int api_duration_ms, int& out_span_ms) {
+    const html_to_image::AnimationTimingDecl inline_timing =
+        html_to_image::find_animation_timing(inline_style);
+    auto pick = [](const std::string& inline_value, const std::string& rule_value) {
+        return inline_value.empty() ? rule_value : inline_value;
+    };
+
+    html_to_image::AnimationTiming timing;
+
+    // One iteration: the CSS `animation-duration`, else the API duration.
+    const std::string duration = pick(inline_timing.duration, spec.timing.duration);
+    int iteration_ms = 0;
+    if (!duration.empty()) {
+        int parsed = 0;
+        if (html_to_image::parse_time_ms(resolve_var_references(el, duration), parsed) &&
+            parsed > 0) {
+            iteration_ms = parsed;
+        }
+    }
+    if (iteration_ms <= 0) iteration_ms = api_duration_ms > 0 ? api_duration_ms : 1000;
+    timing.duration_ms = iteration_ms;
+
+    const std::string delay = pick(inline_timing.delay, spec.timing.delay);
+    if (!delay.empty()) {
+        int parsed = 0;
+        if (html_to_image::parse_time_ms(resolve_var_references(el, delay), parsed)) {
+            timing.delay_ms = parsed;
+        }
+    }
+
+    const std::string count = pick(inline_timing.iteration_count, spec.timing.iteration_count);
+    if (!count.empty()) {
+        timing.iteration_count =
+            html_to_image::parse_iteration_count(resolve_var_references(el, count), 1.0f);
+    }
+
+    timing.direction = html_to_image::parse_animation_direction(
+        pick(inline_timing.direction, spec.timing.direction),
+        html_to_image::AnimationDirection::kNormal);
+    timing.fill_mode = html_to_image::parse_animation_fill_mode(
+        pick(inline_timing.fill_mode, spec.timing.fill_mode),
+        html_to_image::AnimationFillMode::kNone);
+
+    // The API duration is an upper bound on the whole sampled timeline.
+    int span = html_to_image::animation_timeline_ms(timing);
+    if (api_duration_ms > 0 && span > api_duration_ms) span = api_duration_ms;
+    if (span <= 0) span = iteration_ms;
+    out_span_ms = span;
+    return timing;
 }
 
 }  // namespace
@@ -314,25 +360,35 @@ int satoru_render_animation_to_converter_val(SatoruInstance* satoru, ImageConver
     const char* base_style_attr = target->get_attr("style");
     const std::string base_style = base_style_attr ? base_style_attr : "";
 
+    // The element's inline style wins over the <style> rule (CSS cascade):
+    // its `animation-timing-function` becomes the default of the stops.
+    const html_to_image::AnimationTimingDecl inline_timing =
+        html_to_image::find_animation_timing(base_style);
+    if (!inline_timing.timing_function.empty()) {
+        spec.timing.timing_function = inline_timing.timing_function;
+    }
+
     // Resolve the var() references of the stop values (the document owns the
     // custom properties) and rebuild the animatable stops from them.
     resolve_animation_vars(spec, target);
     if (!spec.valid) return 0;
 
-    // The loop length: the CSS `animation-duration` wins, the duration
-    // requested through the API is an upper bound.
-    const int duration =
-        resolve_animation_duration(spec, base_style, target, duration_ms);
+    // The timing: the CSS longhands (duration / delay / iteration count /
+    // direction / fill mode) drive the timeline, the duration requested
+    // through the API is an upper bound on the sampled span.
+    int span_ms = 0;
+    const html_to_image::AnimationTiming timing =
+        resolve_animation_timing(spec, base_style, target, duration_ms, span_ms);
 
     // Colour stops are resolved through the document's colour resolution, so
     // named colours / rgb() / hsl() all work.
     const std::vector<html_to_image::ColorKeyframe> color_stops =
-        resolve_color_stops(spec.color_stops);
+        resolve_color_stops(spec.color_stops, spec);
     const std::vector<html_to_image::ColorKeyframe> background_color_stops =
-        resolve_color_stops(spec.background_color_stops);
+        resolve_color_stops(spec.background_color_stops, spec);
 
     const std::vector<html_to_image::FrameSample> schedule =
-        html_to_image::build_frame_schedule(duration, fps);
+        html_to_image::build_frame_schedule(span_ms, fps);
 
     const uint64_t per_frame_bytes =
         (uint64_t)std::max(width, 1) * (uint64_t)std::max(height, 1) * 4;
@@ -345,16 +401,24 @@ int satoru_render_animation_to_converter_val(SatoruInstance* satoru, ImageConver
     for (const auto& sample : schedule) {
         if ((int)converter->frames.size() >= html_to_image::k_max_animation_frames) break;
 
+        // Timeline position of this frame, then the direction / fill / delay
+        // resolved local state. Outside the active interval without a fill the
+        // element keeps its static style.
+        const double time_ms = (double)sample.progress * (double)span_ms;
+        const html_to_image::AnimationPhase phase =
+            html_to_image::resolve_animation_phase(timing, time_ms);
+        const bool animated = phase.applies;
+
         // Per-frame style overrides. Only the animated properties are written,
         // so the element keeps its static style for everything else.
-        const bool has_opacity = !spec.stops.empty();
+        const bool has_opacity = animated && !spec.stops.empty();
         const float opacity =
-            has_opacity ? html_to_image::sample_opacity(spec, sample.progress) : 1.0f;
+            has_opacity ? html_to_image::sample_opacity(spec, phase.progress) : 1.0f;
         std::string transform_value;
         const bool has_transform =
-            html_to_image::sample_transform(spec, sample.progress, transform_value);
-        const bool has_color = !color_stops.empty();
-        const bool has_background_color = !background_color_stops.empty();
+            animated && html_to_image::sample_transform(spec, phase.progress, transform_value);
+        const bool has_color = animated && !color_stops.empty();
+        const bool has_background_color = animated && !background_color_stops.empty();
 
         std::string extra;
         if (has_transform) {
@@ -364,12 +428,12 @@ int satoru_render_animation_to_converter_val(SatoruInstance* satoru, ImageConver
         if (has_color) {
             extra += ";color:";
             extra += html_to_image::format_rgba(
-                html_to_image::sample_color(color_stops, sample.progress));
+                html_to_image::sample_color(color_stops, phase.progress));
         }
         if (has_background_color) {
             extra += ";background-color:";
             extra += html_to_image::format_rgba(
-                html_to_image::sample_color(background_color_stops, sample.progress));
+                html_to_image::sample_color(background_color_stops, phase.progress));
         }
 
         // Dedupe at the style-value level (before any draw): an unchanged

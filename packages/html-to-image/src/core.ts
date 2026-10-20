@@ -119,14 +119,18 @@ export interface HtmlToImageOptions extends RenderOptions {
    *   `@keyframes` animation into frames. `duration` is one loop length in ms
    *   (clamped to 5000), `fps` defaults to 15 (frame count capped at ~75).
    *   The CSS `animation-duration` (including the `animation` shorthand)
-   *   wins over `duration`, which acts as an upper bound; `fps` is the
-   *   upper frame rate. `loop` is how many times the animated WebP repeats:
-   *   `0` (the default) means infinite, `1` means play once. `opacity`,
-   *   `transform` (`translate` / `rotate` / `scale` only) and `color` /
-   *   `background-color` keyframes are animated; their values may use
-   *   `var()` (resolved against the element's custom properties).
-   *   Per-keyframe easing, several animations on one element and
-   *   `animation-direction` / `animation-fill-mode` are out of scope.
+   *   is the length of one iteration; `animation-delay` /
+   *   `animation-iteration-count` define the sampled timeline, capped by
+   *   `duration`; `fps` is the upper frame rate. `loop` is how many times the
+   *   animated WebP repeats: `0` (the default) means infinite, `1` means play
+   *   once. `opacity`, `transform` (`translate` / `rotate` / `scale` only) and
+   *   `color` / `background-color` keyframes are animated; their values may
+   *   use `var()` (resolved against the element's custom properties).
+   *   `animation-timing-function` (per keyframe or element-level:
+   *   `linear` / `ease*` / `cubic-bezier()` / `steps()` / `step-*`),
+   *   `animation-direction` and `animation-fill-mode` are honoured.
+   *   Several animations on one element (`animation-name: a, b`) are out of
+   *   scope.
    */
   animation?: boolean | { duration: number; fps?: number; loop?: number };
   /** Crop rectangle (encode stage for image input, render options for HTML). */
