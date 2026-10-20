@@ -334,6 +334,7 @@ bool element::is_block_formatting_context() const
 		   m_css.get_display() == display_inline_grid ||
 		   m_css.get_display() == display_grid ||
 		   m_css.get_display() == display_table_caption ||
+		   m_css.is_flow_root() ||
 		   is_root() ||
 		   m_css.get_float() != float_none ||
 		   m_css.get_position() == element_position_absolute ||

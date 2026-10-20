@@ -366,6 +366,21 @@ describe("regression: layout and paint probes", () => {
     expect(isWhite(at(50, 35))).toBe(true);
   });
 
+  it("display:flow-root contains floats and keeps child margins inside", async () => {
+    const { at } = await renderPng(
+      `<div style="display:flow-root;background:#00f;width:100px">
+         <div style="float:left;width:50px;height:40px;background:#f00"></div>
+         <div style="margin-top:20px;height:10px"></div></div>
+       <div style="height:10px;background:#0f0;width:100px"></div>`,
+      300,
+      100,
+    );
+    expect(near(at(80, 10), BLUE)).toBe(true); // child margin-top stays inside the container
+    expect(near(at(10, 30), RED)).toBe(true); // float is inside the container box
+    expect(near(at(80, 30), BLUE)).toBe(true); // container grew to the float height (40px)
+    expect(near(at(80, 45), [0, 255, 0])).toBe(true); // following block starts after the float
+  });
+
   it("float margin box (not the border box) narrows the first line", async () => {
     const squares = '<i style="display:inline-block;width:16px;height:16px;background:#00f"></i>'.repeat(30);
     const { at } = await renderPng(

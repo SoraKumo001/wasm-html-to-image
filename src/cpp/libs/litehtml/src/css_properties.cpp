@@ -222,6 +222,9 @@ void litehtml::css_properties::compute(const element* el, const document::ptr& d
 
     m_display =
         (style_display)el->get_property<int>(_display_, false, display_inline, offset(m_display));
+    // display:flow-root is a block box that always establishes a new block formatting context.
+    m_flow_root = (m_display == display_flow_root);
+    if (m_flow_root) m_display = display_block;
     m_visibility = (visibility)el->get_property<int>(_visibility_, true, visibility_visible,
                                                      offset(m_visibility));
     m_float = (element_float)el->get_property<int>(_float_, false, float_none, offset(m_float));

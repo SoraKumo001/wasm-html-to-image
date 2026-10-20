@@ -50,6 +50,7 @@ namespace litehtml
     text_wrap_mode m_text_wrap_mode;
     text_wrap_style m_text_wrap_style;
     style_display m_display;
+    bool m_flow_root = false;
     visibility m_visibility;
     appearance m_appearance;
     box_sizing m_box_sizing;
@@ -372,6 +373,7 @@ namespace litehtml
     void set_widows(int widows);
 
     style_display get_display() const;
+    bool is_flow_root() const;
     void set_display(style_display mDisplay);
 
     visibility get_visibility() const;
@@ -837,6 +839,11 @@ namespace litehtml
   inline style_display css_properties::get_display() const
   {
     return m_display;
+  }
+
+  inline bool css_properties::is_flow_root() const
+  {
+    return m_flow_root;
   }
 
   inline void css_properties::set_display(style_display mDisplay)

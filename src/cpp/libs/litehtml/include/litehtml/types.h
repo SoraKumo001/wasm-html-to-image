@@ -657,7 +657,7 @@ namespace litehtml
                 }
         };
 
-#define  style_display_strings          "none;block;inline;inline-block;inline-table;list-item;table;table-caption;table-cell;table-column;table-column-group;table-footer-group;table-header-group;table-row;table-row-group;inline-text;flex;inline-flex;-webkit-box;-webkit-inline-box;grid;inline-grid;contents"
+#define  style_display_strings          "none;block;inline;inline-block;inline-table;list-item;table;table-caption;table-cell;table-column;table-column-group;table-footer-group;table-header-group;table-row;table-row-group;inline-text;flex;inline-flex;-webkit-box;-webkit-inline-box;grid;inline-grid;contents;flow-root"
 
         enum style_display
         {
@@ -684,6 +684,7 @@ namespace litehtml
                 display_grid,
                 display_inline_grid,
                 display_contents,
+                display_flow_root,
         };
 
 #define  font_size_strings              "xx-small;x-small;small;medium;large;x-large;xx-large;smaller;larger"
