@@ -185,6 +185,21 @@ litehtml::uint_ptr container_skia::create_font(const litehtml::font_description&
         typefaces = m_context.get_typefaces("sans-serif", desc.weight, slant, fake_bold, desc.stretch);
     }
 
+    // font-optical-sizing: auto drives the opsz axis from the font size (CSS px); an explicit
+    // font-variation-settings "opsz" always wins.
+    std::vector<litehtml::font_variation_setting> variations = desc.variations;
+    if (desc.optical_sizing_auto) {
+        const uint32_t opsz = SkSetFourByteTag('o', 'p', 's', 'z');
+        bool explicit_opsz = false;
+        for (const auto& v : variations) explicit_opsz = explicit_opsz || v.tag == opsz;
+        if (!explicit_opsz) {
+            litehtml::font_variation_setting v;
+            v.tag = opsz;
+            v.value = (float)desc.size;
+            variations.push_back(v);
+        }
+    }
+
     font_info* fi = new font_info;
     fi->desc = desc;
     fi->fake_bold = fake_bold;
@@ -196,7 +211,7 @@ litehtml::uint_ptr container_skia::create_font(const litehtml::font_description&
 
     for (auto& typeface : typefaces) {
         SkFont* font = m_context.fontManager.createSkFont(typeface, (float)desc.size, desc.weight,
-                                                          desc.stretch, desc.variations);
+                                                          desc.stretch, variations);
         if (font) {
             fi->fonts.push_back(font);
         }
@@ -213,7 +228,7 @@ litehtml::uint_ptr container_skia::create_font(const litehtml::font_description&
         }
         if (!duplicate) {
             SkFont* font = m_context.fontManager.createSkFont(tf, (float)desc.size, desc.weight,
-                                                               desc.stretch, desc.variations);
+                                                               desc.stretch, variations);
             if (font) {
                 fi->fonts.push_back(font);
             }
@@ -224,7 +239,7 @@ litehtml::uint_ptr container_skia::create_font(const litehtml::font_description&
         sk_sp<SkTypeface> def = m_context.fontManager.getDefaultTypeface();
         if (def) {
             fi->fonts.push_back(m_context.fontManager.createSkFont(def, (float)desc.size, desc.weight,
-                                                                     desc.stretch, desc.variations));
+                                                                     desc.stretch, variations));
         } else {
             fi->fonts.push_back(new SkFont(SkTypeface::MakeEmpty(), (float)desc.size));
         }
@@ -247,6 +262,10 @@ litehtml::uint_ptr container_skia::create_font(const litehtml::font_description&
         if (actual_slant == SkFontStyle::kItalic_Slant) {
             fi->fake_italic = false;
         }
+
+        // font-synthesis: no synthetic bold / italic when the property turns it off.
+        if (!(desc.synthesis & 1)) fi->fake_bold = false;
+        if (!(desc.synthesis & 2)) fi->fake_italic = false;
 
         // If the matched weight is sufficient, disable fake_bold
         if (actual_weight >= desc.weight) {

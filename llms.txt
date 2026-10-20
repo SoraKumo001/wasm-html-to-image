@@ -212,7 +212,7 @@ The rendering engine couples **litehtml** (HTML/CSS layout) and **Google Skia** 
   - Container: `display: flex | inline-flex`, `flex-direction` (`row`, `column`, `row-reverse`, `column-reverse`), `flex-wrap` (`nowrap`, `wrap`, `wrap-reverse`), `flex-flow`, `justify-content` (`flex-start`, `flex-end`, `center`, `space-between`, `space-around`, `space-evenly`), `align-items` (`stretch`, `flex-start`, `flex-end`, `center`, `baseline`), `align-content`, `gap`, `row-gap`, `column-gap`.
   - Items: `flex`, `flex-grow`, `flex-shrink`, `flex-basis`, `align-self`, `order`.
 - **Grid Layout**:
-  - Container: `display: grid | inline-grid`, `grid-template-columns`, `grid-template-rows`, `gap`, `row-gap`, `column-gap`, `place-items`, `place-content`, `justify-items`, `align-items`.
+  - Container: `display: grid | inline-grid`, `grid-template-columns`, `grid-template-rows`, the `grid-template` / `grid` shorthands (`<rows> / <columns>`, template strings, `auto-flow [dense]`), `gap`, `row-gap`, `column-gap`, `place-items`, `place-content`, `justify-items`, `align-items`.
   - Items: `grid-column`, `grid-row`, `grid-column-start`, `grid-column-end`, `grid-row-start`, `grid-row-end`, `place-self`, `justify-self`, `align-self`.
 - **Positioning**: `position: static | relative | absolute | fixed`, `top`, `right`, `bottom`, `left`, `inset`, `z-index`.
 - **Box Dimensions & Margins**: `width`, `height`, `min-width`, `min-height`, `max-width`, `max-height`, `aspect-ratio`, `box-sizing` (`border-box`, `content-box`), `margin`, `padding`.
@@ -220,12 +220,14 @@ The rendering engine couples **litehtml** (HTML/CSS layout) and **Google Skia** 
 - **Floats & Clear**: `float: left | right | none`, `clear: left | right | both | none`.
 
 ### 2. Typography & Text Shaping
-- **Fonts**: `font-family`, `font-size`, `font-weight` (100–900, `bold`, `normal`), `font-style` (`italic`, `normal`), `font-variant`, `font-variant-*` longhands, `font-feature-settings`, `font-kerning` (`auto`, `normal`, `none`), `font-variation-settings` (variable font axes), `font-stretch` (keywords and percentages), `line-height`, `letter-spacing`, `word-spacing`.
+- **Fonts**: `font-family`, `font-size`, `font-weight` (100–900, `bold`, `normal`), `font-style` (`italic`, `normal`), `font-variant`, `font-variant-*` longhands, `font-feature-settings`, `font-kerning` (`auto`, `normal`, `none`), `font-variation-settings` (variable font axes), `font-stretch` (keywords and percentages), `line-height`, `letter-spacing`, `word-spacing`. `font-optical-sizing: auto | none` (auto drives the `opsz` axis from the size; an explicit `opsz` in `font-variation-settings` wins), `font-synthesis` + longhands (`none` disables synthetic bold / italic).
 - **Text Alignment & Flow**: `text-align` (`left`, `right`, `center`, `justify`), `vertical-align`, `text-transform` (`uppercase`, `lowercase`, `capitalize`, `none`).
 - **Wrapping & Breaking**: `white-space` (`normal`, `nowrap`, `pre`, `pre-wrap`, `pre-line`), `text-wrap` (`wrap`, `nowrap`, `balance`), `word-break` (`normal`, `break-all`, `keep-all`), `overflow-wrap` (`normal`, `break-word`, `anywhere`).
 - **Ellipsis & Multi-line Clamping**:
   - Single-line: `overflow: hidden; text-overflow: ellipsis; white-space: nowrap;`
   - Multi-line clamp: `-webkit-line-clamp: 2; -webkit-box-orient: vertical; display: -webkit-box; overflow: hidden;` (also supports standard `line-clamp`).
+  - Line breaking & alignment: `line-break: auto | loose | normal | strict | anywhere` (CJK kinsoku strength: `strict` keeps small kana / `ー` off the line start, `loose` lets lines start with iteration marks), `text-align-last`, `text-justify: auto | none | inter-word | inter-character | distribute`, `tab-size: <number> | <length>` (tab stops measured from the line start; `white-space: pre*`).
+  - Hyphenation: soft hyphens (`&shy;`) break and show a hyphen at the line end (`hyphens: manual`, default; `none` hides it; `-webkit-hyphens` is an alias); `hyphens: auto` hyphenates English words with a heuristic when `lang="en*"` is set (no dictionary); `hyphenate-character: auto | "<string>"` replaces the hyphen (auto is `-`).
   - Standard clamp: `max-lines: 2` on any block container (implies `overflow: hidden`); `block-ellipsis: auto | no-ellipsis | "<string>"` replaces the end marker `text-fit: grow | shrink | grow shrink [<percentage limit>]` rescales the font so the widest line fills the container (up to 3 relayout passes).
 - **Text Stroke & Shadow**:
   - Stroke: `-webkit-text-stroke: <width> <color>` (also `-webkit-text-stroke-width`, `-webkit-text-stroke-color`, `-webkit-text-fill-color`).

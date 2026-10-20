@@ -827,6 +827,165 @@ describe("regression: layout and paint probes", () => {
     expect(redInEm).toBeGreaterThan(20); // the <em> glyph is red (it used to stay black)
   });
 
+  describe("text controls: align-last, justify, line-break, hyphens, tab-size, overflow:clip, grid, fonts", () => {
+    const inkRight = (img: PNG, y0: number, y1: number) => {
+      let max = -1;
+      for (let y = y0; y < y1; y++)
+        for (let x = 0; x < img.width; x++) if (img.data[(img.width * y + x) * 4] < 128) max = Math.max(max, x);
+      return max;
+    };
+    const line = async (style: string, text: string, boxWidth: number, tag = "div") => {
+      const { img } = await renderPng(
+        `<${tag} style="margin:0;width:${boxWidth}px;font:16px/20px sans-serif;color:#000;${style}">${text}</${tag}>`,
+        300,
+        80,
+      );
+      return inkRight(img, 0, 20);
+    };
+
+    it("text-align-last positions the last line", async () => {
+      const left = await line("", "ab cd", 160);
+      expect(await line("text-align-last:right", "ab cd", 160)).toBeGreaterThan(left + 80);
+      const center = await line("text-align-last:center", "ab cd", 160);
+      expect(center).toBeGreaterThan(left + 30);
+      expect(center).toBeLessThan(140);
+      expect(await line("text-align:justify;text-align-last:justify", "ab cd", 160)).toBeGreaterThan(150);
+      expect(await line("text-align:justify", "ab cd", 160)).toBeLessThan(left + 5); // last line stays start-aligned
+    });
+
+    it("text-justify: none disables justify, inter-word skips CJK, inter-character spreads it", async () => {
+      const t = "aa bb cc dd ee ff gg hh ii jj kk ll mm";
+      expect(await line("text-align:justify", t, 130)).toBe(130);
+      expect(await line("text-align:justify;text-justify:none", t, 130)).toBeLessThan(125);
+      expect(await line("text-align:justify;text-justify:inter-word", t, 130)).toBe(130);
+      const cjk = "あいうえおかきくけこさしすせそたちつてと";
+      const plain = await line("", cjk, 98);
+      expect(await line("text-align:justify;text-justify:inter-word", cjk, 98)).toBe(plain); // no spaces to stretch
+      expect(await line("text-align:justify;text-justify:inter-character", cjk, 98)).toBeGreaterThan(plain);
+    });
+
+    it("line-break: strict keeps small kana attached, loose allows iteration marks, anywhere breaks Latin", async () => {
+      const small = "あいうえゃおかき";
+      const mark = "あいうえ々おかき";
+      expect(await line("", small, 64)).toBeGreaterThan(55); // small kana may start a line (normal)
+      expect(await line("line-break:strict", small, 64)).toBeLessThan(50);
+      expect(await line("", mark, 64)).toBeLessThan(50); // iteration mark may not start a line
+      expect(await line("line-break:loose", mark, 64)).toBeGreaterThan(55);
+      expect(await line("", "abcdefghijklmnop", 64)).toBeGreaterThan(100);
+      expect(await line("line-break:anywhere", "abcdefghijklmnop", 64)).toBeLessThan(65);
+    });
+
+    it("hyphens / hyphenate-character: a soft hyphen shows a hyphen only at the line end", async () => {
+      const wide = await line("", "extra&shy;ordinary", 300);
+      expect(wide).toBe(await line("", "extraordinary", 300)); // invisible inside a line
+      const broken = await line("hyphens:manual", "extra&shy;ordinary", 70);
+      expect(broken).toBe(await line("", "extra-ordinary", 70)); // hyphen drawn after "extra"
+      const none = await line("hyphens:none", "extra&shy;ordinary", 70);
+      expect(none).toBeLessThan(broken); // no hyphen shown
+      expect(await line("-webkit-hyphens:none", "extra&shy;ordinary", 70)).toBe(none);
+      // hyphenate-character replaces the hyphen
+      const star = await line("hyphenate-character:'**'", "extra&shy;ordinary", 70);
+      expect(star).toBeGreaterThan(broken);
+      // hyphens: auto hyphenates English words (lang=en) at the line end
+      const auto = await renderPng(
+        `<div lang="en" style="margin:0;width:60px;font:16px/20px sans-serif;color:#000;hyphens:auto">extraordinary</div>`,
+        120,
+        80,
+      );
+      expect(inkRight(auto.img, 0, 20)).toBeLessThan(62); // wrapped onto several lines
+      const noLang = await renderPng(
+        `<div style="margin:0;width:60px;font:16px/20px sans-serif;color:#000;hyphens:auto">extraordinary</div>`,
+        120,
+        80,
+      );
+      expect(inkRight(noLang.img, 0, 20)).toBeGreaterThan(90); // no lang: no automatic hyphenation
+    });
+
+    it("tab-size sets the tab stop width (number of spaces or a length)", async () => {
+      const tab = (style: string) => line(`white-space:pre;font-family:monospace;${style}`, "a\tb", 300);
+      const d = await tab("");
+      expect(await tab("tab-size:2")).toBeLessThan(d - 20);
+      expect(await tab("tab-size:40px")).toBeLessThan(d);
+      expect(await tab("tab-size:40px")).toBeGreaterThan(40);
+    });
+
+    it("overflow: clip clips like hidden", async () => {
+      const { at } = await renderPng(
+        `<div style="width:50px;height:20px;overflow:clip"><div style="width:200px;height:20px;background:#00f"></div></div>`,
+        200,
+        60,
+      );
+      expect(near(at(40, 10), BLUE)).toBe(true);
+      expect(isWhite(at(80, 10))).toBe(true);
+    });
+
+    it("grid-template / grid shorthands expand to the longhands", async () => {
+      const cell = (c: string) => `<div style="background:${c}"></div>`;
+      const cells = cell("#f00") + cell("#0f0") + cell("#00f") + cell("#ff0");
+      const a = await renderPng(`<div style="display:grid;grid-template:60px 40px / 100px 80px">${cells}</div>`, 200, 120);
+      expect(near(a.at(10, 10), RED)).toBe(true);
+      expect(near(a.at(150, 10), [0, 255, 0])).toBe(true);
+      expect(near(a.at(10, 80), BLUE)).toBe(true);
+      expect(near(a.at(150, 80), [255, 255, 0])).toBe(true);
+      expect(isWhite(a.at(190, 10))).toBe(true); // columns are 100 + 80
+      // template areas with row sizes
+      const areas = await renderPng(
+        `<div style="display:grid;grid:'h h' 30px 'm s' 50px / 60px 90px;">
+           <div style="grid-area:h;background:#f00"></div><div style="grid-area:m;background:#0f0"></div><div style="grid-area:s;background:#00f"></div></div>`,
+        200,
+        120,
+      );
+      expect(near(areas.at(140, 10), RED)).toBe(true); // header spans both columns
+      expect(near(areas.at(10, 50), [0, 255, 0])).toBe(true);
+      expect(near(areas.at(100, 50), BLUE)).toBe(true);
+      // grid: auto-flow
+      const flow = await renderPng(
+        `<div style="display:grid;grid:auto-flow 30px / 50px 50px">${cells}</div>`,
+        200,
+        120,
+      );
+      expect(near(flow.at(10, 10), RED)).toBe(true);
+      expect(near(flow.at(70, 10), [0, 255, 0])).toBe(true);
+      expect(near(flow.at(10, 40), BLUE)).toBe(true);
+    });
+
+    it("font-synthesis: none stops the synthetic bold / italic", async () => {
+      const ink = async (style: string) => {
+        const { img } = await renderPng(
+          `<div style="font:bold italic 40px/50px 'RobotoProbe';color:#000;${style}">HHH</div><style>${PROBE_FONT_FACE}</style>`,
+          200,
+          60,
+        );
+        let n = 0;
+        for (let i = 0; i < img.data.length; i += 4) if (img.data[i] < 128) n++;
+        return n;
+      };
+      const full = await ink("");
+      const noWeight = await ink("font-synthesis:none");
+      expect(noWeight).toBeLessThan(full);
+      expect(await ink("font-synthesis-weight:none;font-synthesis-style:none")).toBe(noWeight);
+      expect(await ink("font-synthesis:weight style")).toBe(full); // both allowed again
+    });
+
+    it("font-optical-sizing drives the opsz axis from the font size; none keeps the default", async () => {
+      const OPSZ_FACE =
+        "@font-face{font-family:'RobotoOpsz';src:url('https://cdn.jsdelivr.net/npm/@fontsource-variable/roboto-flex@5.3.0/files/roboto-flex-latin-opsz-normal.woff2') format('woff2')}";
+      const width = async (style: string) => {
+        const { img } = await renderPng(
+          `<style>${OPSZ_FACE}</style><div style="margin:0;font:40px/50px 'RobotoOpsz';color:#000;white-space:nowrap;${style}">Handgloves</div>`,
+          500,
+          60,
+        );
+        return inkRight(img, 0, 50);
+      };
+      const auto = await width("");
+      const none = await width("font-optical-sizing:none");
+      expect(auto).not.toBe(none);
+      // An explicit opsz in font-variation-settings wins over font-optical-sizing.
+      expect(await width("font-variation-settings:'opsz' 144")).toBe(await width("font-variation-settings:'opsz' 144;font-optical-sizing:none"));
+    });
+  });
+
   it("float margin box (not the border box) narrows the first line", async () => {
     const squares = '<i style="display:inline-block;width:16px;height:16px;background:#00f"></i>'.repeat(30);
     const { at } = await renderPng(

@@ -524,6 +524,17 @@ void litehtml::css_properties::compute(const element* el, const document::ptr& d
     // 5. Otherwise, the remaining 'display' property values apply as specified.
 
     compute_font(el, doc);
+    {
+        css_length def_tab;
+        def_tab.set_value(8, css_units_none);
+        m_tab_size = el->get_property<css_length>(_tab_size_, true, def_tab, offset(m_tab_size));
+        m_tab_size_number = 8;
+        m_tab_size_px = -1;
+        if (!m_tab_size.is_predefined()) {
+            if (m_tab_size.units() == css_units_none) m_tab_size_number = m_tab_size.val();
+            else m_tab_size_px = doc->to_pixels(m_tab_size, m_font_metrics, 0);
+        }
+    }
     pixel_t font_size = get_font_size();
 
     const css_length _auto = css_length::predef_value(0);
@@ -1199,6 +1210,32 @@ void litehtml::css_properties::compute_font(const element* el, const document::p
     }
 
     m_text_fit = el->get_property<int>(_text_fit_, false, 0, offset(m_text_fit));
+    m_line_break = (line_break)el->get_property<int>(_line_break_, true, line_break_auto, offset(m_line_break));
+    m_text_align_last = (text_align_last)el->get_property<int>(_text_align_last_, true, text_align_last_auto,
+                                                               offset(m_text_align_last));
+    m_text_justify = (text_justify)el->get_property<int>(_text_justify_, true, text_justify_auto,
+                                                         offset(m_text_justify));
+    {
+        // hyphens (standard) wins over -webkit-hyphens; otherwise inherited, default manual.
+        int h = el->get_property<int>(_hyphens_, false, -1, offset(m_hyphens));
+        if (h < 0) h = el->get_property<int>(__webkit_hyphens_, false, -1, offset(m_hyphens));
+        if (h < 0) {
+            element::ptr par = el->parent();
+            h = par ? (int)par->css().get_hyphens() : (int)hyphens_manual;
+        }
+        m_hyphens = (hyphens)h;
+        m_hyphenate_character = el->get_property<string>(_hyphenate_character_, true, "", offset(m_hyphenate_character));
+        m_font_optical_sizing = el->get_property<int>(_font_optical_sizing_, true, 0, offset(m_font_optical_sizing));
+        const int fs_weight = el->get_property<int>(_font_synthesis_weight_, true, 0, offset(m_font_synthesis_weight));
+        const int fs_style = el->get_property<int>(_font_synthesis_style_, true, 0, offset(m_font_synthesis_style));
+        const int fs_caps = el->get_property<int>(_font_synthesis_small_caps_, true, 0, offset(m_font_synthesis_caps));
+        const int fs_pos = el->get_property<int>(_font_synthesis_position_, true, 0, offset(m_font_synthesis_pos));
+        m_font_synthesis_weight = fs_weight;
+        m_font_synthesis_style = fs_style;
+        m_font_synthesis_caps = fs_caps;
+        m_font_synthesis_pos = fs_pos;
+        m_font_synthesis = (fs_weight ? 0 : 1) | (fs_style ? 0 : 2) | (fs_caps ? 0 : 4) | (fs_pos ? 0 : 8);
+    }
     m_stroke_linejoin = el->get_property<int>(_stroke_linejoin_, true, -1, offset(m_stroke_linejoin));
     m_box_decoration_break = (box_decoration_break)el->get_property<int>(
         _box_decoration_break_, false, box_decoration_break_slice, offset(m_box_decoration_break));
@@ -1318,6 +1355,8 @@ void litehtml::css_properties::compute_font(const element* el, const document::p
     descr.text_stroke_color = text_stroke_color;
     descr.block_ellipsis = m_block_ellipsis;
     descr.stroke_linejoin = m_stroke_linejoin;
+    descr.synthesis = m_font_synthesis;
+    descr.optical_sizing_auto = m_font_optical_sizing == 0;
 
     // font-kerning maps onto the `kern` OpenType feature. `auto` leaves the
     // kerning of the font itself alone, `normal` turns it on and `none` turns

@@ -48,6 +48,8 @@ struct font_description {
     shadow_vector text_shadow;
     pixel_t text_stroke_width = 0;  // -webkit-text-stroke-width, in px
     web_color text_stroke_color = web_color::current_color;  // -webkit-text-stroke-color
+    int synthesis = 15;               // font-synthesis bits: 1 weight, 2 style, 4 small-caps, 8 position
+    bool optical_sizing_auto = true;  // font-optical-sizing: auto
     int stroke_linejoin = -1;  // stroke-linejoin of the text stroke; -1 = default (round)
     std::string block_ellipsis = "\xE2\x80\xA6";  // block-ellipsis text appended by line clamping
 
@@ -96,6 +98,8 @@ struct font_description {
         if (block_ellipsis != "\xE2\x80\xA6") {
             out += ":be=" + block_ellipsis;
         }
+        if (synthesis != 15) out += ":fs=" + std::to_string(synthesis);
+        if (!optical_sizing_auto) out += ":ops=0";
         for (const auto& f : features) {
             out += ":ff=" + std::to_string(f.tag) + "=" + std::to_string(f.value);
         }

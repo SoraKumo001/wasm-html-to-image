@@ -334,6 +334,16 @@ namespace litehtml
           {_text_overflow_, text_overflow_strings},
           {_stroke_linejoin_, stroke_linejoin_strings},
           {_box_decoration_break_, box_decoration_break_strings},
+          {_line_break_, line_break_strings},
+          {_text_align_last_, text_align_last_strings},
+          {_text_justify_, text_justify_strings},
+          {_hyphens_, hyphens_strings},
+          {__webkit_hyphens_, hyphens_strings},
+          {_font_optical_sizing_, font_optical_sizing_strings},
+          {_font_synthesis_weight_, font_synthesis_value_strings},
+          {_font_synthesis_style_, font_synthesis_value_strings},
+          {_font_synthesis_small_caps_, font_synthesis_value_strings},
+          {_font_synthesis_position_, font_synthesis_value_strings},
           {__webkit_box_decoration_break_, box_decoration_break_strings},
           {_text_combine_upright_, text_combine_upright_strings},
           {_container_type_, container_type_strings},
@@ -368,6 +378,8 @@ namespace litehtml
           {_grid_area_, {_grid_row_start_, _grid_column_start_, _grid_row_end_, _grid_column_end_}},
           {_grid_column_, {_grid_column_start_, _grid_column_end_}},
           {_grid_row_, {_grid_row_start_, _grid_row_end_}},
+          {_grid_template_, {_grid_template_rows_, _grid_template_columns_, _grid_template_areas_}},
+          {_grid_, {_grid_template_rows_, _grid_template_columns_, _grid_template_areas_, _grid_auto_rows_, _grid_auto_columns_, _grid_auto_flow_}},
           {_grid_gap_, {_row_gap_, _column_gap_}},
           {_grid_row_gap_, {_row_gap_}},
           {_grid_column_gap_, {_column_gap_}},
@@ -603,6 +615,16 @@ namespace litehtml
     case _stroke_linejoin_:
     case _box_decoration_break_:
     case __webkit_box_decoration_break_:
+    case _line_break_:
+    case _text_align_last_:
+    case _text_justify_:
+    case _hyphens_:
+    case __webkit_hyphens_:
+    case _font_optical_sizing_:
+    case _font_synthesis_weight_:
+    case _font_synthesis_style_:
+    case _font_synthesis_small_caps_:
+    case _font_synthesis_position_:
     case _text_align_:
     case _vertical_align_:
     case _text_transform_:
@@ -1131,6 +1153,123 @@ namespace litehtml
       break;
     }
 
+    case _grid_template_:
+    case _grid_:
+    {
+      // grid-template: none | <rows> / <columns> | [<line-names>? <string> <track-size>? <line-names>?]+ [/ <columns>]
+      // grid:          <grid-template> | <rows> / auto-flow [dense] <auto-columns>? | auto-flow [dense] <auto-rows>? / <columns>
+      css_token_vector left, right;
+      bool slash = false;
+      for (const auto &tok : value)
+      {
+        if (tok.type == WHITESPACE) continue;
+        if (tok.ch == '/' && !slash) { slash = true; continue; }
+        (slash ? right : left).push_back(tok);
+      }
+      auto is_ident = [](const css_token &t, const char *id) { return t.type == IDENT && lowcase(t.ident()) == id; };
+      // Take `auto-flow` / `dense` off the front of a token list; returns true when auto-flow was found.
+      auto take_auto_flow = [&](css_token_vector &tokens, bool &dense) -> bool
+      {
+        bool found = false;
+        css_token_vector rest;
+        for (const auto &t : tokens)
+        {
+          if (is_ident(t, "auto-flow")) found = true;
+          else if (is_ident(t, "dense")) dense = true;
+          else rest.push_back(t);
+        }
+        if (found) tokens = rest;
+        return found;
+      };
+      auto set_tracks = [&](string_id id, const css_token_vector &tokens)
+      {
+        if (tokens.empty() || (tokens.size() == 1 && is_ident(tokens[0], "none")))
+          add_parsed_property(id, property_value(length_vector(), important, false, m_layer, m_specificity));
+        else
+          parse_grid_template(id, tokens, important);
+      };
+      auto set_flow = [&](bool column, bool dense)
+      {
+        int flow = column ? (dense ? grid_auto_flow_column_dense : grid_auto_flow_column)
+                          : (dense ? grid_auto_flow_row_dense : grid_auto_flow_row);
+        add_parsed_property(_grid_auto_flow_, property_value(flow, important, false, m_layer, m_specificity));
+      };
+      auto set_areas = [&](const css_token_vector &areas)
+      {
+        css_token_vector tokens = areas;
+        if (tokens.empty()) tokens.push_back(css_token(IDENT, string("none")));
+        add_parsed_property(_grid_template_areas_, property_value(tokens, important, false, m_layer, m_specificity));
+      };
+      auto apply_template = [&]()
+      {
+        bool has_strings = false;
+        for (const auto &t : left) has_strings = has_strings || t.type == STRING;
+        if (has_strings)
+        {
+          // Each row: <string> followed by an optional track size (default auto).
+          css_token_vector areas, rows;
+          for (size_t i = 0; i < left.size(); i++)
+          {
+            if (left[i].type == STRING)
+            {
+              areas.push_back(left[i]);
+              const bool has_size = i + 1 < left.size() && left[i + 1].type != STRING && left[i + 1].type != '[';
+              if (!has_size) rows.push_back(css_token(IDENT, string("auto")));
+            }
+            else
+            {
+              rows.push_back(left[i]);
+            }
+          }
+          set_areas(areas);
+          set_tracks(_grid_template_rows_, rows);
+        }
+        else
+        {
+          set_areas(css_token_vector());
+          set_tracks(_grid_template_rows_, left);
+        }
+        set_tracks(_grid_template_columns_, right);
+      };
+
+      if (name == _grid_template_)
+      {
+        apply_template();
+        break;
+      }
+
+      bool dense = false;
+      css_token_vector left_copy = left, right_copy = right;
+      if (take_auto_flow(left_copy, dense))
+      {
+        // auto-flow [dense] <auto-rows>? / <template-columns>
+        set_flow(false, dense);
+        set_tracks(_grid_auto_rows_, left_copy);
+        set_tracks(_grid_auto_columns_, css_token_vector());
+        set_tracks(_grid_template_columns_, right);
+        set_tracks(_grid_template_rows_, css_token_vector());
+        set_areas(css_token_vector());
+      }
+      else if (take_auto_flow(right_copy, dense))
+      {
+        // <template-rows> / auto-flow [dense] <auto-columns>?
+        set_flow(true, dense);
+        set_tracks(_grid_auto_columns_, right_copy);
+        set_tracks(_grid_auto_rows_, css_token_vector());
+        set_tracks(_grid_template_rows_, left);
+        set_tracks(_grid_template_columns_, css_token_vector());
+        set_areas(css_token_vector());
+      }
+      else
+      {
+        apply_template();
+        set_flow(false, false);
+        set_tracks(_grid_auto_rows_, css_token_vector());
+        set_tracks(_grid_auto_columns_, css_token_vector());
+      }
+      break;
+    }
+
     case _grid_column_start_:
     case _grid_column_end_:
     case _grid_row_start_:
@@ -1266,6 +1405,41 @@ namespace litehtml
       else if (ident == "none")
         add_parsed_property(name, property_value(0, important, false, m_layer, m_specificity));
       break;
+
+    case _hyphenate_character_:
+      // auto | <string>; "auto" is stored as the empty string.
+      if (val.type == STRING)
+        add_parsed_property(name, property_value(val.str, important, false, m_layer, m_specificity));
+      else if (ident == "auto")
+        add_parsed_property(name, property_value(string(), important, false, m_layer, m_specificity));
+      break;
+
+    case _tab_size_:
+      return add_length_property(name, val, "", f_length | f_number | f_positive, important);
+
+    case _font_synthesis_:
+    {
+      // none | [ weight || style || small-caps || position ]
+      bool weight = false, style = false, caps = false, position = false, ok = !value.empty();
+      for (const auto &t : value)
+      {
+        string id = t.type == IDENT ? lowcase(t.ident()) : string();
+        if (id == "weight") weight = true;
+        else if (id == "style") style = true;
+        else if (id == "small-caps") caps = true;
+        else if (id == "position") position = true;
+        else if (id != "none") ok = false;
+      }
+      if (ok)
+      {
+        const int none = 1, autov = 0;
+        add_parsed_property(_font_synthesis_weight_, property_value(weight ? autov : none, important, false, m_layer, m_specificity));
+        add_parsed_property(_font_synthesis_style_, property_value(style ? autov : none, important, false, m_layer, m_specificity));
+        add_parsed_property(_font_synthesis_small_caps_, property_value(caps ? autov : none, important, false, m_layer, m_specificity));
+        add_parsed_property(_font_synthesis_position_, property_value(position ? autov : none, important, false, m_layer, m_specificity));
+      }
+      break;
+    }
 
     case _text_fit_:
     {
@@ -1492,7 +1666,6 @@ namespace litehtml
     case _stroke_:
     case _clip_:
     case _margin_trim_:
-    case __webkit_hyphens_:
     case __moz_orient_:
     case __webkit_appearance_:
     case _contain_intrinsic_size_:

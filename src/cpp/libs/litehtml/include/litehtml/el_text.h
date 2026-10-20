@@ -14,6 +14,9 @@ namespace litehtml
 		size			m_size;
 		bool			m_use_transformed;
 		bool			m_draw_spaces;
+		bool			m_ends_shy = false;       // the word ends with a soft hyphen (U+00AD)
+		bool			m_hyphen_visible = false; // the hyphen is shown (the word ends a line)
+		string			m_shy_stripped;           // displayed text without soft hyphens
 	public:
 		el_text(const char* text, const document::ptr& doc);
 
@@ -23,6 +26,8 @@ namespace litehtml
 		void				compute_styles(bool recursive) override;
 		virtual void		apply_word_break() override;
 		bool				is_text() const override { return true; }
+		bool				is_tab() const override { return m_text == "\t"; }
+		pixel_t				set_hyphen_visible(bool visible) override;
 
 		void draw(uint_ptr hdc, pixel_t x, pixel_t y, const position *clip, const std::shared_ptr<render_item> &ri) override;
 		string				dump_get_name() override;

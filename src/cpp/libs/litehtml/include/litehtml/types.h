@@ -1059,6 +1059,54 @@ namespace litehtml
         };
 
 
+#define line_break_strings              "auto;loose;normal;strict;anywhere"
+
+        enum line_break
+        {
+                line_break_auto,
+                line_break_loose,
+                line_break_normal,
+                line_break_strict,
+                line_break_anywhere
+        };
+
+#define text_align_last_strings         "auto;left;right;center;justify;start;end;match-parent"
+
+        enum text_align_last
+        {
+                text_align_last_auto,
+                text_align_last_left,
+                text_align_last_right,
+                text_align_last_center,
+                text_align_last_justify,
+                text_align_last_start,
+                text_align_last_end,
+                text_align_last_match_parent
+        };
+
+#define text_justify_strings            "auto;none;inter-word;inter-character;distribute"
+
+        enum text_justify
+        {
+                text_justify_auto,
+                text_justify_none,
+                text_justify_inter_word,
+                text_justify_inter_character,
+                text_justify_distribute
+        };
+
+#define hyphens_strings                 "none;manual;auto"
+
+        enum hyphens
+        {
+                hyphens_none,
+                hyphens_manual,
+                hyphens_auto
+        };
+
+#define font_synthesis_value_strings    "auto;none"
+#define font_optical_sizing_strings     "auto;none"
+
 #define box_decoration_break_strings    "slice;clone"
 
         enum box_decoration_break
@@ -1100,7 +1148,7 @@ namespace litehtml
                 text_overflow_ellipsis
         };
 
-#define overflow_strings                "visible;hidden;scroll;auto;no-display;no-content"
+#define overflow_strings                "visible;hidden;scroll;auto;no-display;no-content;clip"
 
         enum overflow
         {
@@ -1109,7 +1157,8 @@ namespace litehtml
                 overflow_scroll,
                 overflow_auto,
                 overflow_no_display,
-                overflow_no_content
+                overflow_no_content,
+                overflow_clip  // like hidden for a static renderer; no scroll container
         };
 
 #define background_size_strings         "auto;cover;contain"

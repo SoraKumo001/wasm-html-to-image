@@ -158,6 +158,8 @@ namespace litehtml
         font_metrics			m_font_metrics;
         pixel_t					m_baseline;
         text_align				m_text_align;
+        text_align_last			m_align_last = text_align_last_auto;
+        text_justify			m_justify = text_justify_auto;
         direction				m_direction;
         text_overflow			m_text_overflow;
         overflow				m_overflow;
@@ -186,6 +188,7 @@ namespace litehtml
 		{
         }
 
+        void set_justify_options(text_align_last align_last, text_justify justify) { m_align_last = align_last; m_justify = justify; }
         pixel_t block_pos() const { return m_block_pos; }
         pixel_t inline_pos() const { return m_inline_pos; }
         pixel_t block_size() const { return m_block_size; }

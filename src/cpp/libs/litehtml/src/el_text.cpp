@@ -96,6 +96,28 @@ void litehtml::el_text::compute_styles(bool /*recursive*/)
 		}
 	}
 
+	// Soft hyphens are invisible unless the word ends a line (see set_hyphen_visible).
+	m_ends_shy = false;
+	m_hyphen_visible = false;
+	if (m_text.find("\xC2\xAD") != string::npos)
+	{
+		string stripped;
+		for (size_t i = 0; i < m_text.size(); i++)
+		{
+			if ((unsigned char)m_text[i] == 0xC2 && i + 1 < m_text.size() && (unsigned char)m_text[i + 1] == 0xAD)
+			{
+				i++;
+				continue;
+			}
+			stripped += m_text[i];
+		}
+		m_ends_shy = m_text.size() >= 2 && (unsigned char)m_text[m_text.size() - 2] == 0xC2 &&
+					 (unsigned char)m_text[m_text.size() - 1] == 0xAD;
+		m_shy_stripped = stripped;
+		m_transformed_text = stripped;
+		m_use_transformed = true;
+	}
+
 	font_metrics fm;
 	uint_ptr font = 0;
 	if (el_parent)
@@ -125,6 +147,32 @@ void litehtml::el_text::compute_styles(bool /*recursive*/)
 
 void litehtml::el_text::apply_word_break()
 {
+}
+
+litehtml::pixel_t litehtml::el_text::set_hyphen_visible(bool visible)
+{
+	element::ptr el_parent = parent();
+	if (!el_parent || visible == m_hyphen_visible) return 0;
+	if (visible && (!m_ends_shy || el_parent->css().get_hyphens() == hyphens_none)) return 0;
+	uint_ptr font = el_parent->css().get_font();
+	if (!font) return 0;
+
+	string hyphen = el_parent->css().get_hyphenate_character();
+	if (hyphen.empty()) hyphen = "-";  // auto: U+002D (U+2010 is missing from many fonts)
+	const string shown = visible ? m_shy_stripped + hyphen : m_shy_stripped;
+	const pixel_t old_width = m_size.width;
+	m_transformed_text = shown;
+	m_use_transformed = true;
+	if (el_parent->css().get_writing_mode() == writing_mode_horizontal_tb)
+	{
+		m_size.width = get_document()->container()->text_width(shown.c_str(), font, el_parent->get_direction(), el_parent->css().get_writing_mode());
+	}
+	else
+	{
+		m_size.height = get_document()->container()->text_width(shown.c_str(), font, el_parent->get_direction(), el_parent->css().get_writing_mode());
+	}
+	m_hyphen_visible = visible;
+	return el_parent->css().get_writing_mode() == writing_mode_horizontal_tb ? m_size.width - old_width : 0;
 }
 
 void litehtml::el_text::draw(uint_ptr hdc, pixel_t x, pixel_t y, const position *clip, const std::shared_ptr<render_item> &ri)

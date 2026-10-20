@@ -616,11 +616,161 @@ void litehtml::html_tag::compute_styles(bool recursive)
     g_cs_depth--;
 }
 
+namespace
+{
+// Small kana and the prolonged sound mark: `line-break: strict` does not allow a line to start with them.
+bool lb_strict_no_start(unsigned int cp)
+{
+	switch (cp)
+	{
+	case 0x3041: case 0x3043: case 0x3045: case 0x3047: case 0x3049: case 0x3063: case 0x3083:
+	case 0x3085: case 0x3087: case 0x308E: case 0x3095: case 0x3096:
+	case 0x30A1: case 0x30A3: case 0x30A5: case 0x30A7: case 0x30A9: case 0x30C3: case 0x30E3:
+	case 0x30E5: case 0x30E7: case 0x30EE: case 0x30F5: case 0x30F6: case 0x30FC:
+		return true;
+	default:
+		return cp >= 0x31F0 && cp <= 0x31FF;
+	}
+}
+
+// Characters `line-break: loose` additionally lets a line start with (iteration marks, hyphens, ...).
+bool lb_loose_may_start(unsigned int cp)
+{
+	switch (cp)
+	{
+	case 0x3005: case 0x303B: case 0x309D: case 0x309E: case 0x30FD: case 0x30FE:
+	case 0x2010: case 0x2013: case 0x301C: case 0x30A0: case 0x30FB:
+		return true;
+	default:
+		return false;
+	}
+}
+
+unsigned int first_codepoint(const litehtml::string& text)
+{
+	const char* p = text.c_str();
+	return *p ? litehtml::decode_utf8(&p) : 0;
+}
+
+// Heuristic English hyphenation points: indexes (in bytes) before which a word may break.
+std::vector<size_t> english_hyphenation_points(const litehtml::string& w)
+{
+	std::vector<size_t> points;
+	const size_t n = w.size();
+	if (n < 6) return points;
+	for (unsigned char c : w) if (!std::isalpha(c)) return points;
+	auto vowel = [&](size_t i) { char c = (char)std::tolower((unsigned char)w[i]); return c == 'a' || c == 'e' || c == 'i' || c == 'o' || c == 'u' || c == 'y'; };
+	auto digraph = [&](size_t i) {  // do not split th, ch, sh, ph, gh, wh, ck at (i-1, i)
+		char a = (char)std::tolower((unsigned char)w[i - 1]), b = (char)std::tolower((unsigned char)w[i]);
+		return (b == 'h' && (a == 't' || a == 'c' || a == 's' || a == 'p' || a == 'g' || a == 'w')) || (a == 'c' && b == 'k');
+	};
+	for (size_t i = 2; i + 2 < n; i++)
+	{
+		bool brk = false;
+		if (vowel(i - 1) && !vowel(i) && vowel(i + 1)) brk = true;                          // V|CV
+		else if (!vowel(i - 1) && !vowel(i) && vowel(i - 2) && vowel(i + 1) && !digraph(i)) brk = true;  // VC|CV
+		if (brk && (points.empty() || i - points.back() >= 2)) points.push_back(i);
+	}
+	return points;
+}
+}  // namespace
+
 void litehtml::html_tag::apply_word_break()
 {
+	// line-break (CJK strictness) and hyphens: auto rewrite the word tokens of this element.
+	{
+		const line_break lb = m_css.get_line_break();
+		const bool auto_hyphens = m_css.get_hyphens() == hyphens_auto;
+		bool english = false;
+		if (auto_hyphens)
+		{
+			for (element::ptr e = shared_from_this(); e; e = e->parent())
+			{
+				const char* lang = e->get_attr("lang");
+				if (lang) { english = lowcase(string(lang)).compare(0, 2, "en") == 0; break; }
+			}
+		}
+		if (lb == line_break_loose || lb == line_break_strict || (auto_hyphens && english))
+		{
+			for (auto it = m_children.begin(); it != m_children.end(); )
+			{
+				auto text_el = std::dynamic_pointer_cast<el_text>(*it);
+				if (!text_el || text_el->is_white_space() || text_el->is_break() || text_el->is_space())
+				{
+					++it;
+					continue;
+				}
+				string text;
+				text_el->get_text(text);
+				if (lb == line_break_strict && !text.empty() && lb_strict_no_start(first_codepoint(text)) &&
+					it != m_children.begin())
+				{
+					// merge into the previous word: no break before a small kana / long vowel mark
+					auto prev = std::prev(it);
+					auto prev_text = std::dynamic_pointer_cast<el_text>(*prev);
+					if (prev_text && !prev_text->is_space() && !prev_text->is_break())
+					{
+						string merged;
+						prev_text->get_text(merged);
+						merged += text;
+						prev_text->set_text(merged.c_str());
+						it = m_children.erase(it);
+						continue;
+					}
+				}
+				std::vector<string> pieces;
+				if (lb == line_break_loose)
+				{
+					const char* p = text.c_str();
+					string cur;
+					while (*p)
+					{
+						const char* next = p;
+						unsigned int cp = decode_utf8(&next);
+						if (!cur.empty() && lb_loose_may_start(cp))
+						{
+							pieces.push_back(cur);
+							cur.clear();
+						}
+						cur.append(p, next - p);
+						p = next;
+					}
+					if (!cur.empty()) pieces.push_back(cur);
+				}
+				else if (auto_hyphens && english)
+				{
+					std::vector<size_t> points = english_hyphenation_points(text);
+					size_t start = 0;
+					for (size_t pt : points)
+					{
+						pieces.push_back(text.substr(start, pt - start) + "\xC2\xAD");
+						start = pt;
+					}
+					pieces.push_back(text.substr(start));
+				}
+				if (pieces.size() > 1)
+				{
+					it = m_children.erase(it);
+					for (const auto& piece : pieces)
+					{
+						auto new_el = std::make_shared<el_text>(piece.c_str(), get_document());
+						new_el->parent(shared_from_this());
+						new_el->compute_styles(false);
+						m_children.insert(it, new_el);
+					}
+				}
+				else
+				{
+					++it;
+				}
+			}
+		}
+	}
+
 	word_break wb = m_css.get_word_break();
 	overflow_wrap ow = m_css.get_overflow_wrap();
-	if(wb == word_break_break_all || wb == word_break_break_word || ow == overflow_wrap_break_word || ow == overflow_wrap_anywhere)
+	if(wb == word_break_break_all || wb == word_break_break_word || ow == overflow_wrap_break_word || ow == overflow_wrap_anywhere ||
+	   m_css.get_line_break() == line_break_anywhere)
 	{
 		for (auto it = m_children.begin(); it != m_children.end(); )
 		{

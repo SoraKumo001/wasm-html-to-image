@@ -46,6 +46,17 @@ namespace litehtml
     text_overflow m_text_overflow;
     box_decoration_break m_box_decoration_break = box_decoration_break_slice;
     int m_text_fit = 0;  // bits 0-1: 1 grow, 2 shrink, 3 both; bits 2+: percentage limit (0 = none)
+    line_break m_line_break = line_break_auto;
+    text_align_last m_text_align_last = text_align_last_auto;
+    text_justify m_text_justify = text_justify_auto;
+    hyphens m_hyphens = hyphens_manual;
+    string m_hyphenate_character;  // empty = auto
+    css_length m_tab_size;
+    float m_tab_size_number = 8;  // multiples of the space width
+    pixel_t m_tab_size_px = -1;   // absolute <length>, -1 = use the number
+    int m_font_synthesis = 15;    // bits: 1 weight, 2 style, 4 small-caps, 8 position
+    int m_font_optical_sizing = 0;  // 0 auto, 1 none
+    int m_font_synthesis_weight = 0, m_font_synthesis_style = 0, m_font_synthesis_caps = 0, m_font_synthesis_pos = 0;
     int m_stroke_linejoin = -1;  // stroke-linejoin; -1 = not specified
     white_space m_white_space;
     text_wrap m_text_wrap;
@@ -567,6 +578,15 @@ namespace litehtml
 
     int get_max_lines() const;
     int get_stroke_linejoin() const;
+    line_break get_line_break() const { return m_line_break; }
+    text_align_last get_text_align_last() const { return m_text_align_last; }
+    text_justify get_text_justify() const { return m_text_justify; }
+    hyphens get_hyphens() const { return m_hyphens; }
+    const string& get_hyphenate_character() const { return m_hyphenate_character; }
+    float get_tab_size_number() const { return m_tab_size_number; }
+    pixel_t get_tab_size_px() const { return m_tab_size_px; }
+    int get_font_synthesis() const { return m_font_synthesis; }
+    int get_font_optical_sizing() const { return m_font_optical_sizing; }
     int get_text_fit() const;
     box_decoration_break get_box_decoration_break() const;
     const string& get_block_ellipsis() const;

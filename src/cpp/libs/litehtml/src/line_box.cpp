@@ -6,6 +6,7 @@
 #include "document_container.h"
 #include "types.h"
 #include <algorithm>
+#include <cmath>
 
 //////////////////////////////////////////////////////////////////////////////////////////
 
@@ -193,6 +194,11 @@ litehtml::pixel_t litehtml::lbi_continue::width() const
 void litehtml::line_box::add_item(std::unique_ptr<line_box_item> item)
 {
 	item->get_el()->skip(false);
+	if (item->get_type() == line_box_item::type_text_part)
+	{
+		// A hyphen is only shown when the word ends up at the end of a line (finish()).
+		item->get_el()->pos().width += item->get_el()->src_el()->set_hyphen_visible(false);
+	}
     bool add	= true;
 	switch (item->get_type())
 	{
@@ -212,6 +218,23 @@ void litehtml::line_box::add_item(std::unique_ptr<line_box_item> item)
 	{
 		if (m_writing_mode == writing_mode_horizontal_tb)
 		{
+			if (item->get_type() == line_box_item::type_text_part && item->get_el()->src_el()->is_tab())
+			{
+				// tab-size: advance to the next tab stop, measured from the line start.
+				const auto& pcss = item->get_el()->src_el()->parent() ? item->get_el()->src_el()->parent()->css() : item->get_el()->src_el()->css();
+				pixel_t stop = pcss.get_tab_size_px();
+				if (stop < 0)
+				{
+					pixel_t space_w = item->get_el()->src_el()->get_document()->container()->text_width(" ", pcss.get_font(), m_direction, m_writing_mode);
+					stop = pcss.get_tab_size_number() * space_w;
+				}
+				if (stop > 0.5f)
+				{
+					pixel_t w = stop - std::fmod(m_inline_size, stop);
+					if (w < 0.5f) w = stop;
+					item->get_el()->pos().width = w;
+				}
+			}
 			item->place_to(m_inline_pos + m_inline_size, m_block_pos);
 			m_inline_size += item->width();
 			m_block_size = std::max(m_block_size, item->get_el()->height());
@@ -431,6 +454,22 @@ std::list< std::unique_ptr<litehtml::line_box_item> > litehtml::line_box::finish
 		}
 	}
 
+    if (!last_box)
+    {
+        // hyphens: a word that was broken at a soft hyphen shows its hyphen at the line end.
+        for (auto it = m_items.rbegin(); it != m_items.rend(); ++it)
+        {
+            if ((*it)->get_type() != line_box_item::type_text_part) continue;
+            pixel_t delta = (*it)->get_el()->src_el()->set_hyphen_visible(true);
+            if (delta != 0)
+            {
+                (*it)->get_el()->pos().width += delta;
+                m_inline_size += delta;
+            }
+            break;
+        }
+    }
+
     if( is_empty() || (!is_empty() && last_box && is_break_only()) )
     {
         m_block_size = m_default_line_height.computed_value;
@@ -445,6 +484,21 @@ std::list< std::unique_ptr<litehtml::line_box_item> > litehtml::line_box::finish
         (containing_block_size.size_mode & containing_block_context::size_mode_exact_width))
     {
         text_align align = m_text_align;
+        bool last_line_justify = false;
+        if (last_box && m_align_last != text_align_last_auto && m_align_last != text_align_last_match_parent)
+        {
+            // text-align-last: the last line (not ended by a forced break) uses its own alignment.
+            switch (m_align_last)
+            {
+                case text_align_last_left: align = text_align_left; break;
+                case text_align_last_right: align = text_align_right; break;
+                case text_align_last_center: align = text_align_center; break;
+                case text_align_last_justify: align = text_align_justify; last_line_justify = true; break;
+                case text_align_last_start: align = text_align_start; break;
+                case text_align_last_end: align = text_align_end; break;
+                default: break;
+            }
+        }
         if (align == text_align_start)
         {
             align = (m_direction == direction_rtl ? text_align_right : text_align_left);
@@ -481,13 +535,14 @@ std::list< std::unique_ptr<litehtml::line_box_item> > litehtml::line_box::finish
                 }
                 break;
             case text_align_justify:
-                // the last line of a block is not justified
-                if (!last_box && m_inline_size < avail)
+                // the last line of a block is not justified (unless text-align-last: justify);
+                // text-justify: none turns justification off
+                if ((!last_box || last_line_justify) && m_justify != text_justify_none && m_inline_size < avail)
                 {
                     shift_x = 0;
                     spacing_x = avail - m_inline_size;
                     // don't justify for small lines
-                    if (spacing_x > m_inline_size / 4)
+                    if (!last_line_justify && spacing_x > m_inline_size / 4)
                         spacing_x = 0;
                 }
                 break;
@@ -537,7 +592,22 @@ std::list< std::unique_ptr<litehtml::line_box_item> > litehtml::line_box::finish
         }
     }
 
-    int counter = 0;    float offj  = float(spacing_x) / std::max(1.f, float(m_items.size()) - 1.f);
+    // text-justify: inter-word spreads the free space over the gaps next to white space only
+    // (CJK text without spaces is left alone); the other modes spread it over every item gap.
+    int justify_gaps = 0;
+    if (spacing_x != 0 && m_justify == text_justify_inter_word)
+    {
+        const line_box_item* prev = nullptr;
+        for (const auto& it : m_items)
+        {
+            if (prev && (prev->get_el()->src_el()->is_white_space() || it->get_el()->src_el()->is_white_space())) justify_gaps++;
+            prev = it.get();
+        }
+        if (justify_gaps == 0) spacing_x = 0;
+    }
+    const line_box_item* prev_justify_item = nullptr;
+    int counter = 0;    float offj  = justify_gaps > 0 ? float(spacing_x) / float(justify_gaps)
+                                                       : float(spacing_x) / std::max(1.f, float(m_items.size()) - 1.f);
     float cixx  = 0.0f;
 
 	std::optional<pixel_t> line_height = m_default_line_height.computed_value;
@@ -607,9 +677,12 @@ std::list< std::unique_ptr<litehtml::line_box_item> > litehtml::line_box::finish
 
 		// Apply text-align-justify
 		m_min_width += lbi->get_rendered_min_width();
+		const bool gap_before = !prev_justify_item || justify_gaps == 0 ||
+			prev_justify_item->get_el()->src_el()->is_white_space() || lbi->get_el()->src_el()->is_white_space();
+		prev_justify_item = lbi.get();
 		if (spacing_x != 0 && counter)
 		{
-			cixx += offj;
+			if (gap_before) cixx += offj;
 			if ((counter + 1) == int(m_items.size()))
 				cixx += 0.99f;
 			if (m_writing_mode == writing_mode_horizontal_tb)

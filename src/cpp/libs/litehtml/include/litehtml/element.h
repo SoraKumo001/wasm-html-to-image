@@ -64,6 +64,12 @@ namespace litehtml
 
 		bool						is_root() const;
 
+		// A tab character (tab-size aligns it to the next tab stop in the line box).
+		virtual bool				is_tab() const { return false; }
+		// Show / hide the hyphen of a word that ends with a soft hyphen (U+00AD); returns the
+		// change of the text width. Only el_text implements it.
+		virtual pixel_t				set_hyphen_visible(bool /*visible*/) { return 0; }
+
 		// text-fit: font scale applied to this element's computed font size and the last measured
 		// widest-line / available inline size, used by document::render to converge on a fit.
 		float						text_fit_scale() const { return m_text_fit_scale; }
