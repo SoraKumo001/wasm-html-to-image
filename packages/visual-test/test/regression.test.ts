@@ -1566,6 +1566,22 @@ describe("regression: layout and paint probes", () => {
     expect(redPixels(auto_)).toBeLessThan(redPixels(none));
   });
 
+  it("text-decoration-skip-ink: the double decoration band covers both strokes", async () => {
+    // The `double` style paints two strokes, one on either side of the nominal
+    // decoration position. The skip band has to span both of them: an ink that
+    // stops at the baseline crosses the stroke nearer to it, and must not be
+    // painted over by that stroke.
+    const base =
+      "text-decoration:underline;text-decoration-style:double;text-decoration-color:#f00;text-decoration-thickness:4px";
+    const none = await renderProbeText(
+      probeLine(`${base};text-decoration-skip-ink:none`, "Hx"),
+    );
+    const all = await renderProbeText(
+      probeLine(`${base};text-decoration-skip-ink:all`, "Hx"),
+    );
+    expect(redPixels(all)).toBeLessThan(redPixels(none));
+  });
+
   it("text-decoration-skip-ink: the vertical underline skips the ink it crosses", async () => {
     // In a vertical writing mode the underline runs along the inline axis, so
     // the ink of the glyphs has to be rotated by 90 degrees to find the part

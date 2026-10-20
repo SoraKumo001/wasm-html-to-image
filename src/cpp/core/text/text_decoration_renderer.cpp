@@ -74,6 +74,12 @@ void TextDecorationRenderer::drawDecoration(SkCanvas* canvas, font_info* fi,
     const float wave_amplitude = std::max(2.0f, thickness * 2.0f);
     const float wave_stroke = thickness * 1.5f;
 
+    // The two strokes of the `double` style are centred on the decoration
+    // position, each `double_gap / 2` away from it. The skip-ink band has to
+    // cover both of them (see collect_skip_gaps).
+    const bool is_double = fi->desc.decoration_style == litehtml::text_decoration_style_double;
+    const float double_gap = thickness + 1.0f;
+
     // Draws the decoration line between two inline-axis positions.
     auto draw_logical_line = [&](float block_offset, float x0, float x1) {
         if (x1 <= x0) return;
@@ -89,12 +95,11 @@ void TextDecorationRenderer::drawDecoration(SkCanvas* canvas, font_info* fi,
             dec_paint.setPathEffect(SkDashPathEffect::Make(SkSpan<const float>(intervals, 2), 0));
         }
 
-        if (fi->desc.decoration_style == litehtml::text_decoration_style_double) {
-            float gap = thickness + 1.0f;
-            l_canvas.drawLine(logical_pos(x0, block_offset - gap / 2),
-                              logical_pos(x1, block_offset - gap / 2), dec_paint);
-            l_canvas.drawLine(logical_pos(x0, block_offset + gap / 2),
-                              logical_pos(x1, block_offset + gap / 2), dec_paint);
+        if (is_double) {
+            l_canvas.drawLine(logical_pos(x0, block_offset - double_gap / 2),
+                              logical_pos(x1, block_offset - double_gap / 2), dec_paint);
+            l_canvas.drawLine(logical_pos(x0, block_offset + double_gap / 2),
+                              logical_pos(x1, block_offset + double_gap / 2), dec_paint);
         } else if (fi->desc.decoration_style == litehtml::text_decoration_style_wavy) {
             dec_paint.setStrokeWidth(wave_stroke);
 
@@ -163,12 +168,16 @@ void TextDecorationRenderer::drawDecoration(SkCanvas* canvas, font_info* fi,
         // The part of the block axis the decoration covers. A wavy decoration
         // oscillates around the block offset, so it reaches further down than
         // a solid line of the same thickness and its band has to grow with
-        // the amplitude of the wave.
+        // the amplitude of the wave. A double decoration paints two strokes
+        // on either side of the offset, so its band spans both of them.
         float band_top = block_offset - thickness * 0.5f;
         float band_bottom = block_offset + thickness * 0.5f;
         if (is_wavy) {
             band_top = block_offset - wave_stroke * 0.5f;
             band_bottom = block_offset + wave_amplitude * 2.0f + wave_stroke * 0.5f;
+        } else if (is_double) {
+            band_top = block_offset - double_gap * 0.5f - thickness * 0.5f;
+            band_bottom = block_offset + double_gap * 0.5f + thickness * 0.5f;
         }
         bool skip_all_ink = fi->desc.decoration_skip_ink == litehtml::text_decoration_skip_ink_all;
 
