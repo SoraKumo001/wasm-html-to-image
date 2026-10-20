@@ -130,7 +130,7 @@ const App: React.FC = () => {
       format:
         f && ["svg", "png", "webp", "avif", "jxl", "pdf"].includes(f)
           ? (f as any)
-          : "svg",
+          : "webp",
       textToPaths: t !== null ? t === "true" : true,
       value: v,
       mediaType: params.get("mediaType") === "print" ? "print" : "screen",
@@ -199,7 +199,7 @@ const App: React.FC = () => {
         format:
           f && ["svg", "png", "webp", "avif", "jxl", "pdf"].includes(f)
             ? (f as any)
-            : "svg",
+            : "webp",
         textToPaths: t !== null ? t === "true" : true,
         mediaType: p.get("mediaType") === "print" ? "print" : "screen",
         animationEnabled: anim === "true",
@@ -251,7 +251,7 @@ const App: React.FC = () => {
       format:
         f && ["svg", "png", "webp", "avif", "jxl", "pdf"].includes(f)
           ? (f as any)
-          : "svg",
+          : "webp",
       textToPaths: t !== null ? t === "true" : true,
       asset: a ?? undefined,
       value: params.value !== undefined ? (params.value as string) : prev.value,
