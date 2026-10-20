@@ -293,7 +293,8 @@ struct TextClipBounds {
 // 出力し、paint-order="fill stroke"（SVG既定=fill→stroke）で「fill の上に
 // 中央寄せストローク」の WebKit 順を再現する。stroke は内側半分がフィルを覆う。
 static std::string strokeAttributes(bool has_stroke, float width,
-                                    const litehtml::web_color& color, float opacity) {
+                                    const litehtml::web_color& color, float opacity,
+                                    int linejoin = -1) {
     if (!has_stroke || width <= 0.0f) return std::string();
     std::string c = "rgb(" + std::to_string((int)color.red) + "," +
                     std::to_string((int)color.green) + "," + std::to_string((int)color.blue) + ")";
@@ -303,7 +304,13 @@ static std::string strokeAttributes(bool has_stroke, float width,
     out += " stroke-width=\"" + std::to_string(width) + "\"";
     out += " stroke-opacity=\"" + std::to_string(stroke_opacity) + "\"";
     out += " paint-order=\"fill stroke\"";
-    out += " stroke-linejoin=\"round\" stroke-linecap=\"round\"";
+    const char* join = "round";
+    if (linejoin == litehtml::stroke_linejoin_miter || linejoin == litehtml::stroke_linejoin_miter_clip ||
+        linejoin == litehtml::stroke_linejoin_arcs)
+        join = "miter";
+    else if (linejoin == litehtml::stroke_linejoin_bevel)
+        join = "bevel";
+    out += std::string(" stroke-linejoin=\"") + join + "\" stroke-linecap=\"round\"";
     return out;
 }
 
@@ -366,7 +373,7 @@ static void processTextDraw(FastTag& info, std::string& out, const text_draw_inf
     out.append(std::to_string(opacity));
     out.append("\"");
     out.append(strokeAttributes(drawInfo.has_stroke, drawInfo.stroke_width, drawInfo.stroke_color,
-                                drawInfo.opacity));
+                                drawInfo.opacity, drawInfo.stroke_linejoin));
 
     for (const auto& attr : info.attrs) {
         if (attr.name == "font-weight" || attr.name == "font-style" || attr.name == "fill" ||
@@ -1061,7 +1068,7 @@ static std::string finalizeSvg(std::string_view svg, SatoruContext& context,
                             result.append(" filter=\"url(#" + filterId + ")\" fill=\"" + textColor +
                                           "\" fill-opacity=\"" + std::to_string(opacity) + "\"");
                             result.append(strokeAttributes(tsh.has_stroke, tsh.stroke_width,
-                                                           tsh.stroke_color, tsh.opacity));
+                                                           tsh.stroke_color, tsh.opacity, tsh.stroke_linejoin));
                             for (const auto& a : tag.attrs) {
                                 if (a.name != "filter" && a.name != "fill" &&
                                     a.name != "fill-opacity" && a.name != "style" &&
@@ -1210,7 +1217,7 @@ static std::string finalizeSvg(std::string_view svg, SatoruContext& context,
                                 result.append(" fill=\"" + textColor + "\" fill-opacity=\"" +
                                               std::to_string(opacity) + "\"");
                                 result.append(strokeAttributes(td.has_stroke, td.stroke_width,
-                                                               td.stroke_color, td.opacity));
+                                                               td.stroke_color, td.opacity, td.stroke_linejoin));
                             } else if (drawInfo.style_tag == (int)satoru::MagicTag::TextShadow &&
                                        drawInfo.style_index > 0 &&
                                        drawInfo.style_index <= (int)textShadows.size()) {
@@ -1226,7 +1233,7 @@ static std::string finalizeSvg(std::string_view svg, SatoruContext& context,
                                               textColor + "\" fill-opacity=\"" +
                                               std::to_string(opacity) + "\"");
                                 result.append(strokeAttributes(tsh.has_stroke, tsh.stroke_width,
-                                                               tsh.stroke_color, tsh.opacity));
+                                                               tsh.stroke_color, tsh.opacity, tsh.stroke_linejoin));
                             }
                             result.append(" />");
                             replaced = true;

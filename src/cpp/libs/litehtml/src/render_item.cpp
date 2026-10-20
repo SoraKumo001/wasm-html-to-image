@@ -1040,6 +1040,15 @@ void litehtml::render_item::draw_children(uint_ptr hdc, pixel_t x, pixel_t y, co
                 const auto& offset_position = el->src_el()->css().get_offset_position();
                 css_token_vector clip_path;
                 el->src_el()->get_custom_property(_clip_path_, clip_path);
+                if (!clip_path.empty()) {
+                    // clip-rule: evenodd is forwarded to the container as a leading keyword.
+                    css_token_vector clip_rule;
+                    if (el->src_el()->get_custom_property(_clip_rule_, clip_rule) &&
+                        !clip_rule.empty() && clip_rule[0].type == IDENT &&
+                        lowcase(clip_rule[0].ident()) == "evenodd") {
+                        clip_path.insert(clip_path.begin(), css_token(IDENT, string("evenodd")));
+                    }
+                }
 
                 blend_mode mix_blend = el->src_el()->css().get_mix_blend_mode();
                 bool has_offset = !offset_path.empty();

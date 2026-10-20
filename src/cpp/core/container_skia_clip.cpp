@@ -99,7 +99,12 @@ SkPath container_skia::parse_clip_path(const litehtml::css_token_vector& tokens,
     SkPathBuilder builder;
     if (tokens.empty()) return builder.detach();
 
+    // A leading `evenodd` keyword (from clip-rule) selects the even-odd fill rule.
+    bool even_odd = false;
     for (const auto& tok : tokens) {
+        if (tok.type == litehtml::IDENT && litehtml::lowcase(tok.ident()) == "evenodd") {
+            even_odd = true;
+        }
         if (tok.type == litehtml::CV_FUNCTION) {
             std::string name = litehtml::lowcase(tok.name);
             auto args = litehtml::parse_comma_separated_list(tok.value);
@@ -273,6 +278,13 @@ SkPath container_skia::parse_clip_path(const litehtml::css_token_vector& tokens,
                 for (const auto& group : args) {
                     size_t idx = skip_ws(group, 0);
                     if (idx >= group.size()) continue;
+                    // polygon(<fill-rule>, ...): the keyword group is not a point.
+                    if (group[idx].type == litehtml::IDENT) {
+                        std::string kw = litehtml::lowcase(group[idx].ident());
+                        if (kw == "evenodd") even_odd = true;
+                        else if (kw == "nonzero") even_odd = false;
+                        continue;
+                    }
                     litehtml::css_length lx;
                     if (!lx.from_token(group[idx], litehtml::f_length_percentage)) continue;
                     idx++;
@@ -294,6 +306,7 @@ SkPath container_skia::parse_clip_path(const litehtml::css_token_vector& tokens,
             }
         }
     }
+    if (even_odd) builder.setFillType(SkPathFillType::kEvenOdd);
     return builder.detach();
 }
 

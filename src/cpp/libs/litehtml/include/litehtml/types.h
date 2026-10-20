@@ -1059,6 +1059,17 @@ namespace litehtml
         };
 
 
+#define stroke_linejoin_strings         "miter;round;bevel;miter-clip;arcs"
+
+        enum stroke_linejoin
+        {
+                stroke_linejoin_miter,
+                stroke_linejoin_round,
+                stroke_linejoin_bevel,
+                stroke_linejoin_miter_clip,
+                stroke_linejoin_arcs
+        };
+
 #define text_overflow_strings           "clip;ellipsis"
 
         enum text_overflow

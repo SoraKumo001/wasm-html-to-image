@@ -402,6 +402,41 @@ describe("regression: layout and paint probes", () => {
     expect(row(clamped.img, 20, 40)).not.toBe(row(bare.img, 20, 40)); // ellipsis marker differs
   });
 
+  it("stroke-linejoin shapes the text-stroke corners (miter reaches farther than round)", async () => {
+    const renderCase = async (join: string) => {
+      const { img } = await renderPng(
+        `<div style="font:bold 60px/80px sans-serif;color:#fff;-webkit-text-stroke:8px #000;${join}">W</div>`,
+        100,
+        90,
+      );
+      let n = 0;
+      for (let i = 0; i < img.data.length; i += 4) if (img.data[i] < 128) n++;
+      return n;
+    };
+    const round = await renderCase("");
+    const miter = await renderCase("stroke-linejoin:miter");
+    const bevel = await renderCase("stroke-linejoin:bevel");
+    expect(miter).toBeGreaterThan(round);
+    expect(bevel).toBeLessThan(round);
+  });
+
+  it("clip-rule: evenodd punches the overlap of a self-overlapping clip-path polygon", async () => {
+    const poly = "polygon(0 0, 100% 0, 100% 100%, 0 100%, 0 0, 25% 25%, 75% 25%, 75% 75%, 25% 75%, 25% 25%)";
+    const nonzero = await renderPng(
+      `<div style="width:80px;height:80px;background:#00f;clip-path:${poly}"></div>`,
+      100,
+      100,
+    );
+    const evenodd = await renderPng(
+      `<div style="width:80px;height:80px;background:#00f;clip-path:${poly};clip-rule:evenodd"></div>`,
+      100,
+      100,
+    );
+    expect(near(nonzero.at(40, 40), BLUE)).toBe(true);
+    expect(isWhite(evenodd.at(40, 40))).toBe(true);
+    expect(near(evenodd.at(5, 5), BLUE)).toBe(true);
+  });
+
   it("float margin box (not the border box) narrows the first line", async () => {
     const squares = '<i style="display:inline-block;width:16px;height:16px;background:#00f"></i>'.repeat(30);
     const { at } = await renderPng(

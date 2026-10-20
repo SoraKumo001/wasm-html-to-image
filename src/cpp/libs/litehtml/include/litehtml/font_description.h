@@ -48,6 +48,7 @@ struct font_description {
     shadow_vector text_shadow;
     pixel_t text_stroke_width = 0;  // -webkit-text-stroke-width, in px
     web_color text_stroke_color = web_color::current_color;  // -webkit-text-stroke-color
+    int stroke_linejoin = -1;  // stroke-linejoin of the text stroke; -1 = default (round)
     std::string block_ellipsis = "\xE2\x80\xA6";  // block-ellipsis text appended by line clamping
 
     // Resolved OpenType features, low priority first (font-variant-* then
@@ -90,6 +91,7 @@ struct font_description {
         if (text_stroke_width > 0) {
             out += ":tsw=" + std::to_string(text_stroke_width);
             out += ":tsc=" + text_stroke_color.to_string();
+            out += ":tsj=" + std::to_string(stroke_linejoin);
         }
         if (block_ellipsis != "\xE2\x80\xA6") {
             out += ":be=" + block_ellipsis;

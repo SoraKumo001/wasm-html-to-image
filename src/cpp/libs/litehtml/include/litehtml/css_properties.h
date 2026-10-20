@@ -44,6 +44,7 @@ namespace litehtml
     overflow m_overflow_x;
     overflow m_overflow_y;
     text_overflow m_text_overflow;
+    int m_stroke_linejoin = -1;  // stroke-linejoin; -1 = not specified
     white_space m_white_space;
     text_wrap m_text_wrap;
     white_space_collapse m_white_space_collapse;
@@ -563,6 +564,7 @@ namespace litehtml
     void set_line_clamp(int line_clamp);
 
     int get_max_lines() const;
+    int get_stroke_linejoin() const;
     const string& get_block_ellipsis() const;
 
     box_orient get_webkit_box_orient() const;
@@ -1400,6 +1402,11 @@ namespace litehtml
   inline void css_properties::set_line_clamp(int line_clamp)
   {
     m_line_clamp = line_clamp;
+  }
+
+  inline int css_properties::get_stroke_linejoin() const
+  {
+    return m_stroke_linejoin;
   }
 
   inline int css_properties::get_max_lines() const

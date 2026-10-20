@@ -229,6 +229,7 @@ The rendering engine couples **litehtml** (HTML/CSS layout) and **Google Skia** 
   - Standard clamp: `max-lines: 2` on any block container (implies `overflow: hidden`); `block-ellipsis: auto | no-ellipsis | "<string>"` replaces the end marker (`text-fit` is not supported).
 - **Text Stroke & Shadow**:
   - Stroke: `-webkit-text-stroke: <width> <color>` (also `-webkit-text-stroke-width`, `-webkit-text-stroke-color`, `-webkit-text-fill-color`).
+  - Stroke joins: `stroke-linejoin: miter | round | bevel` shapes `-webkit-text-stroke` corners (`miter-clip` / `arcs` fall back to `miter`; default stays `round`).
   - Text Shadow: `text-shadow: offset-x offset-y blur-radius color` (multiple comma-separated shadows supported).
   - Text Decoration: `text-decoration` (`underline`, `overline`, `line-through`, `none`, style, color, thickness, `text-underline-offset`, `text-decoration-skip-ink`, `text-underline-position`).
   - Text Emphasis: `text-emphasis` (`style`, `color`, `position`).
@@ -250,7 +251,7 @@ The rendering engine couples **litehtml** (HTML/CSS layout) and **Google Skia** 
   - `border-image`: `source`, `slice`, `width`, `outset`, `repeat`.
   - `outline`, `outline-offset`, `outline-width`, `outline-style`, `outline-color`.
 - **Box Shadows**: `box-shadow: [inset] offset-x offset-y blur spread color` (supports multiple comma-separated shadows).
-- **Clipping**: `clip-path: circle(...) | ellipse(...) | polygon(...) | path("...") | inset(...)`.
+- **Clipping**: `clip-path: circle(...) | ellipse(...) | polygon(...) | path("...") | inset(...)`. `clip-rule: evenodd` (or `polygon(evenodd, ...)`) selects the even-odd fill rule.
 - **Transforms**: `transform: translate(...) rotate(...) scale(...) matrix(...)`, `translate`, `rotate`, `scale`, `transform-origin`.
 - **Filters**:
   - `filter`: `blur(...)`, `drop-shadow(...)`.

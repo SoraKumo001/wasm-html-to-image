@@ -408,6 +408,8 @@ namespace litehtml
       _column_rule_style_,
       _column_rule_color_,
       _stroke_,
+      _stroke_linejoin_,
+      _clip_rule_,
       _gap_,
       _column_gap_,
       _row_gap_,

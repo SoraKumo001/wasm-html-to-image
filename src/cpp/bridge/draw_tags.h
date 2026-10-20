@@ -120,6 +120,7 @@ struct text_shadow_info {
     bool has_stroke = false;
     float stroke_width = 0.0f;
     litehtml::web_color stroke_color;
+    int stroke_linejoin = -1;  // litehtml::stroke_linejoin, -1 = default (round)
 
     bool operator==(const text_shadow_info &other) const {
         if (shadows.size() != other.shadows.size()) return false;
@@ -138,6 +139,7 @@ struct text_shadow_info {
                text_color.blue == other.text_color.blue &&
                text_color.alpha == other.text_color.alpha && opacity == other.opacity &&
                has_stroke == other.has_stroke && stroke_width == other.stroke_width &&
+               stroke_linejoin == other.stroke_linejoin &&
                stroke_color.red == other.stroke_color.red &&
                stroke_color.green == other.stroke_color.green &&
                stroke_color.blue == other.stroke_color.blue &&
@@ -153,12 +155,14 @@ struct text_draw_info {
     bool has_stroke = false;
     float stroke_width = 0.0f;
     litehtml::web_color stroke_color;
+    int stroke_linejoin = -1;  // litehtml::stroke_linejoin, -1 = default (round)
 
     bool operator==(const text_draw_info &other) const {
         return weight == other.weight && italic == other.italic && color.red == other.color.red &&
                color.green == other.color.green && color.blue == other.color.blue &&
                color.alpha == other.color.alpha && opacity == other.opacity &&
                has_stroke == other.has_stroke && stroke_width == other.stroke_width &&
+               stroke_linejoin == other.stroke_linejoin &&
                stroke_color.red == other.stroke_color.red &&
                stroke_color.green == other.stroke_color.green &&
                stroke_color.blue == other.stroke_color.blue &&

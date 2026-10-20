@@ -1180,6 +1180,7 @@ void litehtml::css_properties::compute_font(const element* el, const document::p
         m_text_underline_position = text_underline_position_auto;
     }
 
+    m_stroke_linejoin = el->get_property<int>(_stroke_linejoin_, true, -1, offset(m_stroke_linejoin));
     // block-ellipsis is part of the font description (it is the text a clamped line ends with).
     m_block_ellipsis = el->get_property<string>(_block_ellipsis_, true, "\xE2\x80\xA6",
                                                 offset(m_block_ellipsis));
@@ -1290,6 +1291,7 @@ void litehtml::css_properties::compute_font(const element* el, const document::p
     descr.text_stroke_width = text_stroke_width;
     descr.text_stroke_color = text_stroke_color;
     descr.block_ellipsis = m_block_ellipsis;
+    descr.stroke_linejoin = m_stroke_linejoin;
 
     // font-kerning maps onto the `kern` OpenType feature. `auto` leaves the
     // kerning of the font itself alone, `normal` turns it on and `none` turns

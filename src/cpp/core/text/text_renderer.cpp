@@ -34,6 +34,21 @@
 namespace satoru {
 
 namespace {
+
+// stroke-linejoin of a text stroke. Skia has no miter-clip / arcs joins, so they fall back
+// to miter; an unspecified value keeps the historical round join.
+SkPaint::Join textStrokeJoin(int linejoin) {
+    switch (linejoin) {
+        case litehtml::stroke_linejoin_miter:
+        case litehtml::stroke_linejoin_miter_clip:
+        case litehtml::stroke_linejoin_arcs:
+            return SkPaint::kMiter_Join;
+        case litehtml::stroke_linejoin_bevel:
+            return SkPaint::kBevel_Join;
+        default:
+            return SkPaint::kRound_Join;
+    }
+}
 // Vertical shift needed to align a run's baseline with the primary font's
 // baseline in horizontal text. SkTextBlobBuilderRunHandler places each run's
 // baseline at (origin.y + run ascent), while litehtml computes the line
@@ -644,6 +659,7 @@ void TextRenderer::drawText(SatoruContext* ctx, SkCanvas* canvas, const char* te
         info.has_stroke = has_stroke;
         info.stroke_width = stroke_width;
         info.stroke_color = stroke_color;
+        info.stroke_linejoin = fi->desc.stroke_linejoin;
 
         styleTag = MagicTag::TextShadow;
         for (size_t i = 0; i < usedTextShadows.size(); ++i) {
@@ -668,6 +684,7 @@ void TextRenderer::drawText(SatoruContext* ctx, SkCanvas* canvas, const char* te
         info.has_stroke = has_stroke;
         info.stroke_width = stroke_width;
         info.stroke_color = stroke_color;
+        info.stroke_linejoin = fi->desc.stroke_linejoin;
 
         styleTag = MagicTag::TextDraw;
         usedTextDraws.push_back(info);
@@ -694,7 +711,8 @@ void TextRenderer::drawText(SatoruContext* ctx, SkCanvas* canvas, const char* te
                 // the stroke/fill overlap does not darken a translucent shadow.
                 shadow_paint.setStyle(SkPaint::kStrokeAndFill_Style);
                 shadow_paint.setStrokeWidth(stroke_width);
-                shadow_paint.setStrokeJoin(SkPaint::kRound_Join);
+                shadow_paint.setStrokeJoin(textStrokeJoin(fi->desc.stroke_linejoin));
+                shadow_paint.setStrokeMiter(4.0f);
                 shadow_paint.setStrokeCap(SkPaint::kRound_Cap);
             }
 
@@ -729,7 +747,8 @@ void TextRenderer::drawText(SatoruContext* ctx, SkCanvas* canvas, const char* te
             SkColorSetARGB(stroke_color.alpha, stroke_color.red, stroke_color.green, stroke_color.blue));
         stroke_paint.setStyle(SkPaint::kStroke_Style);
         stroke_paint.setStrokeWidth(stroke_width);
-        stroke_paint.setStrokeJoin(SkPaint::kRound_Join);
+        stroke_paint.setStrokeJoin(textStrokeJoin(fi->desc.stroke_linejoin));
+        stroke_paint.setStrokeMiter(4.0f);
         stroke_paint.setStrokeCap(SkPaint::kRound_Cap);
         drawTextInternal(ctx, canvas, draw_text, draw_text_len, fi, actual_pos, mode, stroke_paint,
                          false, usedTextDraws, usedGlyphs, usedGlyphDraws, usedCodepoints, nullptr,

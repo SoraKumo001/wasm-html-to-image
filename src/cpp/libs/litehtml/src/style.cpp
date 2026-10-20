@@ -332,6 +332,7 @@ namespace litehtml
           {_text_underline_position_, style_text_underline_position_strings},
           {_text_emphasis_position_, style_text_emphasis_position_strings},
           {_text_overflow_, text_overflow_strings},
+          {_stroke_linejoin_, stroke_linejoin_strings},
           {_text_combine_upright_, text_combine_upright_strings},
           {_container_type_, container_type_strings},
           {_mix_blend_mode_, blend_mode_strings},
@@ -475,6 +476,7 @@ namespace litehtml
     case _backdrop_filter_:
     case __webkit_backdrop_filter_:
     case _clip_path_:
+    case _clip_rule_:
     case _object_position_:
     case _mask_:
     case __webkit_mask_:
@@ -596,6 +598,7 @@ namespace litehtml
     case _overflow_x_:
     case _overflow_y_:
     case _text_overflow_:
+    case _stroke_linejoin_:
     case _text_align_:
     case _vertical_align_:
     case _text_transform_:
