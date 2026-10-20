@@ -236,6 +236,33 @@ function countPixels(
   return n;
 }
 
+// Bounding box and pixel count of the pixels matching the predicate. The
+// offset-path probes below pin the position of a whole painted box, so a
+// shifted or rotated box cannot slip through a single lucky sample.
+function colorBox(
+  img: PNG,
+  match: (r: number, g: number, b: number) => boolean,
+): { x0: number; y0: number; x1: number; y1: number; n: number } | null {
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -1;
+  let y1 = -1;
+  let n = 0;
+  for (let y = 0; y < img.height; y++) {
+    for (let x = 0; x < img.width; x++) {
+      const i = (img.width * y + x) * 4;
+      if (match(img.data[i], img.data[i + 1], img.data[i + 2])) {
+        n++;
+        x0 = Math.min(x0, x);
+        y0 = Math.min(y0, y);
+        x1 = Math.max(x1, x);
+        y1 = Math.max(y1, y);
+      }
+    }
+  }
+  return n ? { x0, y0, x1, y1, n } : null;
+}
+
 const isReddish = (r: number, g: number, b: number) =>
   r > 120 && r - g > 40 && r - b > 40;
 const isBluish = (r: number, g: number, b: number) =>
@@ -1434,6 +1461,95 @@ describe("regression: layout and paint probes", () => {
     );
     expect(near(at(0, 100), RED)).toBe(true); // unrotated box covers x[-20,20] y[90,110]
     expect(isWhite(at(0, 85))).toBe(true); // a +90deg rotation would cover y[80,120]
+  });
+
+  // ── offset reference box (Chromium oracle, measured with Blink 155/156) ──
+  // Chromium resolves ray() origins and <basic-shape> geometry against the
+  // containing block, even when the element sits inside a transformed ancestor.
+  // The probes below pin that basis so a switch to the element's own border box
+  // (or a double-applied ancestor transform) shows up as a moved box.
+
+  it("offset-path: an explicit offset-position resolves against the containing block inside a transformed ancestor", async () => {
+    // The element is at (30,20) inside a 200x150 containing block, so the two
+    // candidate bases differ: containing block (100,50) vs element box (130,70).
+    // Chromium uses (100,50); ray(90deg) + 40px puts the centre at (140,50) and
+    // the ancestor's translate(50px,30px) moves the painted box to (180,70).
+    // (The ancestor transform applies exactly once.)
+    const { img } = await renderPng(
+      `<div style="position:absolute;left:0;top:0;transform:translate(50px,30px);width:200px;height:150px;background:#eee">
+         <div style="position:absolute;left:30px;top:20px;width:20px;height:20px;background:#f00;
+           offset-path:ray(90deg);offset-position:100px 50px;offset-distance:40px"></div>
+       </div>`,
+    );
+    expect(colorBox(img, isReddish)).toEqual({ x0: 180, y0: 70, x1: 199, y1: 89, n: 400 });
+  });
+
+  it("nested offset-path: an inner ray with offset-position:auto composes with the outer offset transform", async () => {
+    // Chromium: the outer ray anchors its centre on (60,40), i.e. it shifts by
+    // (0,-20), and offset-rotate:auto turns the whole subtree by 90deg. The
+    // inner ray origin is its own border-box top-left (10,40); distance 30 puts
+    // the inner centre at (40,40) in the containing block, which the outer
+    // transform maps to (80,20) - an element-box basis would land elsewhere.
+    const { img, at } = await renderPng(
+      `<div style="position:absolute;left:0;top:0;width:120px;height:120px;background:#eee;
+         offset-path:ray(180deg);offset-position:60px 10px;offset-distance:30px">
+         <div style="position:absolute;left:10px;top:40px;width:20px;height:20px;background:#f00;
+           offset-path:ray(90deg);offset-position:auto;offset-distance:30px"></div>
+       </div>`,
+    );
+    expect(colorBox(img, isReddish)).toEqual({ x0: 70, y0: 10, x1: 89, y1: 29, n: 400 });
+    // The outer box really moved up by 20px (its 120px height now ends at y=99).
+    expect(near(at(5, 95), [238, 238, 238])).toBe(true);
+    expect(isWhite(at(5, 105))).toBe(true);
+  });
+
+  it("nested offset-path: an inner explicit offset-position uses the containing block percentages", async () => {
+    // Chromium: 25% 50% of the 120x120 containing block is (30,60); ray(90deg)
+    // + 20px puts the inner centre at (50,60), and the outer offset transform
+    // (shift (0,-20) + 90deg rotation) maps it to (60,30).
+    const { img, at } = await renderPng(
+      `<div style="position:absolute;left:0;top:0;width:120px;height:120px;background:#eee;
+         offset-path:ray(180deg);offset-position:60px 10px;offset-distance:30px">
+         <div style="position:absolute;left:10px;top:40px;width:20px;height:20px;background:#f00;
+           offset-path:ray(90deg);offset-position:25% 50%;offset-distance:20px"></div>
+       </div>`,
+    );
+    expect(colorBox(img, isReddish)).toEqual({ x0: 50, y0: 20, x1: 69, y1: 39, n: 400 });
+    expect(near(at(5, 95), [238, 238, 238])).toBe(true);
+    expect(isWhite(at(5, 105))).toBe(true);
+  });
+
+  it("offset-path: a basic-shape circle resolves against the containing block inside and outside a transformed ancestor", async () => {
+    // Chromium: circle centre (10,40) + radius 20 -> path start (30,40), where
+    // the box centre lands. An element-border-box basis would start at (70,80).
+    const outside = await renderPng(
+      `<div style="position:absolute;left:40px;top:40px;width:40px;height:40px;background:#f00;
+         offset-path:circle(20px at 10px 40px);offset-distance:0"></div>`,
+    );
+    expect(colorBox(outside.img, isReddish)).toEqual({ x0: 10, y0: 20, x1: 49, y1: 59, n: 1600 });
+
+    // Same shape inside a translated ancestor: the circle stays in the outer
+    // containing block's coordinates (start (30,10)), then translate(50px,30px).
+    const inside = await renderPng(
+      `<div style="position:absolute;left:0;top:0;transform:translate(50px,30px);width:150px;height:120px;background:#eee">
+         <div style="position:absolute;left:20px;top:20px;width:40px;height:40px;background:#f00;
+           offset-path:circle(20px at 10px 10px);offset-distance:0"></div>
+       </div>`,
+    );
+    expect(colorBox(inside.img, isReddish)).toEqual({ x0: 60, y0: 20, x1: 99, y1: 59, n: 1600 });
+  });
+
+  it("offset-path: a basic-shape inset(0) starts at the containing block's top-left edge", async () => {
+    // Chromium: inset(0) uses the 150x120 containing block as reference rectangle
+    // and starts at its top-left corner, so the element centre lands on (0,0) and
+    // the ancestor transform leaves the 40x40 box at (30,10).
+    const { img } = await renderPng(
+      `<div style="position:absolute;left:0;top:0;transform:translate(50px,30px);width:150px;height:120px;background:#eee">
+         <div style="position:absolute;left:20px;top:20px;width:40px;height:40px;background:#f00;
+           offset-path:inset(0);offset-distance:0"></div>
+       </div>`,
+    );
+    expect(colorBox(img, isReddish)).toEqual({ x0: 30, y0: 10, x1: 69, y1: 49, n: 1600 });
   });
 
   it("text-decoration-skip-ink: auto interrupts the underline at the descenders", async () => {
