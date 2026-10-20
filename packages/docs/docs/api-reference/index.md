@@ -19,7 +19,7 @@ title: API 概要
 | `wasm-html-to-image/workers`    | `createHtmlToImageWorker()`<br/>`render(options)`         | マルチスレッド Worker プールによる並列処理版                                      |
 | `wasm-html-to-image/react`      | `render(options)`                                         | React JSX エレメントを直接渡して描画するラッパー                                  |
 | `wasm-html-to-image/preact`     | `render(options)`                                         | Preact JSX エレメントを直接渡して描画するラッパー                                 |
-| `wasm-html-to-image/tailwind`   | `inlineTailwind(html)`                                    | Tailwind CSS クラスをインラインスタイルへ変換                                     |
+| `wasm-html-to-image/tailwind`   | `createCSS(html, { css })` / `tailwind(html, { css })` / `convertTw(html)` | Tailwind v4 のユーティリティ CSS を生成（`tw` prop → `class`、`@theme` → `:root` 変数、`@apply` 展開） |
 
 ---
 

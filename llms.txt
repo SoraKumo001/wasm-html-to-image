@@ -32,7 +32,7 @@ Choose the appropriate import based on runtime and use case:
 | `wasm-html-to-image/workers` | Node.js, Browsers (on workerd: no pool, falls back to direct execution) | Multi-threaded worker pool for high-throughput batch rendering. |
 | `wasm-html-to-image/react` | React (JSX) | Directly render React element trees. |
 | `wasm-html-to-image/preact` | Preact (JSX) | Directly render Preact element trees. |
-| `wasm-html-to-image/tailwind` | Tailwind CSS | Inlines UnoCSS / Tailwind utility classes into inline CSS styles. |
+| `wasm-html-to-image/tailwind` | Tailwind CSS | UnoCSS / Tailwind v4 utilities as CSS (`createCSS`), `tw="..."` → `class` (`convertTw`), `@theme` / `@apply` (`tailwind`). |
 | `wasm-html-to-image/index` | High-throughput servers | Manual WASM module reuse via `loadHtmlToImageModule()` and `htmlToImage()`. |
 
 ---
@@ -292,7 +292,7 @@ When prompting an AI agent to generate HTML/CSS templates for `wasm-html-to-imag
 4. **Use Inline SVGs for Icons**: Embed `<svg>` tags directly into HTML instead of using external icon fonts or canvas scripts.
 5. **Clean Text Truncation**: Use `-webkit-line-clamp: 2; -webkit-box-orient: vertical; display: -webkit-box; overflow: hidden;` for multi-line titles.
 6. **Images**: Remote `<img src="https://...">` works when network access is enabled. For offline, edge-isolated, or instant rendering, embed base64 Data URLs (`data:image/png;base64,...`).
-7. **Tailwind / UnoCSS Support**: When using utility classes, you can pre-compile them to inline CSS using `wasm-html-to-image/tailwind` (`createCSS()`).
+7. **Tailwind / UnoCSS Support**: When using utility classes, you can pre-compile them to CSS using `wasm-html-to-image/tailwind`: `createCSS(html, { css })` returns the utilities, and `tailwind(html, { css })` returns `{ html, css }` with Tailwind v4 `tw="flex gap-2"` rewritten to `class`, `@theme { --color-brand: #f00 }` expanded into `:root` variables (`--color-*` also feed utilities such as `bg-brand`) and `@apply` expanded in `<style>` blocks / `options.css` (unknown or variant utilities are skipped with a warning). Pass both to `render({ value: html, css })`.
 
 ---
 
