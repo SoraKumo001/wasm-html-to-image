@@ -29,7 +29,7 @@ npx wasm-html-to-image <input> [options]
 | `--format <format>`  |  `-f`  |     `png`     | 出力形式 (`svg`, `png`, `pdf`, `jpeg`, `webp`, `avif`, `jxl`, `raw`, `thumbhash`) |
 | `--quality <number>` |  `-q`  |     `85`      | 圧縮品質 (0〜100、エンコード形式のみ有効)                                  |
 | `--base-url <url>`   |   -    | 入力から自動  | 相対リソース解決のベース URL。URL 入力ではリダイレクト後の URL、ファイル入力ではそのディレクトリが既定。明示指定時はそれを優先 |
-| `--animation <duration-ms>` | - | 無効 | `@keyframes` の **opacity / transform / color / background-color** アニメーションをサンプリングしてアニメーション WebP を出力（1 ループの長さを ms で指定、`webp` 出力時のみ有効。5000ms にクランプ） |
+| `--animation <duration-ms>` | - | 無効 | `@keyframes` の **opacity / transform / color / background-color** アニメーションをサンプリングしてアニメーション WebP を出力（1 ループの長さを ms で指定、`webp` 出力時のみ有効。5000ms にクランプ。CSS の `animation-duration` が優先され、この値は上限クランプ） |
 | `--animation-fps <n>` | - | `15` | アニメーションのサンプリング fps（`--animation` 指定時に有効。上限約 75 フレーム） |
 | `--animation-loop <n>` | - | `0`（無限） | アニメーション WebP の再生回数（`0` = 無限、`1` = 1 回だけ。`--animation` 指定時に有効） |
 

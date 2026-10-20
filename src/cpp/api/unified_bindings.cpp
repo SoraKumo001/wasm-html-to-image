@@ -7,9 +7,11 @@
 #include <memory>
 
 #include <litehtml/css_parser.h>
+#include <litehtml/css_tokenizer.h>
 #include <litehtml/document.h>
 #include <litehtml/element.h>
 #include <litehtml/render_item.h>
+#include <litehtml/string_id.h>
 #include <litehtml/web_color.h>
 
 #include "../common/skia_encode.h"
@@ -152,6 +154,124 @@ std::vector<html_to_image::ColorKeyframe> resolve_color_stops(
     return out;
 }
 
+// Maximum nesting depth of the var() substitution (a custom property may
+// reference another one).
+constexpr int k_max_var_depth = 8;
+
+// Resolve the `var()` references of a CSS value with the element's custom
+// properties. The document owns the custom properties, so the resolution
+// happens here and the sampler keeps working on plain strings.
+// An unknown property falls back to the `var()` fallback value; a reference
+// that cannot be resolved is kept as-is.
+std::string resolve_var_references(const litehtml::element::ptr& el,
+                                   const std::string& value, int depth = 0) {
+    if (depth > k_max_var_depth) return value;
+    const std::string lower = html_to_image::detail::to_lower(value);
+    std::string out;
+    size_t i = 0;
+    while (true) {
+        const size_t pos = lower.find("var(", i);
+        if (pos == std::string::npos) {
+            out += value.substr(i);
+            break;
+        }
+        // Find the closing parenthesis of the var() call.
+        size_t end = std::string::npos;
+        int parens = 0;
+        for (size_t k = pos + 4; k < value.size(); ++k) {
+            if (value[k] == '(') {
+                ++parens;
+                continue;
+            }
+            if (value[k] != ')') continue;
+            if (parens > 0) {
+                --parens;
+                continue;
+            }
+            end = k;
+            break;
+        }
+        if (end == std::string::npos) {
+            out += value.substr(i);
+            break;
+        }
+        out += value.substr(i, pos - i);
+
+        const std::string args = value.substr(pos + 4, end - pos - 4);
+        std::string name = args;
+        std::string fallback;
+        bool has_fallback = false;
+        const size_t comma = args.find(',');
+        if (comma != std::string::npos) {
+            name = args.substr(0, comma);
+            fallback = args.substr(comma + 1);
+            has_fallback = true;
+        }
+        name = html_to_image::detail::trim(name);
+
+        std::string replacement;
+        bool resolved = false;
+        if (el && name.size() > 2 && name.compare(0, 2, "--") == 0) {
+            litehtml::css_token_vector tokens;
+            if (el->get_custom_property(litehtml::_id(name), tokens)) {
+                replacement = litehtml::get_repr(tokens);
+                resolved = true;
+            }
+        }
+        if (!resolved) {
+            if (!has_fallback) {
+                out += value.substr(pos, end - pos + 1);  // keep it unresolved
+                i = end + 1;
+                continue;
+            }
+            replacement = html_to_image::detail::trim(fallback);
+        }
+        out += resolve_var_references(el, replacement, depth + 1);
+        i = end + 1;
+    }
+    return out;
+}
+
+// Resolve the `var()` references of every stop value of the animation and
+// rebuild the animatable stops from the resolved values.
+void resolve_animation_vars(html_to_image::AnimationSpec& spec,
+                            const litehtml::element::ptr& el) {
+    for (auto& raw : spec.opacity_raw) {
+        raw.value = resolve_var_references(el, raw.value);
+    }
+    for (auto& raw : spec.transform_raw) {
+        raw.value = resolve_var_references(el, raw.value);
+    }
+    for (auto& stop : spec.color_stops) {
+        stop.value = resolve_var_references(el, stop.value);
+    }
+    for (auto& stop : spec.background_color_stops) {
+        stop.value = resolve_var_references(el, stop.value);
+    }
+    html_to_image::build_animatable_stops(spec);
+}
+
+// The loop length of the animation: the CSS `animation-duration` wins, the
+// duration requested through the API is an upper bound (the CSS value is
+// clamped to it). The element's inline style wins over the <style> rule,
+// as the CSS cascade demands.
+int resolve_animation_duration(const html_to_image::AnimationSpec& spec,
+                               const std::string& inline_style,
+                               const litehtml::element::ptr& el,
+                               int api_duration_ms) {
+    std::string value = spec.duration_value;
+    const std::string inline_duration =
+        html_to_image::find_animation_duration(inline_style);
+    if (!inline_duration.empty()) value = inline_duration;
+    if (value.empty()) return api_duration_ms;
+    value = resolve_var_references(el, value);
+    int css_duration_ms = 0;
+    if (!html_to_image::parse_time_ms(value, css_duration_ms)) return api_duration_ms;
+    if (css_duration_ms <= 0) return api_duration_ms;
+    if (api_duration_ms <= 0) return css_duration_ms;
+    return std::min(api_duration_ms, css_duration_ms);
+}
+
 }  // namespace
 
 int satoru_render_animation_to_converter_val(SatoruInstance* satoru, ImageConverterInstance* converter,
@@ -165,8 +285,10 @@ int satoru_render_animation_to_converter_val(SatoruInstance* satoru, ImageConver
     SatoruRenderOptions render_options;
     parse_satoru_options(render_options, options_val);
 
-    const html_to_image::AnimationSpec spec = html_to_image::parse_animation(html);
-    if (!spec.valid) return 0;
+    html_to_image::AnimationSpec spec = html_to_image::parse_animation(html);
+    // A block that is only animatable after a var() resolution is kept:
+    // the document (and its custom properties) is needed to resolve it.
+    if (!spec.valid && !spec.needs_resolution) return 0;
 
     // Ensure the document is laid out for exactly this input. After resource
     // resolution this is normally a no-op (the collect phase already built it).
@@ -192,6 +314,16 @@ int satoru_render_animation_to_converter_val(SatoruInstance* satoru, ImageConver
     const char* base_style_attr = target->get_attr("style");
     const std::string base_style = base_style_attr ? base_style_attr : "";
 
+    // Resolve the var() references of the stop values (the document owns the
+    // custom properties) and rebuild the animatable stops from them.
+    resolve_animation_vars(spec, target);
+    if (!spec.valid) return 0;
+
+    // The loop length: the CSS `animation-duration` wins, the duration
+    // requested through the API is an upper bound.
+    const int duration =
+        resolve_animation_duration(spec, base_style, target, duration_ms);
+
     // Colour stops are resolved through the document's colour resolution, so
     // named colours / rgb() / hsl() all work.
     const std::vector<html_to_image::ColorKeyframe> color_stops =
@@ -200,7 +332,7 @@ int satoru_render_animation_to_converter_val(SatoruInstance* satoru, ImageConver
         resolve_color_stops(spec.background_color_stops);
 
     const std::vector<html_to_image::FrameSample> schedule =
-        html_to_image::build_frame_schedule(duration_ms, fps);
+        html_to_image::build_frame_schedule(duration, fps);
 
     const uint64_t per_frame_bytes =
         (uint64_t)std::max(width, 1) * (uint64_t)std::max(height, 1) * 4;

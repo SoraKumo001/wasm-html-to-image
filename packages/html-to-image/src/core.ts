@@ -118,10 +118,14 @@ export interface HtmlToImageOptions extends RenderOptions {
    * - `{ duration, fps, loop }` (HTML input only): sample the document's
    *   `@keyframes` animation into frames. `duration` is one loop length in ms
    *   (clamped to 5000), `fps` defaults to 15 (frame count capped at ~75).
-   *   `loop` is how many times the animated WebP repeats: `0` (the default)
-   *   means infinite, `1` means play once. `opacity`, `transform` (`translate` /
-   *   `rotate` / `scale` only) and `color` / `background-color` keyframes are
-   *   animated. Per-keyframe easing, several animations on one element and
+   *   The CSS `animation-duration` (including the `animation` shorthand)
+   *   wins over `duration`, which acts as an upper bound; `fps` is the
+   *   upper frame rate. `loop` is how many times the animated WebP repeats:
+   *   `0` (the default) means infinite, `1` means play once. `opacity`,
+   *   `transform` (`translate` / `rotate` / `scale` only) and `color` /
+   *   `background-color` keyframes are animated; their values may use
+   *   `var()` (resolved against the element's custom properties).
+   *   Per-keyframe easing, several animations on one element and
    *   `animation-direction` / `animation-fill-mode` are out of scope.
    */
   animation?: boolean | { duration: number; fps?: number; loop?: number };

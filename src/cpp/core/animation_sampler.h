@@ -17,6 +17,14 @@
 //  - A `transform` whose function list differs between the stops cannot be
 //    interpolated: such an element keeps its static transform (the whole
 //    transform animation is dropped, the other properties still animate).
+//  - Stop values may contain `var()` references. The sampler only keeps
+//    them raw ({@link AnimationSpec::opacity_raw} and friends): the binding
+//    layer owns the document (and therefore the custom properties), so it
+//    resolves the references and asks the sampler to rebuild the stops
+//    ({@link build_animatable_stops}). The header stays document-free.
+//  - The loop length declared by the CSS (`animation-duration`, including
+//    the `animation` shorthand) is captured raw as well
+//    ({@link AnimationSpec::duration_value}).
 //
 // This header is pure (no litehtml/Skia dependency) so it can be unit-tested
 // and reused by the binding layer. It is header-only: no CMake source-list
@@ -87,14 +95,27 @@ struct ColorKeyframe {
     Rgba color;
 };
 
+// One raw keyframe declaration value: the stop offset plus the raw CSS
+// value. The value may still contain a `var()` reference, so the binding
+// layer resolves it before the stops are built (see build_animatable_stops).
+struct RawStop {
+    float offset = 0.0f;
+    std::string value;
+};
+
 struct AnimationSpec {
-    bool valid = false;
+    bool valid = false;             // the parsed stops can be animated
+    bool has_declarations = false;  // the block declares an animatable property
+    bool needs_resolution = false;  // a declared value holds a var() reference
     std::string name;      // @keyframes name
     std::string selector;  // binding selector from a <style> rule ("" = inline only)
+    std::string duration_value;  // raw `animation-duration` of the binding rule
     std::vector<OpacityKeyframe> stops;             // opacity
     std::vector<TransformKeyframe> transform_stops; // transform
     std::vector<ColorStop> color_stops;             // color (raw values)
     std::vector<ColorStop> background_color_stops;  // background-color (raw values)
+    std::vector<RawStop> opacity_raw;               // raw opacity values
+    std::vector<RawStop> transform_raw;             // raw transform values
 };
 
 // One sampled frame: `progress` in [0,1) (loop semantics, end exclusive) and
@@ -195,6 +216,63 @@ inline bool parse_number(const std::string& s, size_t& i, float& out) {
     return true;
 }
 
+// True when the value holds a `var()` reference. Quoted strings are skipped
+// so `content: "var("` is not mistaken for a reference.
+inline bool has_var_reference(const std::string& value) {
+    const std::string lower = to_lower(value);
+    size_t i = 0;
+    char quote = 0;
+    while (i < value.size()) {
+        const char c = value[i];
+        if (quote) {
+            if (c == quote) quote = 0;
+            ++i;
+            continue;
+        }
+        if (c == '"' || c == '\'') {
+            quote = c;
+            ++i;
+            continue;
+        }
+        if (lower.compare(i, 4, "var(") == 0) return true;
+        ++i;
+    }
+    return false;
+}
+
+// Parse an `opacity` value: a number (0..1) or a percentage.
+inline bool parse_opacity_value(const std::string& value, float& out) {
+    const std::string text = trim(value);
+    if (text.empty()) return false;
+    size_t i = 0;
+    float parsed = 0.0f;
+    if (!parse_number(text, i, parsed)) return false;
+    // `opacity: 50%` is 0.5.
+    if (i < text.size() && text[i] == '%') parsed /= 100.0f;
+    out = parsed;
+    return true;
+}
+
+// Parse a CSS <time> value ("2s", "250ms") into milliseconds.
+inline bool parse_time_ms(const std::string& value, int& out_ms) {
+    const std::string text = trim(value);
+    if (text.empty()) return false;
+    size_t i = 0;
+    float number = 0.0f;
+    if (!parse_number(text, i, number)) return false;
+    const std::string unit = to_lower(text.substr(i));
+    if (unit == "ms") {
+        out_ms = (int)std::lround((double)number);
+    } else if (unit == "s") {
+        out_ms = (int)std::lround((double)number * 1000.0);
+    } else if (unit.empty() && number == 0.0f) {
+        out_ms = 0;  // a unitless zero is accepted as "no time"
+    } else {
+        return false;
+    }
+    return true;
+}
+
 // Split a declaration block into (lower-cased property, value) pairs.
 // Only top-level ';' and ':' separate, so values may contain functions,
 // strings and nested blocks.
@@ -279,6 +357,71 @@ inline std::vector<std::string> split_value_tokens(const std::string& value) {
     }
     if (!token.empty()) out.push_back(token);
     return out;
+}
+
+// Split a value into whitespace separated components, keeping functions
+// (and their arguments) together.
+inline std::vector<std::string> split_top_level_tokens(const std::string& value) {
+    std::vector<std::string> out;
+    std::string token;
+    int depth = 0;
+    for (size_t i = 0; i < value.size(); ++i) {
+        const char c = value[i];
+        if (c == '(') {
+            ++depth;
+            token += c;
+            continue;
+        }
+        if (c == ')') {
+            if (depth > 0) --depth;
+            token += c;
+            continue;
+        }
+        if (depth == 0 && std::isspace((unsigned char)c)) {
+            if (!token.empty()) {
+                out.push_back(token);
+                token.clear();
+            }
+            continue;
+        }
+        token += c;
+    }
+    if (!token.empty()) out.push_back(token);
+    return out;
+}
+
+// The <time> component of an `animation` shorthand value. A `var()`
+// reference is returned as-is (the binding layer resolves it).
+inline std::string find_time_value(const std::string& value) {
+    for (const auto& token : split_top_level_tokens(value)) {
+        if (has_var_reference(token)) return token;
+        size_t i = 0;
+        float number = 0.0f;
+        if (!parse_number(token, i, number)) continue;
+        const std::string unit = to_lower(token.substr(i));
+        if (unit == "s" || unit == "ms") return token;
+    }
+    return "";
+}
+
+// The `animation-duration` declared in a declaration block (a <style> rule
+// body or an inline `style` attribute). The `animation` shorthand is
+// inspected as well (its <time> component) and the last declaration wins,
+// as the CSS cascade demands. Returns "" when no duration is declared.
+// The value is raw: it may still hold a var() reference.
+inline std::string find_animation_duration(const std::string& decls) {
+    std::vector<std::pair<std::string, std::string>> props;
+    split_declarations(decls, props);
+    std::string duration;
+    for (const auto& prop : props) {
+        if (prop.first == "animation-duration") {
+            duration = prop.second;
+        } else if (prop.first == "animation") {
+            const std::string time = find_time_value(prop.second);
+            if (!time.empty()) duration = time;
+        }
+    }
+    return duration;
 }
 
 // Parse one transform argument: a number plus an optional unit.
@@ -411,6 +554,78 @@ inline bool transform_signature_equal(const std::vector<TransformFunction>& a,
     return true;
 }
 
+// Build the animatable stops (opacity / transform) from the raw
+// declaration values of the spec. The raw values may have been replaced by
+// resolved ones (var() substituted) by the binding layer, so this is called
+// again after a resolution.
+inline void build_stops_from_raw(AnimationSpec& spec) {
+    spec.stops.clear();
+    spec.transform_stops.clear();
+
+    for (const auto& raw : spec.opacity_raw) {
+        float value = 0.0f;
+        if (!parse_opacity_value(raw.value, value)) continue;
+        OpacityKeyframe stop;
+        stop.offset = raw.offset;
+        stop.opacity = value;
+        spec.stops.push_back(stop);
+    }
+
+    bool transform_invalid = false;
+    for (const auto& raw : spec.transform_raw) {
+        std::vector<TransformFunction> functions;
+        if (!parse_transform_value(raw.value, functions)) {
+            transform_invalid = true;
+            continue;
+        }
+        TransformKeyframe stop;
+        stop.offset = raw.offset;
+        stop.functions = functions;
+        spec.transform_stops.push_back(stop);
+    }
+
+    std::sort(spec.stops.begin(), spec.stops.end(),
+              [](const OpacityKeyframe& a, const OpacityKeyframe& b) {
+                  return a.offset < b.offset;
+              });
+    std::sort(spec.transform_stops.begin(), spec.transform_stops.end(),
+              [](const TransformKeyframe& a, const TransformKeyframe& b) {
+                  return a.offset < b.offset;
+              });
+
+    // A transform that cannot be interpolated (unsupported function or a
+    // function list that differs between the stops) leaves the element
+    // static: drop the whole transform animation.
+    if (transform_invalid) {
+        spec.transform_stops.clear();
+    } else {
+        for (size_t s = 1; s < spec.transform_stops.size(); ++s) {
+            if (!transform_signature_equal(spec.transform_stops[0].functions,
+                                           spec.transform_stops[s].functions)) {
+                spec.transform_stops.clear();
+                break;
+            }
+        }
+    }
+
+    spec.needs_resolution = false;
+    for (const auto& raw : spec.opacity_raw) {
+        if (has_var_reference(raw.value)) spec.needs_resolution = true;
+    }
+    for (const auto& raw : spec.transform_raw) {
+        if (has_var_reference(raw.value)) spec.needs_resolution = true;
+    }
+    for (const auto& stop : spec.color_stops) {
+        if (has_var_reference(stop.value)) spec.needs_resolution = true;
+    }
+    for (const auto& stop : spec.background_color_stops) {
+        if (has_var_reference(stop.value)) spec.needs_resolution = true;
+    }
+
+    spec.valid = !spec.stops.empty() || !spec.transform_stops.empty() ||
+                 !spec.color_stops.empty() || !spec.background_color_stops.empty();
+}
+
 // Parse one `@keyframes` block starting at `at`. `end` receives the position
 // just after the closing brace so the caller can continue scanning.
 inline bool parse_keyframes_block(const std::string& css, size_t at, size_t kwlen,
@@ -429,7 +644,6 @@ inline bool parse_keyframes_block(const std::string& css, size_t at, size_t kwle
     end = body_end + 1;
 
     spec.name = name;
-    bool transform_invalid = false;
 
     size_t p = 0;
     while (p < body.size()) {
@@ -466,23 +680,17 @@ inline bool parse_keyframes_block(const std::string& css, size_t at, size_t kwle
         split_declarations(decls, props);
         for (const auto& prop : props) {
             if (prop.first == "opacity") {
-                size_t k = 0;
-                float value = 0.0f;
-                if (parse_number(prop.second, k, value)) {
-                    // `opacity: 50%` is 0.5.
-                    if (k < prop.second.size() && prop.second[k] == '%') value /= 100.0f;
-                    spec.stops.push_back({off, value});
-                }
+                // The raw value is kept: it may hold a var() reference that
+                // the binding layer resolves before the stops are built.
+                RawStop raw;
+                raw.offset = off;
+                raw.value = prop.second;
+                spec.opacity_raw.push_back(raw);
             } else if (prop.first == "transform") {
-                std::vector<TransformFunction> functions;
-                if (!parse_transform_value(prop.second, functions)) {
-                    transform_invalid = true;
-                    continue;
-                }
-                TransformKeyframe stop;
-                stop.offset = off;
-                stop.functions = functions;
-                spec.transform_stops.push_back(stop);
+                RawStop raw;
+                raw.offset = off;
+                raw.value = prop.second;
+                spec.transform_raw.push_back(raw);
             } else if (prop.first == "color") {
                 spec.color_stops.push_back({off, prop.second});
             } else if (prop.first == "background-color") {
@@ -491,36 +699,14 @@ inline bool parse_keyframes_block(const std::string& css, size_t at, size_t kwle
         }
     }
 
-    std::sort(spec.stops.begin(), spec.stops.end(),
-              [](const OpacityKeyframe& a, const OpacityKeyframe& b) {
-                  return a.offset < b.offset;
-              });
-    std::sort(spec.transform_stops.begin(), spec.transform_stops.end(),
-              [](const TransformKeyframe& a, const TransformKeyframe& b) {
-                  return a.offset < b.offset;
-              });
     std::sort(spec.color_stops.begin(), spec.color_stops.end(),
               [](const ColorStop& a, const ColorStop& b) { return a.offset < b.offset; });
     std::sort(spec.background_color_stops.begin(), spec.background_color_stops.end(),
               [](const ColorStop& a, const ColorStop& b) { return a.offset < b.offset; });
 
-    // A transform that cannot be interpolated (unsupported function or a
-    // function list that differs between the stops) leaves the element
-    // static: drop the whole transform animation.
-    if (transform_invalid) {
-        spec.transform_stops.clear();
-    } else {
-        for (size_t s = 1; s < spec.transform_stops.size(); ++s) {
-            if (!transform_signature_equal(spec.transform_stops[0].functions,
-                                           spec.transform_stops[s].functions)) {
-                spec.transform_stops.clear();
-                break;
-            }
-        }
-    }
-
-    spec.valid = !spec.stops.empty() || !spec.transform_stops.empty() ||
-                 !spec.color_stops.empty() || !spec.background_color_stops.empty();
+    spec.has_declarations = !spec.opacity_raw.empty() || !spec.transform_raw.empty() ||
+                            !spec.color_stops.empty() || !spec.background_color_stops.empty();
+    build_stops_from_raw(spec);
     return true;
 }
 
@@ -547,8 +733,17 @@ inline void parse_all_keyframes(const std::string& css, std::vector<AnimationSpe
     }
 }
 
-// Find the selector of the first qualified rule that binds `name`.
-inline std::string find_animation_selector(const std::string& css, const std::string& name) {
+// The rule that binds `name`: its selector and the raw
+// `animation-duration` the rule declares ("" when it declares none).
+struct AnimationBinding {
+    std::string selector;
+    std::string duration;
+};
+
+// Find the first qualified rule that binds `name`.
+inline AnimationBinding find_animation_binding(const std::string& css,
+                                                const std::string& name) {
+    AnimationBinding binding;
     const std::string name_l = to_lower(name);
     size_t pos = 0;
     while (pos < css.size()) {
@@ -572,7 +767,10 @@ inline std::string find_animation_selector(const std::string& css, const std::st
         const std::string sel = trim(css.substr(pos, brace - pos));
         size_t be = find_matching_brace(css, brace);
         if (be == std::string::npos) break;
-        const std::string decls = to_lower(css.substr(brace + 1, be - (brace + 1)));
+        // The lower-cased copy drives the name matching, the raw one keeps
+        // the declaration values (custom property names are case sensitive).
+        const std::string decls_raw = css.substr(brace + 1, be - (brace + 1));
+        const std::string decls = to_lower(decls_raw);
         pos = be + 1;
         if (sel.empty() || sel[0] == '@') continue;
 
@@ -612,9 +810,18 @@ inline std::string find_animation_selector(const std::string& css, const std::st
                 break;
             }
         }
-        if (match) return sel;
+        if (match) {
+            binding.selector = sel;
+            binding.duration = find_animation_duration(decls_raw);
+            return binding;
+        }
     }
-    return "";
+    return binding;
+}
+
+// Find the selector of the first qualified rule that binds `name`.
+inline std::string find_animation_selector(const std::string& css, const std::string& name) {
+    return find_animation_binding(css, name).selector;
 }
 
 }  // namespace detail
@@ -645,9 +852,36 @@ inline std::string format_rgba(const Rgba& color) {
     return buf;
 }
 
+// Rebuild the animatable stops of the spec from its raw declaration
+// values. The binding layer resolves the `var()` references of the raw
+// values (the document owns the custom properties) and calls this again,
+// so the sampler itself stays free of any document dependency.
+inline void build_animatable_stops(AnimationSpec& spec) {
+    detail::build_stops_from_raw(spec);
+}
+
+// True when the value holds a `var()` reference.
+inline bool has_var_reference(const std::string& value) {
+    return detail::has_var_reference(value);
+}
+
+// Parse a CSS <time> value ("2s", "250ms") into milliseconds.
+inline bool parse_time_ms(const std::string& value, int& out_ms) {
+    return detail::parse_time_ms(value, out_ms);
+}
+
+// The `animation-duration` declared in a declaration block (a <style> rule
+// body or an inline `style` attribute). The `animation` shorthand is
+// inspected as well. The value is raw: it may still hold a var() reference.
+inline std::string find_animation_duration(const std::string& decls) {
+    return detail::find_animation_duration(decls);
+}
+
 // Parse the document's @keyframes animation that is bound to an element.
 // The first block bound by a <style> rule wins; otherwise the first block is
 // returned and the caller resolves an inline-style binding by name.
+// A block whose stops are only animatable after a var() resolution is kept
+// as a fallback, so the binding layer can still resolve it.
 inline AnimationSpec parse_animation(const std::string& html) {
     AnimationSpec result;
     const std::string css = detail::collect_style_text(html);
@@ -656,18 +890,44 @@ inline AnimationSpec parse_animation(const std::string& html) {
     std::vector<AnimationSpec> specs;
     detail::parse_all_keyframes(css, specs);
 
+    bool have_bound_valid = false;
+    bool have_valid = false;
+    bool have_bound = false;
+    bool have_any = false;
+    AnimationSpec bound_valid;
+    AnimationSpec valid_any;
+    AnimationSpec bound_any;
+    AnimationSpec any;
+
+    auto pick = [](AnimationSpec& slot, bool& taken, const AnimationSpec& spec) {
+        if (taken) return;
+        slot = spec;
+        taken = true;
+    };
+
     for (const auto& candidate : specs) {
-        if (!candidate.valid) continue;
+        if (!candidate.has_declarations) continue;
         AnimationSpec spec = candidate;
-        spec.selector = detail::find_animation_selector(css, spec.name);
-        if (!spec.selector.empty()) return spec;
+        const detail::AnimationBinding binding =
+            detail::find_animation_binding(css, spec.name);
+        spec.selector = binding.selector;
+        spec.duration_value = binding.duration;
+        const bool bound = !spec.selector.empty();
+        if (spec.valid) {
+            if (bound) {
+                pick(bound_valid, have_bound_valid, spec);
+            } else {
+                pick(valid_any, have_valid, spec);
+            }
+        }
+        if (bound) pick(bound_any, have_bound, spec);
+        pick(any, have_any, spec);
     }
-    for (const auto& candidate : specs) {
-        if (!candidate.valid) continue;
-        AnimationSpec spec = candidate;
-        spec.selector = detail::find_animation_selector(css, spec.name);
-        return spec;  // inline-style binding fallback
-    }
+
+    if (have_bound_valid) return bound_valid;
+    if (have_valid) return valid_any;
+    if (have_bound) return bound_any;
+    if (have_any) return any;
     return result;
 }
 

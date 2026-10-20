@@ -922,6 +922,115 @@ describe("regression: layout and paint probes", () => {
     expect(new Set(frames.map((frame) => frame.hash)).size).toBe(3);
   });
 
+  it("resolves var() in @keyframes stop values", async () => {
+    // The stop value of the `from` keyframe is a custom property: the
+    // binding layer resolves it against the document before the stops are
+    // built. Without the resolution the `from` stop is dropped, every
+    // frame paints the same opacity and the output is a still image.
+    const html = `<html><head><style>
+      :root { --from-opacity: 0; }
+      @keyframes fade { from { opacity: var(--from-opacity) } to { opacity: 1 } }
+      .box { width: 80px; height: 80px; background: #00f; animation-name: fade; }
+    </style></head><body style="margin:0;background:#fff"><div class="box"></div></body></html>`;
+
+    const animated = await render({
+      value: html,
+      width: 120,
+      height: 120,
+      format: "webp",
+      animation: { duration: 300, fps: 10 },
+    });
+    expect(animated.animation).toBe(true);
+    const frames = webpFrames(new Uint8Array(animated.data as Uint8Array));
+    expect(frames.length).toBe(3);
+    expect(new Set(frames.map((frame) => frame.hash)).size).toBe(3);
+  });
+
+  it("resolves var() in a @keyframes transform stop value", async () => {
+    const html = `<html><head><style>
+      :root { --from-x: 0px; }
+      @keyframes move { from { transform: translate(var(--from-x), 0px) } to { transform: translate(100px, 0px) } }
+      .box { width: 40px; height: 40px; background: #00f; animation-name: move; }
+    </style></head><body style="margin:0;background:#fff"><div class="box"></div></body></html>`;
+
+    const animated = await render({
+      value: html,
+      width: 120,
+      height: 60,
+      format: "webp",
+      animation: { duration: 300, fps: 10 },
+    });
+    expect(animated.animation).toBe(true);
+    const frames = webpFrames(new Uint8Array(animated.data as Uint8Array));
+    expect(frames.length).toBe(3);
+    expect(new Set(frames.map((frame) => frame.hash)).size).toBe(3);
+  });
+
+  it("uses the CSS animation-duration as the loop length", async () => {
+    // The CSS value wins over the duration requested through the API as
+    // long as it is shorter: the sampled frames cover 100ms, not 1000ms.
+    const html = `<html><head><style>
+      @keyframes fade { from { opacity: 0 } to { opacity: 1 } }
+      .box { width: 80px; height: 80px; background: #00f; animation: fade 100ms infinite; }
+    </style></head><body style="margin:0;background:#fff"><div class="box"></div></body></html>`;
+
+    const animated = await render({
+      value: html,
+      width: 120,
+      height: 120,
+      format: "webp",
+      animation: { duration: 1000, fps: 10 },
+    });
+    expect(animated.animation).toBe(true);
+    const frames = webpFrames(new Uint8Array(animated.data as Uint8Array));
+    expect(frames.length).toBeGreaterThan(1);
+    const total = frames.reduce((sum, frame) => sum + frame.duration, 0);
+    expect(total).toBe(100);
+  });
+
+  it("clamps a longer CSS animation-duration to the requested duration", async () => {
+    // The API duration is an upper bound: a 2s CSS duration is sampled as
+    // 300ms, so the output keeps the requested length.
+    const html = `<html><head><style>
+      @keyframes fade { from { opacity: 0 } to { opacity: 1 } }
+      .box { width: 80px; height: 80px; background: #00f; animation: fade 2s infinite; }
+    </style></head><body style="margin:0;background:#fff"><div class="box"></div></body></html>`;
+
+    const animated = await render({
+      value: html,
+      width: 120,
+      height: 120,
+      format: "webp",
+      animation: { duration: 300, fps: 10 },
+    });
+    expect(animated.animation).toBe(true);
+    const frames = webpFrames(new Uint8Array(animated.data as Uint8Array));
+    expect(frames.length).toBe(3);
+    const total = frames.reduce((sum, frame) => sum + frame.duration, 0);
+    expect(total).toBe(300);
+  });
+
+  it("resolves a var() animation-duration", async () => {
+    const html = `<html><head><style>
+      :root { --dur: 100ms; }
+      @keyframes fade { from { opacity: 0 } to { opacity: 1 } }
+      .box { width: 80px; height: 80px; background: #00f; animation: fade var(--dur) infinite; }
+    </style></head><body style="margin:0;background:#fff"><div class="box"></div></body></html>`;
+
+    const animated = await render({
+      value: html,
+      width: 120,
+      height: 120,
+      format: "webp",
+      animation: { duration: 1000, fps: 10 },
+    });
+    expect(animated.animation).toBe(true);
+    const frames = webpFrames(new Uint8Array(animated.data as Uint8Array));
+    expect(frames.length).toBeGreaterThan(1);
+    const total = frames.reduce((sum, frame) => sum + frame.duration, 0);
+    expect(total).toBe(100);
+  });
+
   it("unicode-bidi: bidi-override reorders inline items in an RTL line", async () => {
 
     const box = (color: string, text: string) =>

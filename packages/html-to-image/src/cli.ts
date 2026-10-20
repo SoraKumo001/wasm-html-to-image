@@ -51,7 +51,7 @@ program
   )
   .option(
     "--animation <duration-ms>",
-    "sample the document's @keyframes opacity / transform / color animation into an animated WebP; one loop duration in ms (webp output only)",
+    "sample the document's @keyframes opacity / transform / color animation into an animated WebP; one loop duration in ms (webp output only; the CSS animation-duration wins and this value is an upper bound)",
     (v) => parseInt(v, 10),
   )
   .option(

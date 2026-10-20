@@ -33,7 +33,7 @@ title: 互換性と仕様
 | `svg`        | `string`     | Skia ベクター描画ストリーム                | `<image>` タグでラップした SVG    |
 | `pdf`        | `Uint8Array` | SkPDFDocument によるベクター PDF           | 画像を等倍 1 ページに配置した PDF |
 
-> `webp` は `animation: { duration, fps, loop }`（CLI: `--animation`）を指定するとアニメーション WebP を出力します。`opacity`・`transform`（`translate` / `rotate` / `scale` のみ）・`color` / `background-color` の `@keyframes` をサンプリングし、既定 15fps、上限は 5 秒（`duration` は内部で 5000ms にクランプ）／約 75 フレームです。再生回数は `loop`（CLI: `--animation-loop`）で指定でき、既定は `0`（無限ループ）です。
+> `webp` は `animation: { duration, fps, loop }`（CLI: `--animation`）を指定するとアニメーション WebP を出力します。`opacity`・`transform`（`translate` / `rotate` / `scale` のみ）・`color` / `background-color` の `@keyframes` をサンプリングし、既定 15fps、上限は 5 秒（`duration` は内部で 5000ms にクランプ）／約 75 フレームです。再生回数は `loop`（CLI: `--animation-loop`）で指定でき、既定は `0`（無限ループ）です。キーフレームの値には `var()` を使用でき、カスタムプロパティは描画対象の要素の解決済みの値から補完されます。ループ長は CSS の `animation-duration`（`animation` ショートハンドを含む）が優先され、API の `duration` は上限クランプとして働きます。
 
 ---
 
@@ -62,7 +62,7 @@ title: 互換性と仕様
 ブラウザエンジン（Chromium/WebKit）ではなく、軽量な **litehtml + Skia** の静的レンダラーであるため、以下の機能は動作しません。HTML/CSS を設計する際はこれらを避けてください：
 
 1. **JavaScript の実行不可**: `<script>` タグやインラインイベントハンドラ (`onclick` など) は一切実行されません。静的な HTML/CSS マークアップのみ生成してください。
-2. **CSS アニメーション / トランジション（部分対応）**: `transition` は評価されません。`@keyframes` は既定では評価されず静的スタイルのみ描画されますが、`animation: { duration, fps, loop }`（CLI: `--animation`）を指定すると **`opacity`・`transform`・`color` / `background-color` の `@keyframes`**をサンプリングしてアニメーション WebP を出力できます。再生回数は `loop`（CLI: `--animation-loop`、既定 `0` = 無限）で指定できます。既定 15fps、上限は 5 秒（`duration` は 5000ms にクランプ）／約 75 フレームです。`transform` は `translate` / `rotate` / `scale` のみに対応し、キーフレーム間で関数リストが一致しない場合はその要素は静止したままです。キーフレーム単位のイージング、1 要素への複数アニメーション、`animation-direction` / `animation-fill-mode` は対象外です。
+2. **CSS アニメーション / トランジション（部分対応）**: `transition` は評価されません。`@keyframes` は既定では評価されず静的スタイルのみ描画されますが、`animation: { duration, fps, loop }`（CLI: `--animation`）を指定すると **`opacity`・`transform`・`color` / `background-color` の `@keyframes`**をサンプリングしてアニメーション WebP を出力できます。再生回数は `loop`（CLI: `--animation-loop`、既定 `0` = 無限）で指定できます。既定 15fps、上限は 5 秒（`duration` は 5000ms にクランプ）／約 75 フレームです。ループ長は CSS の `animation-duration`（`animation` ショートハンドを含む、`var()` 対応）が優先され、API の `duration` は上限クランプ、API の `fps` は上限のフレームレートとして働きます。`transform` は `translate` / `rotate` / `scale` のみに対応し、キーフレーム間で関数リストが一致しない場合はその要素は静止したままです。キーフレーム単位のイージング、1 要素への複数アニメーション、`animation-direction` / `animation-fill-mode` は対象外です。
 3. **HTML5 `<canvas>` スクリプト**: `canvas.getContext('2d')` による描画は行われません。図形描画にはインライン `<svg>` や CSS プロパティを使用してください。
 4. **動的インタラクション**: `:hover`, `:active`, `:focus` などの動的疑似クラスは反映されません。
 5. **ブラウザ専用 Web API**: `window`, `document`, `localStorage`, `IndexedDB` などの Web API は参照できません。
