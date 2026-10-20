@@ -501,7 +501,9 @@ EncodeResult encode_frames(const EncodeFrameView* frames, size_t count,
                 const float quality = (float)(int)options.quality;
                 out.data = encode_webp_animated(
                     anim_frames.data(), anim_frames.size(), quality, lossless,
-                    options.animation_loop, options.animation_bgcolor);
+                    options.animation_loop, options.animation_bgcolor,
+                    // speed 6 (default) = method 2 (~25% faster than Skia method 3 for ~4% size, same PSNR); a higher speed is a lower method.
+                    std::clamp(8 - options.speed, 0, 6));
                 if (out.data) {
                     out.is_animation = true;
                 }

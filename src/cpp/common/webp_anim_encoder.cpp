@@ -44,7 +44,7 @@ using AnimEncoderPtr = std::unique_ptr<WebPAnimEncoder, AnimEncoderDeleter>;
 // libwebp 呼び出し列を Skia と同一に保つため、色変換・config設定も在一起する
 // (差分があると同一入力でも出力バイトが変わる)。
 bool preprocess_webp_picture(WebPPicture* pic, WebPConfig* webp_config,
-                             const SkPixmap& pixmap, bool lossless) {
+                             const SkPixmap& pixmap, bool lossless, int method) {
     if (!SkPixmapIsValid(pixmap)) {
         return false;
     }
@@ -62,7 +62,7 @@ bool preprocess_webp_picture(WebPPicture* pic, WebPConfig* webp_config,
     if (!lossless) {
         webp_config->lossless = 0;
 #ifndef SK_WEBP_ENCODER_USE_DEFAULT_METHOD
-        webp_config->method = 3;
+        webp_config->method = method;
 #endif
         pic->use_argb = 0;
     } else {
@@ -113,7 +113,7 @@ bool preprocess_webp_picture(WebPPicture* pic, WebPConfig* webp_config,
 
 sk_sp<SkData> encode_webp_animated(const WebpAnimFrame* frames, size_t count,
                                     float quality, bool lossless, int loop_count,
-                                    uint32_t bgcolor) {
+                                    uint32_t bgcolor, int method) {
     if (frames == nullptr || count == 0) return nullptr;
 
     const int canvas_width = frames[0].pixmap.width();
@@ -148,7 +148,7 @@ sk_sp<SkData> encode_webp_animated(const WebpAnimFrame* frames, size_t count,
         if (!pic) return nullptr;
         if (!WebPPictureInit(pic.get())) return nullptr;
 
-        if (!preprocess_webp_picture(pic.get(), &webp_config, pixmap, lossless)) {
+        if (!preprocess_webp_picture(pic.get(), &webp_config, pixmap, lossless, method)) {
             return nullptr;
         }
 

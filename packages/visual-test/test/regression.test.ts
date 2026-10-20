@@ -1453,11 +1453,11 @@ describe("regression: layout and paint probes", () => {
     );
   });
 
-  it("animated WebP loops infinitely by default and keeps the legacy bytes", async () => {
+  it("animated WebP loops infinitely by default and keeps the legacy bytes at speed 5", async () => {
     // The libwebp `WebPAnimEncoder` path replaced Skia's `EncodeAnimated`.
-    // With the default options (loop_count 0 / opaque white background) the
-    // output must stay byte-identical to the previous implementation, so the
-    // hash below pins that regression.
+    // With the default loop / background (loop_count 0, opaque white) and libwebp
+    // method 3 (speed 5; the default speed 6 is method 2, a faster encode) the
+    // output must stay byte-identical to Skia's, so the hash below pins that.
     const html = `<html><head><style>
       @keyframes fade { from { opacity: 0 } to { opacity: 1 } }
       .box { width: 80px; height: 80px; background: #00f; animation-name: fade; }
@@ -1468,6 +1468,7 @@ describe("regression: layout and paint probes", () => {
       width: 120,
       height: 120,
       format: "webp",
+      speed: 5,
       animation: { duration: 300, fps: 10 },
     });
     expect(animated.animation).toBe(true);

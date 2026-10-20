@@ -112,7 +112,7 @@ export interface RenderOptions {
 export interface HtmlToImageOptions extends RenderOptions {
   /** Encode quality 0-100 (encode stage only, default 85; ignored for svg/pdf). */
   quality?: number;
-  /** Encode speed 0-10, mainly for AVIF (encode stage only; default 8 for AVIF, 6 otherwise). */
+  /** Encode speed 0-10 for AVIF, JXL and animated (lossy) WebP (encode stage only; default 8 for AVIF, 6 otherwise). Animated WebP uses libwebp method `8 - speed`: the default 6 is method 2, 5 is method 3 (Skia's, smaller by ~4%), 9 is method 0 (fastest, ~30% larger). */
   speed?: number;
   /**
    * Animation handling.

@@ -47,10 +47,11 @@ constexpr uint32_t k_webp_anim_default_bgcolor = 0xFFFFFFFFu;
 //   lossless   : true = lossless (quality>=100 相当)
 //   loop_count : 再生回数。0 = 無限回 (Skia 従来値)
 //   bgcolor    : canvas背景色 (0xAARRGGBB)
+//   method     : lossy の libwebp method 0..6 (0 が最速、既定 3 = Skia と同じ)
 // 戻り値: 失敗時 nullptr。
 sk_sp<SkData> encode_webp_animated(const WebpAnimFrame* frames, size_t count,
                                     float quality, bool lossless, int loop_count,
-                                    uint32_t bgcolor);
+                                    uint32_t bgcolor, int method = 3);
 
 }  // namespace html_to_image
 
