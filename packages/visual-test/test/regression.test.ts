@@ -380,6 +380,28 @@ describe("regression: layout and paint probes", () => {
     expect(isWhite(at(650, 20))).toBe(true); // at the 800px intrinsic width this would be painted
   });
 
+  it("aspect-ratio gives a replaced element's auto height, overriding the intrinsic ratio", async () => {
+    // GitHub's hero media is <img style="width:100%;aspect-ratio:1206/684">. The ratio has to
+    // size the box even when the intrinsic ratio differs, and even when the image cannot be
+    // decoded at all (an unavailable source has no intrinsic ratio to fall back to).
+    // The first image is a transparent 800x450 SVG shown as a 1:1 box (200x200), the second is
+    // an undecodable PNG with a 2:1 box (200x100). Both paint their blue background.
+    const svg =
+      "data:image/svg+xml," +
+      encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' width='800' height='450'></svg>");
+    const { at } = await renderPng(
+      `<div style="width:200px">
+         <img style="display:block;width:100%;aspect-ratio:1/1;background:#00f" src="${svg}" alt="">
+         <img style="display:block;width:100%;aspect-ratio:2/1;background:#00f" src="data:image/png;base64,aGVsbG8=" alt="">
+       </div>`,
+      300,
+      400,
+    );
+    expect(near(at(100, 150), BLUE)).toBe(true); // inside the 1:1 box (112px tall without the fix)
+    expect(near(at(100, 250), BLUE)).toBe(true); // inside the 2:1 box (0px tall without the fix)
+    expect(isWhite(at(100, 350))).toBe(true); // no stray height below both boxes
+  });
+
   it("radial-gradient(circle <length>) draws and clamps to the last stop outside the radius", async () => {
     const { at } = await renderPng(
       `<div style="width:150px;height:100px;background:radial-gradient(circle 40px,#f00,#00f)"></div>`,

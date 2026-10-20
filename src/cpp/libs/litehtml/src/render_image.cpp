@@ -32,29 +32,61 @@ litehtml::pixel_t litehtml::render_item_image::_measure(
         return content_offset_width();
     }
 
-    if (self_size.width.type != containing_block_context::cbc_value_type_auto) {
+    const bool width_is_auto =
+        self_size.width.type == containing_block_context::cbc_value_type_auto;
+    const bool height_is_auto =
+        self_size.height.type == containing_block_context::cbc_value_type_auto;
+
+    if (!width_is_auto) {
         m_pos.width = self_size.render_width;
     }
-    if (self_size.height.type != containing_block_context::cbc_value_type_auto) {
+    if (!height_is_auto) {
         m_pos.height = self_size.render_height;
     }
 
-    if (m_pos.width == 0 && m_pos.height == 0) {
-        m_pos.width = sz.width;
-        m_pos.height = sz.height;
-    } else if (m_pos.width == 0 && sz.height != 0) {
-        m_pos.width = m_pos.height * sz.width / sz.height;
-    } else if (m_pos.height == 0 && sz.width != 0) {
-        m_pos.height = m_pos.width * sz.height / sz.width;
+    // The used ratio for a replaced element: an explicit aspect-ratio replaces the intrinsic
+    // ratio, while `aspect-ratio: auto <ratio>` only falls back to the specified ratio when the
+    // image has no intrinsic ratio. A ratio of 0 means unknown, so only the intrinsic ratio can
+    // be used for the arithmetic below.
+    float used_ratio = 0;  // height / width
+    const aspect_ratio ar = css().get_aspect_ratio();
+    const bool has_intrinsic_ratio = sz.width > 0 && sz.height > 0;
+    if (!ar.is_auto() && !(ar.use_intrinsic && has_intrinsic_ratio)) {
+        if (ar.width > 0 && ar.height > 0) used_ratio = ar.height / ar.width;
+    } else if (has_intrinsic_ratio) {
+        used_ratio = (float)sz.height / (float)sz.width;
     }
 
-    // Constraints
+    if (width_is_auto && height_is_auto) {
+        // Both axes auto: the intrinsic inline size, with the used ratio (or the intrinsic ratio
+        // when there is no explicit aspect-ratio) deriving the block size.
+        m_pos.width = sz.width;
+        m_pos.height = used_ratio > 0 ? m_pos.width * used_ratio : sz.height;
+    } else if (width_is_auto) {
+        if (used_ratio > 0) {
+            m_pos.width = m_pos.height / used_ratio;
+        } else if (sz.height != 0) {
+            m_pos.width = m_pos.height * sz.width / sz.height;
+        }
+    } else if (height_is_auto) {
+        if (used_ratio > 0) {
+            m_pos.height = m_pos.width * used_ratio;
+        } else if (sz.width != 0) {
+            m_pos.height = m_pos.width * sz.height / sz.width;
+        }
+    }
+
+    // Constraints (preserve the used ratio when it is known)
     if (!css().get_max_width().is_predefined()) {
         pixel_t max_width = src_el()->get_document()->to_pixels(
             css().get_max_width(), css().get_font_metrics(), containing_block_size.width);
         if (m_pos.width > max_width) {
             m_pos.width = max_width;
-            if (sz.width != 0) m_pos.height = m_pos.width * sz.height / sz.width;
+            if (used_ratio > 0) {
+                m_pos.height = m_pos.width * used_ratio;
+            } else if (sz.width != 0) {
+                m_pos.height = m_pos.width * sz.height / sz.width;
+            }
         }
     }
     if (!css().get_max_height().is_predefined()) {
@@ -62,7 +94,11 @@ litehtml::pixel_t litehtml::render_item_image::_measure(
             css().get_max_height(), css().get_font_metrics(), containing_block_size.height);
         if (m_pos.height > max_height) {
             m_pos.height = max_height;
-            if (sz.height != 0) m_pos.width = m_pos.height * sz.width / sz.height;
+            if (used_ratio > 0) {
+                m_pos.width = m_pos.height / used_ratio;
+            } else if (sz.height != 0) {
+                m_pos.width = m_pos.height * sz.width / sz.height;
+            }
         }
     }
 
