@@ -3,31 +3,23 @@
 <head>
 <meta charset="utf-8">
 <style>
-  @keyframes spin-pulse {
-    0%   { transform: rotate(0deg) scale(0.8); background-color: #3b82f6; }
-    50%  { transform: rotate(180deg) scale(1.1); background-color: #ef4444; }
-    100% { transform: rotate(360deg) scale(0.8); background-color: #3b82f6; }
+  @keyframes page-pulse {
+    0%   { transform: scale(0.97); opacity: 0.55; color: #1e293b; background-color: #e0e7ff; }
+    50%  { transform: scale(1);    opacity: 1;    color: #9f1239; background-color: #fce7f3; }
+    100% { transform: scale(0.97); opacity: 0.55; color: #1e293b; background-color: #e0e7ff; }
   }
-  @keyframes fade {
-    from { opacity: 0.1; }
-    to   { opacity: 1; }
-  }
-  @keyframes slide {
-    from { transform: translate(0, 0); }
-    to   { transform: translate(150px, 0); }
-  }
-  @keyframes hue {
-    0%   { color: #2563eb; }
-    50%  { color: #db2777; }
-    100% { color: #2563eb; }
+  .page {
+    padding: 24px;
+    border-radius: 24px;
+    background-color: #e0e7ff;
+    animation: page-pulse 3s infinite ease-in-out;
   }
   * { box-sizing: border-box; }
   body {
     margin: 0;
-    padding: 24px;
+    padding: 16px;
     font-family: system-ui, -apple-system, sans-serif;
-    color: #1e293b;
-    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+    background: #f8fafc;
   }
   h1 {
     margin: 0;
@@ -111,11 +103,11 @@
 
   /* flow-root */
   .floated { float: left; width: 60px; height: 60px; margin-right: 10px; background: #f97316; border-radius: 10px; }
-  .fr { border: 2px solid #0ea5e9; padding: 6px; font-size: 12px; }
+  .fr { border: 2px solid #0ea5e9; padding: 6px; font-size: 12px; min-height: 80px; }
   .fr.root { display: flow-root; }
 
   /* clip-rule */
-  .star { width: 90px; height: 90px; background: #8b5cf6; }
+  .star { width: 90px; height: 90px; background: #8b5cf6; margin: 8px; }
   .star.nz { clip-path: polygon(50% 0%, 79% 91%, 2% 35%, 98% 35%, 21% 91%); clip-rule: nonzero; }
   .star.eo { clip-path: polygon(50% 0%, 79% 91%, 2% 35%, 98% 35%, 21% 91%); clip-rule: evenodd; }
 
@@ -149,38 +141,29 @@
   .vertical .num { text-combine-upright: all; }
 
   /* animation */
-  .anim-row { display: flex; align-items: center; gap: 22px; }
-  .spin {
-    width: 64px;
-    height: 64px;
-    border-radius: 16px;
-    background: #3b82f6;
-    animation: spin-pulse 2s infinite ease-in-out;
-  }
-  .fader {
-    width: 64px;
-    height: 64px;
-    border-radius: 50%;
-    background: #10b981;
-    animation: fade 2s infinite alternate ease-in-out;
-  }
-  .slider {
-    width: 48px;
-    height: 48px;
-    border-radius: 12px;
-    background: #f43f5e;
-    animation: slide 2s infinite alternate ease-in-out;
-  }
-  .hue { font: bold 28px sans-serif; animation: hue 2s infinite linear; }
 </style>
 </head>
 <body>
+<div class="page">
   <div class="hero">
     <h1>wasm-html-to-image Showcase</h1>
     <p>最近追加した CSS 機能・縦書き・アニメーションをまとめて確認できるページです。Format を WebP / APNG / GIF にして Animation をオンにすると動きます。</p>
   </div>
 
   <div class="grid">
+    <div class="card wide">
+      <h2>縦書き (writing-mode: vertical-rl)</h2>
+      <span class="tag">text-emphasis / text-combine-upright</span>
+      <div class="row">
+        <div class="vertical">
+          <p style="margin:0">吾輩は<em>猫</em>である。名前はまだ無い。<br>どこで生れたかとんと見当がつかぬ。<br>2026年<span class="num">10</span>月に追加。</p>
+        </div>
+        <div class="vertical" style="border-right:0;border-left:4px solid #38bdf8;background:#f0f9ff;writing-mode:vertical-lr">
+          <p style="margin:0">vertical-lr は<br>左から右へ行が進みます。</p>
+        </div>
+      </div>
+    </div>
+
     <div class="card wide">
       <h2>corner-shape</h2>
       <span class="tag">round / scoop / bevel / notch / squircle / superellipse() / longhand / box-shadow / dashed</span>
@@ -208,8 +191,6 @@
     <div class="card">
       <h2>display: flow-root</h2>
       <span class="tag">float を内包 (clearfix 不要)</span>
-      <div class="fr"><div class="floated"></div>flow-root なし: float が親の外にはみ出る</div>
-      <div style="clear:both;height:8px"></div>
       <div class="fr root"><div class="floated"></div>flow-root あり: 親が float を内包する</div>
     </div>
 
@@ -248,28 +229,11 @@
     </div>
 
     <div class="card wide">
-      <h2>縦書き (writing-mode: vertical-rl)</h2>
-      <span class="tag">text-emphasis / text-combine-upright</span>
-      <div class="row">
-        <div class="vertical">
-          <p style="margin:0">吾輩は<em>猫</em>である。名前はまだ無い。<br>どこで生れたかとんと見当がつかぬ。<br>2026年<span class="num">10</span>月に追加。</p>
-        </div>
-        <div class="vertical" style="border-right:0;border-left:4px solid #38bdf8;background:#f0f9ff;writing-mode:vertical-lr">
-          <p style="margin:0">vertical-lr は<br>左から右へ行が進みます。</p>
-        </div>
-      </div>
-    </div>
-
-    <div class="card wide">
       <h2>アニメーション (@keyframes → animated WebP / APNG / GIF)</h2>
       <span class="tag">transform / opacity / color / background-color</span>
-      <div class="anim-row">
-        <div class="spin"></div>
-        <div class="fader"></div>
-        <div class="slider"></div>
-        <div class="hue">Animated</div>
-      </div>
+      <p style="margin:0;font-size:13px">このページ全体 (<code>.page</code>) が 1 つの <code>@keyframes</code> で拡大縮小・フェード・文字色・背景色を変化させています。エンジンは 1 つの @keyframes を 1 要素に適用するため、全体を包む要素をアニメーションさせています。</p>
     </div>
   </div>
+</div>
 </body>
 </html>
