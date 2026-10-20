@@ -1216,9 +1216,11 @@ inline std::string select_animation_item(const std::string& decls_raw, const std
     return out;
 }
 
-// Find the first qualified rule that binds `name`.
-inline AnimationBinding find_animation_binding(const std::string& css,
-                                                const std::string& name) {
+// Every qualified rule that binds `name`, in source order (a keyframes block may be used by
+// several rules, each selecting other elements).
+inline std::vector<AnimationBinding> find_animation_bindings(const std::string& css,
+                                                              const std::string& name) {
+    std::vector<AnimationBinding> bindings;
     AnimationBinding binding;
     const std::string name_l = to_lower(name);
     size_t pos = 0;
@@ -1288,12 +1290,20 @@ inline AnimationBinding find_animation_binding(const std::string& css,
             }
         }
         if (match) {
-            binding.selector = sel;
-            binding.timing = find_animation_timing(select_animation_item(decls_raw, name_l));
-            return binding;
+            AnimationBinding found;
+            found.selector = sel;
+            found.timing = find_animation_timing(select_animation_item(decls_raw, name_l));
+            bindings.push_back(std::move(found));
         }
     }
-    return binding;
+    return bindings;
+}
+
+// Find the first qualified rule that binds `name`.
+inline AnimationBinding find_animation_binding(const std::string& css,
+                                                const std::string& name) {
+    const auto all = find_animation_bindings(css, name);
+    return all.empty() ? AnimationBinding() : all.front();
 }
 
 // Find the selector of the first qualified rule that binds `name`.
@@ -1588,13 +1598,19 @@ inline std::vector<AnimationSpec> parse_animations(const std::string& html) {
     detail::parse_all_keyframes(css, specs);
     for (const auto& candidate : specs) {
         if (!candidate.has_declarations) continue;
-        AnimationSpec spec = candidate;
-        const detail::AnimationBinding binding = detail::find_animation_binding(css, spec.name);
-        spec.selector = binding.selector;
-        spec.timing = binding.timing;
-        spec.duration_value = binding.timing.duration;
-        detail::build_stops_from_raw(spec);
-        if (spec.valid || spec.needs_resolution) result.push_back(std::move(spec));
+        std::vector<detail::AnimationBinding> bindings =
+            detail::find_animation_bindings(css, candidate.name);
+        if (bindings.empty()) bindings.push_back(detail::AnimationBinding());
+        // One spec per binding rule: the same keyframes may animate other elements with
+        // other timings.
+        for (const auto& binding : bindings) {
+            AnimationSpec spec = candidate;
+            spec.selector = binding.selector;
+            spec.timing = binding.timing;
+            spec.duration_value = binding.timing.duration;
+            detail::build_stops_from_raw(spec);
+            if (spec.valid || spec.needs_resolution) result.push_back(std::move(spec));
+        }
     }
     return result;
 }

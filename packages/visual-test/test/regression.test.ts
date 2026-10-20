@@ -798,6 +798,19 @@ describe("regression: layout and paint probes", () => {
     expect(apng.includes("acTL")).toBe(true);
   });
 
+  it("the same @keyframes bound by several rules animates every rule's elements", async () => {
+    const html = `<html><head><style>
+      @keyframes tint { from { background-color: #f00 } to { background-color: #00f } }
+      .a { width: 40px; height: 40px; background: #000; animation: tint 400ms infinite; }
+      .wrap .b { width: 40px; height: 40px; margin-top: 10px; background: #000; animation: tint 800ms infinite; }
+    </style></head><body style="margin:0;background:#fff">
+      <div class="a"></div><div class="wrap"><div class="b"></div></div>
+    </body></html>`;
+    const first = await renderFirstFrame(html, 60, 100);
+    expect(near(first.at(10, 10), RED)).toBe(true); // first rule
+    expect(near(first.at(10, 60), RED)).toBe(true); // second rule (used to stay black)
+  });
+
   it("float margin box (not the border box) narrows the first line", async () => {
     const squares = '<i style="display:inline-block;width:16px;height:16px;background:#00f"></i>'.repeat(30);
     const { at } = await renderPng(
