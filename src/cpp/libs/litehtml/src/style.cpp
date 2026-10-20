@@ -40,18 +40,24 @@ namespace litehtml
       return unit == "deg" || unit == "rad" || unit == "grad" || unit == "turn";
     }
 
+    // calc()/min()/max()/clamp() are length-ish values. They are evaluated
+    // before the shorthand is parsed, but an expression that cannot be reduced
+    // to a single value stays a function token and must still be accepted where
+    // a <length-percentage> is expected.
+    bool offset_calc_token(const css_token &tok)
+    {
+      if (tok.type != CV_FUNCTION) return false;
+      const string name = lowcase(tok.name);
+      return name == "calc" || name == "min" || name == "max" || name == "clamp";
+    }
+
     // <length-percentage> (unitless zero is a valid length, angles are not).
     bool offset_lp_token(const css_token &tok)
     {
       if (tok.type == PERCENTAGE) return true;
       if (tok.type == NUMBER) return tok.n.number == 0;
       if (tok.type == DIMENSION) return !offset_angle_token(tok);
-      return false;
-    }
-
-    bool offset_zero_token(const css_token &tok)
-    {
-      return tok.type == NUMBER && tok.n.number == 0;
+      return offset_calc_token(tok);
     }
 
     bool offset_coord_box(const css_token &tok)
@@ -79,10 +85,37 @@ namespace litehtml
              offset_ident_is(tok, "center");
     }
 
-    // Validate the <position> value of offset-position. This mirrors the forms
-    // Chromium accepts for offset-position: `top 10px` is invalid, while
-    // `10px top`, `top left`, and the edge-offset form `left 10px top 20px` are
-    // valid.
+    bool offset_center_keyword(const css_token &tok)
+    {
+      return offset_ident_is(tok, "center");
+    }
+
+    // The functions that may be used as <offset-path>.
+    bool offset_path_function(const css_token &tok)
+    {
+      if (tok.type != CV_FUNCTION) return false;
+      const string name = lowcase(tok.name);
+      return name == "path" || name == "ray" || name == "url";
+    }
+
+    // path() and url() need a non-empty argument, ray() takes an angle.
+    bool offset_path_function_ok(const css_token &tok)
+    {
+      if (tok.type != CV_FUNCTION) return true;
+      if (lowcase(tok.name) == "ray") return true;
+      for (const auto &arg : tok.value)
+        if (arg.type == STRING || arg.type == URL) return !arg.str.empty();
+      return false;
+    }
+
+    // Validate the <position> value of offset-position. The accepted forms are:
+    //   * a single <length-percentage> or one of left/right/top/bottom/center
+    //   * two values: [ left | center | right | <length-percentage> ]
+    //                 [ top | center | bottom | <length-percentage> ]
+    //     Both of them may be keywords and then their order is free, but a
+    //     length keeps its axis, so `10px left` stays invalid.
+    //   * the edge-offset form [ left | right ] <length-percentage>
+    //     [ top | bottom ] <length-percentage>, the axes may be swapped.
     bool valid_offset_position(const css_token_vector &tokens)
     {
       if (tokens.empty()) return false;
@@ -93,39 +126,31 @@ namespace litehtml
 
       if (n == 2)
       {
-        bool first_h = offset_h_keyword(tokens[0]) || offset_ident_is(tokens[0], "center") ||
-                       offset_lp_token(tokens[0]);
-        bool second_v = offset_v_keyword(tokens[1]) || offset_ident_is(tokens[1], "center") ||
-                        offset_lp_token(tokens[1]);
+        const bool first_h = offset_h_keyword(tokens[0]) || offset_center_keyword(tokens[0]) ||
+                             offset_lp_token(tokens[0]);
+        const bool second_v = offset_v_keyword(tokens[1]) || offset_center_keyword(tokens[1]) ||
+                              offset_lp_token(tokens[1]);
         if (first_h && second_v) return true;
-        // Vertical keyword first is only valid with another keyword (`top left`).
-        return offset_v_keyword(tokens[0]) &&
-               (offset_h_keyword(tokens[1]) || offset_ident_is(tokens[1], "center"));
+        // The keyword order may be swapped, but only when both values are
+        // keywords: a length is always tied to its axis.
+        const bool first_v = offset_v_keyword(tokens[0]) || offset_center_keyword(tokens[0]);
+        const bool second_h = offset_h_keyword(tokens[1]) || offset_center_keyword(tokens[1]);
+        const bool first_len = offset_lp_token(tokens[0]);
+        const bool second_len = offset_lp_token(tokens[1]);
+        return !first_len && !second_len && first_v && second_h;
       }
 
-      if (n == 3 || n == 4)
+      if (n == 4)
       {
-        // Edge-offset form: each axis is a keyword, optionally with an offset.
-        bool seen_h = false, seen_v = false;
-        size_t i = 0;
-        while (i < n)
-        {
-          if (!seen_h && offset_h_keyword(tokens[i]))
-          {
-            seen_h = true;
-            i++;
-            if (i < n && offset_lp_token(tokens[i])) i++;
-          }
-          else if (!seen_v && offset_v_keyword(tokens[i]))
-          {
-            seen_v = true;
-            i++;
-            if (i < n && offset_lp_token(tokens[i])) i++;
-          }
-          else
-            return false;
-        }
-        return seen_h && seen_v;
+        // Edge-offset form: [ left | right ] <length-percentage>
+        //                   [ top | bottom ] <length-percentage>
+        if (offset_h_keyword(tokens[0]) && offset_lp_token(tokens[1]) &&
+            offset_v_keyword(tokens[2]) && offset_lp_token(tokens[3]))
+          return true;
+        if (offset_v_keyword(tokens[0]) && offset_lp_token(tokens[1]) &&
+            offset_h_keyword(tokens[2]) && offset_lp_token(tokens[3]))
+          return true;
+        return false;
       }
       return false;
     }
@@ -183,8 +208,9 @@ namespace litehtml
           path.push_back(tokens[i++]);
           have_path = true;
         }
-        else if (tokens[i].type == CV_FUNCTION)
+        else if (offset_path_function(tokens[i]) || tokens[i].type == URL)
         {
+          if (!offset_path_function_ok(tokens[i])) return false;
           path.push_back(tokens[i++]);
           if (i < tokens.size() && offset_coord_box(tokens[i]))
             path.push_back(tokens[i++]);
@@ -214,9 +240,10 @@ namespace litehtml
           rotate.push_back(tokens[i++]);
           have_rotate_keyword = true;
         }
-        else if (!have_rotate_angle &&
-                 (offset_angle_token(tokens[i]) || offset_zero_token(tokens[i])))
+        else if (!have_rotate_angle && offset_angle_token(tokens[i]))
         {
+          // A unitless zero is not accepted here: it is ambiguous between a
+          // distance and an angle and Chromium resolves it as a distance.
           rotate.push_back(tokens[i++]);
           have_rotate_angle = true;
         }
@@ -1334,8 +1361,10 @@ namespace litehtml
       // CSS Motion Path shorthand. Components are parsed in grammar order instead of
       // being classified independently; any out-of-order or unknown component drops
       // the whole declaration. offset-anchor is intentionally not handled here.
+      // `evaluated_value` is used so that calc() is reduced to a plain length
+      // before the components are split up.
       css_token_vector path_t, dist_t, rot_t, pos_t;
-      if (!parse_offset_shorthand(value, path_t, dist_t, rot_t, pos_t))
+      if (!parse_offset_shorthand(evaluated_value, path_t, dist_t, rot_t, pos_t))
         break;
       // Like every CSS shorthand, `offset` resets the longhands it does not mention
       // back to their initial value (none / normal / auto / normal).
