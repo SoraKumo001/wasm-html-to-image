@@ -1,1 +1,0 @@
-var e=``+new URL(`24-media-print-HnrJDDOT.html`,import.meta.url).href;export{e as default};

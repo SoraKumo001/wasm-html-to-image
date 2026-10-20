@@ -1,1 +1,0 @@
-var e=``+new URL(`25-page-breaks-DuDtoBo4.html`,import.meta.url).href;export{e as default};

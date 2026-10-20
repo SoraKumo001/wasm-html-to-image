@@ -1,1 +1,0 @@
-var e=``+new URL(`18-border-image-Dao5O55V.html`,import.meta.url).href;export{e as default};

@@ -1,1 +1,0 @@
-var e=``+new URL(`12-bidi-text-DKM1fvZw.html`,import.meta.url).href;export{e as default};

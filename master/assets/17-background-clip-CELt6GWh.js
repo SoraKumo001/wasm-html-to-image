@@ -1,1 +1,0 @@
-var e=``+new URL(`17-background-clip-BXShUayz.html`,import.meta.url).href;export{e as default};

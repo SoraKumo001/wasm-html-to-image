@@ -1,1 +1,0 @@
-var e=``+new URL(`06-flexbox-DaKv9vG2.html`,import.meta.url).href;export{e as default};

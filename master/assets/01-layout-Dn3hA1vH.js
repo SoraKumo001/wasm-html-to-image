@@ -1,1 +1,0 @@
-var e=``+new URL(`01-layout-Ryw_Ryb2.html`,import.meta.url).href;export{e as default};
