@@ -478,9 +478,11 @@ int satoru_render_animation_to_converter_val(SatoruInstance* satoru, ImageConver
             unit.target->set_attr("style", style.c_str());
             unit.target->refresh_styles();
         }
-        // Recursive: descendants inherit colour / font properties from the animated element
-        // (e.g. an <em> inside an animated <p>), so their computed styles must follow.
-        for (const auto& unit : units) unit.target->compute_styles(true);
+        // Descendants inherit `color` from the animated element (e.g. an <em> inside an animated
+        // <p>), so only a colour animation recomputes the subtree; opacity / transform /
+        // background-color are not inherited and the element alone is enough.
+        for (const auto& unit : units)
+            unit.target->compute_styles(!unit.color_stops.empty());
         style_touched = true;
         // Paint-phase sync: re-collecting styled (now positioned at opacity<1
         // or carrying a transform) nodes keeps them in the positioned/stacking
@@ -507,7 +509,7 @@ int satoru_render_animation_to_converter_val(SatoruInstance* satoru, ImageConver
             unit.target->set_attr("style", unit.base_style.c_str());
             unit.target->refresh_styles();
         }
-        for (const auto& unit : units) unit.target->compute_styles(true);
+        for (const auto& unit : units) unit.target->compute_styles(!unit.color_stops.empty());
         satoru->doc->root_render()->fetch_positioned();
         satoru->doc->root_render()->sort_positioned();
     }
