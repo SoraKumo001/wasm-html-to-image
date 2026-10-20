@@ -191,7 +191,7 @@ describe("cli options", () => {
       try {
         expect(resolveAnimation(flags({ animation: 1000 }))).toEqual({
           warning:
-            "--animation is only supported for webp output; ignoring (format=png).",
+            "--animation is only supported for webp, apng and gif output; ignoring (format=png).",
         });
       } finally {
         warn.mockRestore();

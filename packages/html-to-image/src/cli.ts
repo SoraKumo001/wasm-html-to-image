@@ -11,6 +11,8 @@ const OUTPUT_FORMATS = [
   "pdf",
   "jpeg",
   "webp",
+  "apng",
+  "gif",
   "avif",
   "jxl",
   "raw",
@@ -51,7 +53,7 @@ program
   )
   .option(
     "--animation <duration-ms>",
-    "sample the document's @keyframes opacity / transform / color animation into an animated WebP; one loop duration in ms (webp output only; the CSS animation-duration wins and this value is an upper bound)",
+    "sample the document's @keyframes opacity / transform / color animation into an animated WebP / APNG / GIF; one loop duration in ms (webp, apng and gif output only; the CSS animation-duration wins and this value is an upper bound)",
     (v) => parseInt(v, 10),
   )
   .option(
@@ -61,7 +63,7 @@ program
   )
   .option(
     "--animation-loop <n>",
-    "how many times the animated WebP repeats (0 = infinite, the default; 1 = play once; requires --animation)",
+    "how many times the animated WebP / APNG / GIF repeats (0 = infinite, the default; 1 = play once; requires --animation)",
     (v) => parseInt(v, 10),
   )
   .action(async (input: string, options: CliFlags) => {

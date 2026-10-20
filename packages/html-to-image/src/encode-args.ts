@@ -13,6 +13,8 @@ export const FORMAT_INT: Record<OutputFormat, number> = {
   jpeg: 4,
   avif: 5,
   jxl: 8,
+  apng: 9,
+  gif: 10,
   raw: 6,
   thumbhash: 7,
   none: -1,

@@ -26,6 +26,8 @@ title: 互換性と仕様
 | `png`        | `Uint8Array` | Skia 描画 → PNG エンコード                 | 画像をデコードして PNG 出力       |
 | `jpeg`       | `Uint8Array` | Skia 描画 → JPEG 圧縮 (`quality`)          | 画像をデコードして JPEG 圧縮      |
 | `webp`       | `Uint8Array` | Skia 描画 → WebP 圧縮 (`quality`)          | 画像をデコードして WebP 圧縮      |
+| `apng`       | `Uint8Array` | Skia 描画 → PNG (`animation` 指定でアニメーション) | 画像をデコードして PNG 化 |
+| `gif`        | `Uint8Array` | Skia 描画 → GIF (256 色・ディザ。`animation` 指定でアニメーション) | 画像をデコードして GIF 化 |
 | `avif`       | `Uint8Array` | Skia 描画 → AVIF 圧縮 (`quality`, `speed`) | 画像をデコードして AVIF 圧縮      |
 | `jxl`        | `Uint8Array` | Skia 描画 → JXL 圧縮 (`quality`, `speed`)  | 画像をデコードして JXL 圧縮（出力のみ。JXL 入力のデコードは未対応） |
 | `raw`        | `Uint8Array` | RGBA 非圧縮ピクセルデータ                  | RGBA 非圧縮ピクセルデータ         |
@@ -33,7 +35,7 @@ title: 互換性と仕様
 | `svg`        | `string`     | Skia ベクター描画ストリーム                | `<image>` タグでラップした SVG    |
 | `pdf`        | `Uint8Array` | SkPDFDocument によるベクター PDF           | 画像を等倍 1 ページに配置した PDF |
 
-> `webp` は `animation: { duration, fps, loop }`（CLI: `--animation`）を指定するとアニメーション WebP を出力します。`opacity`・`transform`（`translate` / `rotate` / `scale` のみ）・`color` / `background-color` の `@keyframes` をサンプリングし、既定 15fps、上限は 5 秒（`duration` は内部で 5000ms にクランプ）／約 75 フレームです。再生回数は `loop`（CLI: `--animation-loop`）で指定でき、既定は `0`（無限ループ）です。キーフレームの値には `var()` を使用でき、カスタムプロパティは描画対象の要素の解決済みの値から補完されます。ループ長は CSS の `animation-duration`（`animation` ショートハンドを含む）が優先され、API の `duration` は上限クランプとして働きます。
+> `webp` / `apng` / `gif` は `animation: { duration, fps, loop }`（CLI: `--animation`）を指定するとアニメーション画像を出力します（`apng` は `animation` なしだと通常の PNG、`gif` は 256 色パレット + ディザで、透過部分は白背景に合成されます）。`opacity`・`transform`（`translate` / `rotate` / `scale` のみ）・`color` / `background-color` の `@keyframes` をサンプリングし、既定 15fps、上限は 5 秒（`duration` は内部で 5000ms にクランプ）／約 75 フレームです。再生回数は `loop`（CLI: `--animation-loop`）で指定でき、既定は `0`（無限ループ）です。キーフレームの値には `var()` を使用でき、カスタムプロパティは描画対象の要素の解決済みの値から補完されます。ループ長は CSS の `animation-duration`（`animation` ショートハンドを含む）が優先され、API の `duration` は上限クランプとして働きます。
 
 ---
 
@@ -65,7 +67,7 @@ title: 互換性と仕様
 ブラウザエンジン（Chromium/WebKit）ではなく、軽量な **litehtml + Skia** の静的レンダラーであるため、以下の機能は動作しません。HTML/CSS を設計する際はこれらを避けてください：
 
 1. **JavaScript の実行不可**: `<script>` タグやインラインイベントハンドラ (`onclick` など) は一切実行されません。静的な HTML/CSS マークアップのみ生成してください。
-2. **CSS アニメーション / トランジション（部分対応）**: `transition` は評価されません。`@keyframes` は既定では評価されず静的スタイルのみ描画されますが、`animation: { duration, fps, loop }`（CLI: `--animation`）を指定すると **`opacity`・`transform`・`color` / `background-color` の `@keyframes`**をサンプリングしてアニメーション WebP を出力できます。再生回数は `loop`（CLI: `--animation-loop`、既定 `0` = 無限）で指定できます。既定 15fps、上限は 5 秒（`duration` は 5000ms にクランプ）／約 75 フレームです。CSS の `animation-duration`（`animation` ショートハンドを含む、`var()` 対応）が 1 イテレーションの長さになり、`animation-delay` と `animation-iteration-count`（数値 / `infinite`）からサンプリング区間が決まります（`infinite` は 1 イテレーション、`alternate` / `alternate-reverse` は 2 イテレーション）。API の `duration` は区間全体の上限クランプ、API の `fps` は上限のフレームレートとして働きます。`transform` は `translate` / `rotate` / `scale` のみに対応し、キーフレーム間で関数リストが一致しない場合はその要素は静止したままです。タイミング関数はキーフレームブロック内の `animation-timing-function` がその停止点から始まる区間に適用され、要素側（`<style>` またはインライン）の `animation-timing-function` が既定値になります（`linear` / `ease` / `ease-in` / `ease-out` / `ease-in-out` / `cubic-bezier()` / `steps()` / `step-start` / `step-end`、`opacity`・`color`・`transform` の補間に適用）。`animation-direction`（normal / reverse / alternate / alternate-reverse）と `animation-fill-mode`（none / forwards / backwards / both）にも対応し、`animation-delay` 中の値（backwards）と終了後の保持値（forwards）を解決します。負の `animation-delay` はイテレーション途中からの開始として扱います。1 要素への複数アニメーション（`animation-name: a, b`）は対象外です。
+2. **CSS アニメーション / トランジション（部分対応）**: `transition` は評価されません。`@keyframes` は既定では評価されず静的スタイルのみ描画されますが、`animation: { duration, fps, loop }`（CLI: `--animation`）を指定すると **`opacity`・`transform`・`color` / `background-color` の `@keyframes`**をサンプリングしてアニメーション WebP / APNG / GIF を出力できます。再生回数は `loop`（CLI: `--animation-loop`、既定 `0` = 無限）で指定できます。既定 15fps、上限は 5 秒（`duration` は 5000ms にクランプ）／約 75 フレームです。CSS の `animation-duration`（`animation` ショートハンドを含む、`var()` 対応）が 1 イテレーションの長さになり、`animation-delay` と `animation-iteration-count`（数値 / `infinite`）からサンプリング区間が決まります（`infinite` は 1 イテレーション、`alternate` / `alternate-reverse` は 2 イテレーション）。API の `duration` は区間全体の上限クランプ、API の `fps` は上限のフレームレートとして働きます。`transform` は `translate` / `rotate` / `scale` のみに対応し、キーフレーム間で関数リストが一致しない場合はその要素は静止したままです。タイミング関数はキーフレームブロック内の `animation-timing-function` がその停止点から始まる区間に適用され、要素側（`<style>` またはインライン）の `animation-timing-function` が既定値になります（`linear` / `ease` / `ease-in` / `ease-out` / `ease-in-out` / `cubic-bezier()` / `steps()` / `step-start` / `step-end`、`opacity`・`color`・`transform` の補間に適用）。`animation-direction`（normal / reverse / alternate / alternate-reverse）と `animation-fill-mode`（none / forwards / backwards / both）にも対応し、`animation-delay` 中の値（backwards）と終了後の保持値（forwards）を解決します。負の `animation-delay` はイテレーション途中からの開始として扱います。1 要素への複数アニメーション（`animation-name: a, b`）は対象外です。
 3. **HTML5 `<canvas>` スクリプト**: `canvas.getContext('2d')` による描画は行われません。図形描画にはインライン `<svg>` や CSS プロパティを使用してください。
 4. **動的インタラクション**: `:hover`, `:active`, `:focus` などの動的疑似クラスは反映されません。
 5. **ブラウザ専用 Web API**: `window`, `document`, `localStorage`, `IndexedDB` などの Web API は参照できません。

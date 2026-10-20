@@ -293,6 +293,49 @@ const isBluish = (r: number, g: number, b: number) =>
 const isBlackish = (r: number, g: number, b: number) =>
   r < 100 && g < 100 && b < 100;
 
+// Minimal GIF LZW decoder (variable code size, clear / end codes) for the GIF probe.
+function lzwDecode(data: number[], minCode: number): number[] {
+  const clear = 1 << minCode;
+  const eoi = clear + 1;
+  let bits = minCode + 1;
+  let table: number[][] = [];
+  const reset = () => {
+    table = [];
+    for (let i = 0; i < clear; i++) table.push([i]);
+    table.push([], []);
+    bits = minCode + 1;
+  };
+  reset();
+  const out: number[] = [];
+  let acc = 0;
+  let nbits = 0;
+  let prev: number[] | undefined;
+  for (const byte of data) {
+    acc |= byte << nbits;
+    nbits += 8;
+    while (nbits >= bits) {
+      const code = acc & ((1 << bits) - 1);
+      acc >>= bits;
+      nbits -= bits;
+      if (code === clear) {
+        reset();
+        prev = undefined;
+        continue;
+      }
+      if (code === eoi) return out;
+      let entry: number[];
+      if (code < table.length) entry = table[code];
+      else if (prev) entry = [...prev, prev[0]];
+      else return out;
+      out.push(...entry);
+      if (prev) table.push([...prev, entry[0]]);
+      prev = entry;
+      if (table.length === 1 << bits && bits < 12) bits++;
+    }
+  }
+  return out;
+}
+
 describe("regression: layout and paint probes", () => {
   it("column flex container with auto height honours min-height (flex-grow fills it)", async () => {
     const { at } = await renderPng(
@@ -435,6 +478,83 @@ describe("regression: layout and paint probes", () => {
     expect(near(nonzero.at(40, 40), BLUE)).toBe(true);
     expect(isWhite(evenodd.at(40, 40))).toBe(true);
     expect(near(evenodd.at(5, 5), BLUE)).toBe(true);
+  });
+
+  it("animated APNG / GIF carry the sampled frames, loop count and valid image data", async () => {
+    const html = `<html><head><style>
+      @keyframes fade { from { opacity: 0 } to { opacity: 1 } }
+      .box { width: 80px; height: 80px; background: #00f; animation-name: fade; }
+    </style></head><body style="margin:0;background:#fff"><div class="box"></div></body></html>`;
+    const animation = { duration: 300, fps: 10, loop: 3 };
+
+    // --- APNG: acTL / fcTL / fdAT chunk structure; plain PNG decoders show frame 0.
+    const apng = await render({ value: html, width: 120, height: 120, format: "apng", animation });
+    expect(apng.animation).toBe(true);
+    const png = Buffer.from(apng.data as Uint8Array);
+    const chunks: string[] = [];
+    let actl: { frames: number; plays: number } | undefined;
+    for (let pos = 8; pos < png.length; ) {
+      const len = png.readUInt32BE(pos);
+      const type = png.toString("latin1", pos + 4, pos + 8);
+      chunks.push(type);
+      if (type === "acTL") actl = { frames: png.readUInt32BE(pos + 8), plays: png.readUInt32BE(pos + 12) };
+      pos += 12 + len;
+    }
+    expect(actl?.frames).toBeGreaterThan(1);
+    expect(actl?.plays).toBe(3);
+    expect(chunks.filter((c) => c === "fcTL").length).toBe(actl!.frames);
+    expect(chunks.filter((c) => c === "fdAT").length).toBe(actl!.frames - 1);
+    expect(chunks[chunks.length - 1]).toBe("IEND");
+    const first = PNG.sync.read(png);
+    expect([first.width, first.height]).toEqual([120, 120]);
+
+    // A single frame (no animation option) degrades to a plain PNG.
+    const stillPng = await render({ value: html, width: 120, height: 120, format: "apng" });
+    expect(stillPng.animation).toBeFalsy();
+    expect(Buffer.from(stillPng.data as Uint8Array).includes("acTL")).toBe(false);
+
+    // --- GIF: header, NETSCAPE loop (plays - 1), one image descriptor per frame.
+    const gif = await render({ value: html, width: 120, height: 120, format: "gif", animation });
+    expect(gif.animation).toBe(true);
+    const g = Buffer.from(gif.data as Uint8Array);
+    expect(g.toString("latin1", 0, 6)).toBe("GIF89a");
+    expect([g.readUInt16LE(6), g.readUInt16LE(8)]).toEqual([120, 120]);
+    const tableLen = 3 * (1 << ((g[10] & 7) + 1));
+    let pos = 13 + tableLen;
+    let loop = -1;
+    let frameCount = 0;
+    let firstFrame: number[] | undefined;
+    while (pos < g.length && g[pos] !== 0x3b) {
+      if (g[pos] === 0x21) {
+        if (g[pos + 1] === 0xff) loop = g.readUInt16LE(pos + 16);
+        pos += 2;
+        while (g[pos] !== 0) pos += g[pos] + 1;
+        pos += 1;
+      } else {
+        expect(g[pos]).toBe(0x2c);
+        frameCount++;
+        const minCode = g[pos + 10];
+        pos += 11;
+        const data: number[] = [];
+        while (g[pos] !== 0) {
+          data.push(...g.subarray(pos + 1, pos + 1 + g[pos]));
+          pos += g[pos] + 1;
+        }
+        pos += 1;
+        if (!firstFrame) firstFrame = lzwDecode(data, minCode);
+      }
+    }
+    expect(g[g.length - 1]).toBe(0x3b);
+    expect(frameCount).toBeGreaterThan(1);
+    expect(loop).toBe(2);
+    expect(firstFrame?.length).toBe(120 * 120);
+    // Frame 0 is fully faded out (opacity 0): white background everywhere.
+    const white = firstFrame![60 * 120 + 60];
+    expect(firstFrame!.every((v) => v === white)).toBe(true);
+
+    const stillGif = await render({ value: html, width: 120, height: 120, format: "gif" });
+    expect(stillGif.animation).toBeFalsy();
+    expect(Buffer.from(stillGif.data as Uint8Array).includes("NETSCAPE")).toBe(false);
   });
 
   it("float margin box (not the border box) narrows the first line", async () => {

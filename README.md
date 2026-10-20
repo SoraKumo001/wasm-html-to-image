@@ -148,6 +148,8 @@ All formats return a `RenderResult<T>` object containing `.data` (`Uint8Array` o
 | `png`       | `Uint8Array`       | Skia render → PNG encode                       | Decodes and converts to PNG   |
 | `jpeg`      | `Uint8Array`       | Skia render → JPEG encode (`quality`)          | Decodes and compresses JPEG   |
 | `webp`      | `Uint8Array`       | Skia render → WebP encode (`quality`)          | Decodes and compresses WebP   |
+| `apng`      | `Uint8Array`       | Skia render → PNG (animated with `animation`)  | Decodes and converts to PNG   |
+| `gif`       | `Uint8Array`       | Skia render → GIF (256 colors, dithered; animated with `animation`) | Decodes and converts to GIF |
 | `avif`      | `Uint8Array`       | Skia render → AVIF encode (`quality`, `speed`) | Decodes and compresses AVIF   |
 | `jxl`       | `Uint8Array`       | Skia render → JXL encode (`quality`, `speed`)  | Decodes and compresses JXL    |
 | `raw`       | `Uint8Array`       | Uncompressed RGBA pixel bytes                  | Uncompressed RGBA pixel bytes |

@@ -41,7 +41,7 @@ struct EncodeFrameView {
 
 struct EncodeResult {
     sk_sp<SkData> data;          // 成功時のみ非null
-    std::string format_name;     // "png"/"webp"/"jpeg"/"avif"/"jxl"/"raw"/"thumbhash"/"unknown"
+    std::string format_name;     // "png"/"apng"/"gif"/"webp"/"jpeg"/"avif"/"jxl"/"raw"/"thumbhash"/"unknown"
     bool is_animation = false;   // animated WebPで実際に複数帧を符号化したときのみtrue
     bool success() const { return data != nullptr; }
 };

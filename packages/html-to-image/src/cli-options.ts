@@ -59,9 +59,9 @@ export function resolveAnimation(flags: CliFlags): AnimationResolution {
     }
     return {};
   }
-  if (flags.format !== "webp") {
+  if (flags.format !== "webp" && flags.format !== "apng" && flags.format !== "gif") {
     return {
-      warning: `--animation is only supported for webp output; ignoring (format=${flags.format}).`,
+      warning: `--animation is only supported for webp, apng and gif output; ignoring (format=${flags.format}).`,
     };
   }
   // `loop` stays absent unless requested: the render() default (0) is the

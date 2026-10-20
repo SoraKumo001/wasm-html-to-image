@@ -56,6 +56,8 @@ export type OutputFormat =
   | "pdf"
   | "jpeg"
   | "webp"
+  | "apng"
+  | "gif"
   | "avif"
   | "jxl"
   | "raw"
@@ -122,7 +124,7 @@ export interface HtmlToImageOptions extends RenderOptions {
    *   is the length of one iteration; `animation-delay` /
    *   `animation-iteration-count` define the sampled timeline, capped by
    *   `duration`; `fps` is the upper frame rate. `loop` is how many times the
-   *   animated WebP repeats: `0` (the default) means infinite, `1` means play
+   *   animated WebP / APNG / GIF repeats: `0` (the default) means infinite, `1` means play
    *   once. `opacity`, `transform` (`translate` / `rotate` / `scale` only) and
    *   `color` / `background-color` keyframes are animated; their values may
    *   use `var()` (resolved against the element's custom properties).

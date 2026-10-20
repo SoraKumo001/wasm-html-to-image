@@ -20,7 +20,9 @@ enum class RenderFormat {
     AVIF = 5,
     RAW = 6,
     ThumbHash = 7,
-    JXL = 8
+    JXL = 8,
+    APNG = 9,
+    GIF = 10
 };
 
 // image-opt版 FitMode を共通化 (satoru側 RenderOptions::fitType 0/1/2 と同義)
@@ -33,10 +35,10 @@ struct ConverterEncodeOptions {
     int speed = 6;
     bool animation = false;
     FitMode fit = FitMode::Contain;
-    // animated WebP の再生回数 (libwebp の anim_params.loop_count)。
+    // animated WebP / APNG / GIF の再生回数 (libwebp の anim_params.loop_count 相当)。
     // 0 = 無限回 (Skia `SkWebpEncoder::EncodeAnimated` 従来値)。
     int animation_loop = 0;
-    // animated WebP の canvas背景色 (libwebp の anim_params.bgcolor, 0xAARRGGBB)。
+    // animated WebP の canvas背景色 (GIF では透過部分の合成色) (libwebp の anim_params.bgcolor, 0xAARRGGBB)。
     // 既定は libwebp と同じ不透明白 (0xFFFFFFFF)。
     uint32_t animation_bgcolor = 0xFFFFFFFFu;
 };

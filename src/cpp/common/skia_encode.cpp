@@ -6,6 +6,8 @@
 
 #include "skia_utils.h"
 #include "thumbhash.h"
+#include "apng_encoder.h"
+#include "gif_encoder.h"
 #include "webp_anim_encoder.h"
 #include "avif/avif.h"
 #include "include/core/SkStream.h"
@@ -251,6 +253,38 @@ EncodeResult encode_frames(const EncodeFrameView* frames, size_t count,
                 return out;
             }
             out.data = encode_webp_single(first.pixmap(), options.quality);
+            return out;
+        }
+        case RenderFormat::APNG: {
+            // Animated PNG when several frames are requested; a single frame is a plain PNG.
+            if (options.animation && count > 1) {
+                std::vector<ApngFrame> anim_frames;
+                anim_frames.reserve(count);
+                for (size_t i = 0; i < count; ++i) {
+                    if (frames[i].bitmap == nullptr) return out;
+                    anim_frames.push_back({frames[i].bitmap->pixmap(), frames[i].duration});
+                }
+                out.format_name = "apng";
+                out.data = encode_apng(anim_frames.data(), anim_frames.size(), options.animation_loop);
+                out.is_animation = out.data != nullptr;
+                return out;
+            }
+            out.format_name = "png";
+            out.data = encode_png(first.pixmap());
+            return out;
+        }
+        case RenderFormat::GIF: {
+            out.format_name = "gif";
+            const size_t n = (options.animation && count > 1) ? count : 1;
+            std::vector<GifFrame> gif_frames;
+            gif_frames.reserve(n);
+            for (size_t i = 0; i < n; ++i) {
+                if (frames[i].bitmap == nullptr) return out;
+                gif_frames.push_back({frames[i].bitmap->pixmap(), frames[i].duration});
+            }
+            out.data = encode_gif(gif_frames.data(), gif_frames.size(), options.animation_loop,
+                                  options.animation_bgcolor);
+            out.is_animation = out.data != nullptr && n > 1;
             return out;
         }
         case RenderFormat::JPEG: {

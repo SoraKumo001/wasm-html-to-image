@@ -20,12 +20,12 @@ npx wasm-html-to-image <input> [options]
 | `--output <path>`    | `-o` | Input based | Target output path                                                       |
 | `--width <number>`   | `-w` |    `800`    | Viewport width                                                           |
 | `--height <number>`  | `-h` |   `auto`    | Viewport height                                                          |
-| `--format <format>`  | `-f` |    `png`    | Format (`svg`, `png`, `pdf`, `jpeg`, `webp`, `avif`, `jxl`, `raw`, `thumbhash`) |
+| `--format <format>`  | `-f` |    `png`    | Format (`svg`, `png`, `pdf`, `jpeg`, `webp`, `apng`, `gif`, `avif`, `jxl`, `raw`, `thumbhash`) |
 | `--quality <number>` | `-q` |    `85`     | Encode quality 0–100                                                     |
 | `--base-url <url>`   |  -   |  From input | Base URL for relative resources; defaults to the post-redirect URL (URL input) or the file's directory, explicit wins |
-| `--animation <duration-ms>` | - | Disabled | Sample the document's **opacity / transform / color / background-color** `@keyframes` into an animated WebP (one loop length in ms; `webp` output only; clamped to 5000 ms) |
+| `--animation <duration-ms>` | - | Disabled | Sample the document's **opacity / transform / color / background-color** `@keyframes` into an animated WebP / APNG / GIF (one loop length in ms; `webp`, `apng` and `gif` output only; clamped to 5000 ms) |
 | `--animation-fps <n>` | - | `15` | Animation sampling fps (used with `--animation`; ~75 frames total cap) |
-| `--animation-loop <n>` | - | `0` (infinite) | How many times the animated WebP repeats (`0` = infinite, `1` = play once; used with `--animation`) |
+| `--animation-loop <n>` | - | `0` (infinite) | How many times the animated WebP / APNG / GIF repeats (`0` = infinite, `1` = play once; used with `--animation`) |
 
 ## Examples
 
