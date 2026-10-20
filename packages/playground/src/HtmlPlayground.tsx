@@ -179,13 +179,15 @@ const App: React.FC = () => {
     const box = previewBoxRef.current;
     if (!box) return;
     const update = () => {
-      // Leave room for the vertical scrollbar so no horizontal scrollbar appears.
-      const available = box.clientWidth - 18;
-      setPreviewScale(
+      // offsetWidth does not change when the vertical scrollbar appears (clientWidth does,
+      // which made the scale oscillate): subtract the border and a fixed scrollbar width.
+      const available = box.offsetWidth - 2 - 17;
+      const next =
         params.width > 0 && available > 0
           ? Math.min(1, available / params.width)
-          : 1,
-      );
+          : 1;
+      // Ignore sub-pixel noise so a tiny change cannot retrigger the layout.
+      setPreviewScale((prev) => (Math.abs(prev - next) < 0.002 ? prev : next));
     };
     update();
     const observer = new ResizeObserver(update);
@@ -1022,8 +1024,8 @@ const App: React.FC = () => {
               borderRadius: "4px",
               height: "800px",
               background: "white",
-              overflowY: "auto",
-              overflowX: "auto",
+              overflowY: "scroll",
+              overflowX: "hidden",
               boxSizing: "border-box",
             }}
           >
