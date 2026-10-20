@@ -1,9 +1,9 @@
-// Smoke test for cloudflare-ogp via `wrangler dev` + HTTP assertions.
-// - Starts `wrangler dev` on a random free port (no fixed ports).
+// Smoke test for cloudflare-ogp via `cf dev` + HTTP assertions.
+// - Starts `cf dev` on a random free port (no fixed ports).
 // - Waits up to 60s for the worker to become ready.
 // - Asserts `GET /?title=Hello` returns image/png with PNG magic + >100B.
 // - Asserts `GET /not-found` returns 404.
-// - Always kills the wrangler child process; exits non-zero on failure.
+// - Always kills the cf child process; exits non-zero on failure.
 import { spawn } from "node:child_process";
 import net from "node:net";
 import { fileURLToPath } from "node:url";
@@ -40,12 +40,10 @@ async function waitForReady(port, child, deadline) {
   // once the worker code is running; connection errors mean "not yet").
   for (;;) {
     if (child.exitCode !== null || child.signalCode !== null) {
-      throw new Error(
-        `wrangler dev exited early (code=${child.exitCode} signal=${child.signalCode})`,
-      );
+      throw new Error(`cf dev exited early (code=${child.exitCode} signal=${child.signalCode})`);
     }
     if (Date.now() > deadline) {
-      throw new Error("timed out waiting for wrangler dev to become ready");
+      throw new Error("timed out waiting for cf dev to become ready");
     }
     try {
       const res = await fetch(`http://127.0.0.1:${port}/not-found`);
@@ -63,28 +61,34 @@ async function waitForReady(port, child, deadline) {
 
 async function main() {
   const port = await getFreePort();
-  console.log(`[smoke] starting wrangler dev on port ${port}`);
-  // Spawn wrangler via node on its JS entry (avoids .cmd/shell quirks on
-  // Windows so `child.kill()` reliably terminates the actual process).
+  console.log(`[smoke] starting cf dev on port ${port}`);
+  // Spawn cf via node on its bin entry (avoids .cmd/shell quirks on Windows
+  // so `child.kill()` reliably terminates the actual process).
   const { createRequire } = await import("node:module");
   const require = createRequire(new URL("../package.json", import.meta.url));
-  const wranglerPkg = require.resolve("wrangler/package.json");
-  const wranglerEntry = path.join(path.dirname(wranglerPkg), "bin", "wrangler.js");
-  const child = spawn(process.execPath, [wranglerEntry, "dev", "--port", String(port)], {
+  const cfPkg = require.resolve("cf/package.json");
+  const cfEntry = path.join(path.dirname(cfPkg), "bin", "cf");
+  const child = spawn(process.execPath, [cfEntry, "dev", "--port", String(port)], {
     cwd: PKG_DIR,
     stdio: ["ignore", "pipe", "pipe"],
-    env: { ...process.env, BROWSER: "none" },
+    env: {
+      ...process.env,
+      BROWSER: "none",
+      CI: "true",
+      CF_SEND_TELEMETRY: "false",
+      CF_QUIET: "1",
+    },
   });
   let tail = "";
   const onData = (d) => {
     const s = String(d);
     tail += s;
     if (tail.length > 20000) tail = tail.slice(-20000);
-    process.stdout.write(`[wrangler] ${s}`);
+    process.stdout.write(`[cf] ${s}`);
   };
   child.stdout.on("data", onData);
   child.stderr.on("data", onData);
-  child.on("error", (e) => console.error(`[smoke] wrangler spawn error: ${e.message}`));
+  child.on("error", (e) => console.error(`[smoke] cf spawn error: ${e.message}`));
 
   const kill = () =>
     new Promise((resolve) => {
@@ -115,7 +119,7 @@ async function main() {
 
   try {
     await waitForReady(port, child, Date.now() + READY_TIMEOUT_MS);
-    console.log(`[smoke] wrangler dev ready on port ${port}`);
+    console.log(`[smoke] cf dev ready on port ${port}`);
 
     // 1) PNG render check.
     const pngRes = await fetch(
@@ -148,7 +152,7 @@ async function main() {
     console.log("[smoke] all assertions passed");
   } catch (err) {
     console.error(`[smoke] FAILED: ${err?.stack ?? err}`);
-    console.error(`[smoke] wrangler log tail:\n${tail.slice(-4000)}`);
+    console.error(`[smoke] cf log tail:\n${tail.slice(-4000)}`);
     process.exitCode = 1;
   } finally {
     await kill();

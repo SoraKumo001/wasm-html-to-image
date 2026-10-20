@@ -72,7 +72,7 @@ export function clearResourceCache(): void {
   resourceCache.clear();
 }
 
-function isNodeRuntime(): boolean {
+export function isNodeRuntime(): boolean {
   const proc = (globalThis as { process?: { versions?: { node?: string } } })
     .process;
   return typeof proc?.versions?.node === "string";
@@ -136,7 +136,11 @@ async function fetchResourceBytesInner(
   timeoutMs?: number,
   confineFiles?: boolean,
 ): Promise<Uint8Array | null> {
-  const headers = userAgent ? { "User-Agent": userAgent } : undefined;
+  // Browser fetch forbids overriding User-Agent (and Firefox preflights it,
+  // breaking Google Fonts/jsDelivr CORS). Spoof only in Node where we
+  // control the UA to get woff2 CSS.
+  const headers =
+    userAgent && isNodeRuntime() ? { "User-Agent": userAgent } : undefined;
   // Abort hung connections so one stalled server cannot outlive `timeoutMs`.
   const signal =
     timeoutMs !== undefined

@@ -76,6 +76,9 @@ namespace litehtml
                 virtual void                            split_text(const char* text, const std::function<void(const char*)>& on_word, const std::function<void(const char*)>& on_space);
 
                 virtual void                            push_layer(uint_ptr hdc, float opacity, blend_mode bm) {}
+                // Same, with the area the layer's content can paint to (a conservative bound, in the
+                // coordinates the content is drawn in). Containers may allocate a smaller layer.
+                virtual void                            push_layer(uint_ptr hdc, float opacity, blend_mode bm, const position& /*bounds*/) { push_layer(hdc, opacity, bm); }
                 virtual void                            pop_layer(uint_ptr hdc) {}
 
                 virtual void                            push_transform(uint_ptr hdc, const css_token_vector& transform, const css_token_vector& origin, const position& pos) {}

@@ -1025,6 +1025,48 @@ describe("regression: layout and paint probes", () => {
     expect(colorType(rich.data as Uint8Array)).not.toBe(3); // RGB or RGBA
   });
 
+  it("opacity layers are bounded to the subtree but never clip what it paints outside its box", async () => {
+    // Shadow outside the box.
+    const shadow = await renderPng(
+      `<div style="margin:40px;width:40px;height:40px;background:#00f;opacity:.5;box-shadow:0 0 20px 6px #f00"></div>`,
+      200,
+      140,
+    );
+    expect(isWhite(shadow.at(34, 60))).toBe(false); // 6px left of the box: shadow, not clipped
+    expect(near(shadow.at(60, 60), [128, 128, 255], 40)).toBe(true); // half-transparent blue
+    // Text overflowing a narrow box.
+    const overflow = await renderPng(
+      `<div style="margin:10px;width:30px;height:30px;opacity:.5;white-space:nowrap;font:bold 30px/30px sans-serif;color:#000">WWWWWWWW</div>`,
+      300,
+      60,
+    );
+    let inkRight = 0;
+    for (let x = 100; x < 300; x++) for (let y = 0; y < 60; y++) if (!isWhite(overflow.at(x, y))) inkRight++;
+    expect(inkRight).toBeGreaterThan(50); // text past the 30px box is still painted
+    // Own transform: the layer follows the moved element.
+    const moved = await renderPng(
+      `<div style="margin:10px;width:40px;height:40px;background:#00f;opacity:.5;transform:translate(100px,20px)"></div>`,
+      200,
+      100,
+    );
+    expect(near(moved.at(130, 50), [128, 128, 255], 40)).toBe(true);
+    expect(isWhite(moved.at(30, 30))).toBe(true);
+    // Rotation reaches outside the unrotated box.
+    const rotated = await renderPng(
+      `<div style="margin:50px;width:60px;height:20px;background:#00f;opacity:.5;transform:rotate(90deg)"></div>`,
+      200,
+      200,
+    );
+    expect(near(rotated.at(80, 30), [128, 128, 255], 40)).toBe(true); // top of the rotated bar
+    // A transformed descendant cannot be bounded: still painted.
+    const child = await renderPng(
+      `<div style="margin:20px;width:40px;height:40px;opacity:.5"><div style="width:40px;height:40px;background:#00f;transform:translate(80px,0)"></div></div>`,
+      200,
+      100,
+    );
+    expect(near(child.at(120, 40), [128, 128, 255], 40)).toBe(true);
+  });
+
   it("float margin box (not the border box) narrows the first line", async () => {
     const squares = '<i style="display:inline-block;width:16px;height:16px;background:#00f"></i>'.repeat(30);
     const { at } = await renderPng(

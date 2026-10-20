@@ -621,6 +621,7 @@ namespace litehtml
     int get_text_emphasis_position() const;
 
     const shadow_vector &get_box_shadow() const;
+    const shadow_vector &get_text_shadow() const { return m_text_shadow; }
     const css_token_vector &get_transform() const;
     const css_token_vector &get_rotate() const;
     const css_token_vector &get_scale() const;

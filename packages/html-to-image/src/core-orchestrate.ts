@@ -25,6 +25,7 @@ import {
   type ResolveResourceHook,
 } from "./diagnostics.js";
 import {
+  isNodeRuntime,
   now,
   resolveHtmlResources,
   type DiagState,
@@ -331,7 +332,11 @@ export async function resolveHtmlSource(
     return value as string | string[];
   }
   if (typeof url === "string") {
-    const headers = { "User-Agent": userAgent ?? DEFAULT_USER_AGENT };
+    // Same as resource fetch: User-Agent override is Node-only. In browsers
+    // it is forbidden and triggers a Firefox preflight that breaks CORS.
+    const headers = isNodeRuntime()
+      ? { "User-Agent": userAgent ?? DEFAULT_USER_AGENT }
+      : undefined;
     const fetchStart = now();
     // Post-redirect document URL (`Response.url`). Relative resources must
     // resolve against the final URL, not the stale request URL: a 301 to a new

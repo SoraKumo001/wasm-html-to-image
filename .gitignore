@@ -85,3 +85,4 @@ tmp/
 
 # Cloudflare
 .wrangler
+.cloudflare/

@@ -1,3 +1,7 @@
+// NOTE: cf (the new CLI) does not read wrangler.jsonc. Project config lives in
+// cloudflare.config.ts, and the Wrangler-bundler-only options (wasm `rules`)
+// live in wrangler.config.ts. This file is kept for reference/older tooling;
+// it is not used by `cf dev` / `cf deploy`.
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "cloudflare-ogp",

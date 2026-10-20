@@ -312,6 +312,9 @@ class container_skia : public litehtml::document_container {
 
     virtual void push_layer(litehtml::uint_ptr hdc, float opacity,
                             litehtml::blend_mode bm) override;
+    virtual void push_layer(litehtml::uint_ptr hdc, float opacity, litehtml::blend_mode bm,
+                            const litehtml::position& bounds) override;
+    void push_layer_impl(float opacity, litehtml::blend_mode bm, const SkRect* bounds);
     virtual void pop_layer(litehtml::uint_ptr hdc) override;
 
     virtual void push_transform(litehtml::uint_ptr hdc, const litehtml::css_token_vector &transform,

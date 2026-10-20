@@ -7,3 +7,4 @@ allowBuilds:
   workerd: true
 minimumReleaseAgeExclude:
   - "@cloudflare/workers-types@5.20260906.1"
+  - cf@1.0.0-beta.19

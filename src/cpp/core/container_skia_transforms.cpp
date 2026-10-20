@@ -25,6 +25,22 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 void container_skia::push_layer(litehtml::uint_ptr hdc, float opacity, litehtml::blend_mode bm) {
+    push_layer_impl(opacity, bm, nullptr);
+}
+
+void container_skia::push_layer(litehtml::uint_ptr hdc, float opacity, litehtml::blend_mode bm,
+                                const litehtml::position& bounds) {
+    // The tagged (SVG) output keeps the full-size layer markers.
+    if (m_tagging) {
+        push_layer_impl(opacity, bm, nullptr);
+        return;
+    }
+    const SkRect rect = SkRect::MakeXYWH((float)bounds.x, (float)bounds.y, (float)bounds.width,
+                                         (float)bounds.height);
+    push_layer_impl(opacity, bm, &rect);
+}
+
+void container_skia::push_layer_impl(float opacity, litehtml::blend_mode bm, const SkRect* bounds) {
     m_paint.opacityStack.push_back(opacity);
     if (m_canvas) {
         flush();
@@ -53,7 +69,8 @@ void container_skia::push_layer(litehtml::uint_ptr hdc, float opacity, litehtml:
             SkPaint paint;
             paint.setAlphaf(opacity);
             paint.setBlendMode(sk_bm);
-            m_canvas->saveLayer(nullptr, &paint);
+            // A bounded layer only allocates / composites that area instead of the whole canvas.
+            m_canvas->saveLayer(bounds, &paint);
         } else {
             m_canvas->save();
         }

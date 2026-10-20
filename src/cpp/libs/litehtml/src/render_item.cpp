@@ -7,6 +7,14 @@
 #include "document_container.h"
 #include "types.h"
 
+namespace {
+bool subtree_paint_bounds(const std::shared_ptr<litehtml::render_item>& ri, litehtml::pixel_t ox,
+                          litehtml::pixel_t oy, bool is_root, litehtml::pixel_t& left,
+                          litehtml::pixel_t& top, litehtml::pixel_t& right,
+                          litehtml::pixel_t& bottom, int depth);
+}  // namespace
+
+
 static bool is_orthogonal(litehtml::writing_mode wm1, litehtml::writing_mode wm2) {
     return (wm1 == litehtml::writing_mode_horizontal_tb) !=
            (wm2 == litehtml::writing_mode_horizontal_tb);
@@ -1057,8 +1065,24 @@ void litehtml::render_item::draw_children(uint_ptr hdc, pixel_t x, pixel_t y, co
                                  !backdrop_filter.empty() || !clip_path.empty() || !mask.empty() ||
                                  has_offset;
 
+                // An opacity layer without filters / masks / clip-paths / offset paths / blend modes
+                // is pushed inside the element's own transform (the result is identical) with a
+                // bound of what the subtree can paint, instead of a full-canvas layer.
+                bool bounded_layer = false;
+                position layer_bounds;
+                if (opacity < 1.0f && mix_blend == blend_mode_normal && !has_offset &&
+                    filter.empty() && backdrop_filter.empty() && mask.empty() && clip_path.empty() &&
+                    el->src_el()->css().get_position() != element_position_fixed) {
+                    pixel_t l = 1e9f, t = 1e9f, r = -1e9f, b = -1e9f;
+                    if (subtree_paint_bounds(el, pos.x, pos.y, true, l, t, r, b, 0)) {
+                        layer_bounds = position(l, t, r - l, b - t);
+                        bounded_layer = true;
+                    }
+                }
+
                 if (has_props) {
-                    if (opacity < 1.0f || mix_blend != blend_mode_normal) doc->container()->push_layer(hdc, opacity, mix_blend);
+                    if (!bounded_layer && (opacity < 1.0f || mix_blend != blend_mode_normal))
+                        doc->container()->push_layer(hdc, opacity, mix_blend);
                     if (!backdrop_filter.empty()) doc->container()->push_backdrop_filter(hdc, el);
 
                     if (has_offset) {
@@ -1120,6 +1144,8 @@ void litehtml::render_item::draw_children(uint_ptr hdc, pixel_t x, pixel_t y, co
                         if (!merged_transform.empty())
                             doc->container()->push_transform(
                                 hdc, merged_transform, el->src_el()->css().get_transform_origin(), el_pos);
+                        if (bounded_layer)
+                            doc->container()->push_layer(hdc, opacity, mix_blend, layer_bounds);
                         if (!filter.empty()) doc->container()->push_filter(hdc, filter);
                         if (!clip_path.empty())
                             doc->container()->push_clip_path(hdc, clip_path, el_pos);
@@ -1144,10 +1170,11 @@ void litehtml::render_item::draw_children(uint_ptr hdc, pixel_t x, pixel_t y, co
                     if (!mask.empty()) doc->container()->pop_mask(hdc);
                     if (!clip_path.empty()) doc->container()->pop_clip_path(hdc);
                     if (!filter.empty()) doc->container()->pop_filter(hdc);
+                    if (bounded_layer) doc->container()->pop_layer(hdc);
                     if (!rotate.empty() || !scale.empty() || !translate.empty() || !transform.empty()) doc->container()->pop_transform(hdc);
                     if (has_offset) doc->container()->pop_offset_path(hdc);
                     if (!backdrop_filter.empty()) doc->container()->pop_backdrop_filter(hdc);
-                    if (opacity < 1.0f || mix_blend != blend_mode_normal) doc->container()->pop_layer(hdc);
+                    if (!bounded_layer && (opacity < 1.0f || mix_blend != blend_mode_normal)) doc->container()->pop_layer(hdc);
                 }
             }
 
@@ -1473,6 +1500,84 @@ void litehtml::render_item::dump(litehtml::dumper& cout) {
 
     cout.end_node();
 }
+
+namespace {
+
+// Conservative area the subtree of `ri` paints to (absolute coordinates of the drawing pass),
+// or false when that cannot be bounded safely (transforms / filters / masks / clip-paths /
+// offset paths / blend modes below the root, positioned or table / grid / list-item boxes).
+// Used to give an opacity layer a bound instead of the whole canvas.
+bool subtree_paint_bounds(const std::shared_ptr<litehtml::render_item>& ri, litehtml::pixel_t ox,
+                          litehtml::pixel_t oy, bool is_root, litehtml::pixel_t& left,
+                          litehtml::pixel_t& top, litehtml::pixel_t& right,
+                          litehtml::pixel_t& bottom, int depth) {
+    using namespace litehtml;
+    if (depth > 64) return false;
+    const auto& css = ri->src_el()->css();
+    if (!is_root) {
+        if (!css.get_transform().empty() || !css.get_rotate().empty() || !css.get_scale().empty() ||
+            !css.get_translate().empty() || !css.get_offset_path().empty() ||
+            css.get_mix_blend_mode() != blend_mode_normal)
+            return false;
+    }
+    if (!css.get_filter().empty() || !css.get_backdrop_filter().empty() || !css.get_mask().empty())
+        return false;
+    {
+        css_token_vector clip_path;
+        if (ri->src_el()->get_custom_property(_clip_path_, clip_path) && !clip_path.empty())
+            return false;
+    }
+    const element_position positioning = css.get_position();
+    if (positioning == element_position_absolute || positioning == element_position_fixed)
+        return false;
+    switch (css.get_display()) {
+        case display_table: case display_inline_table: case display_table_caption:
+        case display_table_cell: case display_table_column: case display_table_column_group:
+        case display_table_footer_group: case display_table_header_group: case display_table_row:
+        case display_table_row_group: case display_grid: case display_inline_grid:
+        case display_list_item:
+            return false;
+        default:
+            break;
+    }
+
+    position box = ri->pos();
+    box.x += ox;
+    box.y += oy;
+    const pixel_t content_x = box.x, content_y = box.y;
+    box += ri->get_paddings();
+    box += ri->get_borders();
+
+    // Painted outside the box: shadows, plus a margin for outlines / glyph overhang / strokes.
+    pixel_t grow = 24 + css.get_font_metrics().height * 0.5f;
+    auto shadow_extent = [](const shadow_vector& shadows) {
+        pixel_t e = 0;
+        for (const auto& s : shadows) {
+            if (s.inset) continue;
+            pixel_t reach = std::abs(s.x.val()) + std::abs(s.y.val()) + s.blur.val() * 1.5f +
+                            std::max<pixel_t>(0, s.spread.val());
+            e = std::max(e, reach);
+        }
+        return e;
+    };
+    grow += std::max(shadow_extent(css.get_box_shadow()), shadow_extent(css.get_text_shadow()));
+
+    left = std::min(left, box.x - grow);
+    top = std::min(top, box.y - grow);
+    right = std::max(right, box.x + box.width + grow);
+    bottom = std::max(bottom, box.y + box.height + grow);
+
+    // Inline boxes lay their text out relative to the enclosing block, not to themselves.
+    const bool inline_box = css.get_display() == display_inline;
+    for (const auto& child : ri->children()) {
+        if (!subtree_paint_bounds(child, inline_box ? ox : content_x, inline_box ? oy : content_y,
+                                  false, left, top, right, bottom, depth + 1))
+            return false;
+    }
+    return true;
+}
+
+}  // namespace
 
 litehtml::position litehtml::render_item::get_placement() const {
     litehtml::position pos = m_pos;
