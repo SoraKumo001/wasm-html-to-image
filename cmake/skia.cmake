@@ -189,4 +189,13 @@ if(WASM_ENABLE_TEXT_SHAPING)
 endif()
 target_compile_definitions(skia_lib PUBLIC ${SKIA_UNIFIED_DEFS})
 target_compile_options(skia_lib PRIVATE ${COMMON_COMPILE_OPTIONS} -w)
+# SSE2/SSSE3/SSE4.1: Skia picks its optimized blitters / raster pipeline / memset from the compile-time
+# CPU level. Emscripten maps those intrinsics onto wasm SIMD128 (already enabled by -msimd128);
+# without them Skia falls back to the scalar "portable" code (store_8888/load_8888/blit_row ...).
+# skcms probes AVX headers once it sees __SSE__ and breaks on Emscripten, so it stays scalar.
+foreach(_skia_src IN LISTS SKIA_CORE_SRC)
+  if(NOT _skia_src MATCHES "/modules/skcms/")
+    set_property(SOURCE "${_skia_src}" APPEND PROPERTY COMPILE_OPTIONS -msse2 -mssse3 -msse4.1)
+  endif()
+endforeach()
 target_link_libraries(skia_lib PUBLIC ${HTML_TO_IMAGE_LIBS})

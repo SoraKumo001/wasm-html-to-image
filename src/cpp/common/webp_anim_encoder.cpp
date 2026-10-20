@@ -151,7 +151,6 @@ sk_sp<SkData> encode_webp_animated(const WebpAnimFrame* frames, size_t count,
         if (!preprocess_webp_picture(pic.get(), &webp_config, pixmap, lossless)) {
             return nullptr;
         }
-        if (!WebPEncode(&webp_config, pic.get())) return nullptr;
 
         if (!WebPAnimEncoderAdd(enc.get(), pic.get(), timestamp, &webp_config)) {
             return nullptr;
