@@ -296,6 +296,8 @@ namespace litehtml
       _line_height_,
       _line_clamp_,
       __webkit_line_clamp_,
+      _max_lines_,
+      _block_ellipsis_,
       __webkit_hyphens_,
       __moz_orient_,
       __webkit_appearance_,

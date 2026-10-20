@@ -211,7 +211,7 @@ bool litehtml::render_item_inline_context::text_wrap_eligible(const containing_b
     if(src_el()->css().get_white_space() != white_space_normal) return false;
     if(src_el()->css().get_text_indent().val() != 0) return false;
     if(src_el()->css().get_text_overflow() == text_overflow_ellipsis) return false;
-    if(src_el()->css().get_line_clamp() > 0) return false;
+    if(src_el()->css().get_line_clamp() > 0 || src_el()->css().get_max_lines() > 0) return false;
     if(self_size.render_inline_size() <= 0) return false;
     return true;
 }
@@ -670,15 +670,19 @@ void litehtml::render_item_inline_context::place_inline(std::unique_ptr<line_box
         style_display display = src_el()->css().get_display();
         box_orient orient = src_el()->css().get_webkit_box_orient();
 
-        if (line_clamp > 0 &&
+        int max_lines = src_el()->css().get_max_lines();
+        bool webkit_clamp = line_clamp > 0 &&
             (display == display_webkit_box || display == display_webkit_inline_box) &&
-            orient == box_orient_vertical &&
-            m_line_boxes.size() >= (size_t)line_clamp)
+            orient == box_orient_vertical;
+        // max-lines clamps any block container; -webkit-line-clamp needs a vertical -webkit-box.
+        size_t limit = webkit_clamp ? (size_t)line_clamp : (max_lines > 0 ? (size_t)max_lines : 0);
+        if (limit > 0 && m_line_boxes.size() >= limit)
         {
             // We reached the limit. Force ellipsis on the last allowed line.
             m_is_clamped = true;
             auto& last_line = m_line_boxes.back();
             last_line->set_text_overflow(text_overflow_ellipsis);
+            last_line->set_overflow(overflow_hidden);
 
             // Add the item to the last line even if it doesn't fit,
             // so that line_box::finish can perform the ellipsis.

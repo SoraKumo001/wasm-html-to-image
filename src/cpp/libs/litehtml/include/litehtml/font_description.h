@@ -48,6 +48,7 @@ struct font_description {
     shadow_vector text_shadow;
     pixel_t text_stroke_width = 0;  // -webkit-text-stroke-width, in px
     web_color text_stroke_color = web_color::current_color;  // -webkit-text-stroke-color
+    std::string block_ellipsis = "\xE2\x80\xA6";  // block-ellipsis text appended by line clamping
 
     // Resolved OpenType features, low priority first (font-variant-* then
     // font-feature-settings) so later entries can override earlier ones.
@@ -89,6 +90,9 @@ struct font_description {
         if (text_stroke_width > 0) {
             out += ":tsw=" + std::to_string(text_stroke_width);
             out += ":tsc=" + text_stroke_color.to_string();
+        }
+        if (block_ellipsis != "\xE2\x80\xA6") {
+            out += ":be=" + block_ellipsis;
         }
         for (const auto& f : features) {
             out += ":ff=" + std::to_string(f.tag) + "=" + std::to_string(f.value);

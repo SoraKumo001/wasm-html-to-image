@@ -165,6 +165,8 @@ namespace litehtml
 
     int m_order;
     int m_line_clamp;
+    int m_max_lines;
+    string m_block_ellipsis;
     box_orient m_webkit_box_orient;
     float m_opacity;
     aspect_ratio m_aspect_ratio;
@@ -285,6 +287,8 @@ namespace litehtml
                        m_column_rule(),
                        m_order(0),
                        m_line_clamp(0),
+                       m_max_lines(0),
+                       m_block_ellipsis("\xE2\x80\xA6"),
                        m_webkit_box_orient(box_orient_horizontal),
                        m_opacity(1.0f),
                        m_aspect_ratio(),
@@ -557,6 +561,9 @@ namespace litehtml
 
     int get_line_clamp() const;
     void set_line_clamp(int line_clamp);
+
+    int get_max_lines() const;
+    const string& get_block_ellipsis() const;
 
     box_orient get_webkit_box_orient() const;
     void set_webkit_box_orient(box_orient orient);
@@ -1393,6 +1400,16 @@ namespace litehtml
   inline void css_properties::set_line_clamp(int line_clamp)
   {
     m_line_clamp = line_clamp;
+  }
+
+  inline int css_properties::get_max_lines() const
+  {
+    return m_max_lines;
+  }
+
+  inline const string& css_properties::get_block_ellipsis() const
+  {
+    return m_block_ellipsis;
   }
 
   inline box_orient css_properties::get_webkit_box_orient() const

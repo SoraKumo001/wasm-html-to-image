@@ -946,6 +946,15 @@ void litehtml::css_properties::compute(const element* el, const document::ptr& d
     if (m_line_clamp == 0) {
         m_line_clamp = el->get_property<int>(__webkit_line_clamp_, false, 0, offset(m_line_clamp));
     }
+    // max-lines / block-ellipsis (CSS Overflow 4). block-ellipsis is stored as the final text:
+    // auto -> U+2026, no-ellipsis -> "", <string> -> the string.
+    m_max_lines = el->get_property<int>(_max_lines_, false, 0, offset(m_max_lines));
+    // The ellipsis of a clamped last line is clipped by the element's overflow clip, so a
+    // max-lines block container is treated as overflow:hidden (its box is N lines tall anyway).
+    if (m_max_lines > 0 && m_overflow == overflow_visible && m_display != display_inline &&
+        m_display != display_none) {
+        m_overflow = m_overflow_x = m_overflow_y = overflow_hidden;
+    }
     m_column_count = el->get_property<int>(_column_count_, false, 0, offset(m_column_count));
     m_column_width = el->get_property<css_length>(_column_width_, false,
                                                  css_length::predef_value(0),
@@ -1171,6 +1180,10 @@ void litehtml::css_properties::compute_font(const element* el, const document::p
         m_text_underline_position = text_underline_position_auto;
     }
 
+    // block-ellipsis is part of the font description (it is the text a clamped line ends with).
+    m_block_ellipsis = el->get_property<string>(_block_ellipsis_, true, "\xE2\x80\xA6",
+                                                offset(m_block_ellipsis));
+
     // text-emphasis
     m_text_emphasis_style =
         el->get_property<string>(_text_emphasis_style_, true, "", offset(m_text_emphasis_style));
@@ -1276,6 +1289,7 @@ void litehtml::css_properties::compute_font(const element* el, const document::p
     descr.text_shadow = m_text_shadow;
     descr.text_stroke_width = text_stroke_width;
     descr.text_stroke_color = text_stroke_color;
+    descr.block_ellipsis = m_block_ellipsis;
 
     // font-kerning maps onto the `kern` OpenType feature. `auto` leaves the
     // kerning of the font itself alone, `normal` turns it on and `none` turns
@@ -1660,6 +1674,7 @@ litehtml::css_properties::dump_get_attrs() const {
     ret.emplace_back("border_spacing_x", m_css_border_spacing_x.to_string());
     ret.emplace_back("border_spacing_y", m_css_border_spacing_y.to_string());
     ret.emplace_back("line_clamp", std::to_string(m_line_clamp));
+    ret.emplace_back("max_lines", std::to_string(m_max_lines));
     ret.emplace_back("webkit_box_orient", index_value(m_webkit_box_orient, box_orient_strings));
     ret.emplace_back("word_break", index_value(m_word_break, word_break_strings));
     ret.emplace_back("break_before", index_value(m_break_before, break_flow_strings));

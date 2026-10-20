@@ -381,6 +381,27 @@ describe("regression: layout and paint probes", () => {
     expect(near(at(80, 45), [0, 255, 0])).toBe(true); // following block starts after the float
   });
 
+  it("max-lines clamps any block container and block-ellipsis controls the marker", async () => {
+    const text = "WWWW WWWW WWWW WWWW WWWW WWWW WWWW WWWW";
+    const row = (img: PNG, y0: number, y1: number) => {
+      let n = 0;
+      for (let y = y0; y < y1; y++)
+        for (let x = 0; x < img.width; x++) {
+          const i = (img.width * y + x) * 4;
+          if (img.data[i] < 128 && img.data[i + 3] > 0) n++;
+        }
+      return n;
+    };
+    const css = "width:100px;font:bold 20px/20px sans-serif;color:#000";
+    const free = await renderPng(`<div style="${css}">${text}</div>`, 120, 120);
+    const clamped = await renderPng(`<div style="${css};max-lines:2">${text}</div>`, 120, 120);
+    const bare = await renderPng(`<div style="${css};max-lines:2;block-ellipsis:no-ellipsis">${text}</div>`, 120, 120);
+    expect(row(free.img, 40, 120)).toBeGreaterThan(0);
+    expect(row(clamped.img, 40, 120)).toBe(0); // nothing past line 2
+    expect(row(clamped.img, 20, 40)).toBeGreaterThan(0);
+    expect(row(clamped.img, 20, 40)).not.toBe(row(bare.img, 20, 40)); // ellipsis marker differs
+  });
+
   it("float margin box (not the border box) narrows the first line", async () => {
     const squares = '<i style="display:inline-block;width:16px;height:16px;background:#00f"></i>'.repeat(30);
     const { at } = await renderPng(

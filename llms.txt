@@ -226,6 +226,7 @@ The rendering engine couples **litehtml** (HTML/CSS layout) and **Google Skia** 
 - **Ellipsis & Multi-line Clamping**:
   - Single-line: `overflow: hidden; text-overflow: ellipsis; white-space: nowrap;`
   - Multi-line clamp: `-webkit-line-clamp: 2; -webkit-box-orient: vertical; display: -webkit-box; overflow: hidden;` (also supports standard `line-clamp`).
+  - Standard clamp: `max-lines: 2` on any block container (implies `overflow: hidden`); `block-ellipsis: auto | no-ellipsis | "<string>"` replaces the end marker (`text-fit` is not supported).
 - **Text Stroke & Shadow**:
   - Stroke: `-webkit-text-stroke: <width> <color>` (also `-webkit-text-stroke-width`, `-webkit-text-stroke-color`, `-webkit-text-fill-color`).
   - Text Shadow: `text-shadow: offset-x offset-y blur-radius color` (multiple comma-separated shadows supported).

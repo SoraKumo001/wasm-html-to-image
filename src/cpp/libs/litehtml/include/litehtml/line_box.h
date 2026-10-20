@@ -212,6 +212,7 @@ namespace litehtml
         void				set_wrap_end(pixel_t end) { m_wrap_end = end; }
 
         void				set_text_overflow(text_overflow overflow) { m_text_overflow = overflow; }
+        void				set_overflow(overflow val) { m_overflow = val; }
         void				add_item(std::unique_ptr<line_box_item> item);
         bool				can_hold(const std::unique_ptr<line_box_item>& item, white_space ws) const;
         bool				is_empty() const;

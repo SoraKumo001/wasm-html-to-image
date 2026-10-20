@@ -1260,6 +1260,22 @@ namespace litehtml
         add_parsed_property(name, property_value(0, important, false, m_layer, m_specificity));
       break;
 
+    case _max_lines_:
+      if (val.type == NUMBER && val.n.number_type == css_number_integer && val.n.number >= 0)
+        add_parsed_property(name, property_value((int)val.n.number, important, false, m_layer, m_specificity));
+      else if (ident == "none")
+        add_parsed_property(name, property_value(0, important, false, m_layer, m_specificity));
+      break;
+
+    case _block_ellipsis_:
+      if (val.type == STRING)
+        add_parsed_property(name, property_value(val.str, important, false, m_layer, m_specificity));
+      else if (ident == "auto")
+        add_parsed_property(name, property_value(string("\xE2\x80\xA6"), important, false, m_layer, m_specificity));
+      else if (ident == "no-ellipsis")
+        add_parsed_property(name, property_value(string(), important, false, m_layer, m_specificity));
+      break;
+
     case _column_count_:
       if (val.type == NUMBER && val.n.number_type == css_number_integer)
         add_parsed_property(name, property_value((int)val.n.number, important, false, m_layer, m_specificity));
