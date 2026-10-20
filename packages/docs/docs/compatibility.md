@@ -16,7 +16,7 @@ title: 互換性と仕様
 | **HTML 文字列**     | 文字列 (先頭タグやテキスト) | 通常の HTML/CSS レンダリング                                    |
 | **HTML 文字列配列** | `string[]`                  | 複数ページの PDF 出力専用                                       |
 | **URL**             | `http://` または `https://` | 指定 URL の HTML を自動フェッチしてレンダリング                 |
-| **画像バイナリ**    | `Uint8Array` / `Buffer`     | マジックバイトにより PNG, JPEG, WebP, GIF, AVIF, BMP を自動認識 |
+| **画像バイナリ**    | `Uint8Array` / `Buffer`     | マジックバイトにより PNG, JPEG, WebP, GIF, AVIF, JPEG XL, BMP を自動認識 |
 | **Data URL**        | `data:image/*;base64,...`   | 画像として自動認識し最適化パイプラインへ直行                    |
 
 ### 出力形式 (`format`)

@@ -16,7 +16,7 @@ No headless browsers (Chromium, Puppeteer, or Playwright) required. Runs seamles
 ## ✨ Features
 
 - ⚡ **Single Unified WASM Binary**: HTML parsing, CSS layout, vector painting, and image encoding execute entirely inside WebAssembly without copying intermediate framebuffers across JS boundaries.
-- 🎨 **Versatile Inputs**: Renders HTML strings, remote Web URLs, multi-page HTML arrays, or raw image buffers (PNG, JPEG, WebP, GIF, AVIF, BMP, Data URLs).
+- 🎨 **Versatile Inputs**: Renders HTML strings, remote Web URLs, multi-page HTML arrays, or raw image buffers (PNG, JPEG, WebP, GIF, AVIF, JXL, BMP, Data URLs).
 - 📦 **Rich Output Formats**: Direct SVG vector streams, high-quality PNG, JPEG, WebP, AVIF, JXL, uncompressed RAW pixels, ThumbHash placeholders, and multi-page vector PDFs.
 - 🚀 **Zero-Config Single Bundle**: Use `wasm-html-to-image/single` to call `render()` immediately without manual WASM loading or build setup.
 - 🌐 **Edge & Serverless Native**: Dedicated subpaths (`/workerd` for Cloudflare Workers, `/edge-light` for Vercel Edge) tailored for strict serverless constraints.

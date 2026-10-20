@@ -691,6 +691,31 @@ describe("regression: layout and paint probes", () => {
     expect(await extent("text-fit:shrink 90%", long)).toBeGreaterThan(shrunk);
   });
 
+  it("<img> decodes JPEG XL (data URL) and image input accepts raw JXL bytes", async () => {
+    const jxl = (
+      await render({
+        value: `<body style="margin:0"><div style="width:40px;height:40px;background:#f00"></div></body>`,
+        width: 40,
+        height: 40,
+        format: "jxl",
+        quality: 100,
+      })
+    ).data as Uint8Array;
+    const b64 = Buffer.from(jxl).toString("base64");
+    const { at } = await renderPng(
+      `<img src="data:image/jxl;base64,${b64}" width="80" height="80">`,
+      100,
+      100,
+    );
+    expect(near(at(40, 40), RED)).toBe(true);
+    expect(isWhite(at(95, 95))).toBe(true);
+
+    const fromBytes = await render({ value: jxl, width: 40, format: "png" });
+    const png = PNG.sync.read(Buffer.from(fromBytes.data as Uint8Array));
+    expect([png.width, png.height]).toEqual([40, 40]);
+    expect(near([png.data[0], png.data[1], png.data[2]] as Rgb, RED)).toBe(true);
+  });
+
   it("float margin box (not the border box) narrows the first line", async () => {
     const squares = '<i style="display:inline-block;width:16px;height:16px;background:#00f"></i>'.repeat(30);
     const { at } = await renderPng(

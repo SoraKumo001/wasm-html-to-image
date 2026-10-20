@@ -1,5 +1,8 @@
 #include "image_decoder.h"
 
+#include <jxl/encode.h>
+#include <jxl/decode.h>
+
 #include <memory>
 #include <utility>
 
@@ -100,6 +103,12 @@ DecodeResult ImageDecoder::decode(const uint8_t* data, size_t size, sk_sp<SkFont
         result.animated = false;
     }
 
+    // 1b. JPEG XL (Skia has no JXL codec): decode with libjxl.
+    const JxlSignature sig = JxlSignatureCheck(data, size);
+    if ((sig == JXL_SIG_CODESTREAM || sig == JXL_SIG_CONTAINER) && decode_jxl(data, size, result)) {
+        return result;
+    }
+
     // 2. SVG (satoru側 decode_svg を統合。事前に共通 patch_svg_data を適用)。
     //    判定ヒューリスティックは satoru側 (先頭空白スキップ + '<') を採用。
     //    converter側は data[0] == '<' の直接比較 + api_load_image 側で事前パッチのため、
@@ -128,6 +137,85 @@ bool ImageDecoder::is_likely_svg(const uint8_t* data, size_t size) {
         --s;
     }
     return s >= 1 && p[0] == '<';
+}
+
+// JPEG XL (still or animated) -> N32 premul frames, converted to sRGB, orientation applied.
+bool ImageDecoder::decode_jxl(const uint8_t* data, size_t size, DecodeResult& result) {
+    JxlDecoder* dec = JxlDecoderCreate(nullptr);
+    if (!dec) return false;
+    struct Guard {
+        JxlDecoder* d;
+        ~Guard() { JxlDecoderDestroy(d); }
+    } guard{dec};
+
+    if (JxlDecoderSubscribeEvents(dec, JXL_DEC_BASIC_INFO | JXL_DEC_FRAME | JXL_DEC_FULL_IMAGE) !=
+        JXL_DEC_SUCCESS) {
+        return false;
+    }
+    JxlDecoderSetInput(dec, data, size);
+    JxlDecoderCloseInput(dec);
+
+    const JxlPixelFormat format = {4, JXL_TYPE_UINT8, JXL_NATIVE_ENDIAN, 0};
+    JxlBasicInfo info{};
+    bool have_info = false;
+    int duration_ms = 0;
+    SkBitmap rgba;  // straight RGBA8888 output buffer of the frame being decoded
+
+    for (;;) {
+        JxlDecoderStatus status = JxlDecoderProcessInput(dec);
+        if (status == JXL_DEC_BASIC_INFO) {
+            if (JxlDecoderGetBasicInfo(dec, &info) != JXL_DEC_SUCCESS) return false;
+            if (info.xsize == 0 || info.ysize == 0 || info.xsize > 32768 || info.ysize > 32768)
+                return false;
+            have_info = true;
+            // Output in sRGB regardless of the file's profile (best effort).
+            JxlColorEncoding srgb;
+            JxlColorEncodingSetToSRGB(&srgb, JXL_FALSE);
+            JxlDecoderSetOutputColorProfile(dec, &srgb, nullptr, 0);
+        } else if (status == JXL_DEC_FRAME) {
+            JxlFrameHeader header;
+            duration_ms = 0;
+            if (JxlDecoderGetFrameHeader(dec, &header) == JXL_DEC_SUCCESS && info.have_animation &&
+                info.animation.tps_numerator > 0) {
+                duration_ms = (int)((double)header.duration * 1000.0 * info.animation.tps_denominator /
+                                    info.animation.tps_numerator);
+            }
+        } else if (status == JXL_DEC_NEED_IMAGE_OUT_BUFFER) {
+            if (!have_info) return false;
+            size_t buffer_size = 0;
+            if (JxlDecoderImageOutBufferSize(dec, &format, &buffer_size) != JXL_DEC_SUCCESS)
+                return false;
+            if (buffer_size != (size_t)info.xsize * info.ysize * 4) return false;
+            rgba.reset();
+            if (!rgba.tryAllocPixels(SkImageInfo::Make((int)info.xsize, (int)info.ysize,
+                                                       kRGBA_8888_SkColorType,
+                                                       kUnpremul_SkAlphaType))) {
+                return false;
+            }
+            if (JxlDecoderSetImageOutBuffer(dec, &format, rgba.getPixels(), buffer_size) !=
+                JXL_DEC_SUCCESS) {
+                return false;
+            }
+        } else if (status == JXL_DEC_FULL_IMAGE) {
+            SkBitmap frame;
+            const SkImageInfo n32 = SkImageInfo::Make((int)info.xsize, (int)info.ysize,
+                                                      kN32_SkColorType, kPremul_SkAlphaType);
+            if (!frame.tryAllocPixels(n32) || !rgba.pixmap().readPixels(frame.pixmap())) return false;
+            result.frames.push_back({std::move(frame), duration_ms});
+        } else if (status == JXL_DEC_SUCCESS) {
+            break;
+        } else {
+            // error / unexpected end of input
+            if (result.frames.empty()) return false;
+            break;
+        }
+    }
+    if (result.frames.empty()) return false;
+    result.width = (int)info.xsize;
+    result.height = (int)info.ysize;
+    result.format = "jxl";
+    result.animated = result.frames.size() > 1;
+    return true;
 }
 
 DecodeResult ImageDecoder::decode_svg(const sk_sp<SkData>& data, sk_sp<SkFontMgr> font_mgr) {

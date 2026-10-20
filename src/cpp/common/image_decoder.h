@@ -44,6 +44,7 @@ class ImageDecoder {
                                        int& out_height, sk_sp<SkFontMgr> font_mgr = nullptr);
 
    private:
+    static bool decode_jxl(const uint8_t* data, size_t size, DecodeResult& result);
     static bool is_likely_svg(const uint8_t* data, size_t size);
     static DecodeResult decode_svg(const sk_sp<SkData>& data, sk_sp<SkFontMgr> font_mgr);
 };

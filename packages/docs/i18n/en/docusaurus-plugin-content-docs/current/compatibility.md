@@ -16,7 +16,7 @@ Supported input types, output formats, CSS properties, and runtime environments.
 | **HTML String**       | Text string with tags     | Regular HTML/CSS rendering                                 |
 | **HTML String Array** | `string[]`                | Multi-page PDF generation                                  |
 | **URL**               | `http://` or `https://`   | Auto-fetches and renders remote HTML                       |
-| **Image Buffer**      | `Uint8Array` / `Buffer`   | Magic-byte recognition for PNG, JPEG, WebP, GIF, AVIF, BMP |
+| **Image Buffer**      | `Uint8Array` / `Buffer`   | Magic-byte recognition for PNG, JPEG, WebP, GIF, AVIF, JPEG XL, BMP |
 | **Data URL**          | `data:image/*;base64,...` | Bypasses HTML path, routed to image optimization pipeline  |
 
 ### Outputs (`format`)

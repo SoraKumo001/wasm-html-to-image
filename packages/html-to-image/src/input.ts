@@ -52,6 +52,17 @@ function sniffImageFormat(bytes: Uint8Array): string | null {
     return "avif";
   if (bytes.length >= 2 && bytes[0] === 0x42 && bytes[1] === 0x4d)
     return "bmp";
+  // JPEG XL: bare codestream (FF 0A) or ISO BMFF container signature box.
+  if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0x0a) return "jxl";
+  if (
+    bytes.length >= 12 &&
+    bytes[0] === 0 &&
+    bytes[1] === 0 &&
+    bytes[2] === 0 &&
+    bytes[3] === 0x0c &&
+    ascii(bytes, 4, 8) === "JXL "
+  )
+    return "jxl";
   return null;
 }
 
@@ -59,7 +70,7 @@ function sniffImageFormat(bytes: Uint8Array): string | null {
  * Whether `value` is image input.
  *
  * - Binary (`Uint8Array` / `ArrayBuffer`): magic-byte sniffing for
- *   PNG/JPEG/WebP/GIF/AVIF/BMP. Unknown magic throws.
+ *   PNG/JPEG/WebP/GIF/AVIF/JXL/BMP. Unknown magic throws.
  * - `string`: `data:image/` prefix means image input; anything else is HTML.
  * - `string[]` (HTML vector) / `undefined`: not image input.
  */
