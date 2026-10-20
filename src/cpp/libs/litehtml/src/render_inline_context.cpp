@@ -31,13 +31,55 @@ bool satoru_is_ruby_box(const std::shared_ptr<litehtml::render_item>& el)
 	}
 	return false;
 }
+
+// text-wrap-style: balance/pretty stop after a handful of lines so a long
+// paragraph never pays for the extra layout passes (Chromium does the same).
+constexpr size_t k_max_balance_lines = 6;
+constexpr size_t k_max_pretty_lines  = 10;
+// Bisection steps for the narrowest wrap width that keeps the line count. The
+// search range is at most a block width, so 8 steps settle well below 2px.
+constexpr int k_wrap_width_search_steps = 8;
+
+// Words (non-space, non-break text runs) placed on a line.
+size_t count_line_words(const litehtml::line_box& box)
+{
+	size_t words = 0;
+	for(const auto& item : box.items())
+	{
+		if(item->get_type() != litehtml::line_box_item::type_text_part) continue;
+		const auto& src = item->get_el()->src_el();
+		if(src->is_white_space() || src->is_break()) continue;
+		++words;
+	}
+	return words;
 }
 
-litehtml::pixel_t litehtml::render_item_inline_context::_render_content(pixel_t /*x*/, pixel_t /*y*/, bool /*second_pass*/, const containing_block_context &self_size, formatting_context* fmt_ctx)
+// Inline size of the widest unbreakable text run in the block. A wrap width at
+// or below it cannot break any line further, so it is the lower bound of the
+// text-wrap-style search.
+litehtml::pixel_t widest_word(const std::vector<std::unique_ptr<litehtml::line_box>>& boxes)
+{
+	litehtml::pixel_t widest = 0;
+	for(const auto& box : boxes)
+	{
+		for(const auto& item : box->items())
+		{
+			if(item->get_type() != litehtml::line_box_item::type_text_part) continue;
+			if(item->get_el()->src_el()->is_white_space()) continue;
+			widest = std::max(widest, item->width());
+		}
+	}
+	return widest;
+}
+}
+
+void litehtml::render_item_inline_context::layout_lines(const containing_block_context &self_size, formatting_context* fmt_ctx, pixel_t wrap_end)
 {
     m_line_boxes.clear();
 	m_max_line_width = 0;
 	m_is_clamped = false;
+	m_wrap_eligible = true;
+	m_wrap_end = (wrap_end < 0) ? (pixel_t)self_size.render_inline_size() : wrap_end;
 
     white_space ws = src_el()->css().get_white_space();
     bool skip_spaces = false;
@@ -100,6 +142,84 @@ litehtml::pixel_t litehtml::render_item_inline_context::_render_content(pixel_t 
         });
 
     finish_last_box(true, self_size);
+}
+
+void litehtml::render_item_inline_context::apply_text_wrap_style(const containing_block_context &self_size, formatting_context* fmt_ctx)
+{
+    const text_wrap_style wrap_style = src_el()->css().get_text_wrap_style();
+    if(wrap_style != text_wrap_style_balance && wrap_style != text_wrap_style_pretty) return;
+    if(!text_wrap_eligible(self_size)) return;
+
+    const size_t line_count = m_line_boxes.size();
+    if(line_count < 2) return;
+    if(wrap_style == text_wrap_style_balance)
+    {
+        if(line_count > k_max_balance_lines) return;
+    } else
+    {
+        if(line_count > k_max_pretty_lines) return;
+        // pretty only repairs an orphan: a last line carrying a single word.
+        if(count_line_words(*m_line_boxes.back()) != 1) return;
+    }
+
+    const pixel_t full_width = self_size.render_inline_size();
+    const pixel_t min_word = widest_word(m_line_boxes);
+    if(min_word <= 0 || min_word + 2 >= full_width) return;
+
+    // The narrowest wrap width that still produces the same number of lines packs
+    // every line as full as the break opportunities allow, which is the layout
+    // Chromium produces for text-wrap-style: balance. Line boxes keep the full
+    // content width, so alignment is unaffected by the narrowing.
+    pixel_t low  = min_word;    // more lines than the original layout
+    pixel_t high = full_width;  // the original layout (line_count lines)
+    for(int step = 0; step < k_wrap_width_search_steps && high - low > 1; ++step)
+    {
+        const pixel_t probe = low + (high - low) / 2;
+        layout_lines(self_size, fmt_ctx, probe);
+        if(m_line_boxes.size() == line_count)
+            high = probe;
+        else
+            low = probe;
+    }
+
+    layout_lines(self_size, fmt_ctx, high);
+    bool applied = m_line_boxes.size() == line_count;
+    if(applied && wrap_style == text_wrap_style_pretty)
+    {
+        applied = count_line_words(*m_line_boxes.back()) != 1;
+    }
+    if(!applied)
+    {
+        // The narrowed pass changed the line count (it would move the following
+        // content) or kept the orphan: keep the normal wrapping.
+        layout_lines(self_size, fmt_ctx);
+    }
+}
+
+bool litehtml::render_item_inline_context::text_wrap_eligible(const containing_block_context &self_size) const
+{
+    // Only the plain horizontal case is handled: floats, atomic inlines and
+    // forced breaks clear m_wrap_eligible while the lines are collected. Vertical
+    // writing, shrink-to-fit widths (their intrinsic size comes from the
+    // unbalanced pass), line clamping and ellipsis are left on the normal path.
+    if(self_size.mode != writing_mode_horizontal_tb) return false;
+    if(self_size.size_mode & (containing_block_context::size_mode_measure |
+                              containing_block_context::size_mode_content |
+                              containing_block_context::size_mode_min_content)) return false;
+    if(!m_wrap_eligible || m_is_clamped) return false;
+    if(src_el()->css().get_text_wrap_mode() != text_wrap_mode_wrap) return false;
+    if(src_el()->css().get_white_space() != white_space_normal) return false;
+    if(src_el()->css().get_text_indent().val() != 0) return false;
+    if(src_el()->css().get_text_overflow() == text_overflow_ellipsis) return false;
+    if(src_el()->css().get_line_clamp() > 0) return false;
+    if(self_size.render_inline_size() <= 0) return false;
+    return true;
+}
+
+litehtml::pixel_t litehtml::render_item_inline_context::_render_content(pixel_t /*x*/, pixel_t /*y*/, bool /*second_pass*/, const containing_block_context &self_size, formatting_context* fmt_ctx)
+{
+    layout_lines(self_size, fmt_ctx);
+    apply_text_wrap_style(self_size, fmt_ctx);
 
     if (!m_line_boxes.empty())
     {
@@ -364,6 +484,10 @@ litehtml::pixel_t litehtml::render_item_inline_context::new_box(const std::uniqu
 			css().get_text_overflow(),
 			css().get_overflow(), css().get_writing_mode(), css().get_inline_reverse()));
 
+	// Break text at the narrowed inline end while the line box keeps the full
+	// content width (text-wrap-style). Floats can narrow a line further.
+	m_line_boxes.back()->set_wrap_end(std::min(m_wrap_end, (pixel_t)line_ctx.right));
+
 	// Add items returned by finish_last_box function into the new line
 	for(auto& it : items)
 	{
@@ -379,6 +503,16 @@ void litehtml::render_item_inline_context::place_inline(std::unique_ptr<line_box
 	{
 		item->get_el()->skip(true);
 		return;
+	}
+
+	// Floats, atomic inlines (images, inline-blocks, ruby), block-level items and
+	// forced breaks are outside the text-wrap-style balancing passes.
+	if(item->get_el()->src_el()->is_float() ||
+	   item->get_el()->src_el()->is_break() ||
+	   !item->get_el()->src_el()->is_inline() ||
+	   item->get_el()->src_el()->is_inline_box())
+	{
+		m_wrap_eligible = false;
 	}
 
     if(item->get_el()->src_el()->is_float())

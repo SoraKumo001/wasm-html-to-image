@@ -63,6 +63,29 @@ async function renderProbeText(body: string, width = 800, fontFace = PROBE_FONT_
 const probeLine = (style: string, text: string, family = "'RobotoProbe'") =>
   `<div style="font-family:${family},sans-serif;font-size:60px;line-height:90px;color:#000;${style}">${text}</div>`;
 
+// Right edge of the painted ink on every text line of a probe image. The probes
+// below pin line-height, so the ink of line i lies in rows
+// [i * lineHeight, (i + 1) * lineHeight). One entry per line that has ink.
+function lineRightEdges(img: PNG, lineHeight: number) {
+  const edges: number[] = [];
+  for (let y0 = 0; y0 < img.height; y0 += lineHeight) {
+    let right = -1;
+    for (let y = y0; y < Math.min(y0 + lineHeight, img.height); y++) {
+      for (let x = 0; x < img.width; x++) {
+        const i = (img.width * y + x) * 4;
+        if (img.data[i + 3] > 0 && img.data[i] < 128) right = Math.max(right, x);
+      }
+    }
+    if (right >= 0) edges.push(right + 1);
+  }
+  return edges;
+}
+
+// Spread (max - min) of the line lengths: the metric text-wrap-style: balance
+// is supposed to reduce.
+const lineEdgeSpread = (edges: number[]) =>
+  Math.max(...edges) - Math.min(...edges);
+
 // A red decoration line is anti-aliased against the white background, so a
 // partially covered pixel still counts as red when it is clearly redder.
 const isRedPixel = (img: PNG, x: number, y: number) => {
@@ -1089,6 +1112,63 @@ describe("regression: layout and paint probes", () => {
       format: "png",
     });
     expect(r.height).toBe(20); // was two lines (40px)
+  });
+
+  // text-wrap-style: balance / pretty. Chromium narrows the wrap width until the
+  // line count would grow, which evens out the line lengths (balance) and pulls
+  // an orphaned last word up (pretty). Both must keep the line count, otherwise
+  // the following content would move.
+  const WRAP_PROBE_TEXT =
+    "The quick brown fox jumps over the lazy dog and then keeps on running";
+  const wrapProbe = (wrap: string, width: number) =>
+    renderProbeText(
+      `<div style="width:${width}px;font-family:'RobotoProbe',sans-serif;font-size:16px;line-height:22px;color:#000;${wrap}">${WRAP_PROBE_TEXT}</div>`,
+      width,
+    );
+
+  it("text-wrap-style: balance evens out the line lengths without adding a line", async () => {
+    const auto = lineRightEdges(await wrapProbe("", 300), 22);
+    const balanced = lineRightEdges(
+      await wrapProbe("text-wrap-style:balance", 300),
+      22,
+    );
+
+    expect(auto.length).toBe(2);
+    expect(balanced.length).toBe(auto.length); // line count is preserved
+    // The last line used to keep the short tail (a 67px spread, last line ~35px
+    // shorter than the first one) instead of growing to the balanced width.
+    expect(lineEdgeSpread(auto)).toBeGreaterThan(50);
+    expect(lineEdgeSpread(balanced)).toBeLessThan(30);
+    expect(balanced[1]).toBeGreaterThan(auto[1] + 20);
+  });
+
+  it("text-wrap-style: pretty pulls an orphaned last word onto the previous line", async () => {
+    const auto = lineRightEdges(await wrapProbe("", 240), 22);
+    const pretty = lineRightEdges(
+      await wrapProbe("text-wrap-style:pretty", 240),
+      22,
+    );
+
+    expect(auto.length).toBe(3);
+    expect(auto[2]).toBeLessThan(80); // the orphan ("running") alone on line 3
+    expect(pretty.length).toBe(auto.length); // line count is preserved
+    expect(pretty[2]).toBeGreaterThan(auto[2] + 60); // 2+ words on the last line
+  });
+
+  it("text-wrap-style is not applied when the flow is out of scope (atomic inline)", async () => {
+    // A replaced inline (here: a 20px square) leaves the normal wrapping in
+    // place, so the line lengths match the auto render exactly.
+    const square =
+      "<img src=\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20'%3E%3Crect width='20' height='20' fill='%23f00'/%3E%3C/svg%3E\">";
+    const text = WRAP_PROBE_TEXT.replace("fox", `${square}fox`);
+    const renderWith = (wrap: string) =>
+      renderProbeText(
+        `<div style="width:300px;font-family:'RobotoProbe',sans-serif;font-size:16px;line-height:22px;color:#000;${wrap}">${text}</div>`,
+        300,
+      );
+    expect(lineRightEdges(await renderWith("text-wrap-style:balance"), 22)).toEqual(
+      lineRightEdges(await renderWith(""), 22),
+    );
   });
 
   it("grid-auto-rows sizes implicit rows", async () => {

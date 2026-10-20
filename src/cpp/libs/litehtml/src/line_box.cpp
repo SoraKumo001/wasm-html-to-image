@@ -1120,7 +1120,7 @@ bool litehtml::line_box::can_hold(const std::unique_ptr<line_box_item>& item, wh
 		if (m_writing_mode == writing_mode_horizontal_tb)
 		{
 			pixel_t item_inline_size = (m_writing_mode == writing_mode_horizontal_tb) ? item->width() : item->get_el()->height();
-			if (m_inline_pos + m_inline_size + item_inline_size > m_inline_end + 0.01)
+			if (m_inline_pos + m_inline_size + item_inline_size > m_wrap_end + 0.01)
 			{
 				return false;
 			}
@@ -1233,6 +1233,7 @@ std::list< std::unique_ptr<litehtml::line_box_item> > litehtml::line_box::new_in
     {
 		m_inline_pos	= inline_pos;
 		m_inline_end	= inline_end;
+		m_wrap_end		= inline_end;
         m_inline_size = 0;
         auto remove_begin = m_items.end();
 		auto i = m_items.begin();

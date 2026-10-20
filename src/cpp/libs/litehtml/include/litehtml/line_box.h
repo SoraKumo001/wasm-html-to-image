@@ -147,6 +147,11 @@ namespace litehtml
         pixel_t					m_block_pos;
         pixel_t					m_inline_pos;
         pixel_t					m_inline_end;
+        // Inline end used for line breaking. It equals m_inline_end unless
+        // text-wrap-style narrowing is in progress: then text is broken at the
+        // narrower width while the line box (and its alignment) keeps the full
+        // content width, so centered/right-aligned lines stay centered/right.
+        pixel_t					m_wrap_end;
         pixel_t					m_block_size;
         pixel_t					m_inline_size;
 		css_line_height_t		m_default_line_height;
@@ -165,6 +170,7 @@ namespace litehtml
 				m_block_pos(block_pos),
 				m_inline_pos(inline_pos),
 				m_inline_end(inline_end),
+				m_wrap_end(inline_end),
 				m_block_size(0),
 				m_inline_size(0),
 				m_default_line_height(line_height),
@@ -202,6 +208,9 @@ namespace litehtml
 		pixel_t	 	line_right() const	{ return m_inline_end;			}
 		pixel_t	 	min_width() const	{ return m_min_width;		}
 
+        // Narrower inline end used to decide where lines break (text-wrap-style).
+        void				set_wrap_end(pixel_t end) { m_wrap_end = end; }
+
         void				set_text_overflow(text_overflow overflow) { m_text_overflow = overflow; }
         void				add_item(std::unique_ptr<line_box_item> item);
         bool				can_hold(const std::unique_ptr<line_box_item>& item, white_space ws) const;
@@ -217,6 +226,7 @@ namespace litehtml
 		std::shared_ptr<render_item> 		get_last_text_part() const;
 		std::shared_ptr<render_item> 		get_first_text_part() const;
 		std::list< std::unique_ptr<line_box_item> >& 	items() { return m_items; }
+		const std::list< std::unique_ptr<line_box_item> >& 	items() const { return m_items; }
 	private:
         bool				have_last_space() const;
         bool				is_break_only() const;

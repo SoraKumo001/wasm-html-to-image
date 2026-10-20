@@ -53,7 +53,7 @@ title: 互換性と仕様
 | **グラデーション & 背景** | `linear-gradient`, `radial-gradient`, `conic-gradient`, `background-size`, `mix-blend-mode` | 複雑なカラーストップとアングル指定、ブレンドモードに対応 |
 | **クリッピング & マスク** | `clip-path: circle(), ellipse(), polygon(), path(), inset()`, `mask` / `mask-image` / `mask-size` / `mask-repeat` / `mask-position` | Skia ネイティブパスによる自由形状クリッピングとアルファマスク (画像・グラデーションを繰り返し・サイズ指定付きで適用) |
 | **インライン SVG**   | `<svg>`, `<path>`, `<circle>`, `<rect>`, `<g>`, `<linearGradient>` 等 | SkSVGDOM によるベクターグラフィックスの直接埋め込み描画 |
-| **モダン CSS 機能**  | `calc()`, `light-dark()`, CSS 変数 (`var(--...)`), `@layer`, `white-space-collapse`, `text-wrap-mode` / `text-wrap-style` | 数値計算やデザイントークンの活用。`white-space-collapse` と `text-wrap-mode` は `white-space` / 折り返しへ反映します（`text-wrap-style: balance` / `pretty` は値の保持のみで、行の再折り返しは行いません） |
+| **モダン CSS 機能**  | `calc()`, `light-dark()`, CSS 変数 (`var(--...)`), `@layer`, `white-space-collapse`, `text-wrap-mode` / `text-wrap-style` | 数値計算やデザイントークンの活用。`white-space-collapse` と `text-wrap-mode` は `white-space` / 折り返しへ反映します。`text-wrap-style: balance` は行数が変わらない範囲で折り返し幅を狭めて行長を揃え、`pretty` は最終行の孤立語を解消します（水平組みの通常フロー、balance は 6 行・pretty は 10 行まで。float・インライン置換要素・強制改行・縦書き・shrink-to-fit 幅は対象外） |
 | **セレクタ**         | クラス, ID, 属性セレクタ, `:nth-child()`, `:not()`, `:is()`, `:where()`, `:has()`, `::before`, `::after` | 擬似クラス・擬似要素 (`content`) による高度なスタイリング。`:has()` は子 (`>`)・子孫・隣接 (`+`)・一般 (`~`) コンビネータの動作を Chromium 対照で確認済み |
 | **スクロール・表示最適化** | `scroll-snap-*`, `scroll-snap-align`, `content-visibility` は no-op (無視) | 静止画レンダラーではスクロール位置や遅延描画の概念がないため、指定があっても通常描画される |
 | **レスポンシブ**     | `@container` (コンテナクエリ), `@media print`, `@media screen`          | コンポーネント単位のサイズ適応                         |

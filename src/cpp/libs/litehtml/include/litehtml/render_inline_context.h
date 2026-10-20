@@ -31,8 +31,17 @@ namespace litehtml
 		std::vector<std::unique_ptr<litehtml::line_box> > m_line_boxes;
 		pixel_t m_max_line_width;
 		bool m_is_clamped;
+		// Line-breaking inline end used by the running layout pass. It equals the
+		// block's content inline-size unless text-wrap-style narrowing is active.
+		pixel_t m_wrap_end;
+		// Cleared when the flow holds content the text-wrap-style balancing passes
+		// do not handle (floats, atomic inlines, forced breaks).
+		bool m_wrap_eligible;
 
 		pixel_t _render_content(pixel_t x, pixel_t y, bool second_pass, const containing_block_context &self_size, formatting_context* fmt_ctx) override;
+		void layout_lines(const containing_block_context &self_size, formatting_context* fmt_ctx, pixel_t wrap_end = -1);
+		void apply_text_wrap_style(const containing_block_context &self_size, formatting_context* fmt_ctx);
+		bool text_wrap_eligible(const containing_block_context &self_size) const;
 		void fix_line_width(element_float flt,
 							const containing_block_context &self_size, formatting_context* fmt_ctx) override;
 
@@ -41,7 +50,7 @@ namespace litehtml
 		pixel_t new_box(const std::unique_ptr<line_box_item>& el, line_context& line_ctx, const containing_block_context &self_size, formatting_context* fmt_ctx);
 		void apply_vertical_align() override;
 	public:
-		explicit render_item_inline_context(std::shared_ptr<element>  src_el) : render_item_block(std::move(src_el)), m_max_line_width(0), m_is_clamped(false)
+		explicit render_item_inline_context(std::shared_ptr<element>  src_el) : render_item_block(std::move(src_el)), m_max_line_width(0), m_is_clamped(false), m_wrap_end(0), m_wrap_eligible(true)
 		{}
 
 		std::shared_ptr<render_item> clone() override
