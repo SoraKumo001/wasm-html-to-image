@@ -1455,6 +1455,26 @@ describe("regression: layout and paint probes", () => {
     expect(near(collapsed.at(5, 15), [0, 255, 0])).toBe(true);
     expect(isWhite(collapsed.at(5, 25))).toBe(true);
   });
+  it("grid items are auto-placed in order-modified document order", async () => {
+    // `order` reorders grid items for placement (CSS Grid §8.5 runs auto-placement in
+    // order-modified document order), so the red order:2 item is pushed to the second
+    // column although it comes first in the DOM (GitHub accordion wrapper/visual swap).
+    const swapped = await renderPng(
+      `<div style="display:grid;grid-template-columns:100px 100px;width:200px"><div style="order:2;height:40px;background:#f00"></div><div style="order:1;height:40px;background:#00f"></div></div>`,
+      300,
+      100,
+    );
+    expect(near(swapped.at(50, 20), BLUE)).toBe(true);
+    expect(near(swapped.at(150, 20), RED)).toBe(true);
+    // Items sharing an `order` keep their DOM order.
+    const same = await renderPng(
+      `<div style="display:grid;grid-template-columns:100px 100px;width:200px"><div style="order:1;height:40px;background:#f00"></div><div style="order:1;height:40px;background:#00f"></div></div>`,
+      300,
+      100,
+    );
+    expect(near(same.at(50, 20), RED)).toBe(true);
+    expect(near(same.at(150, 20), BLUE)).toBe(true);
+  });
   it("display:contents generates no box: its children take part in the parent's layout", async () => {
     const h = async (b: string) => (await render({ value: `<html><body style="margin:0">${b}</body></html>`, width: 400, format: "png" })).height;
     expect(

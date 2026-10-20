@@ -1,6 +1,7 @@
 #include <sstream>
 #include <map>
 #include <cmath>
+#include <algorithm>
 #include "html.h"
 #include "render_grid.h"
 #include "render_inline.h"
@@ -577,11 +578,39 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
     int curr_row = 0;
     int curr_col = 0;
 
+    // Auto-placement runs in order-modified document order: `order` moves a grid item to its
+    // place in the flow just like it does for flex items, while items sharing an order keep
+    // their DOM order. Paint order (draw_children) still follows the DOM.
+    std::vector<std::shared_ptr<render_item>> placement_items;
+    placement_items.reserve(m_children.size());
+    bool order_sort_required = false;
+    bool prev_item_order_set = false;
+    int prev_item_order = 0;
     for (const auto& el : m_children)
     {
         if (el->src_el()->css().get_position() == element_position_absolute || el->src_el()->css().get_position() == element_position_fixed)
             continue;
+        const int item_order = el->src_el()->css().get_order();
+        if (!prev_item_order_set)
+        {
+            prev_item_order = item_order;
+            prev_item_order_set = true;
+        }
+        else if (!order_sort_required && item_order != prev_item_order)
+        {
+            order_sort_required = true;
+        }
+        placement_items.push_back(el);
+    }
+    if (order_sort_required)
+    {
+        std::stable_sort(placement_items.begin(), placement_items.end(),
+                         [](const std::shared_ptr<render_item>& item1, const std::shared_ptr<render_item>& item2)
+                         { return item1->src_el()->css().get_order() < item2->src_el()->css().get_order(); });
+    }
 
+    for (const auto& el : placement_items)
+    {
         grid_line cs, ce, rs, re;
         cs.parse(el->src_el()->css().get_grid_column_start());
         ce.parse(el->src_el()->css().get_grid_column_end());
