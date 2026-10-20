@@ -1378,6 +1378,53 @@ describe("regression: layout and paint probes", () => {
     expect(isWhite(at(10, 10))).toBe(true);
   });
 
+  it("offset shorthand rejects an offset-rotate before the path", async () => {
+    // The first declaration is valid; the second one has its components out of
+    // order (rotate before path), so the whole declaration must be dropped and
+    // the first one must keep applying. If the invalid declaration were
+    // partially applied, the 40x8 box would additionally be rotated by 30deg.
+    const { at } = await renderPng(
+      `<div style="position:absolute;left:0;top:0;width:40px;height:8px;background:#f00;
+         offset:path('M 0 0 L 200 0') 60px;
+         offset:30deg path('M 0 0 L 200 0') 60px"></div>`,
+    );
+    expect(near(at(60, 2), RED)).toBe(true); // still at distance 60 on the path
+    expect(isWhite(at(60, 8))).toBe(true); // a 30deg rotation would cover this
+  });
+
+  it("offset shorthand rejects a repeated offset-distance", async () => {
+    const { at } = await renderPng(
+      `<div style="position:absolute;left:0;top:0;width:20px;height:20px;background:#f00;
+         offset:path('M 0 0 L 200 0') 60px;
+         offset:path('M 0 0 L 120 0') 20px 30px"></div>`,
+    );
+    expect(near(at(60, 5), RED)).toBe(true); // first declaration still wins
+    expect(isWhite(at(20, 5))).toBe(true); // would be red if 20px reset the distance
+  });
+
+  it("offset shorthand rejects an offset-position after the path", async () => {
+    const { at } = await renderPng(
+      `<div style="position:absolute;left:0;top:0;width:20px;height:20px;background:#f00;
+         offset:path('M 0 0 L 200 0') 60px;
+         offset:path('M 0 0 L 120 0') center"></div>`,
+    );
+    expect(near(at(60, 2), RED)).toBe(true); // first declaration still wins
+    expect(isWhite(at(0, 2))).toBe(true); // would be red if the path reset to 0
+  });
+
+  it("offset shorthand parses leading lengths as offset-position", async () => {
+    // The two lengths are the offset-position, not distances. With the ray origin
+    // at (100,100), distance 20 lands the centre at (120,100). If the first length
+    // were taken as the distance, the origin would stay the default (150,0) and
+    // the centre would be at (250,0).
+    const { at } = await renderPng(
+      `<div style="position:absolute;left:0;top:0;width:20px;height:20px;background:#f00;
+         offset:100px 100px ray(90deg) 20px"></div>`,
+    );
+    expect(near(at(120, 100), RED)).toBe(true);
+    expect(isWhite(at(250, 100))).toBe(true);
+  });
+
   it("offset-rotate: an explicit 0deg angle suppresses the tangent rotation", async () => {
     // ray(180deg) points down, so `auto` would rotate the box by +90deg. An explicit
     // 0deg must keep the box axis-aligned even though the angle value is zero.

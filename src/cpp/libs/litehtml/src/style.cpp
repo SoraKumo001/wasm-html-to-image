@@ -24,6 +24,209 @@ namespace litehtml
   bool parse_font_family(const css_token_vector &tokens, string &font_family);
   bool parse_font_weight(const css_token &tok, css_length &weight);
 
+  namespace
+  {
+    bool offset_tok_ws(const css_token &tok) { return tok.type == WHITESPACE; }
+
+    bool offset_ident_is(const css_token &tok, const char *name)
+    {
+      return tok.type == IDENT && lowcase(tok.ident()) == name;
+    }
+
+    bool offset_angle_token(const css_token &tok)
+    {
+      if (tok.type != DIMENSION) return false;
+      string unit = lowcase(tok.unit);
+      return unit == "deg" || unit == "rad" || unit == "grad" || unit == "turn";
+    }
+
+    // <length-percentage> (unitless zero is a valid length, angles are not).
+    bool offset_lp_token(const css_token &tok)
+    {
+      if (tok.type == PERCENTAGE) return true;
+      if (tok.type == NUMBER) return tok.n.number == 0;
+      if (tok.type == DIMENSION) return !offset_angle_token(tok);
+      return false;
+    }
+
+    bool offset_zero_token(const css_token &tok)
+    {
+      return tok.type == NUMBER && tok.n.number == 0;
+    }
+
+    bool offset_coord_box(const css_token &tok)
+    {
+      if (tok.type != IDENT) return false;
+      string id = lowcase(tok.ident());
+      return id == "content-box" || id == "padding-box" || id == "border-box" ||
+             id == "fill-box" || id == "stroke-box" || id == "view-box";
+    }
+
+    bool offset_h_keyword(const css_token &tok)
+    {
+      return offset_ident_is(tok, "left") || offset_ident_is(tok, "right");
+    }
+
+    bool offset_v_keyword(const css_token &tok)
+    {
+      return offset_ident_is(tok, "top") || offset_ident_is(tok, "bottom");
+    }
+
+    bool offset_position_keyword(const css_token &tok)
+    {
+      return offset_ident_is(tok, "left") || offset_ident_is(tok, "right") ||
+             offset_ident_is(tok, "top") || offset_ident_is(tok, "bottom") ||
+             offset_ident_is(tok, "center");
+    }
+
+    // Validate the <position> value of offset-position. This mirrors the forms
+    // Chromium accepts for offset-position: `top 10px` is invalid, while
+    // `10px top`, `top left`, and the edge-offset form `left 10px top 20px` are
+    // valid.
+    bool valid_offset_position(const css_token_vector &tokens)
+    {
+      if (tokens.empty()) return false;
+      const size_t n = tokens.size();
+
+      if (n == 1)
+        return offset_lp_token(tokens[0]) || offset_position_keyword(tokens[0]);
+
+      if (n == 2)
+      {
+        bool first_h = offset_h_keyword(tokens[0]) || offset_ident_is(tokens[0], "center") ||
+                       offset_lp_token(tokens[0]);
+        bool second_v = offset_v_keyword(tokens[1]) || offset_ident_is(tokens[1], "center") ||
+                        offset_lp_token(tokens[1]);
+        if (first_h && second_v) return true;
+        // Vertical keyword first is only valid with another keyword (`top left`).
+        return offset_v_keyword(tokens[0]) &&
+               (offset_h_keyword(tokens[1]) || offset_ident_is(tokens[1], "center"));
+      }
+
+      if (n == 3 || n == 4)
+      {
+        // Edge-offset form: each axis is a keyword, optionally with an offset.
+        bool seen_h = false, seen_v = false;
+        size_t i = 0;
+        while (i < n)
+        {
+          if (!seen_h && offset_h_keyword(tokens[i]))
+          {
+            seen_h = true;
+            i++;
+            if (i < n && offset_lp_token(tokens[i])) i++;
+          }
+          else if (!seen_v && offset_v_keyword(tokens[i]))
+          {
+            seen_v = true;
+            i++;
+            if (i < n && offset_lp_token(tokens[i])) i++;
+          }
+          else
+            return false;
+        }
+        return seen_h && seen_v;
+      }
+      return false;
+    }
+
+    // Parse the `offset` shorthand (CSS Motion Path):
+    //   <offset-position>? [ <offset-path> | <offset-distance> ]? <offset-rotate>?
+    // Components are consumed in order, so a position must precede the path and a
+    // distance must follow the path. Out-of-order or unknown components make the
+    // whole declaration invalid.
+    bool parse_offset_shorthand(const css_token_vector &value, css_token_vector &path,
+                                css_token_vector &distance, css_token_vector &rotate,
+                                css_token_vector &position)
+    {
+      css_token_vector tokens;
+      for (const auto &tok : value)
+        if (!offset_tok_ws(tok)) tokens.push_back(tok);
+      if (tokens.empty()) return false;
+
+      size_t i = 0;
+      bool have_position = false, have_path = false;
+
+      // 1. Optional <offset-position>, which must be the first component.
+      if (offset_ident_is(tokens[0], "normal") || offset_ident_is(tokens[0], "auto"))
+      {
+        position.push_back(tokens[0]);
+        i = 1;
+        have_position = true;
+      }
+      else
+      {
+        size_t end = 0;
+        while (end < tokens.size() &&
+               (offset_lp_token(tokens[end]) || offset_position_keyword(tokens[end])))
+          end++;
+        if (end > 0)
+        {
+          css_token_vector candidate(tokens.begin(), tokens.begin() + end);
+          if (!valid_offset_position(candidate)) return false;
+          position = candidate;
+          i = end;
+          have_position = true;
+        }
+      }
+
+      // 2. Optional <offset-path>: none | <coord-box> | <function> [<coord-box>].
+      if (i < tokens.size())
+      {
+        if (offset_ident_is(tokens[i], "none"))
+        {
+          path.push_back(tokens[i++]);
+          have_path = true;
+        }
+        else if (offset_coord_box(tokens[i]))
+        {
+          path.push_back(tokens[i++]);
+          have_path = true;
+        }
+        else if (tokens[i].type == CV_FUNCTION)
+        {
+          path.push_back(tokens[i++]);
+          if (i < tokens.size() && offset_coord_box(tokens[i]))
+            path.push_back(tokens[i++]);
+          have_path = true;
+        }
+      }
+
+      // A position can only be followed by a path (not by a bare distance or
+      // rotate value).
+      if (have_position && !have_path) return i == tokens.size();
+      if (!have_path) return false;
+
+      // 3. Optional <offset-distance> and <offset-rotate>, each at most once.
+      // Chromium accepts either order after the path (`path(...) 30deg 60px` and
+      // `path(...) 60px 30deg` both work), so both orders are allowed here.
+      bool have_distance = false, have_rotate_keyword = false, have_rotate_angle = false;
+      while (i < tokens.size())
+      {
+        if (!have_distance && offset_lp_token(tokens[i]))
+        {
+          distance.push_back(tokens[i++]);
+          have_distance = true;
+        }
+        else if (!have_rotate_keyword &&
+                 (offset_ident_is(tokens[i], "auto") || offset_ident_is(tokens[i], "reverse")))
+        {
+          rotate.push_back(tokens[i++]);
+          have_rotate_keyword = true;
+        }
+        else if (!have_rotate_angle &&
+                 (offset_angle_token(tokens[i]) || offset_zero_token(tokens[i])))
+        {
+          rotate.push_back(tokens[i++]);
+          have_rotate_angle = true;
+        }
+        else
+          return false;
+      }
+      return true;
+    }
+  }  // namespace
+
   std::map<string_id, string> style::m_valid_values =
       {
           {_display_, style_display_strings},
@@ -1128,57 +1331,11 @@ namespace litehtml
 
     case _offset_:
     {
-      // CSS Motion Path shorthand. Heuristic split of the component value list into
-      // <offset-path> / <offset-distance> / <offset-rotate> / <offset-position>.
-      // offset-anchor and explicit <position> vs <offset-distance> disambiguation are
-      // intentionally not attempted here (see docs/partial support).
+      // CSS Motion Path shorthand. Components are parsed in grammar order instead of
+      // being classified independently; any out-of-order or unknown component drops
+      // the whole declaration. offset-anchor is intentionally not handled here.
       css_token_vector path_t, dist_t, rot_t, pos_t;
-      bool have_path = false, have_dist = false, have_rot = false;
-      for (const auto& tok : value)
-      {
-        if (tok.type == WHITESPACE) continue;
-        if (tok.type == CV_FUNCTION)
-        {
-          if (!have_path) { path_t.push_back(tok); have_path = true; }
-          continue;
-        }
-        if (tok.type == IDENT)
-        {
-          string id = lowcase(tok.ident());
-          if (id == "none") { path_t.push_back(tok); have_path = true; }
-          else if (id == "auto" || id == "reverse") { rot_t.push_back(tok); have_rot = true; }
-          else if (id == "normal" || id == "left" || id == "right" || id == "top" ||
-                   id == "bottom" || id == "center")
-            pos_t.push_back(tok);
-          continue;
-        }
-        if (tok.type == DIMENSION)
-        {
-          string u = lowcase(tok.unit);
-          if (u == "deg" || u == "rad" || u == "grad" || u == "turn")
-          {
-            rot_t.push_back(tok);
-            have_rot = true;
-          }
-          else if (!have_dist) { dist_t.push_back(tok); have_dist = true; }
-          else { rot_t.push_back(tok); have_rot = true; }
-          continue;
-        }
-        if (tok.type == NUMBER)
-        {
-          rot_t.push_back(tok);
-          have_rot = true;
-          continue;
-        }
-        if (tok.type == PERCENTAGE)
-        {
-          if (!have_dist) { dist_t.push_back(tok); have_dist = true; }
-          else if (!have_rot) { rot_t.push_back(tok); have_rot = true; }
-          continue;
-        }
-      }
-      // Nothing recognized => the whole declaration is invalid, drop it.
-      if (path_t.empty() && dist_t.empty() && rot_t.empty() && pos_t.empty())
+      if (!parse_offset_shorthand(value, path_t, dist_t, rot_t, pos_t))
         break;
       // Like every CSS shorthand, `offset` resets the longhands it does not mention
       // back to their initial value (none / normal / auto / normal).
