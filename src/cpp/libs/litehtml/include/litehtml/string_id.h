@@ -409,6 +409,7 @@ namespace litehtml
       _column_rule_color_,
       _stroke_,
       _stroke_linejoin_,
+      _corner_shape_,
       _clip_rule_,
       _gap_,
       _column_gap_,

@@ -1059,6 +1059,19 @@ namespace litehtml
         };
 
 
+#define corner_shape_strings            "round;scoop;bevel;notch;squircle;square"
+
+        // corner-shape keyword of one corner (CSS Borders 4). `round` is the ordinary border-radius.
+        enum corner_shape
+        {
+                corner_shape_round,
+                corner_shape_scoop,
+                corner_shape_bevel,
+                corner_shape_notch,
+                corner_shape_squircle,
+                corner_shape_square
+        };
+
 #define stroke_linejoin_strings         "miter;round;bevel;miter-clip;arcs"
 
         enum stroke_linejoin

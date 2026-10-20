@@ -1,6 +1,9 @@
 #include "skia_utils.h"
 
 #include <algorithm>
+#include <cmath>
+
+#include "include/core/SkPathBuilder.h"
 
 // satoru版 `utils/skia_utils.cpp` の逐語移植 (superset側を正とする)。
 // image-opt版に clean_font_name / make_rrect は存在しない。
@@ -96,3 +99,77 @@ SkRRect make_rrect(const litehtml::position& pos, const litehtml::border_radiuse
     rrect.setRectRadii(rect, rad);
     return rrect;
 }
+
+SkPath make_shape_path(const litehtml::position& pos, const litehtml::border_radiuses& radius) {
+    if (!radius.has_corner_shape()) return SkPath::RRect(make_rrect(pos, radius));
+
+    const float x = (float)pos.x, y = (float)pos.y, w = (float)pos.width, h = (float)pos.height;
+    // Per corner (clockwise from top-left): corner point P and the vectors a (P -> where the
+    // path arrives) / b (P -> where it leaves) whose lengths are the corner radii.
+    struct Corner {
+        SkPoint p, a, b;
+        int shape;
+    };
+    const float rx[4] = {(float)radius.top_left_x, (float)radius.top_right_x,
+                         (float)radius.bottom_right_x, (float)radius.bottom_left_x};
+    const float ry[4] = {(float)radius.top_left_y, (float)radius.top_right_y,
+                         (float)radius.bottom_right_y, (float)radius.bottom_left_y};
+    const Corner corners[4] = {
+        {{x, y}, {0, ry[0]}, {rx[0], 0}, radius.shape[0]},
+        {{x + w, y}, {-rx[1], 0}, {0, ry[1]}, radius.shape[1]},
+        {{x + w, y + h}, {0, -ry[2]}, {-rx[2], 0}, radius.shape[2]},
+        {{x, y + h}, {rx[3], 0}, {0, -ry[3]}, radius.shape[3]},
+    };
+
+    SkPathBuilder pb;
+    const float k_half_sqrt2 = 0.70710678f;
+    for (int i = 0; i < 4; i++) {
+        const Corner& c = corners[i];
+        const SkPoint start = c.p + c.a;
+        const SkPoint end = c.p + c.b;
+        const SkPoint center = c.p + c.a + c.b;  // inner corner of the radius box
+        if (i == 0) {
+            pb.moveTo(start);
+        } else {
+            pb.lineTo(start);
+        }
+        const bool flat = (c.a.fX == 0 && c.a.fY == 0) || (c.b.fX == 0 && c.b.fY == 0);
+        if (flat) {
+            pb.lineTo(c.p);
+            continue;
+        }
+        switch (c.shape) {
+            case litehtml::corner_shape_scoop:
+                pb.conicTo(center, end, k_half_sqrt2);
+                break;
+            case litehtml::corner_shape_bevel:
+                pb.lineTo(end);
+                break;
+            case litehtml::corner_shape_notch:
+                pb.lineTo(center);
+                pb.lineTo(end);
+                break;
+            case litehtml::corner_shape_squircle: {
+                // Superellipse with exponent 4 (CSS `squircle` = superellipse(2)).
+                const int steps = 24;
+                for (int s = 1; s <= steps; s++) {
+                    float t = (float)s / steps * 1.5707963f;
+                    float cs = std::pow(std::cos(t), 0.5f);
+                    float sn = std::pow(std::sin(t), 0.5f);
+                    pb.lineTo(center - c.b * cs - c.a * sn);
+                }
+                break;
+            }
+            case litehtml::corner_shape_square:
+                pb.lineTo(c.p);
+                pb.lineTo(end);
+                break;
+            default:  // round
+                pb.conicTo(c.p, end, k_half_sqrt2);
+                break;
+        }
+    }
+    pb.close();
+    return pb.detach();
+}
+

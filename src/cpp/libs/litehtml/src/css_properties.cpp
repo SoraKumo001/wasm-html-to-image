@@ -823,6 +823,12 @@ void litehtml::css_properties::compute(const element* el, const document::ptr& d
     m_css_borders.radius.bottom_right_y = el->get_property<css_length>(
         _border_bottom_right_radius_y_, false, 0, offset(m_css_borders.radius.bottom_right_y));
 
+    {
+        // corner-shape: four 3-bit keywords packed by the parser (top-left first).
+        int packed = el->get_property<int>(_corner_shape_, false, 0, offset(m_corner_shape_packed));
+        m_corner_shape_packed = packed;
+        for (int i = 0; i < 4; i++) m_css_borders.radius.shape[i] = (packed >> (3 * i)) & 7;
+    }
     doc->cvt_units(m_css_borders.radius.top_left_x, m_font_metrics, 0);
     doc->cvt_units(m_css_borders.radius.top_left_y, m_font_metrics, 0);
     doc->cvt_units(m_css_borders.radius.top_right_x, m_font_metrics, 0);

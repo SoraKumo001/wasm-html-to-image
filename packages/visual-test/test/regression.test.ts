@@ -557,6 +557,46 @@ describe("regression: layout and paint probes", () => {
     expect(Buffer.from(stillGif.data as Uint8Array).includes("NETSCAPE")).toBe(false);
   });
 
+  it("corner-shape reshapes the border-radius corners of backgrounds and borders", async () => {
+    const box = async (shape: string, extra = "") =>
+      renderPng(
+        `<div style="width:80px;height:80px;background:#00f;border-radius:40px;${shape ? `corner-shape:${shape};` : ""}${extra}"></div>`,
+        100,
+        100,
+      );
+    const round = await box("");
+    const bevel = await box("bevel");
+    const scoop = await box("scoop");
+    const notch = await box("notch");
+    const squircle = await box("squircle");
+    const square = await box("square");
+    // (12,12): inside the round arc, outside bevel / scoop / notch.
+    expect(near(round.at(12, 12), BLUE)).toBe(true);
+    for (const s of [bevel, scoop, notch]) expect(isWhite(s.at(12, 12))).toBe(true);
+    // (30,30): only the notch has removed it.
+    for (const s of [round, bevel, scoop]) expect(near(s.at(30, 30), BLUE)).toBe(true);
+    expect(isWhite(notch.at(30, 30))).toBe(true);
+    // (8,8): inside the superellipse but outside the circle.
+    expect(isWhite(round.at(8, 8))).toBe(true);
+    expect(near(squircle.at(8, 8), BLUE)).toBe(true);
+    // `square` keeps the ordinary right-angled corner.
+    expect(near(square.at(1, 1), BLUE)).toBe(true);
+    // Four values apply per corner (top-left, top-right, bottom-right, bottom-left).
+    const mixed = await box("notch round round round");
+    expect(isWhite(mixed.at(30, 30))).toBe(true);
+    expect(near(mixed.at(70, 30), BLUE)).toBe(true);
+
+    // The border follows the shaped outline: the notched corner has no border either.
+    const bordered = await renderPng(
+      `<div style="width:72px;height:72px;border:4px solid #f00;background:#00f;border-radius:20px;corner-shape:notch"></div>`,
+      100,
+      100,
+    );
+    expect(near(bordered.at(2, 40), RED)).toBe(true); // left edge
+    expect(near(bordered.at(40, 2), RED)).toBe(true); // top edge
+    expect(isWhite(bordered.at(8, 8))).toBe(true); // notched-out corner
+  });
+
   it("float margin box (not the border box) narrows the first line", async () => {
     const squares = '<i style="display:inline-block;width:16px;height:16px;background:#00f"></i>'.repeat(30);
     const { at } = await renderPng(

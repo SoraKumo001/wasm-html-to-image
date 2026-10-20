@@ -77,6 +77,14 @@ namespace litehtml
 		pixel_t	bottom_left_x;
 		pixel_t	bottom_left_y;
 
+		// corner-shape per corner (top-left, top-right, bottom-right, bottom-left)
+		int		shape[4] = {0, 0, 0, 0};
+
+		bool has_corner_shape() const
+		{
+			return shape[0] || shape[1] || shape[2] || shape[3];
+		}
+
 		border_radiuses()
 		{
 			top_left_x = 0;
@@ -98,6 +106,7 @@ namespace litehtml
 			bottom_right_y = val.bottom_right_y;
 			bottom_left_x = val.bottom_left_x;
 			bottom_left_y = val.bottom_left_y;
+			for (int i = 0; i < 4; i++) shape[i] = val.shape[i];
 		}
 		border_radiuses& operator = (const border_radiuses& val) = default;
 		void operator += (const margins& mg)
@@ -188,6 +197,9 @@ namespace litehtml
 		css_length	bottom_left_x;
 		css_length	bottom_left_y;
 
+		// corner-shape per corner (top-left, top-right, bottom-right, bottom-left)
+		int			shape[4] = {0, 0, 0, 0};
+
 		css_border_radius() = default;
 
 		css_border_radius(const css_border_radius& val)
@@ -200,6 +212,7 @@ namespace litehtml
 			bottom_left_y	= val.bottom_left_y;
 			bottom_right_x	= val.bottom_right_x;
 			bottom_right_y	= val.bottom_right_y;
+			for (int i = 0; i < 4; i++) shape[i] = val.shape[i];
 		}
 
 		css_border_radius& operator=(const css_border_radius& val) = default;
@@ -223,6 +236,7 @@ namespace litehtml
 			ret.top_right_y = top_right_y.calc_percent(height);
 			ret.bottom_right_x = bottom_right_x.calc_percent(width);
 			ret.bottom_right_y = bottom_right_y.calc_percent(height);
+			for (int i = 0; i < 4; i++) ret.shape[i] = shape[i];
 			ret.fix_values(width, height);
 			return ret;
 		}

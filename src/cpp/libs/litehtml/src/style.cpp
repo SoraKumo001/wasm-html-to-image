@@ -1263,6 +1263,32 @@ namespace litehtml
         add_parsed_property(name, property_value(0, important, false, m_layer, m_specificity));
       break;
 
+    case _corner_shape_:
+    {
+      // 1-4 keywords, expanded like the margin shorthand (tl, tr, br, bl).
+      int kw[4];
+      size_t n = 0;
+      bool ok = !value.empty() && value.size() <= 4;
+      for (size_t i = 0; ok && i < value.size(); i++)
+      {
+        int idx = value_index(lowcase(value[i].ident()), corner_shape_strings, -1);
+        if (value[i].type != IDENT || idx < 0)
+          ok = false;
+        else
+          kw[n++] = idx;
+      }
+      if (ok)
+      {
+        int tl = kw[0];
+        int tr = n >= 2 ? kw[1] : tl;
+        int br = n >= 3 ? kw[2] : tl;
+        int bl = n >= 4 ? kw[3] : (n >= 2 ? tr : tl);
+        int packed = tl | (tr << 3) | (br << 6) | (bl << 9);
+        add_parsed_property(name, property_value(packed, important, false, m_layer, m_specificity));
+      }
+      break;
+    }
+
     case _max_lines_:
       if (val.type == NUMBER && val.n.number_type == css_number_integer && val.n.number >= 0)
         add_parsed_property(name, property_value((int)val.n.number, important, false, m_layer, m_specificity));

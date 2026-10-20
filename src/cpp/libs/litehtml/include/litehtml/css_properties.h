@@ -62,6 +62,7 @@ namespace litehtml
     css_margins m_css_margins;
     css_margins m_css_padding;
     css_borders m_css_borders;
+    int m_corner_shape_packed = 0;
     css_length m_css_width;
     css_length m_css_height;
     css_length m_css_min_width;

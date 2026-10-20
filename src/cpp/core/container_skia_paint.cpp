@@ -75,13 +75,14 @@ static SkSamplingOptions image_sampling(litehtml::image_rendering rendering) {
                : SkSamplingOptions(SkFilterMode::kLinear, SkMipmapMode::kNone);
 }
 
-SkRRect get_background_rrect(const litehtml::background_layer& layer) {
-    litehtml::position intersect_box = layer.border_box.intersect(layer.clip_box);
-    if (intersect_box.width <= 0 || intersect_box.height <= 0) {
-        return SkRRect::MakeEmpty();
-    }
+// Box and (offset-adjusted) radii of the area a background layer paints into.
+static bool background_geometry(const litehtml::background_layer& layer,
+                                litehtml::position& intersect_box,
+                                litehtml::border_radiuses& rad) {
+    intersect_box = layer.border_box.intersect(layer.clip_box);
+    if (intersect_box.width <= 0 || intersect_box.height <= 0) return false;
 
-    litehtml::border_radiuses rad = layer.border_radius;
+    rad = layer.border_radius;
     float offset_l = std::max(0.0f, intersect_box.x - layer.border_box.x);
     float offset_t = std::max(0.0f, intersect_box.y - layer.border_box.y);
     float offset_r = std::max(0.0f, layer.border_box.right() - intersect_box.right());
@@ -96,7 +97,39 @@ SkRRect get_background_rrect(const litehtml::background_layer& layer) {
     rad.bottom_left_x = std::max(0.0f, rad.bottom_left_x - offset_l);
     rad.bottom_left_y = std::max(0.0f, rad.bottom_left_y - offset_b);
 
-    return make_rrect(intersect_box, rad);
+    return true;
+}
+
+SkRRect get_background_rrect(const litehtml::background_layer& layer) {
+    litehtml::position box;
+    litehtml::border_radiuses rad;
+    if (!background_geometry(layer, box, rad)) return SkRRect::MakeEmpty();
+    return make_rrect(box, rad);
+}
+
+// Background area as a path: honours corner-shape, identical to the rrect otherwise.
+static SkPath get_background_path(const litehtml::background_layer& layer) {
+    litehtml::position box;
+    litehtml::border_radiuses rad;
+    if (!background_geometry(layer, box, rad)) return SkPath();
+    return make_shape_path(box, rad);
+}
+
+static void clip_background(SkCanvas* canvas, const litehtml::background_layer& layer) {
+    if (layer.border_radius.has_corner_shape()) {
+        canvas->clipPath(get_background_path(layer), true);
+    } else {
+        canvas->clipRRect(get_background_rrect(layer), true);
+    }
+}
+
+static void draw_background(SkCanvas* canvas, const litehtml::background_layer& layer,
+                            const SkPaint& paint) {
+    if (layer.border_radius.has_corner_shape()) {
+        canvas->drawPath(get_background_path(layer), paint);
+    } else {
+        canvas->drawRRect(get_background_rrect(layer), paint);
+    }
 }
 }  // namespace
 
@@ -225,7 +258,7 @@ void container_skia::draw_image(litehtml::uint_ptr hdc, const litehtml::backgrou
 
             m_canvas->save();
             // Clip to layer.clip_box which respects background-clip
-            m_canvas->clipRRect(get_background_rrect(layer), true);
+            clip_background(m_canvas, layer);
 
             SkRect dst =
                 SkRect::MakeXYWH((float)layer.origin_box.x, (float)layer.origin_box.y,
@@ -284,7 +317,7 @@ void container_skia::draw_solid_fill(litehtml::uint_ptr hdc,
     SkPaint p;
     p.setColor(SkColorSetARGB(color.alpha, color.red, color.green, color.blue));
     p.setAntiAlias(true);
-    m_canvas->drawRRect(get_background_rrect(layer), p);
+    draw_background(m_canvas, layer, p);
 }
 
 void container_skia::draw_linear_gradient(
@@ -305,7 +338,7 @@ void container_skia::draw_linear_gradient(
         } else {
             p.setColor(make_magic_color(satoru::MagicTagExtended::LinearGradient, index));
         }
-        m_canvas->drawRRect(get_background_rrect(layer), p);
+        draw_background(m_canvas, layer, p);
     } else {
         if (layer.origin_box.width <= 0 || layer.origin_box.height <= 0) return;
 
@@ -361,7 +394,7 @@ void container_skia::draw_linear_gradient(
         repeatPaint.setAntiAlias(true);
 
         m_canvas->save();
-        m_canvas->clipRRect(get_background_rrect(layer), true);
+        clip_background(m_canvas, layer);
         m_canvas->drawRect(
             SkRect::MakeXYWH((float)layer.clip_box.x, (float)layer.clip_box.y,
                              (float)layer.clip_box.width, (float)layer.clip_box.height),
@@ -384,7 +417,7 @@ void container_skia::draw_radial_gradient(
         int index = (int)m_paint.radialGradients.size();
         SkPaint p;
         p.setColor(make_magic_color(satoru::MagicTagExtended::RadialGradient, index));
-        m_canvas->drawRRect(get_background_rrect(layer), p);
+        draw_background(m_canvas, layer, p);
     } else {
         if (layer.origin_box.width <= 0 || layer.origin_box.height <= 0) return;
 
@@ -434,7 +467,7 @@ void container_skia::draw_radial_gradient(
         repeatPaint.setAntiAlias(true);
 
         m_canvas->save();
-        m_canvas->clipRRect(get_background_rrect(layer), true);
+        clip_background(m_canvas, layer);
         m_canvas->drawRect(
             SkRect::MakeXYWH((float)layer.clip_box.x, (float)layer.clip_box.y,
                              (float)layer.clip_box.width, (float)layer.clip_box.height),
@@ -457,7 +490,7 @@ void container_skia::draw_conic_gradient(
         int index = (int)m_paint.conicGradients.size();
         SkPaint p;
         p.setColor(make_magic_color(satoru::MagicTagExtended::ConicGradient, index));
-        m_canvas->drawRRect(get_background_rrect(layer), p);
+        draw_background(m_canvas, layer, p);
     } else {
         if (layer.origin_box.width <= 0 || layer.origin_box.height <= 0) return;
 
@@ -515,7 +548,7 @@ void container_skia::draw_conic_gradient(
         repeatPaint.setAntiAlias(true);
 
         m_canvas->save();
-        m_canvas->clipRRect(get_background_rrect(layer), true);
+        clip_background(m_canvas, layer);
         m_canvas->drawRect(
             SkRect::MakeXYWH((float)layer.clip_box.x, (float)layer.clip_box.y,
                              (float)layer.clip_box.width, (float)layer.clip_box.height),
@@ -755,6 +788,29 @@ void container_skia::draw_border_image(litehtml::uint_ptr hdc,
     }
 }
 
+// Ring between the border box outline and the padding box outline (both with corner-shape).
+static SkPath border_ring_path(const litehtml::position& pos, const litehtml::border_radiuses& rad,
+                               float lw, float tw, float rw, float bw) {
+    SkPathBuilder ring;
+    ring.addPath(make_shape_path(pos, rad));
+    litehtml::position inner_pos(pos.x + lw, pos.y + tw, pos.width - lw - rw,
+                                 pos.height - tw - bw);
+    if (inner_pos.width > 0 && inner_pos.height > 0) {
+        litehtml::border_radiuses inner = rad;
+        inner.top_left_x = std::max(0.0f, (float)rad.top_left_x - lw);
+        inner.top_left_y = std::max(0.0f, (float)rad.top_left_y - tw);
+        inner.top_right_x = std::max(0.0f, (float)rad.top_right_x - rw);
+        inner.top_right_y = std::max(0.0f, (float)rad.top_right_y - tw);
+        inner.bottom_right_x = std::max(0.0f, (float)rad.bottom_right_x - rw);
+        inner.bottom_right_y = std::max(0.0f, (float)rad.bottom_right_y - bw);
+        inner.bottom_left_x = std::max(0.0f, (float)rad.bottom_left_x - lw);
+        inner.bottom_left_y = std::max(0.0f, (float)rad.bottom_left_y - bw);
+        ring.addPath(make_shape_path(inner_pos, inner));
+    }
+    ring.setFillType(SkPathFillType::kEvenOdd);
+    return ring.detach();
+}
+
 void container_skia::draw_borders(litehtml::uint_ptr hdc, const litehtml::borders& borders,
                                   const litehtml::position& draw_pos, bool root) {
     if (!m_canvas) return;
@@ -775,6 +831,19 @@ void container_skia::draw_borders(litehtml::uint_ptr hdc, const litehtml::border
         if (borders.top.style == litehtml::border_style_none ||
             borders.top.style == litehtml::border_style_hidden)
             return;
+
+        if (borders.radius.has_corner_shape()) {
+            // Shaped corners: fill the ring between the outer and the inset outline.
+            SkPaint rp;
+            rp.setColor(SkColorSetARGB(borders.top.color.alpha, borders.top.color.red,
+                                       borders.top.color.green, borders.top.color.blue));
+            rp.setAntiAlias(true);
+            m_canvas->drawPath(border_ring_path(draw_pos, borders.radius, (float)borders.left.width,
+                                                (float)borders.top.width, (float)borders.right.width,
+                                                (float)borders.bottom.width),
+                               rp);
+            return;
+        }
 
         SkPaint p;
         p.setColor(SkColorSetARGB(borders.top.color.alpha, borders.top.color.red,
@@ -915,10 +984,12 @@ void container_skia::draw_borders(litehtml::uint_ptr hdc, const litehtml::border
                                          std::max(0.0f, (float)borders.radius.bottom_left_y - bw)}};
                     inner_rr.setRectRadii(ir, rads);
 
-                    SkPath path = SkPathBuilder()
-                                      .addRRect(outer_rr)
-                                      .addRRect(inner_rr, SkPathDirection::kCCW)
-                                      .detach();
+                    SkPath path = borders.radius.has_corner_shape()
+                                      ? border_ring_path(draw_pos, borders.radius, lw, tw, rw, bw)
+                                      : SkPathBuilder()
+                                            .addRRect(outer_rr)
+                                            .addRRect(inner_rr, SkPathDirection::kCCW)
+                                            .detach();
                     m_canvas->drawPath(path, p);
                 } else
                     m_canvas->drawRRect(outer_rr, p);

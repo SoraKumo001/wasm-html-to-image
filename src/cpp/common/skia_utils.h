@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "include/core/SkImage.h"
+#include "include/core/SkPath.h"
 #include "include/core/SkRRect.h"
 #include "include/core/SkRefCnt.h"
 #include "litehtml.h"
@@ -30,5 +31,10 @@ std::vector<uint8_t> base64_decode(const std::string& in);
 std::string url_decode(const std::string& in);
 
 SkRRect make_rrect(const litehtml::position& pos, const litehtml::border_radiuses& radius);
+
+// Outline of the box with `border-radius` + `corner-shape` applied. Without any corner-shape
+// this is exactly the rounded rect of make_rrect(); otherwise each corner is built from its
+// own shape (scoop / bevel / notch / squircle / square) using the radii as shape parameters.
+SkPath make_shape_path(const litehtml::position& pos, const litehtml::border_radiuses& radius);
 
 #endif  // HTML_TO_IMAGE_SKIA_UTILS_H

@@ -69,7 +69,11 @@ void container_skia::set_clip(const litehtml::position& pos,
     } else {
         m_canvas->save();
         if (pos.width > 0 && pos.height > 0) {
-            m_canvas->clipRRect(make_rrect(pos, bdr_radius), true);
+            if (bdr_radius.has_corner_shape()) {
+                m_canvas->clipPath(make_shape_path(pos, bdr_radius), true);
+            } else {
+                m_canvas->clipRRect(make_rrect(pos, bdr_radius), true);
+            }
         }
     }
     m_clip.clips.push_back({pos, bdr_radius});

@@ -66,7 +66,11 @@ void container_skia::push_backdrop_filter(litehtml::uint_ptr hdc,
                                                                    border_box.height);
 
         m_canvas->save();
-        m_canvas->clipRRect(make_rrect(border_box, bdr_radius), true);
+        if (bdr_radius.has_corner_shape()) {
+            m_canvas->clipPath(make_shape_path(border_box, bdr_radius), true);
+        } else {
+            m_canvas->clipRRect(make_rrect(border_box, bdr_radius), true);
+        }
 
         SkCanvas::SaveLayerRec layer_rec(nullptr, nullptr, last_filter.get(), 0);
         m_canvas->saveLayer(layer_rec);

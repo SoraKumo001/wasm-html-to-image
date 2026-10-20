@@ -59,11 +59,7 @@ namespace {
 
 static std::string path_from_rrect(const litehtml::position& pos,
                                    const litehtml::border_radiuses& r) {
-    SkRRect rrect = make_rrect(pos, r);
-
-    SkPathBuilder pathBuilder;
-    pathBuilder.addRRect(rrect);
-    SkPath path = pathBuilder.detach();
+    SkPath path = make_shape_path(pos, r);
 
     SkString svgPath = SkParsePath::ToSVGString(path);
 
