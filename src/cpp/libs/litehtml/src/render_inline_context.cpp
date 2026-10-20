@@ -276,6 +276,11 @@ litehtml::pixel_t litehtml::render_item_inline_context::_render_content(pixel_t 
         }
     }
 
+	if (!(self_size.size_mode & containing_block_context::size_mode_measure) && src_el()->css().get_text_fit() != 0)
+	{
+		src_el()->set_text_fit_measure(m_max_line_width, self_size.render_inline_size());
+	}
+
 	if (self_size.size_mode & containing_block_context::size_mode_measure)
 	{
 		pixel_t ret = m_max_line_width;

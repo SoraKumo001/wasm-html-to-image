@@ -63,6 +63,19 @@ namespace litehtml
 		pixel_t							h_scroll(pixel_t dx)		const;
 
 		bool						is_root() const;
+
+		// text-fit: font scale applied to this element's computed font size and the last measured
+		// widest-line / available inline size, used by document::render to converge on a fit.
+		float						text_fit_scale() const { return m_text_fit_scale; }
+		void						set_text_fit_scale(float s) { m_text_fit_scale = s; }
+		void						set_text_fit_measure(pixel_t natural, pixel_t avail) const { m_text_fit_natural = natural; m_text_fit_avail = avail; }
+		pixel_t						text_fit_natural() const { return m_text_fit_natural; }
+		pixel_t						text_fit_avail() const { return m_text_fit_avail; }
+	private:
+		float						m_text_fit_scale = 1.0f;
+		mutable pixel_t				m_text_fit_natural = 0;
+		mutable pixel_t				m_text_fit_avail = 0;
+	public:
 		element::ptr				parent() const;
 		void						parent(const element::ptr& par);
 		// returns true for elements inside a table (but outside cells) that don't participate in table rendering

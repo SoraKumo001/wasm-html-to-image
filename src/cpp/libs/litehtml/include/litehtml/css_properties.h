@@ -45,6 +45,7 @@ namespace litehtml
     overflow m_overflow_y;
     text_overflow m_text_overflow;
     box_decoration_break m_box_decoration_break = box_decoration_break_slice;
+    int m_text_fit = 0;  // bits 0-1: 1 grow, 2 shrink, 3 both; bits 2+: percentage limit (0 = none)
     int m_stroke_linejoin = -1;  // stroke-linejoin; -1 = not specified
     white_space m_white_space;
     text_wrap m_text_wrap;
@@ -567,6 +568,7 @@ namespace litehtml
 
     int get_max_lines() const;
     int get_stroke_linejoin() const;
+    int get_text_fit() const;
     box_decoration_break get_box_decoration_break() const;
     const string& get_block_ellipsis() const;
 
@@ -1410,6 +1412,11 @@ namespace litehtml
   inline box_decoration_break css_properties::get_box_decoration_break() const
   {
     return m_box_decoration_break;
+  }
+
+  inline int css_properties::get_text_fit() const
+  {
+    return m_text_fit;
   }
 
   inline int css_properties::get_stroke_linejoin() const

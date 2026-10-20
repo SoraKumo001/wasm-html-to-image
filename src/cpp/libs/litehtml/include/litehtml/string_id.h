@@ -410,6 +410,7 @@ namespace litehtml
       _stroke_,
       _stroke_linejoin_,
       _corner_shape_,
+      _text_fit_,
       _box_decoration_break_,
       __webkit_box_decoration_break_,
       _clip_rule_,

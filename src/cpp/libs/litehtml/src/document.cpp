@@ -725,6 +725,44 @@ pixel_t document::render( pixel_t max_width, render_type rt )
 			reset_measure_budget(); ret = m_root_render->measure(cb_context, nullptr); m_root_render->place(0, 0, cb_context, nullptr); anchor_vertical_rl_root(m_root_render, viewport.width);
 			}
 
+			// text-fit: scale the font of elements whose widest line misses the available width,
+			// re-laying the document out until it converges (bounded).
+			for (int pass = 0; pass < 3; pass++)
+			{
+				bool changed = false;
+				std::function<void(const element::ptr&)> fit = [&](const element::ptr& el)
+				{
+					int tf = el->css().get_text_fit();
+					if (tf != 0 && el->text_fit_natural() > 0 && el->text_fit_avail() > 0)
+					{
+						float ratio = (float)(el->text_fit_avail() / el->text_fit_natural());
+						float cur = el->text_fit_scale();
+						float want = cur;
+						if (ratio < 0.999f && (tf & 2)) want = cur * ratio;
+						else if (ratio > 1.001f && (tf & 1)) want = cur * ratio;
+						int limit = tf >> 2;
+						if (limit > 0)
+						{
+							if (want < cur) want = std::max(want, limit / 100.0f);
+							else if (want > cur) want = std::min(want, limit / 100.0f);
+						}
+						if (std::fabs(want - cur) > 0.005f * cur)
+						{
+							el->set_text_fit_scale(want);
+							changed = true;
+						}
+					}
+					for (const auto& child : el->children()) fit(child);
+				};
+				fit(m_root);
+				if (!changed) break;
+				m_root->compute_styles();
+				m_root_render = m_root->create_render_item(nullptr);
+				fix_tables_layout();
+				if (m_root_render) m_root_render = m_root_render->init();
+				reset_measure_budget(); ret = m_root_render->measure(cb_context, nullptr); m_root_render->place(0, 0, cb_context, nullptr); anchor_vertical_rl_root(m_root_render, viewport.width);
+			}
+
 			if(m_root_render->fetch_positioned())
 			{
 				m_fixed_boxes.clear();

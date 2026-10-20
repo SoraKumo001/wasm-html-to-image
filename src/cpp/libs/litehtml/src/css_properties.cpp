@@ -1108,6 +1108,7 @@ void litehtml::css_properties::compute_font(const element* el, const document::p
         }
     }
 
+    font_size *= el->text_fit_scale();  // text-fit adjustment (1 unless the element was fitted)
     m_font_size = (float)font_size;
 
     // initialize font
@@ -1186,6 +1187,7 @@ void litehtml::css_properties::compute_font(const element* el, const document::p
         m_text_underline_position = text_underline_position_auto;
     }
 
+    m_text_fit = el->get_property<int>(_text_fit_, false, 0, offset(m_text_fit));
     m_stroke_linejoin = el->get_property<int>(_stroke_linejoin_, true, -1, offset(m_stroke_linejoin));
     m_box_decoration_break = (box_decoration_break)el->get_property<int>(
         _box_decoration_break_, false, box_decoration_break_slice, offset(m_box_decoration_break));

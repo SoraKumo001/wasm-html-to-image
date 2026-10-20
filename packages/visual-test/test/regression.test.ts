@@ -660,6 +660,37 @@ describe("regression: layout and paint probes", () => {
     expect(smallClone.equals(smallPlain)).toBe(true);
   });
 
+  it("text-fit: shrink / grow scale the font so the widest line fits the container", async () => {
+    const extent = async (style: string, text: string) => {
+      const { img } = await renderPng(
+        `<div style="width:200px;font:bold 40px/50px sans-serif;color:#000;white-space:nowrap;${style}">${text}</div>`,
+        400,
+        80,
+      );
+      let max = -1;
+      for (let y = 0; y < img.height; y++)
+        for (let x = 0; x < img.width; x++) {
+          const i = (img.width * y + x) * 4;
+          if (img.data[i] < 128) max = Math.max(max, x);
+        }
+      return max;
+    };
+    const long = "Hello World Wide Web";
+    expect(await extent("", long)).toBeGreaterThan(250); // overflows without text-fit
+    const shrunk = await extent("text-fit:shrink", long);
+    expect(shrunk).toBeLessThan(205);
+    expect(shrunk).toBeGreaterThan(150); // fitted, not collapsed
+    expect(await extent("text-fit:grow", long)).toBeGreaterThan(250); // grow never shrinks
+    const short = "Hi";
+    expect(await extent("", short)).toBeLessThan(100);
+    const grown = await extent("text-fit:grow", short);
+    expect(grown).toBeGreaterThan(150);
+    expect(grown).toBeLessThan(205);
+    expect(await extent("text-fit:shrink", short)).toBeLessThan(100); // shrink never grows
+    // A percentage limit bounds the scale (50% of the font size at the least).
+    expect(await extent("text-fit:shrink 90%", long)).toBeGreaterThan(shrunk);
+  });
+
   it("float margin box (not the border box) narrows the first line", async () => {
     const squares = '<i style="display:inline-block;width:16px;height:16px;background:#00f"></i>'.repeat(30);
     const { at } = await renderPng(

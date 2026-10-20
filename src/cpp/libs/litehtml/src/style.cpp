@@ -1267,6 +1267,29 @@ namespace litehtml
         add_parsed_property(name, property_value(0, important, false, m_layer, m_specificity));
       break;
 
+    case _text_fit_:
+    {
+      // none | grow | shrink | grow shrink, optionally followed by a percentage limit.
+      int mode = 0, limit = 0;
+      bool ok = !value.empty();
+      for (const auto &t : value)
+      {
+        if (t.type == IDENT)
+        {
+          string id = lowcase(t.ident());
+          if (id == "grow") mode |= 1;
+          else if (id == "shrink") mode |= 2;
+          else if (id == "none") mode = 0;
+          else if (id != "consistent" && id != "per-line" && id != "per-line-all") ok = false;
+        }
+        else if (t.type == PERCENTAGE && t.n.number > 0) limit = (int)t.n.number;
+        else ok = false;
+      }
+      if (ok)
+        add_parsed_property(name, property_value(mode | (limit << 2), important, false, m_layer, m_specificity));
+      break;
+    }
+
     case _corner_shape_:
     {
       // 1-4 keywords, expanded like the margin shorthand (tl, tr, br, bl).
