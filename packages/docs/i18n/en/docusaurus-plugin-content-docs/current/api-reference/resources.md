@@ -11,6 +11,8 @@ How wasm-html-to-image loads, caches, and shapes external images and web fonts.
 
 Generic font-family declarations like `sans-serif` and specific Google Fonts like `Inter` are automatically downloaded in WOFF2 format using Chrome-compatible headers and cached in memory.
 
+The default `sans-serif` (Noto Sans JP) and `serif` (Noto Serif JP) are fetched as variable fonts (weight axis), so `font-weight: bold` and the like render a real weight instead of a synthetic bold. To keep the download small without weights, point `fontMap` at a fixed-weight URL.
+
 ```typescript
 import { render } from "wasm-html-to-image/single";
 

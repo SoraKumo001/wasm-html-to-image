@@ -30,6 +30,8 @@ flowchart TD
 
 特別な設定をしなくても、一般的な CSS 指定（例: `font-family: sans-serif` や `font-family: "Noto Sans JP"`）は自動的に Google Fonts から WOFF2 形式で取得されます。
 
+既定の `sans-serif` (Noto Sans JP) と `serif` (Noto Serif JP) は可変フォント (ウェイト軸) として取得するため、`font-weight: bold` などは擬似ボールドではなく本物のウェイトで描画されます。ウェイトを使わず取得量を抑えたい場合は `fontMap` で固定ウェイトの URL を指定してください。
+
 取得時の HTTP リクエストには、最新の WOFF2 フォーマットを取得するために最適な Chrome 互換の `User-Agent` が自動適用されます。
 
 ```typescript

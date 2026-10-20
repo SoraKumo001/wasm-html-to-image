@@ -290,7 +290,7 @@ When prompting an AI agent to generate HTML/CSS templates for `wasm-html-to-imag
 
 1. **Explicit Root Dimensions**: Always wrap the template in a root container with fixed pixel dimensions and `box-sizing: border-box;` (e.g. `width: 1200px; height: 630px;` for OGP).
 2. **Prioritize Flexbox or Grid**: Flexbox (`display: flex; flex-direction: column; justify-content: space-between;`) provides the most reliable and predictable visual layout.
-3. **Use Standard Google Fonts**: Simply set `font-family: 'Inter', sans-serif;` or `'Noto Sans JP', sans-serif;`. The library fetches and caches WOFF2 fonts automatically. For air-gapped or edge runtime execution, pass font buffers to `fallbackFonts`.
+3. **Use Standard Google Fonts**: Simply set `font-family: 'Inter', sans-serif;` or `'Noto Sans JP', sans-serif;`. The library fetches and caches WOFF2 fonts automatically; the default `sans-serif` / `serif` (Noto Sans / Serif JP) are variable fonts, so bold is a real weight (override via `fontMap` for fixed-weight URLs). For air-gapped or edge runtime execution, pass font buffers to `fallbackFonts`.
 4. **Use Inline SVGs for Icons**: Embed `<svg>` tags directly into HTML instead of using external icon fonts or canvas scripts.
 5. **Clean Text Truncation**: Use `-webkit-line-clamp: 2; -webkit-box-orient: vertical; display: -webkit-box; overflow: hidden;` for multi-line titles.
 6. **Images**: Remote `<img src="https://...">` works when network access is enabled. For offline, edge-isolated, or instant rendering, embed base64 Data URLs (`data:image/png;base64,...`).
