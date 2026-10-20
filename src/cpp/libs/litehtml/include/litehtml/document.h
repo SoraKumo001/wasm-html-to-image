@@ -62,9 +62,11 @@ namespace litehtml
 		unsigned layout_epoch() const { return m_layout_epoch; }
 		typedef std::shared_ptr<document>	ptr;
 		typedef std::weak_ptr<document>		weak_ptr;
+		struct fragment_band { pixel_t top; pixel_t bottom; };
 	private:
 		std::shared_ptr<element>			m_root;
 		std::shared_ptr<render_item>		m_root_render;
+		std::map<const element*, fragment_band>	m_fragment_bands;
 		document_container*					m_container;
 		fonts_map							m_fonts;
 		css_text::vector					m_css;
@@ -119,6 +121,18 @@ namespace litehtml
 		std::shared_ptr<element>		create_element(const char* tag_name, int gumbo_tag = -1);
 		std::shared_ptr<element>		root() const;
 		std::shared_ptr<render_item>	root_render();
+		// box-decoration-break: clone support for fragmented output (PDF pages). The band is the
+		// visible part [top, bottom) of an element's border box (relative to its top edge);
+		// decorations (background, border, shadow) of that element are painted as a complete
+		// box fitted to the band instead of being sliced.
+		void							set_fragment_band(const element* el, pixel_t top, pixel_t bottom) { m_fragment_bands[el] = {top, bottom}; }
+		void							clear_fragment_bands() { m_fragment_bands.clear(); }
+		const fragment_band*			fragment_band_of(const element* el) const
+		{
+			if (m_fragment_bands.empty()) return nullptr;
+			auto it = m_fragment_bands.find(el);
+			return it == m_fragment_bands.end() ? nullptr : &it->second;
+		}
 		void							get_fixed_boxes(position::vector& fixed_boxes);
 		void							add_fixed_box(const position& pos);
 		void							add_media_list(media_query_list_list::ptr list);

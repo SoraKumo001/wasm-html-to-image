@@ -1187,6 +1187,13 @@ void litehtml::css_properties::compute_font(const element* el, const document::p
     }
 
     m_stroke_linejoin = el->get_property<int>(_stroke_linejoin_, true, -1, offset(m_stroke_linejoin));
+    m_box_decoration_break = (box_decoration_break)el->get_property<int>(
+        _box_decoration_break_, false, box_decoration_break_slice, offset(m_box_decoration_break));
+    if (m_box_decoration_break == box_decoration_break_slice) {
+        m_box_decoration_break = (box_decoration_break)el->get_property<int>(
+            __webkit_box_decoration_break_, false, box_decoration_break_slice,
+            offset(m_box_decoration_break));
+    }
     // block-ellipsis is part of the font description (it is the text a clamped line ends with).
     m_block_ellipsis = el->get_property<string>(_block_ellipsis_, true, "\xE2\x80\xA6",
                                                 offset(m_block_ellipsis));

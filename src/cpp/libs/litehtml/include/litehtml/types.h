@@ -1059,6 +1059,14 @@ namespace litehtml
         };
 
 
+#define box_decoration_break_strings    "slice;clone"
+
+        enum box_decoration_break
+        {
+                box_decoration_break_slice,
+                box_decoration_break_clone
+        };
+
 #define corner_shape_strings            "round;scoop;bevel;notch;squircle;square"
 
         // corner-shape keyword of one corner (CSS Borders 4). `round` is the ordinary border-radius.

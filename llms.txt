@@ -248,6 +248,7 @@ The rendering engine couples **litehtml** (HTML/CSS layout) and **Google Skia** 
 - **Borders & Corners**:
   - `border`, `border-width`, `border-style` (`solid`, `dashed`, `dotted`, `double`, etc.), `border-color`.
   - `border-radius`: all four corners independently (`border-top-left-radius`, etc.), elliptical radii (`Xpx / Ypx`), logical corner properties (`border-start-start-radius`, etc.).
+  - `box-decoration-break: slice | clone` (also `-webkit-` prefixed) applies to block boxes split across PDF pages: `clone` repaints a complete box (all borders, rounded corners, background) for the part on each page; `slice` (default) keeps the single sliced box. Inline boxes broken across lines are not affected.
   - `corner-shape: round | scoop | bevel | notch | squircle | square` (1-4 values, top-left first) reshapes the `border-radius` corners of backgrounds, borders and `overflow` clipping. `box-shadow` stays rounded; non-uniform / dashed borders on shaped boxes are filled as a solid ring; `superellipse()` and per-corner longhands are not supported.
   - `border-image`: `source`, `slice`, `width`, `outset`, `repeat`.
   - `outline`, `outline-offset`, `outline-width`, `outline-style`, `outline-color`.

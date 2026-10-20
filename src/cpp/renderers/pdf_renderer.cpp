@@ -112,6 +112,41 @@ std::vector<BreakUnit> collect_break_units(const litehtml::element* root) {
     return units;
 }
 
+// ---- box-decoration-break: clone ---------------------------------------------
+//
+// A block box that straddles a page cut is normally drawn once and sliced by the page clip
+// (box-decoration-break: slice). With `clone` every page paints a complete box (all borders and
+// rounded corners, background restarted) for the part of the box that lies on that page: the
+// element's border box in document coordinates is recorded here, and the page loop hands the
+// visible band to the document (document::set_fragment_band) before drawing.
+struct CloneBox {
+    const litehtml::element* el = nullptr;
+    int top = 0;     // border box, document coordinates
+    int bottom = 0;
+};
+
+void collect_clone_boxes(const std::shared_ptr<litehtml::render_item>& ri,
+                         std::vector<CloneBox>& out) {
+    if (!ri) return;
+    const auto& el = ri->src_el();
+    if (el && el->css().get_box_decoration_break() == litehtml::box_decoration_break_clone) {
+        const litehtml::style_display d = el->css().get_display();
+        if (d != litehtml::display_inline && d != litehtml::display_none &&
+            d != litehtml::display_table_row && d != litehtml::display_inline_text) {
+            litehtml::position p = ri->get_placement();
+            const litehtml::pixel_t above = ri->padding_top() + ri->border_top();
+            const litehtml::pixel_t extra =
+                above + ri->padding_bottom() + ri->border_bottom();
+            CloneBox b;
+            b.el = el.get();
+            b.top = (int)(p.y - above);
+            b.bottom = (int)(p.y - above + p.height + extra);
+            if (b.bottom > b.top) out.push_back(b);
+        }
+    }
+    for (const auto& child : ri->children()) collect_clone_boxes(child, out);
+}
+
 // ---- P3: inline (line-box) fragmentation data ---------------------------------
 //
 // Line-level fragmentation is planned on top of the P2 atomic-break cuts. A text
@@ -914,6 +949,8 @@ sk_sp<SkData> renderHtmlToPdf(const std::string& html, int width, int height,
     collect_line_groups(doc->root().get(), line_groups, float_boxes);
     std::vector<RepeatHeader> repeat_headers;
     collect_repeat_headers(doc->root().get(), repeat_headers);
+    std::vector<CloneBox> clone_boxes;
+    collect_clone_boxes(doc->root_render(), clone_boxes);
     std::vector<PageCut> pages =
         plan_page_cuts(break_units, line_groups, float_boxes, repeat_headers, content_area_height,
                        doc_height);
@@ -992,8 +1029,20 @@ sk_sp<SkData> renderHtmlToPdf(const std::string& html, int width, int height,
         container.set_canvas(canvas);
         container.set_height(content_area_height);
         container.set_tagging(false);
+        // box-decoration-break: clone — paint complete boxes for the fragments on this page.
+        doc->clear_fragment_bands();
+        for (const CloneBox& b : clone_boxes) {
+            const int slice_top = page_offset;
+            const int slice_bottom = page_offset + slice_height;
+            if (b.bottom <= slice_top || b.top >= slice_bottom) continue;
+            const int band_top = std::max(0, slice_top - b.top);
+            const int band_bottom = std::min(b.bottom - b.top, slice_bottom - b.top);
+            if (band_top == 0 && band_bottom == b.bottom - b.top) continue;  // not fragmented
+            doc->set_fragment_band(b.el, (litehtml::pixel_t)band_top, (litehtml::pixel_t)band_bottom);
+        }
         doc->draw(0, 0, -(litehtml::pixel_t)(page_offset - header_height), nullptr);
         container.flush();
+        doc->clear_fragment_bands();
 
         canvas->restore();
 

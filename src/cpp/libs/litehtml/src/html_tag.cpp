@@ -1330,6 +1330,17 @@ static litehtml::css_borders inline_fragment_borders(const litehtml::css_borders
         return bdr;
 }
 
+// box-decoration-break: clone fragment (see document::set_fragment_band): fit the content box
+// `pos` so that the decorated border box is only the visible band of the element.
+static void apply_fragment_band(const litehtml::document::fragment_band* band, litehtml::position& pos,
+                                const std::shared_ptr<litehtml::render_item>& ri)
+{
+        if (!band) return;
+        litehtml::pixel_t vertical = ri->padding_top() + ri->padding_bottom() + ri->border_top() + ri->border_bottom();
+        pos.y += band->top;
+        pos.height = std::max<litehtml::pixel_t>(0, band->bottom - band->top - vertical);
+}
+
 void litehtml::html_tag::draw_background(uint_ptr hdc, pixel_t x, pixel_t y, const position *clip,   
                                                                                  const std::shared_ptr<render_item> &ri)
 {
@@ -1338,6 +1349,7 @@ void litehtml::html_tag::draw_background(uint_ptr hdc, pixel_t x, pixel_t y, con
                 position pos = ri->pos();
                 pos.x   += x;
                 pos.y   += y;
+                apply_fragment_band(get_document()->fragment_band_of(this), pos, ri);
 
                 position border_box = pos;
                 border_box += ri->get_paddings();
@@ -1443,6 +1455,7 @@ void litehtml::html_tag::draw_borders(uint_ptr hdc, pixel_t x, pixel_t y, const 
                 position pos = ri->pos();
                 pos.x   += x;
                 pos.y   += y;
+                apply_fragment_band(get_document()->fragment_band_of(this), pos, ri);
 
                 position border_box = pos;
                 border_box += ri->get_paddings();

@@ -639,6 +639,27 @@ describe("regression: layout and paint probes", () => {
     expect(isWhite(col.at(20, 80))).toBe(true);
   });
 
+  it("box-decoration-break: clone repaints a complete box on each PDF page; slice is the default", async () => {
+    const doc = (style: string, height: number) =>
+      `<html><head><style>@page{size:300px 200px;margin:0}</style></head><body style="margin:0">` +
+      `<div style="margin:20px;border:6px solid #c00;border-radius:24px;background:#9cf;padding:10px;height:${height}px;${style}">x</div></body></html>`;
+    const pdf = async (style: string, height: number) =>
+      Buffer.from((await render({ value: doc(style, height), width: 300, format: "pdf" })).data as Uint8Array);
+
+    const plain = await pdf("", 300);
+    const slice = await pdf("box-decoration-break:slice", 300);
+    const clone = await pdf("box-decoration-break:clone", 300);
+    const webkitClone = await pdf("-webkit-box-decoration-break:clone", 300);
+    expect(slice.equals(plain)).toBe(true); // slice is the existing behaviour
+    expect(clone.equals(plain)).toBe(false); // each fragment is decorated as a whole box
+    expect(webkitClone.equals(clone)).toBe(true);
+
+    // A box that fits on one page has no fragments: clone changes nothing.
+    const smallPlain = await pdf("", 80);
+    const smallClone = await pdf("box-decoration-break:clone", 80);
+    expect(smallClone.equals(smallPlain)).toBe(true);
+  });
+
   it("float margin box (not the border box) narrows the first line", async () => {
     const squares = '<i style="display:inline-block;width:16px;height:16px;background:#00f"></i>'.repeat(30);
     const { at } = await renderPng(

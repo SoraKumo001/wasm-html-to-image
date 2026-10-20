@@ -333,6 +333,8 @@ namespace litehtml
           {_text_emphasis_position_, style_text_emphasis_position_strings},
           {_text_overflow_, text_overflow_strings},
           {_stroke_linejoin_, stroke_linejoin_strings},
+          {_box_decoration_break_, box_decoration_break_strings},
+          {__webkit_box_decoration_break_, box_decoration_break_strings},
           {_text_combine_upright_, text_combine_upright_strings},
           {_container_type_, container_type_strings},
           {_mix_blend_mode_, blend_mode_strings},
@@ -599,6 +601,8 @@ namespace litehtml
     case _overflow_y_:
     case _text_overflow_:
     case _stroke_linejoin_:
+    case _box_decoration_break_:
+    case __webkit_box_decoration_break_:
     case _text_align_:
     case _vertical_align_:
     case _text_transform_:
