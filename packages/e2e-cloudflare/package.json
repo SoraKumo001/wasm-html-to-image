@@ -4,13 +4,17 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "dev": "cf dev",
+    "build": "tsc",
+    "deploy": "cf deploy",
     "test": "node scripts/smoke.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260906.1",
     "@types/node": "26.4.1",
+    "cf": "1.0.0-beta.19",
     "typescript": "^7.0.2",
-    "wrangler": "^4.129.0"
+    "wrangler": "^4.151.2"
   },
   "dependencies": {
     "wasm-html-to-image": "workspace:*"

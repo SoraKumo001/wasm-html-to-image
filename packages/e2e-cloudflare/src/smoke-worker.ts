@@ -2,7 +2,7 @@ import { render } from "wasm-html-to-image/workerd";
 
 /**
  * Minimal worker that exercises the workerd entry over HTTP.
- * Used by scripts/smoke.mjs via `wrangler dev` (no fixed port).
+ * Used by scripts/smoke.mjs via `cf dev` (no fixed port).
  */
 export default {
   async fetch(request: Request): Promise<Response> {
