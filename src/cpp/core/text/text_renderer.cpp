@@ -155,40 +155,108 @@ std::vector<SkRect> glyphInkBounds(const SkTextBlob::Iter::ExperimentalRun& run)
 
 // text-emphasis (圏点): litehtml の css_properties が emphasis_style/color/position を
 // 解析して font_description に格納するが、描画は未対応だったためここで打つ。
-// 最小範囲: filled/open × dot/circle/double-circle(円近似)/triangle/sesame。
-// カスタム文字列・first-letter 等は対象外。
+// filled/open × dot/circle/double-circle(円近似)/triangle/sesame と、
+// カスタム文字列 (text-emphasis-style: <string>、実質 1 文字) に対応する。
+// カスタム文字列は per-glyph の文字描画として載せる (最初の非空白文字のみ使用。
+// spec 上 2 文字目は空白のみ許可され、描画には寄与しない)。
 struct EmphasisSpec {
     bool enabled = false;
     bool filled = true;
     enum Shape { Dot, Triangle, Sesame } shape = Dot;
+    char32_t custom = 0;  // != 0: 図形ではなくこの文字を打つ
 };
-
-EmphasisSpec parseEmphasisStyle(const std::string& style) {
-    EmphasisSpec spec;
-    if (style.empty()) return spec;
-    std::string lower;
-    lower.reserve(style.size());
-    for (unsigned char c : style) lower.push_back((char)std::tolower(c));
-    // カスタム文字列 ("*" 等) は未対応
-    if (lower.find('"') != std::string::npos || lower.find('\'') != std::string::npos) {
-        return spec;
-    }
-    if (lower.find("none") != std::string::npos) return spec;
-    spec.enabled = true;
-    spec.filled = (lower.find("open") == std::string::npos);
-    if (lower.find("sesame") != std::string::npos) {
-        spec.shape = EmphasisSpec::Sesame;
-    } else if (lower.find("triangle") != std::string::npos) {
-        spec.shape = EmphasisSpec::Triangle;
-    } else {
-        spec.shape = EmphasisSpec::Dot;  // dot / circle / double-circle(円近似)
-    }
-    return spec;
-}
 
 bool isEmphasisSpace(char32_t u) {
     // Chromium は空白に圏点を打たない (U+0020 / NBSP / 全角空白 / ASCII制御空白)
     return u == 0x20 || u == 0x00A0 || u == 0x3000 || (u >= 0x09 && u <= 0x0D);
+}
+
+// UTF-8 1 文字を読む (text-emphasis のカスタム文字列用の最小デコーダ)。
+char32_t decodeEmphasisUtf8(const char*& p) {
+    const unsigned char* s = (const unsigned char*)p;
+    char32_t ch;
+    int extra;
+    if (s[0] < 0x80) {
+        ch = s[0];
+        extra = 0;
+    } else if ((s[0] & 0xE0) == 0xC0) {
+        ch = s[0] & 0x1F;
+        extra = 1;
+    } else if ((s[0] & 0xF0) == 0xE0) {
+        ch = s[0] & 0x0F;
+        extra = 2;
+    } else if ((s[0] & 0xF8) == 0xF0) {
+        ch = s[0] & 0x07;
+        extra = 3;
+    } else {
+        p++;
+        return 0xFFFD;
+    }
+    p++;
+    for (int i = 0; i < extra; ++i) {
+        if (*p == 0 || ((unsigned char)*p & 0xC0) != 0x80) return 0xFFFD;
+        ch = (ch << 6) | ((unsigned char)*p++ & 0x3F);
+    }
+    return ch;
+}
+
+// カスタム文字列の最初の非空白文字を返す (無ければ 0)。
+char32_t firstEmphasisChar(const char* begin, const char* end) {
+    const char* p = begin;
+    while (p < end && *p) {
+        char32_t ch = decodeEmphasisUtf8(p);
+        if (!isEmphasisSpace(ch) && ch != 0) return ch;
+    }
+    return 0;
+}
+
+EmphasisSpec parseEmphasisStyle(const std::string& style) {
+    EmphasisSpec spec;
+    if (style.empty()) return spec;
+    // ショートハンドはトークン値そのまま (引用符なし)、ロングハンドは宣言の repr
+    // (引用符付き) が来るため、どちらも同じ規則で走査する。
+    bool has_none = false;
+    size_t i = 0;
+    while (i < style.size()) {
+        while (i < style.size() && std::isspace((unsigned char)style[i])) i++;
+        if (i >= style.size()) break;
+        const size_t start = i;
+        // 引用符付き文字列は中の空白ごと 1 トークンとして扱う
+        if (style[i] == '\'' || style[i] == '"') {
+            const char quote = style[i++];
+            const size_t inner = i;
+            while (i < style.size() && style[i] != quote) i++;
+            char32_t ch = firstEmphasisChar(style.c_str() + inner, style.c_str() + i);
+            if (ch != 0) spec.custom = ch;
+            if (i < style.size()) i++;
+            continue;
+        }
+        while (i < style.size() && !std::isspace((unsigned char)style[i])) i++;
+        std::string token = style.substr(start, i - start);
+        std::string lower;
+        lower.reserve(token.size());
+        for (unsigned char c : token) lower.push_back((char)std::tolower(c));
+        if (lower == "none") {
+            has_none = true;
+        } else if (lower == "open") {
+            spec.filled = false;
+        } else if (lower == "filled") {
+            spec.filled = true;
+        } else if (lower == "sesame") {
+            spec.shape = EmphasisSpec::Sesame;
+        } else if (lower == "triangle") {
+            spec.shape = EmphasisSpec::Triangle;
+        } else if (lower == "dot" || lower == "circle" || lower == "double-circle") {
+            spec.shape = EmphasisSpec::Dot;  // double-circle は円近似
+        } else {
+            // カスタム文字列 (ショートハンドでは引用符が落ちる)
+            char32_t ch = firstEmphasisChar(token.c_str(), token.c_str() + token.size());
+            if (ch != 0) spec.custom = ch;
+        }
+    }
+    if (has_none && spec.custom == 0) return spec;
+    spec.enabled = true;
+    return spec;
 }
 
 // 1つの圏点を (cx, cy) 中心に打つ。(ox, oy): 外向き法線、(ix, iy): インライン方向。
@@ -237,11 +305,56 @@ void drawEmphasisMark(SkCanvas* canvas, const EmphasisSpec& spec, float cx, floa
     }
 }
 
+// 圏点用の書体を選ぶ: 本文のラン書体 → 同じ font_info の書体 → 読み込み済みの
+// フォールバック書体 → per-glyph 選択、の順にグリフを持つものを探す。
+// (● のようにラン書体に無い記号は、同じ family の別フェイスにあることが多い)
+SkFont emphasisFont(SatoruContext* ctx, font_info* fi, const SkFont& run_font, char32_t ch) {
+    const SkUnichar u = (SkUnichar)ch;
+    if (run_font.unicharToGlyph(u) != 0) return run_font;
+    for (auto& f : fi->fonts) {
+        if (f && f->getTypeface() && f->getTypeface()->unicharToGlyph(u) != 0) {
+            SkFont font = run_font;
+            font.setTypeface(sk_ref_sp(f->getTypeface()));
+            return font;
+        }
+    }
+    if (sk_sp<SkTypeface> tf = ctx->fontManager.findTypefaceForCodepoint(u)) {
+        SkFont font = run_font;
+        font.setTypeface(tf);
+        return font;
+    }
+    return ctx->fontManager.selectFont(ch, fi, nullptr, ctx->getUnicodeService());
+}
+
+// カスタム文字列の圏点を 1 つ打つ。グリフのインク中心を (cx, cy) に合わせる。
+// 縦書きでも記号自体は正立で描く (Chromium の圏点は書字方向に関わらず正立)。
+void drawEmphasisGlyph(SkCanvas* canvas, SatoruContext* ctx, font_info* fi, const SkFont& run_font,
+                       char32_t ch, float cx, float cy, const SkPaint& base) {
+    SkFont font = emphasisFont(ctx, fi, run_font, ch);
+    // 圏点は本文サイズの半分で打つ (Chromium の emphasis mark と同じ)。
+    font.setSize(run_font.getSize() * 0.5f);
+    const SkGlyphID gid = font.unicharToGlyph((SkUnichar)ch);
+    if (!gid) return;
+    const SkRect bounds = font.getBounds(gid, nullptr);
+    if (bounds.isEmpty()) return;
+    SkTextBlobBuilder builder;
+    auto run = builder.allocRunPos(font, 1);
+    run.glyphs[0] = gid;
+    run.pos[0] = cx - (bounds.left() + bounds.right()) * 0.5f;
+    run.pos[1] = cy - (bounds.top() + bounds.bottom()) * 0.5f;
+    SkPaint paint(base);
+    paint.setPathEffect(nullptr);
+    paint.setStyle(SkPaint::kFill_Style);
+    sk_sp<SkTextBlob> blob = builder.make();
+    if (blob) canvas->drawTextBlob(blob.get(), 0, 0, paint);
+}
+
 // 1ランの圏点を打つ。グリフ位置は本文と同じ shaping 結果から求める。
-void drawEmphasisRun(SkCanvas* canvas, font_info* fi, const litehtml::position& pos,
-                     litehtml::writing_mode mode, const SkPaint& paint, const EmphasisSpec& spec,
-                     const TextAnalysis& run_chars, const ShapedResult& shaped, float inline_start,
-                     bool is_upright, bool is_punctuation, bool is_rtl) {
+void drawEmphasisRun(SkCanvas* canvas, SatoruContext* ctx, font_info* fi,
+                     const litehtml::position& pos, litehtml::writing_mode mode,
+                     const SkPaint& paint, const EmphasisSpec& spec, const TextAnalysis& run_chars,
+                     const ShapedResult& shaped, float inline_start, bool is_upright,
+                     bool is_punctuation, bool is_rtl) {
     struct GlyphPos {
         float x;
         float y;
@@ -333,10 +446,19 @@ void drawEmphasisRun(SkCanvas* canvas, font_info* fi, const litehtml::position& 
             glyphs[i].font.getMetrics(&m);
             cy = (oy < 0.0f) ? (base + m.fAscent - gap) : (base + m.fDescent + gap);
         }
-        drawEmphasisMark(canvas, spec, cx, cy, size, mark_paint, ox, oy, ix, iy);
+        if (spec.custom != 0) {
+            drawEmphasisGlyph(canvas, ctx, fi, glyphs[i].font, spec.custom, cx, cy, mark_paint);
+        } else {
+            drawEmphasisMark(canvas, spec, cx, cy, size, mark_paint, ox, oy, ix, iy);
+        }
     }
 }
 }  // namespace
+
+char32_t TextRenderer::emphasisCodepoint(const font_info* fi) {
+    if (!fi) return 0;
+    return parseEmphasisStyle(fi->desc.emphasis_style).custom;
+}
 
 void TextBatcher::addText(const sk_sp<SkTextBlob>& blob, double tx, double ty, const Style& style) {
     if (m_active && m_currentStyle != style) {
@@ -644,6 +766,9 @@ double TextRenderer::drawTextInternal(SatoruContext* ctx, SkCanvas* canvas, cons
     EmphasisSpec emphasis_spec = parseEmphasisStyle(fi->desc.emphasis_style);
     bool want_emphasis =
         emphasis_spec.enabled && !tagging && paint.getStyle() != SkPaint::kStroke_Style;
+    // カスタム文字列の圏点は本文とは別のコードポイントを打つ。書体のサブセット取得が
+    // その文字を覆うよう、使用文字として登録する (● 等は別ブロックのことがある)。
+    if (emphasis_spec.custom != 0 && usedCodepoints) usedCodepoints->insert(emphasis_spec.custom);
 
     size_t start = 0;
     while (start < analysis.chars.size()) {
@@ -893,7 +1018,7 @@ double TextRenderer::drawTextInternal(SatoruContext* ctx, SkCanvas* canvas, cons
         }
 
         if (want_emphasis && !is_run_combine) {
-            drawEmphasisRun(canvas, fi, pos, mode, paint, emphasis_spec, run_analysis, shaped,
+            drawEmphasisRun(canvas, ctx, fi, pos, mode, paint, emphasis_spec, run_analysis, shaped,
                             (float)current_l_pos.inline_offset, is_upright, is_punctuation,
                             (analysis.bidi_level & 1) != 0);
         }

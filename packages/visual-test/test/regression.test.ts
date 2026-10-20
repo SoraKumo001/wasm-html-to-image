@@ -1815,4 +1815,103 @@ describe("regression: layout and paint probes", () => {
     expect(none.length).toBeGreaterThan(0);
     expect(auto_.length).toBeGreaterThan(none.length);
   });
+
+  // CJK probe font: ::first-letter and text-emphasis need full-width glyphs to
+  // have known character cells, so these probes load Noto Sans JP like the
+  // vertical cases do.
+  const CJK_PROBE_FONT_FACE =
+    "@font-face{font-family:'NotoProbe';font-style:normal;font-weight:400;src:url(https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-jp/files/noto-sans-jp-japanese-400-normal.woff2) format('woff2')}";
+
+  // In a 40px full-width line the character cells are 40px wide. Horizontal
+  // text advances along x, vertical-rl text advances down y (one column here).
+  const countRed = (img: PNG, x0: number, x1: number, y0: number, y1: number) => {
+    let count = 0;
+    for (let y = Math.max(0, y0); y < Math.min(img.height, y1); y++)
+      for (let x = Math.max(0, x0); x < Math.min(img.width, x1); x++)
+        if (isRedPixel(img, x, y)) count++;
+    return count;
+  };
+  const redInHorizontalCell = (img: PNG, cell: number) =>
+    countRed(img, cell * 40, (cell + 1) * 40, 0, img.height);
+  // vertical-rl: the line advances down the page, one 40px row band per character.
+  const redInVerticalCell = (img: PNG, cell: number) =>
+    countRed(img, 0, img.width, cell * 40, (cell + 1) * 40);
+
+  it("::first-letter includes the trailing closing punctuation (horizontal)", async () => {
+    // CSS Selectors-4: the first letter unit plus any following punctuation
+    // (Pe/Pf/Po) belongs to ::first-letter, so 「あ」 is wrapped as a whole.
+    const html = `<html><head><style>${CJK_PROBE_FONT_FACE}
+      body{margin:0;background:#fff}
+      p{margin:0;font-size:40px;line-height:1.4;color:#000;font-family:'NotoProbe',sans-serif}
+      p::first-letter{color:#f00}</style></head><body><p>「あ」</p></body></html>`;
+    const { data } = await render({ value: html, width: 300, format: "png" });
+    const img = PNG.sync.read(Buffer.from(data));
+    // Cell 0 is the opening bracket, cell 1 the letter, cell 2 the closing bracket.
+    expect(redInHorizontalCell(img, 0)).toBeGreaterThan(5);
+    expect(redInHorizontalCell(img, 1)).toBeGreaterThan(5);
+    expect(redInHorizontalCell(img, 2)).toBeGreaterThan(5);
+  });
+
+  it("::first-letter includes the trailing closing punctuation (vertical)", async () => {
+    const html = `<html><head><style>${CJK_PROBE_FONT_FACE}
+      body{margin:0;background:#fff}
+      p{margin:0;font-size:40px;writing-mode:vertical-rl;height:200px;color:#000;font-family:'NotoProbe',sans-serif}
+      p::first-letter{color:#f00}</style></head><body><p>「あ」</p></body></html>`;
+    const { data } = await render({ value: html, width: 300, format: "png" });
+    const img = PNG.sync.read(Buffer.from(data));
+    // Vertical-rl advances down the page, so the character cells are 40px row
+    // bands and the probe has a single column.
+    expect(redInVerticalCell(img, 0)).toBeGreaterThan(5);
+    expect(redInVerticalCell(img, 1)).toBeGreaterThan(5);
+    expect(redInVerticalCell(img, 2)).toBeGreaterThan(5);
+  });
+
+  // Total dark ink of an image: a mark per glyph can only add ink, so comparing
+  // the counts detects whether the custom emphasis character is painted at all
+  // (the probe font has no descenders to confound the count).
+  const darkPixels = (img: PNG) => {
+    let count = 0;
+    for (let y = 0; y < img.height; y++)
+      for (let x = 0; x < img.width; x++) {
+        const i = (img.width * y + x) * 4;
+        if (img.data[i + 3] > 0 && img.data[i] < 128) count++;
+      }
+    return count;
+  };
+
+  it("text-emphasis: a custom string paints the character (horizontal)", async () => {
+    // text-emphasis-style: <string> replaces the filled/open shapes with the
+    // given character, drawn once per glyph. A ● is a much bigger mark than the
+    // keyword dot, so the ink tells the two apart (and a missing mark paints
+    // less ink than the dot).
+    const renderCase = async (emphasis: string) => {
+      const html = `<html><head><style>${CJK_PROBE_FONT_FACE}
+        body{margin:0;background:#fff}
+        div{margin:0;font-size:40px;line-height:2;color:#000;font-family:'NotoProbe',sans-serif;${emphasis}}</style></head>
+        <body><div>ああああ</div></body></html>`;
+      const { data } = await render({ value: html, width: 400, format: "png" });
+      return PNG.sync.read(Buffer.from(data));
+    };
+    const dot = await renderCase("text-emphasis:filled dot");
+    const shorthand = await renderCase("text-emphasis:'●'");
+    const longhand = await renderCase("text-emphasis-style:'●'");
+    expect(darkPixels(shorthand)).toBeGreaterThan(darkPixels(dot) + 300);
+    expect(darkPixels(longhand)).toBeGreaterThan(darkPixels(dot) + 300);
+  });
+
+  it("text-emphasis: a custom string paints the character (vertical)", async () => {
+    const renderCase = async (emphasis: string) => {
+      const html = `<html><head><style>${CJK_PROBE_FONT_FACE}
+        body{margin:0;background:#fff}
+        div{margin:0;font-size:40px;line-height:2;color:#000;writing-mode:vertical-rl;height:200px;font-family:'NotoProbe',sans-serif;${emphasis}}</style></head>
+        <body><div>ああああ</div></body></html>`;
+      const { data } = await render({ value: html, width: 300, format: "png" });
+      return PNG.sync.read(Buffer.from(data));
+    };
+    const dot = await renderCase("text-emphasis:filled dot");
+    const shorthand = await renderCase("text-emphasis:'●'");
+    const longhand = await renderCase("text-emphasis-style:'●'");
+    expect(darkPixels(shorthand)).toBeGreaterThan(darkPixels(dot) + 300);
+    expect(darkPixels(longhand)).toBeGreaterThan(darkPixels(dot) + 300);
+  });
 });

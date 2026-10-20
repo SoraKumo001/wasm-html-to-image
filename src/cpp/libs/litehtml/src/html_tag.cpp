@@ -43,16 +43,15 @@ static char32_t decode_utf8(const char **ptr) {
     return res;
 }
 
-// CSS Selectors-4: punctuation that precedes the first letter unit belongs to
-// ::first-letter. This minimal extension only recognises the leading
-// opening-punctuation class (Unicode Ps, initial quotes Pi, and the ASCII
-// quotation marks) so that e.g. "【前】" folds "【前" into the wrapper. Trailing
-// (closing) punctuation and interpuncts are intentionally out of scope.
-static bool is_first_letter_opening_punct(char32_t ch) {
+// CSS Selectors-4 §3.4: the ::first-letter pseudo-element covers the first
+// typographic letter unit plus any preceding punctuation (Unicode categories
+// Ps, Pe, Pi, Pf, Po) and any following punctuation (Pe, Pf, Po). Chromium
+// matches this: "「あ」" -> "「あ」", "あ。。" -> "あ。。", "。あ" -> "。あ",
+// while "あ「" -> "あ" (Ps/Pi are not following punctuation).
+// The Ps/Pi/Pf/Pe tables are complete for the blocks in use; the Po table is a
+// practical subset (ASCII punctuation, General Punctuation, CJK punctuation).
+static bool is_first_letter_ps(char32_t ch) {
     switch (ch) {
-    // ASCII quotation marks (Po)
-    case 0x0022: // "
-    case 0x0027: // '
     // Parentheses / brackets (Ps)
     case 0x0028: case 0x005B: case 0x007B:
     case 0x0F3A: case 0x0F3C: case 0x169B:
@@ -74,7 +73,42 @@ static bool is_first_letter_opening_punct(char32_t ch) {
     case 0xFE3F: case 0xFE41: case 0xFE43: case 0xFE47:
     case 0xFE59: case 0xFE5B: case 0xFE5D:
     case 0xFF08: case 0xFF3B: case 0xFF5B: case 0xFF5F: case 0xFF62:
-    // Initial quotes (Pi)
+        return true;
+    default:
+        return false;
+    }
+}
+
+static bool is_first_letter_pe(char32_t ch) {
+    switch (ch) {
+    case 0x0029: case 0x005D: case 0x007D:
+    case 0x0F3B: case 0x0F3D: case 0x169C:
+    case 0x2046: case 0x207E: case 0x208E:
+    case 0x2309: case 0x230B: case 0x232A:
+    case 0x2769: case 0x276B: case 0x276D: case 0x276F:
+    case 0x2771: case 0x2773: case 0x2775:
+    case 0x27C6: case 0x27E7: case 0x27E9: case 0x27EB: case 0x27ED: case 0x27EF:
+    case 0x2984: case 0x2986: case 0x2988: case 0x298A: case 0x298C:
+    case 0x298E: case 0x2990: case 0x2992: case 0x2994: case 0x2996: case 0x2998:
+    case 0x29D9: case 0x29DB: case 0x29FD:
+    case 0x2E23: case 0x2E25: case 0x2E27: case 0x2E29:
+    case 0x2E56: case 0x2E58: case 0x2E5A: case 0x2E5C:
+    case 0x3009: case 0x300B: case 0x300D: case 0x300F:
+    case 0x3011: case 0x3015: case 0x3017: case 0x3019: case 0x301B:
+    case 0x301E: case 0x301F:
+    case 0xFD3F: case 0xFE18:
+    case 0xFE36: case 0xFE38: case 0xFE3A: case 0xFE3C: case 0xFE3E:
+    case 0xFE40: case 0xFE42: case 0xFE44: case 0xFE48:
+    case 0xFE5A: case 0xFE5C: case 0xFE5E:
+    case 0xFF09: case 0xFF3D: case 0xFF5D: case 0xFF60: case 0xFF63:
+        return true;
+    default:
+        return false;
+    }
+}
+
+static bool is_first_letter_pi(char32_t ch) {
+    switch (ch) {
     case 0x00AB: case 0x2018: case 0x201B: case 0x201C: case 0x201F:
     case 0x2039: case 0x2E02: case 0x2E04: case 0x2E09: case 0x2E0C:
     case 0x2E1C: case 0x2E20:
@@ -82,6 +116,59 @@ static bool is_first_letter_opening_punct(char32_t ch) {
     default:
         return false;
     }
+}
+
+static bool is_first_letter_pf(char32_t ch) {
+    switch (ch) {
+    case 0x00BB: case 0x2019: case 0x201D: case 0x203A:
+    case 0x2E03: case 0x2E05: case 0x2E0A: case 0x2E0D:
+    case 0x2E1D: case 0x2E21:
+        return true;
+    default:
+        return false;
+    }
+}
+
+static bool is_first_letter_po(char32_t ch) {
+    if (ch >= 0x2020 && ch <= 0x2027) return true;  // † ‡ • ‣ ․ ‥ … ‧
+    if (ch >= 0x2030 && ch <= 0x2038) return true;  // per mille, primes, ‸
+    if (ch >= 0x2047 && ch <= 0x2051) return true;  // ⁇ ⁈ ... ⁑
+    if (ch >= 0xFE10 && ch <= 0xFE19) return true;  // vertical forms
+    if (ch >= 0xFE50 && ch <= 0xFE57) return true;  // small forms (， 、)
+    if (ch >= 0xFE5F && ch <= 0xFE61) return true;  // ﹟ ﹠ ﹡
+    switch (ch) {
+    // ASCII punctuation (Po); the ASCII quotation marks are Po too
+    case 0x0021: case 0x0022: case 0x0023: case 0x0025: case 0x0026: case 0x0027:
+    case 0x002A: case 0x002C: case 0x002E: case 0x002F:
+    case 0x003A: case 0x003B: case 0x003F: case 0x0040: case 0x005C:
+    // Latin-1
+    case 0x00A1: case 0x00A7: case 0x00B6: case 0x00B7: case 0x00BF:
+    case 0x037E: case 0x0387:
+    // General Punctuation
+    case 0x2016: case 0x2017:
+    case 0x203B: case 0x203C: case 0x203D: case 0x203E:
+    case 0x2041: case 0x2042: case 0x2043:
+    case 0x2053: case 0x2054: case 0x2057: case 0x205C: case 0x205E:
+    // CJK Symbols and Punctuation (、。〃〽・)
+    case 0x3001: case 0x3002: case 0x3003: case 0x301D: case 0x303D: case 0x30FB:
+    // Halfwidth / fullwidth CJK forms
+    case 0xFF01: case 0xFF02: case 0xFF03: case 0xFF05: case 0xFF06: case 0xFF07:
+    case 0xFF0A: case 0xFF0C: case 0xFF0E: case 0xFF0F:
+    case 0xFF1A: case 0xFF1B: case 0xFF1F: case 0xFF20:
+    case 0xFF3C: case 0xFF61: case 0xFF64: case 0xFF65:
+        return true;
+    default:
+        return false;
+    }
+}
+
+static bool is_first_letter_preceding_punct(char32_t ch) {
+    return is_first_letter_ps(ch) || is_first_letter_pe(ch) || is_first_letter_pi(ch) ||
+           is_first_letter_pf(ch) || is_first_letter_po(ch);
+}
+
+static bool is_first_letter_following_punct(char32_t ch) {
+    return is_first_letter_pe(ch) || is_first_letter_pf(ch) || is_first_letter_po(ch);
 }
 
 litehtml::html_tag::html_tag(const std::shared_ptr<document>& doc) : element(doc)
@@ -2042,22 +2129,28 @@ void litehtml::html_tag::apply_first_letter()
         const char* s = txt.c_str();
         const char* p = s;
         char32_t first_ch = decode_utf8(&p);
-        // CSS Selectors-4: leading punctuation preceding the first letter unit is
-        // part of ::first-letter. Fold a leading run of opening punctuation into
-        // the wrapper together with the first following character (the letter
-        // unit), e.g. "【前】" -> wrapper "【前", rest "】".
-        if(is_first_letter_opening_punct(first_ch))
+        // CSS Selectors-4: the leading punctuation preceding the first letter unit
+        // (Ps/Pe/Pi/Pf/Po) is part of ::first-letter, and so is the punctuation
+        // following it (Pe/Pf/Po). E.g. "【前】" -> wrapper "【前】", rest "",
+        // "あ。。" -> wrapper "あ。。", "あ「" -> wrapper "あ" (Ps is not trailing).
+        if(is_first_letter_preceding_punct(first_ch))
         {
                 while(*p)
                 {
                         const char* q = p;
-                        if(!is_first_letter_opening_punct(decode_utf8(&q))) break;
+                        if(!is_first_letter_preceding_punct(decode_utf8(&q))) break;
                         p = q;
                 }
                 if(*p)
                 {
                         decode_utf8(&p); // include the first following character
                 }
+        }
+        while(*p)
+        {
+                const char* q = p;
+                if(!is_first_letter_following_punct(decode_utf8(&q))) break;
+                p = q;
         }
         size_t first_len = (size_t)(p - s);
         if(first_len == 0 || first_len > txt.size()) return;

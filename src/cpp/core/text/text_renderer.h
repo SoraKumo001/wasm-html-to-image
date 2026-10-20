@@ -91,6 +91,10 @@ class TextRenderer {
                          std::set<char32_t>* usedCodepoints, TextBatcher* batcher = nullptr,
                          bool forceEllipsis = false);
 
+    // text-emphasis-style のカスタム文字列 (無ければ 0)。レイアウト時に、圏点が打つ
+    // 文字を書体サブセットの使用文字へ登録するために使う。
+    static char32_t emphasisCodepoint(const font_info* fi);
+
    private:
     // Internal helper for shaping and drawing a single run of text.
     // `glyphInk` (optional) collects the ink geometry of the drawn glyphs so

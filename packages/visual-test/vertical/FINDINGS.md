@@ -61,8 +61,10 @@ SVG 出力は PNG と一致 (差分 < 1%)、PDF 出力も縦書きのまま 1 �
 | 8 | `text-combine-upright:all` (結合ランを横書きで再整形して 1em に圧縮) | 06/94: Chromium と同等 |
 | 7 | `letter-spacing` (横書き・縦書きとも。font description 生成前に解決、グリフ間隔を加算) | 99/16。`word-spacing` は未検証 |
 | 14 | `text-emphasis` (圏点): `text_renderer.cpp` に per-glyph 描画を追加。filled/open × dot/circle(円近似)/triangle/sesame(短い太線)、over/under・right/left 配置、空白・結合マーク除外、currentColor 解決。tagging(SVG)/stroke上塗り/tcyランは対象外 | 14: 中央列にゴマ点が Chromium と同位置に付く (fill 2.6% 変化なし=他列の既存差分が支配、outline 4.1%→3.9%) |
+| - | `text-emphasis-style: <string>` / `text-emphasis: '●'` (カスタム文字列): 最初の非空白文字を per-glyph の記号描画として載せる (本文サイズの 0.5em、インク中心をマーク位置へ、縦書きも正立)。ラン書体に無い記号は同じ `font_info` の別フェイス→読み込み済み書体→per-glyph 選択の順に解決し、レイアウト時に使用文字へ登録してサブセット取得に載せる (`TextRenderer::emphasisCodepoint`、`container_skia::text_width`) | プローブ (H/V、`'●'`/`'*'`/`'x'`/`'※'`) で Chromium と同位置・同サイズ (0.5em) の圏点。14 は不変 (fill 2.5% / outline 3.6%) |
 | - | `::first-letter` の付与対象を `::before` 子テキスト優先に修正 (空 before は skip、`::after` は対象外。decode_utf8 分割・wrapper・二重分割ガード維持) | 62: 【が緑 2em で Chromium と一致 (fill 1.0% / outline 1.7%)。「前」までの拡大は未対応 |
-| - | `::first-letter` の先頭句読点包含 (CSS Selectors-4: 先頭字に先行する開き句読点類 `「『【〈《（［〔"'` 等 (Unicode Ps / Pi / ASCII 引用符) を wrapper に含める。`html_tag.cpp` に `is_first_letter_opening_punct` を追加し、先頭が開き句読点なら連続する開き句読点 + 直後の 1 文字を分割対象に。閉じ句読点・中黒等の後続は対象外) | 62: `【前` が緑 2em (fill 1.0% / outline 1.7%→1.4%)。Chromium は `【前】` 全体を緑化 (末尾 `】` は未対応) |
+| - | `::first-letter` の先頭句読点包含 (CSS Selectors-4: 先頭字に先行する句読点類 `「『【〈《（［〔"'` 等 (Unicode Ps/Pe/Pi/Pf/Po) を wrapper に含める。`html_tag.cpp` の `is_first_letter_preceding_punct` が連続する先行句読点 + 直後の 1 文字を分割対象に) | 62: `【前` が緑 2em (fill 1.0% / outline 1.7%→1.4%) |
+| - | `::first-letter` の末尾句読点包含 (CSS Selectors-4 の後続句読点 Pe/Pf/Po。`is_first_letter_following_punct` を追加し、最初の字の直後に連続する閉じ括弧・句読点を wrapper に含める。Ps/Pi は後続に含めない) | 62: `【前】` 全体が緑 2em (fill 1.0%→0.9% / outline 1.4%→1.2%)。`「あ」` `"A"` `あ。` `あ。。` `。あ` が Chromium と一致、`あ「` は `あ` のみ (Chromium と同じ) |
 | - | 縦書きブロックを BFC 化 (float の高さ漏れ) | 30/77: ページ高さ 320→266px で一致 |
 | - | 縦書きの下線・上線の位置 (下線はブロック開始側の内側、上線はブロック終端側の内側へ) | 43: fill 0.7%→0.3% / outline 0.8%→0.5% |
 | - | `position:fixed` を文書高さ算出から除外 (fixed サブツリー全体を `calc_document_size` でスキップ。viewport 基準の子座標が混入し高さが膨らんでいた) | 短文+fixed bottom-right 2979→55px、長文 2979→2366px に復帰 |
@@ -71,6 +73,8 @@ SVG 出力は PNG と一致 (差分 < 1%)、PDF 出力も縦書きのまま 1 �
 既存の横書きビジュアルテスト 26 アセットは基準値から ±0.3% 以内で回帰なし。
 - 横書き先頭 float の measure 台帳汚染 (76: `place_float` が measure 時に未配置座標で `add_float` し、共有 fmt_ctx に残った phantom が place 時の行幅計算を狂わせていた。measure + 横書き時のみ台帳更新を skip し自幅を返す。縦書きは従来通り): 76 fill 6.9%→3.2% / outline 9.9%→2.2%、高さ 201→154px で Chromium と一致。vertical 全数・vitest 155 件・横書き 26 件で回帰なし (76 の baseline のみ正値へ更新)。
 - 複合ルビ P1 (上表): wasm build 済み。vertical `compare.ts` 全数はエラー無し、既存 07/79/79a/44 は前回値と一致 (07 fill 1.3% / outline 2.4%、44 fill 3.5% / outline 4.0%、79 fill 3.0% / outline 6.5%、79a fill 2.9% / outline 6.4%)。vitest 159 件 (visual-test、新規 79b–79e の baseline 追加) 通過、横書き 26 アセット (png+svg) も通過 (横書きアセットに ruby は無く影響なし)。新規 4 ケースの Chromium 並置は `out/79b-ruby-compound-h.png` 〜 `79e-ruby-jukugo-2char.png`。
+- `::first-letter` 末尾句読点と `text-emphasis` カスタム文字列 (上表): 回帰プローブ 4 件を `test/regression.test.ts` に追加 (`::first-letter` H/V は 40px の字セルごとに赤を数える、text-emphasis H/V はカスタム文字列のインク量をキーワード dot と比較)。修正前の wasm で 4 件とも fail することを確認済み。vertical の baseline は改善のみ (62-pseudo 0.9%/1.2% は baseline 1.27%/2.72% を下回るため更新不要)。vitest 265 件 (visual-test) + unit 165 件が通過。
+
 未対応・既知の制限:
 - inline-grid: 固定トラック + 暗黙の自動単一列のみ対応。明示 `auto` トラック・`fr` の shrink、複数自動列の内容按分は未対応 (固定列は可用幅で解決される)。ベースラインは先行 (first row) のみ (last も同一値を返す)。
 - ルビ: 複合ルビ (1 つの `<ruby>` に複数の `<rt>`、または `<rtc>`) は P1 で 2 アイテム化 (上記)。均等割付 (各注釈を各基底文字へ分配) は未対応で、注釈全体を基底幅へ中央寄せする。横書き複合は注釈 block の strut (line-height) の分だけ基底+注釈の箱が高くなる (79b: ours 89px vs Chromium 67px)。`rtc` は Chromium が ruby として扱わず inline fallback するため差が残る。P2 (対切りネスト・均等割付・両面ルビ) は対象外。縦書きで折り返し位置にルビが来る場合の 2 列分割は修正済み (44)
@@ -80,8 +84,8 @@ SVG 出力は PNG と一致 (差分 < 1%)、PDF 出力も縦書きのまま 1 �
 
 ## 不具合 (縦書き以外でも起きるもの / 参考)
 
-- ~~`text-emphasis` (圏点) 未対応 (14)~~ → 本変更で対応 (上記)。残件: カスタム文字列、SVG(tagging)出力、tcyラン、`open` 以外の装飾組み合わせの厳密比較。
-- ~~`::first-letter` 未対応 (62)~~ → 本変更で対応 (上記)。先頭に先行する開き句読点類は wrapper に含めるようになった (`【前`)。残件: Chromium は前後の句読点を包含する (`【前】` の末尾 `】`、`"A"` の末尾 `"`) が本実装は末尾の閉じ句読点・中黒を対象外とする。先頭の閉じ句読点 (例 `。あ`) も未対応 (先頭 1 文字のみ)。最小プローブ `temp/first-letter-probe.*` で Chromium 対照済み。
+- ~~`text-emphasis` (圏点) 未対応 (14)~~ → 本変更で対応 (上記)。残件: SVG(tagging)出力、tcyラン、`open` 以外の装飾組み合わせの厳密比較。カスタム文字列 (`text-emphasis-style: <string>`) は 1 文字目のみ対応 (仕様上 2 文字目は空白のみ許可)。
+- ~~`::first-letter` 未対応 (62)~~ → 本変更で対応 (上記)。先頭に先行する句読点類 (`【前`) と末尾の閉じ句読点 (`【前】` の `】`) を wrapper に含める。残件: 先頭の字が無い (句読点のみ) テキストの扱いは未検証。最小プローブ `temp/first-letter-probe.*` で Chromium 対照済み。
 - 横書きの先頭 float 右寄せでテキストが下へずれていた (76) → 本変更で修正 (下記)。残差 fill 3.2% / outline 2.2% は約物詰め (`text-spacing-trim`) 相当が無いための行末・折返し位置差 (03, 17 と同種の仕様差)。
 - Chromium の `text-spacing-trim` (約物の詰め) 相当が無く、行末位置・折返し位置が微妙にずれる (03, 17)。バグではなく仕様差。
 

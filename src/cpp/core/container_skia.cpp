@@ -361,10 +361,14 @@ litehtml::pixel_t container_skia::text_width(const char* text, litehtml::uint_pt
     if (fi) {
         fi->is_rtl = (dir == litehtml::direction_rtl);
         if (m_resourceManager && !fi->requests.empty()) {
+            const char32_t emphasis_cp = satoru::TextRenderer::emphasisCodepoint(fi);
             if (fi->requests.size() == 1) {
                 collect_text_codepoints(m_context, text, m_text.measuredCodepoints[fi->requests[0]]);
+                if (emphasis_cp)
+                    m_text.measuredCodepoints[fi->requests[0]].insert(emphasis_cp);
             } else {
                 auto codepoints = decode_text_codepoints(m_context, text);
+                if (emphasis_cp) codepoints.push_back(emphasis_cp);
                 for (const auto& req : fi->requests) {
                     auto& measured = m_text.measuredCodepoints[req];
                     measured.insert(codepoints.begin(), codepoints.end());
