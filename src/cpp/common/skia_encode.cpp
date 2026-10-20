@@ -31,6 +31,8 @@ namespace html_to_image {
 
 namespace {
 
+void to_straight_rgba_row(const uint8_t* src, uint8_t* dst, int width, bool bgra, bool premul);
+
 struct ColorTable {
     static constexpr int kSlots = 1024;  // power of two, > 2 * 256
     uint32_t keys[kSlots];
@@ -89,12 +91,12 @@ sk_sp<SkData> encode_png_indexed(const SkPixmap& pixmap) {
     }
 
     // 2. PNG stores straight (unpremultiplied) RGBA: convert once, then index every pixel.
-    SkBitmap straight;
-    if (!straight.tryAllocPixels(SkImageInfo::Make(width, height, kRGBA_8888_SkColorType,
-                                                   kUnpremul_SkAlphaType)) ||
-        !pixmap.readPixels(straight.pixmap())) {
-        return nullptr;
-    }
+    const bool bgra = pixmap.colorType() == kBGRA_8888_SkColorType;
+    const bool premul = pixmap.alphaType() == kPremul_SkAlphaType;
+    std::vector<uint32_t> straight((size_t)width * height);
+    for (int y = 0; y < height; ++y)
+        to_straight_rgba_row((const uint8_t*)pixmap.addr(0, y), (uint8_t*)&straight[(size_t)y * width],
+                             width, bgra, premul);
     ColorTable table;
     std::vector<uint32_t> colors;  // palette entries (RGBA8888 straight)
     colors.reserve(256);
@@ -102,7 +104,7 @@ sk_sp<SkData> encode_png_indexed(const SkPixmap& pixmap) {
     uint32_t prev_color = 0;
     int prev_index = -1;
     for (int y = 0; y < height; ++y) {
-        const uint32_t* row = (const uint32_t*)straight.getAddr32(0, y);
+        const uint32_t* row = &straight[(size_t)y * width];
         uint8_t* out = &raw[(size_t)y * (width + 1)];
         *out++ = 0;  // filter: none (indices deflate best unfiltered)
         for (int x = 0; x < width; ++x) {
@@ -158,7 +160,114 @@ sk_sp<SkData> encode_png_indexed(const SkPixmap& pixmap) {
 
 }  // namespace
 
-sk_sp<SkData> encode_png_rgba(const SkPixmap& pixmap) {
+// ---- fast RGBA/RGB PNG writer ---------------------------------------------------------------
+//
+// SkPngEncoder converts premultiplied pixels through Skia's portable raster pipeline (about
+// 20 ms for a 800x1200 page on wasm) before libpng filters and deflates. Doing the (rare)
+// un-premultiply by hand, filtering with Up and streaming rows straight into zlib removes that
+// cost; an image without translucent pixels is written as 8-bit RGB (a quarter less to deflate).
+
+namespace {
+
+// RGBA8888 (bytes r,g,b,a) from a row of premultiplied / straight / opaque N32 pixels.
+void to_straight_rgba_row(const uint8_t* src, uint8_t* dst, int width, bool bgra, bool premul) {
+    for (int x = 0; x < width; ++x, src += 4, dst += 4) {
+        uint8_t r = bgra ? src[2] : src[0];
+        const uint8_t g = src[1];
+        uint8_t b = bgra ? src[0] : src[2];
+        const uint8_t a = src[3];
+        uint8_t gg = g;
+        if (premul && a != 255) {
+            if (a == 0) {
+                r = gg = b = 0;
+            } else {
+                r = (uint8_t)std::min(255, (r * 255 + a / 2) / a);
+                gg = (uint8_t)std::min(255, (g * 255 + a / 2) / a);
+                b = (uint8_t)std::min(255, (b * 255 + a / 2) / a);
+            }
+        }
+        dst[0] = r;
+        dst[1] = gg;
+        dst[2] = b;
+        dst[3] = a;
+    }
+}
+
+bool pixmap_has_translucent_pixels(const SkPixmap& pm) {
+    if (pm.alphaType() == kOpaque_SkAlphaType) return false;
+    for (int y = 0; y < pm.height(); ++y) {
+        const uint8_t* row = (const uint8_t*)pm.addr(0, y);
+        for (int x = 0; x < pm.width(); ++x)
+            if (row[x * 4 + 3] != 255) return true;
+    }
+    return false;
+}
+
+// Returns nullptr when the pixmap is not 8888 (the caller falls back to SkPngEncoder).
+sk_sp<SkData> encode_png_fast(const SkPixmap& pm, bool allow_rgb) {
+    const int width = pm.width(), height = pm.height();
+    if (width <= 0 || height <= 0) return nullptr;
+    if (pm.colorType() != kRGBA_8888_SkColorType && pm.colorType() != kBGRA_8888_SkColorType)
+        return nullptr;
+    const bool bgra = pm.colorType() == kBGRA_8888_SkColorType;
+    const bool premul = pm.alphaType() == kPremul_SkAlphaType;
+    const bool rgb = allow_rgb && !pixmap_has_translucent_pixels(pm);
+    const int bpp = rgb ? 3 : 4;
+    const size_t stride = (size_t)width * bpp;
+
+    z_stream zs;
+    std::memset(&zs, 0, sizeof(zs));
+    if (deflateInit2(&zs, 6, Z_DEFLATED, 15, 8, rgb ? Z_DEFAULT_STRATEGY : Z_FILTERED) != Z_OK) return nullptr;
+    std::vector<uint8_t> idat(deflateBound(&zs, (uLong)((stride + 1) * height)));
+    zs.next_out = idat.data();
+    zs.avail_out = (uInt)idat.size();
+
+    std::vector<uint8_t> straight((size_t)width * 4);
+    std::vector<uint8_t> cur(stride), prev(stride, 0), filtered(stride + 1);
+    bool ok = true;
+    for (int y = 0; y < height && ok; ++y) {
+        to_straight_rgba_row((const uint8_t*)pm.addr(0, y), straight.data(), width, bgra, premul);
+        if (rgb) {
+            for (int x = 0; x < width; ++x) {
+                cur[x * 3] = straight[x * 4];
+                cur[x * 3 + 1] = straight[x * 4 + 1];
+                cur[x * 3 + 2] = straight[x * 4 + 2];
+            }
+        } else {
+            std::memcpy(cur.data(), straight.data(), stride);
+        }
+        filtered[0] = 2;  // filter type Up
+        for (size_t i = 0; i < stride; ++i) filtered[i + 1] = (uint8_t)(cur[i] - prev[i]);
+        zs.next_in = filtered.data();
+        zs.avail_in = (uInt)filtered.size();
+        ok = deflate(&zs, Z_NO_FLUSH) == Z_OK;
+        cur.swap(prev);
+    }
+    if (ok) ok = deflate(&zs, Z_FINISH) == Z_STREAM_END;
+    const size_t idat_size = zs.total_out;
+    deflateEnd(&zs);
+    if (!ok) return nullptr;
+
+    std::vector<uint8_t> png = {0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
+    png.reserve(idat_size + 128);
+    uint8_t ihdr[13];
+    for (int i = 0; i < 4; ++i) {
+        ihdr[i] = (uint8_t)((uint32_t)width >> (24 - 8 * i));
+        ihdr[4 + i] = (uint8_t)((uint32_t)height >> (24 - 8 * i));
+    }
+    ihdr[8] = 8;
+    ihdr[9] = rgb ? 2 : 6;
+    ihdr[10] = ihdr[11] = ihdr[12] = 0;
+    put_chunk(png, "IHDR", ihdr, 13);
+    put_chunk(png, "IDAT", idat.data(), idat_size);
+    put_chunk(png, "IEND", nullptr, 0);
+    return SkData::MakeWithCopy(png.data(), png.size());
+}
+
+}  // namespace
+
+sk_sp<SkData> encode_png_rgba(const SkPixmap& pixmap, bool allow_rgb) {
+    if (sk_sp<SkData> fast = encode_png_fast(pixmap, allow_rgb)) return fast;
     SkDynamicMemoryWStream stream;
     SkPngEncoder::Options options;
     // Up filter only: trying all five filters per row (Skia default) cost 20-40%
@@ -173,7 +282,7 @@ sk_sp<SkData> encode_png(const SkPixmap& pixmap) {
     // Images of at most 256 colors are stored indexed (about 3x smaller); everything else
     // takes the regular RGBA path.
     if (sk_sp<SkData> indexed = encode_png_indexed(pixmap)) return indexed;
-    return encode_png_rgba(pixmap);
+    return encode_png_rgba(pixmap, true);
 }
 
 std::string encode_png_data_url(const SkBitmap& bitmap) {

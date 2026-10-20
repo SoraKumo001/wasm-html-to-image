@@ -30,6 +30,54 @@ enum class CssChangeKind {
     GeneratedFontFace,
 };
 
+// litehtml ignores @font-face, and the font manager scans the font CSS text itself, so the
+// (often huge: a Google Fonts CSS holds a rule per unicode-range subset) @font-face rules are
+// dropped from the CSS that every document creation tokenizes and parses.
+inline std::string strip_font_face_rules(const std::string& css) {
+    static const char kRule[] = "@font-face";
+    if (css.find(kRule) == std::string::npos) return css;
+    std::string out;
+    out.reserve(css.size());
+    size_t i = 0;
+    const size_t n = css.size();
+    while (i < n) {
+        if (css.compare(i, 2, "/*") == 0) {  // keep comments as they are
+            size_t end = css.find("*/", i + 2);
+            end = end == std::string::npos ? n : end + 2;
+            out.append(css, i, end - i);
+            i = end;
+            continue;
+        }
+        if (css.compare(i, sizeof(kRule) - 1, kRule) == 0) {
+            const size_t open = css.find('{', i);
+            if (open == std::string::npos) break;
+            int depth = 0;
+            size_t j = open;
+            char quote = 0;
+            for (; j < n; ++j) {
+                const char c = css[j];
+                if (quote) {
+                    if (c == '\\') {
+                        ++j;
+                    } else if (c == quote) {
+                        quote = 0;
+                    }
+                } else if (c == '"' || c == '\'') {
+                    quote = c;
+                } else if (c == '{') {
+                    ++depth;
+                } else if (c == '}' && --depth == 0) {
+                    break;
+                }
+            }
+            i = j < n ? j + 1 : n;
+            continue;
+        }
+        out.push_back(css[i++]);
+    }
+    return out;
+}
+
 class SatoruContext {
     satoru::ILogger *m_logger = nullptr;
     sk_sp<SkData> m_lastPng;
@@ -128,7 +176,7 @@ class SatoruContext {
     bool addCss(const std::string &css, CssChangeKind kind = CssChangeKind::Generic) {
         if (css.empty()) return false;
         if (!m_extraCssBlocks.insert(css).second) return false;
-        m_extraCss += css + "\n";
+        m_extraCss += strip_font_face_rules(css) + "\n";
         m_cssVersion++;
         switch (kind) {
             case CssChangeKind::UserScan:

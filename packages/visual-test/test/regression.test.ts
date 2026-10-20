@@ -1022,7 +1022,7 @@ describe("regression: layout and paint probes", () => {
       height: 80,
       format: "png",
     });
-    expect(colorType(rich.data as Uint8Array)).toBe(6);
+    expect(colorType(rich.data as Uint8Array)).not.toBe(3); // RGB or RGBA
   });
 
   it("float margin box (not the border box) narrows the first line", async () => {
