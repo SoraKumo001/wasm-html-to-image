@@ -866,15 +866,13 @@ std::shared_ptr<litehtml::render_item> litehtml::render_item_table::init()
     table_rows_selector		row_selector;
     table_cells_selector	cell_selector;
 
-    elements_iterator row_iter(false, &table_selector, &row_selector);
-
-    row_iter.process(shared_from_this(), [&](std::shared_ptr<render_item>& el, iterator_item_type /*item_type*/)
+    auto add_row = [&](std::shared_ptr<render_item>& row_el, iterator_item_type /*item_type*/)
         {
-            m_grid->begin_row(el);
+            m_grid->begin_row(row_el);
 
 
             elements_iterator cell_iter(true, &table_selector, &cell_selector);
-            cell_iter.process(el, [&](std::shared_ptr<render_item>& el, iterator_item_type item_type)
+            cell_iter.process(row_el, [&](std::shared_ptr<render_item>& el, iterator_item_type item_type)
                 {
 					if(item_type != iterator_item_type_end_parent)
 					{
@@ -882,7 +880,39 @@ std::shared_ptr<litehtml::render_item> litehtml::render_item_table::init()
 						m_grid->add_cell(el);
 					}
                 });
-        });
+        };
+
+    auto add_rows_of = [&](std::shared_ptr<render_item>& child)
+        {
+            style_display d = child->src_el()->css().get_display();
+            if (d == display_table_row)
+            {
+                add_row(child, iterator_item_type_child);
+            }
+            else if (d == display_table_row_group || d == display_table_header_group ||
+                     d == display_table_footer_group)
+            {
+                elements_iterator row_iter(false, &table_selector, &row_selector);
+                row_iter.process(child, add_row);
+            }
+        };
+
+    // CSS 2.1 17.2.1: the first header group is rendered above every other row group and the
+    // first footer group below them, wherever they appear in the source.
+    std::shared_ptr<render_item>* header = nullptr;
+    std::shared_ptr<render_item>* footer = nullptr;
+    for (auto& child : m_children)
+    {
+        style_display d = child->src_el()->css().get_display();
+        if (d == display_table_header_group && !header) header = &child;
+        if (d == display_table_footer_group && !footer) footer = &child;
+    }
+    if (header) add_rows_of(*header);
+    for (auto& child : m_children)
+    {
+        if (&child != header && &child != footer) add_rows_of(child);
+    }
+    if (footer) add_rows_of(*footer);
 
     for (auto& el : m_children)
     {
@@ -924,6 +954,60 @@ void litehtml::render_item_table::draw_children(uint_ptr hdc, pixel_t x, pixel_t
     // Table backgrounds
     if (flag == draw_block)
     {
+        // <col> / <colgroup> backgrounds sit under the cells. The column box spans the rows area.
+        if (css().get_writing_mode() == writing_mode_horizontal_tb && m_grid->rows_count() > 0)
+        {
+            const pixel_t area_top = m_grid->row(0).top + m_grid->top_captions_height();
+            const table_row& last_row = m_grid->row(m_grid->rows_count() - 1);
+            const pixel_t area_bottom = last_row.top + last_row.height + m_grid->top_captions_height();
+            auto column_span = [&](const std::shared_ptr<render_item>& col, pixel_t& left, pixel_t& right)
+            {
+                for (int c = 0; c < m_grid->cols_count(); c++)
+                {
+                    if (m_grid->column(c).el_column == col)
+                    {
+                        left = m_grid->column(c).left;
+                        right = m_grid->column(c).right;
+                        return true;
+                    }
+                }
+                return false;
+            };
+            auto paint_box = [&](const std::shared_ptr<render_item>& ri, pixel_t left, pixel_t right)
+            {
+                position saved = ri->pos();
+                ri->pos() = position(left, area_top, right - left, area_bottom - area_top);
+                ri->src_el()->draw_background(hdc, pos.x, pos.y, clip, ri);
+                ri->pos() = saved;
+            };
+            for (auto& child : m_children)
+            {
+                style_display d = child->src_el()->css().get_display();
+                pixel_t left = 0, right = 0;
+                if (d == display_table_column && column_span(child, left, right))
+                {
+                    paint_box(child, left, right);
+                }
+                else if (d == display_table_column_group)
+                {
+                    bool found = false;
+                    pixel_t group_left = 0, group_right = 0;
+                    for (auto& col : child->children())
+                    {
+                        if (!column_span(col, left, right)) continue;
+                        group_left = found ? std::min(group_left, left) : left;
+                        group_right = found ? std::max(group_right, right) : right;
+                        found = true;
+                    }
+                    if (found) paint_box(child, group_left, group_right);
+                    for (auto& col : child->children())
+                    {
+                        if (column_span(col, left, right)) paint_box(col, left, right);
+                    }
+                }
+            }
+        }
+
         for (auto& caption : m_grid->captions())
         {
             caption->src_el()->draw_background(hdc, pos.x, pos.y, clip, caption);

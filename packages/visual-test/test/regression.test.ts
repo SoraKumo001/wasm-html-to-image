@@ -597,6 +597,48 @@ describe("regression: layout and paint probes", () => {
     expect(isWhite(bordered.at(8, 8))).toBe(true); // notched-out corner
   });
 
+  it("display:table-header-group / table-footer-group rows render and are ordered header-first, footer-last", async () => {
+    const cell = (c: string) => `<tr><td style="background:${c};height:30px;width:100px"></td></tr>`;
+    const GREEN: Rgb = [0, 255, 0];
+    // Explicit header group (used to collapse the whole table to nothing).
+    const header = await renderPng(
+      `<table style="border-collapse:collapse"><thead style="display:table-header-group">${cell("#f00")}</thead><tbody>${cell("#0f0")}</tbody></table>`,
+      200,
+      100,
+    );
+    expect(near(header.at(20, 10), RED)).toBe(true);
+    expect(near(header.at(20, 40), GREEN)).toBe(true);
+    // The header group comes first and the footer group last whatever the source order.
+    const reordered = await renderPng(
+      `<table style="border-collapse:collapse"><tfoot style="display:table-footer-group">${cell("#00f")}</tfoot><tbody>${cell("#0f0")}</tbody><thead style="display:table-header-group">${cell("#f00")}</thead></table>`,
+      200,
+      100,
+    );
+    expect(near(reordered.at(20, 10), RED)).toBe(true);
+    expect(near(reordered.at(20, 40), GREEN)).toBe(true);
+    expect(near(reordered.at(20, 70), BLUE)).toBe(true);
+    // The same structure built from plain elements.
+    const divs = await renderPng(
+      `<div style="display:table"><div style="display:table-header-group"><div style="display:table-row"><div style="display:table-cell;background:#f00;height:30px;width:100px"></div></div></div><div style="display:table-row-group"><div style="display:table-row"><div style="display:table-cell;background:#0f0;height:30px"></div></div></div></div>`,
+      200,
+      100,
+    );
+    expect(near(divs.at(20, 10), RED)).toBe(true);
+    expect(near(divs.at(20, 40), GREEN)).toBe(true);
+  });
+
+  it("<col> / <colgroup> backgrounds paint under the table rows", async () => {
+    const col = await renderPng(
+      `<table style="border-collapse:collapse"><colgroup style="background:#ff0"><col style="background:#f0f;width:60px"><col style="background:#0ff;width:60px"></colgroup><tr><td style="height:30px"></td><td></td></tr><tr><td style="height:30px"></td><td></td></tr></table>`,
+      200,
+      100,
+    );
+    expect(near(col.at(20, 10), [255, 0, 255])).toBe(true);
+    expect(near(col.at(20, 50), [255, 0, 255])).toBe(true);
+    expect(near(col.at(90, 10), [0, 255, 255])).toBe(true);
+    expect(isWhite(col.at(20, 80))).toBe(true);
+  });
+
   it("float margin box (not the border box) narrows the first line", async () => {
     const squares = '<i style="display:inline-block;width:16px;height:16px;background:#00f"></i>'.repeat(30);
     const { at } = await renderPng(

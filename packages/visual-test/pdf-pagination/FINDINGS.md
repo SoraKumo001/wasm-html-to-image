@@ -364,6 +364,9 @@ npx tsx pdf-pagination/verify.mts
   `display:table-header-group` と `<thead>` タグの**両方**を見るが、検証は
   master CSS 既定 (`<thead>` = table-row-group、タグは `_thead_` のまま) で行った。
   ヘッダ-group レイアウト自体の修正は表エンジン側の課題で P4 (頁割) のスコープ外。
+  → 後続対応で解消: 原因は `fix_tables_layout` の `table-row` 分岐が header/footer group 直下の
+  行まで匿名 row-group (+匿名 table) で包んでいたこと。header/footer group を直接の子として
+  受け入れ、行を header → 本文 → footer の順で grid へ登録するよう修正済み。
 - **thead 繰返しは「予約 + 下シフト」方式**: 継続頁では本文全体をヘッダ高だけ下へシフトする
   (表以外の要素も同頁内で一緒に下がる)。表だけを押し下げる厳密再レイアウトはしない。
 - **1 頁に複数の「繰返しヘッダ表」が同時継続する場合は最大高の 1 表のみ予約・再描画**

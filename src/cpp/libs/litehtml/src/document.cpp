@@ -1153,13 +1153,20 @@ void document::fix_tables_layout()
 			}
 			break;
 		case display_table_row:
-			fix_table_parent(el_ptr, display_table_row_group, "table-row-group");
+			{
+				// A row directly inside a header / footer group is already in a valid parent.
+				auto parent = el_ptr->parent();
+				style_display parent_disp = parent ? parent->src_el()->css().get_display() : display_none;
+				if (parent_disp != display_table_header_group && parent_disp != display_table_footer_group)
+					fix_table_parent(el_ptr, display_table_row_group, "table-row-group");
+			}
 			fix_table_children(el_ptr, display_table_cell, "table-cell");
 			break;
 		case display_table_cell:
 			fix_table_parent(el_ptr, display_table_row, "table-row");
 			break;
-		// TODO: make table layout fix for table-caption, table-column etc. elements
+		// table-caption / table-column / table-column-group need no restructuring: they are valid
+		// direct children of a table and render_item_table lays them out / paints them itself.
 		case display_table_caption:
 		case display_table_column:
 		case display_table_column_group:
@@ -1215,10 +1222,14 @@ void document::fix_table_children(const std::shared_ptr<render_item>& el_ptr, st
 		{
 			if (!(*cur_iter)->src_el()->is_table_skip() || ((*cur_iter)->src_el()->is_table_skip() && !tmp.empty()))
 			{
+				// Direct children of a table that are already valid table parts must not be wrapped
+				// in an anonymous row group (captions, columns and header/footer row groups).
 				if (disp != display_table_row_group || 
 					((*cur_iter)->src_el()->css().get_display() != display_table_caption &&
 					 (*cur_iter)->src_el()->css().get_display() != display_table_column &&
-					 (*cur_iter)->src_el()->css().get_display() != display_table_column_group))
+					 (*cur_iter)->src_el()->css().get_display() != display_table_column_group &&
+					 (*cur_iter)->src_el()->css().get_display() != display_table_header_group &&
+					 (*cur_iter)->src_el()->css().get_display() != display_table_footer_group))
 				{
 					if (tmp.empty())
 					{
