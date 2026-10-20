@@ -9,6 +9,7 @@
  */
 // @ts-expect-error — dist/html-to-image-wasm.js is generated at build time
 import { wasmBase64, wasmEncoding } from "../dist/html-to-image-wasm.js";
+import { checkWasmBinary } from "./wasm-binary.js";
 
 /** Decompress the embedded WASM payload and return the raw bytes. */
 export async function loadCompressedWasmBinary(): Promise<Uint8Array> {
@@ -28,6 +29,13 @@ export async function loadCompressedWasmBinary(): Promise<Uint8Array> {
     const bytes = new Uint8Array(await new Response(stream).arrayBuffer());
     if (bytes.length === 0) {
       throw new Error("decompressed to 0 bytes");
+    }
+    // A payload captured from a half-written `.wasm` decompresses fine but
+    // is not a complete module: reject it here instead of letting the
+    // engine fail with `section Data extends past end`.
+    const check = checkWasmBinary(bytes);
+    if (!check.ok) {
+      throw new Error(`restored payload is not a complete module: ${check.reason}`);
     }
     return bytes;
   } catch (e) {

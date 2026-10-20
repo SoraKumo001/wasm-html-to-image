@@ -12,17 +12,30 @@ import createHtmlToImageModule from "../dist/html-to-image.js";
 
 const { initWorker } = await loadWorkerLib();
 
-let mod: HtmlToImageModule | undefined;
+let modPromise: Promise<HtmlToImageModule> | undefined;
 
-/** Lazily load (and reuse) the module inside this worker. */
-const getModule = async () => {
-  if (!mod) {
-    mod = await loadHtmlToImageModule({
-      factory: createHtmlToImageModule as CreateHtmlToImageModule,
-      moduleArg: { wasmBinary: await loadCompressedWasmBinary() },
+/**
+ * Lazily load (and reuse) the module inside this worker.
+ *
+ * The pending promise is shared: parallel jobs arriving while the module
+ * is still loading wait for that single load instead of starting a second
+ * instantiation (a 12 MB binary plus its linear memory, each). A failed
+ * load clears the promise so the next job retries.
+ */
+const getModule = async (): Promise<HtmlToImageModule> => {
+  if (!modPromise) {
+    modPromise = (async () => {
+      const wasmBinary = await loadCompressedWasmBinary();
+      return loadHtmlToImageModule({
+        factory: createHtmlToImageModule as CreateHtmlToImageModule,
+        moduleArg: { wasmBinary },
+      });
+    })().catch((e) => {
+      modPromise = undefined;
+      throw e;
     });
   }
-  return mod;
+  return modPromise;
 };
 
 /**

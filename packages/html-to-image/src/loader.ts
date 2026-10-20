@@ -20,6 +20,8 @@
  * same file works in both runtimes.
  */
 
+import { checkWasmBinary } from "./wasm-binary.js";
+
 /** Opaque WASM instance handle (Embind `allow_raw_pointers` raw pointer). */
 export type WasmInstancePtr = unknown;
 
@@ -187,6 +189,45 @@ const moduleCache = new Map<
   Map<EmscriptenModuleArg | undefined, HtmlToImageModule>
 >();
 
+/**
+ * In-flight loads, keyed like {@link moduleCache} (factory then moduleArg).
+ *
+ * The resolved-module cache only helps *after* the first load finished, so
+ * N parallel calls (a worker pool starting up, a burst of requests) each
+ * instantiated their own copy of the module — a 12 MB binary plus its
+ * linear memory, N times over. Sharing the pending promise makes parallel
+ * initialization instantiate exactly once.
+ */
+const pendingLoads = new Map<
+  CreateHtmlToImageModule | undefined,
+  Map<EmscriptenModuleArg | undefined, Promise<HtmlToImageModule>>
+>();
+
+/**
+ * How many times a load is attempted before the error is reported.
+ *
+ * A truncated `.wasm` (read while a concurrent build was still writing it)
+ * is transient: re-reading the file a moment later usually yields the
+ * complete binary. Two attempts are enough to cover that window without
+ * hiding a real failure.
+ */
+const LOAD_ATTEMPTS = 2;
+
+/** Delay before the retry of a transient (truncated binary) failure. */
+const LOAD_RETRY_DELAY_MS = 150;
+
+/**
+ * A failure that is likely to disappear on a second attempt (the `.wasm`
+ * was read while it was still being written).
+ */
+export class TransientWasmError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "TransientWasmError";
+  }
+}
+
+
 /** Default glue URL: `./html-to-image.js` next to the compiled loader. */
 export function defaultGlueUrl(): URL {
   return new URL("./html-to-image.js", import.meta.url);
@@ -306,6 +347,10 @@ async function readWasmBinaryNode(
  * Load and instantiate the unified module (cached per process, keyed by
  * factory then moduleArg — see `moduleCache`).
  * Works in Node (file URL import) and browsers (served URL import).
+ *
+ * Parallel calls with the same key share one instantiation (see
+ * {@link pendingLoads}); a failed load is not cached, so a later call
+ * retries.
  */
 export async function loadHtmlToImageModule(
   options: LoadOptions = {},
@@ -315,7 +360,99 @@ export async function loadHtmlToImageModule(
   if (!options.noCache) {
     const hit = moduleCache.get(cacheKeyFactory)?.get(cacheKeyModuleArg);
     if (hit) return hit;
+    // A load is already running for this key: share it instead of
+    // instantiating a second copy of the module.
+    const pending = pendingLoads.get(cacheKeyFactory)?.get(cacheKeyModuleArg);
+    if (pending) return pending;
   }
+  const promise = loadHtmlToImageModuleOnce(
+    options,
+    cacheKeyFactory,
+    cacheKeyModuleArg,
+  );
+  if (!options.noCache) {
+    let inner = pendingLoads.get(cacheKeyFactory);
+    if (!inner) {
+      inner = new Map();
+      pendingLoads.set(cacheKeyFactory, inner);
+    }
+    inner.set(cacheKeyModuleArg, promise);
+    // A rejected load must not poison the cache: drop it so a later call
+    // retries (a truncated `.wasm` may be complete by then).
+    promise.catch(() => {
+      if (inner?.get(cacheKeyModuleArg) === promise) {
+        inner.delete(cacheKeyModuleArg);
+      }
+    });
+  }
+  return promise;
+}
+
+/**
+ * Load the module, retrying once when the failure is transient (the
+ * `.wasm` was read while it was still being written).
+ */
+async function loadHtmlToImageModuleOnce(
+  options: LoadOptions,
+  cacheKeyFactory: CreateHtmlToImageModule | undefined,
+  cacheKeyModuleArg: EmscriptenModuleArg | undefined,
+): Promise<HtmlToImageModule> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await loadHtmlToImageModuleUncached(
+        options,
+        cacheKeyFactory,
+        cacheKeyModuleArg,
+      );
+    } catch (e) {
+      if (attempt >= LOAD_ATTEMPTS || !isTransientWasmFailure(e)) {
+        throw e;
+      }
+      await new Promise((r) => setTimeout(r, LOAD_RETRY_DELAY_MS));
+    }
+  }
+}
+
+/**
+ * True when the failure looks like a corrupt/truncated binary (retryable).
+ *
+ * The engine reports a truncated module as `CompileError`; the emscripten
+ * glue wraps it into `RuntimeError("Aborted(CompileError: ...)")`, so the
+ * message is inspected as well.
+ */
+function isTransientWasmFailure(e: unknown): boolean {
+  if (e instanceof TransientWasmError) return true;
+  if (typeof WebAssembly !== "undefined" && e instanceof WebAssembly.CompileError)
+    return true;
+  const message = e instanceof Error ? e.message : String(e);
+  return /CompileError/.test(message);
+}
+
+/**
+ * Explain a load failure in terms of the artifact that is actually broken:
+ * a truncated `.wasm` (read while a build was writing it) or a
+ * glue/binary mismatch (the two come from different builds).
+ */
+function explainWasmLoadFailure(e: unknown, glueLabel: string): Error {
+  const message = e instanceof Error ? e.message : String(e);
+  if (/Import #\d+/.test(message)) {
+    return new Error(
+      `wasm-html-to-image: the WebAssembly binary and the JavaScript ` +
+        `glue do not match (${message}). The artifacts in ${glueLabel} ` +
+        `are probably from different builds - rebuild the glue and the ` +
+        `.wasm together.`,
+      { cause: e },
+    );
+  }
+  if (e instanceof Error) return e;
+  return new Error(message);
+}
+
+async function loadHtmlToImageModuleUncached(
+  options: LoadOptions,
+  cacheKeyFactory: CreateHtmlToImageModule | undefined,
+  cacheKeyModuleArg: EmscriptenModuleArg | undefined,
+): Promise<HtmlToImageModule> {
   let factory = options.factory;
   let glueLabel = "(pre-bundled factory)";
   let glueDir = "";
@@ -352,16 +489,57 @@ export async function loadHtmlToImageModule(
   // workerd with `instantiateWasm`, is left untouched).
   let moduleArg = options.moduleArg;
   if (!options.factory && glueDir && moduleArg?.wasmBinary === undefined) {
+    const wasmPath = glueDirToFsPath(glueDir) + "html-to-image.wasm";
     const wasmBinary = await readWasmBinaryNode(glueDir);
-    if (wasmBinary) moduleArg = { ...moduleArg, wasmBinary };
+    if (wasmBinary) {
+      // A file that is still being written yields a truncated binary and
+      // a cryptic `section Data extends past end` deep inside the engine.
+      const check = checkWasmBinary(wasmBinary);
+      if (!check.ok) {
+        throw new TransientWasmError(
+          `wasm-html-to-image: invalid WebAssembly binary at ${wasmPath}: ` +
+            `${check.reason} - the file was probably read while it was ` +
+            `still being written (concurrent build); retry once the ` +
+            `build finished.`,
+        );
+      }
+      moduleArg = { ...moduleArg, wasmBinary };
+    } else if (isNodeRuntime()) {
+      throw new TransientWasmError(
+        `wasm-html-to-image: cannot read the WebAssembly binary at ` +
+          `${wasmPath}`,
+      );
+    }
   }
-  const module = await factory({
-    ...moduleArg,
-    locateFile:
-      options.locateFile ??
-      moduleArg?.locateFile ??
-      ((path: string) => glueDir + path),
-  });
+  const provided = moduleArg?.wasmBinary;
+  const providedBytes =
+    provided instanceof Uint8Array
+      ? provided
+      : provided instanceof ArrayBuffer
+        ? new Uint8Array(provided)
+        : undefined;
+  if (providedBytes) {
+    // Caller-supplied bytes (browser worker payload, edge runtimes) get
+    // the same structural check.
+    const check = checkWasmBinary(providedBytes);
+    if (!check.ok) {
+      throw new TransientWasmError(
+        `wasm-html-to-image: invalid WebAssembly binary: ${check.reason}`,
+      );
+    }
+  }
+  let module: HtmlToImageModule;
+  try {
+    module = await factory({
+      ...moduleArg,
+      locateFile:
+        options.locateFile ??
+        moduleArg?.locateFile ??
+        ((path: string) => glueDir + path),
+    });
+  } catch (e) {
+    throw explainWasmLoadFailure(e, glueLabel);
+  }
   if (!options.noCache) {
     let inner = moduleCache.get(cacheKeyFactory);
     if (!inner) {
@@ -373,9 +551,11 @@ export async function loadHtmlToImageModule(
   return module;
 }
 
+
 /** Drop all cached instances (tests / HMR). */
 export function dropCachedModule(): void {
   moduleCache.clear();
+  pendingLoads.clear();
 }
 
 /**
@@ -383,10 +563,16 @@ export function dropCachedModule(): void {
  * Shared adapter for workerd / edge-light entry points (behavior unchanged:
  * `WebAssembly.instantiate` + success-callback override, empty object return
  * for emscripten). The `label` only selects the console-error prefix.
+ *
+ * `onFailure` (optional) is notified when the instantiation fails. The
+ * emscripten glue only offers a success callback, so without it a failed
+ * instantiation leaves the module promise pending forever; the caller uses
+ * this hook to turn the failure into a rejected promise.
  */
 export function precompiledModuleArg(
   wasm: WebAssembly.Module,
   label: string,
+  onFailure?: (e: unknown) => void,
 ): EmscriptenModuleArg {
   return {
     instantiateWasm: (imports: unknown, successCallback: unknown) => {
@@ -402,6 +588,7 @@ export function precompiledModuleArg(
             `wasm-html-to-image [${label}]: Wasm instantiation failed:`,
             e,
           );
+          onFailure?.(e);
         });
       return {}; // Return empty object as emscripten expects
     },
@@ -423,10 +610,20 @@ export async function loadPrecompiledModule(
 ): Promise<HtmlToImageModule> {
   let pending = cache.get(wasm);
   if (!pending) {
-    pending = loadHtmlToImageModule({
-      factory,
-      moduleArg: precompiledModuleArg(wasm, label),
+    // The glue only reports instantiation failures through the console,
+    // so the failure is mirrored into a rejected promise: otherwise the
+    // module promise never settles and the caller waits forever.
+    let reportFailure: (e: unknown) => void = () => {};
+    const failure = new Promise<never>((_resolve, reject) => {
+      reportFailure = reject;
     });
+    pending = Promise.race([
+      loadHtmlToImageModule({
+        factory,
+        moduleArg: precompiledModuleArg(wasm, label, reportFailure),
+      }),
+      failure,
+    ]);
     cache.set(wasm, pending);
     pending.catch(() => {
       if (cache.get(wasm) === pending) cache.delete(wasm);
