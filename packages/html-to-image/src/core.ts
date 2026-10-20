@@ -214,8 +214,8 @@ const EMOJI_URL =
  * UA so woff2 is served); fetched at render time, nothing bundled.
  */
 export const DEFAULT_FONT_MAP: Record<string, string> = {
-  "sans-serif": "https://fonts.googleapis.com/css2?family=Noto+Sans+JP",
-  serif: "https://fonts.googleapis.com/css2?family=Noto+Serif+JP",
+  "sans-serif": "https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@100..900",
+  serif: "https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@200..900",
   monospace: "https://fonts.googleapis.com/css2?family=M+PLUS+1+Code",
   cursive: "https://fonts.googleapis.com/css2?family=Yuji+Syuku",
   fantasy: "https://fonts.googleapis.com/css2?family=Reggae+One",

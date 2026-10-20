@@ -951,11 +951,16 @@ describe("regression: layout and paint probes", () => {
 
     it("font-synthesis: none stops the synthetic bold / italic", async () => {
       const ink = async (style: string) => {
-        const { img } = await renderPng(
-          `<div style="font:bold italic 40px/50px 'RobotoProbe';color:#000;${style}">HHH</div><style>${PROBE_FONT_FACE}</style>`,
-          200,
-          60,
-        );
+        // The regular-only Noto Sans JP as fallback: the default (variable) one would stand in
+        // for the synthetic bold with a real bold.
+        const { data } = await render({
+          value: `<html><body style="margin:0;background:#fff"><div style="font:bold italic 40px/50px 'RobotoProbe';color:#000;${style}">HHH</div><style>${PROBE_FONT_FACE}</style></body></html>`,
+          width: 200,
+          height: 60,
+          format: "png",
+          fontMap: { "sans-serif": "https://fonts.googleapis.com/css2?family=Noto+Sans+JP" },
+        });
+        const img = PNG.sync.read(Buffer.from(data));
         let n = 0;
         for (let i = 0; i < img.data.length; i += 4) if (img.data[i] < 128) n++;
         return n;
