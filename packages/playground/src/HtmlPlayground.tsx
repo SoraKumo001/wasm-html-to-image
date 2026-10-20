@@ -15,7 +15,89 @@ type Params = {
   textToPaths: boolean;
   value?: string | null;
   mediaType: "screen" | "print";
+  animationEnabled: boolean;
+  animationDuration: number;
+  animationFps: number;
+  animationLoop: number;
 };
+
+const ANIMATION_SAMPLE_KEY = "animation-sample";
+const ANIMATION_SAMPLE_HTML = `<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    @keyframes pulse-rotate {
+      0% {
+        transform: rotate(0deg) scale(0.85);
+        opacity: 0.6;
+        background-color: #3b82f6;
+        color: #ffffff;
+      }
+      50% {
+        transform: rotate(180deg) scale(1.1);
+        opacity: 1;
+        background-color: #ef4444;
+        color: #ffffff;
+      }
+      100% {
+        transform: rotate(360deg) scale(0.85);
+        opacity: 0.6;
+        background-color: #3b82f6;
+        color: #ffffff;
+      }
+    }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      margin: 0;
+      padding: 30px;
+      background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 480px;
+      box-sizing: border-box;
+    }
+    .card {
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+      padding: 32px 48px;
+      text-align: center;
+      max-width: 420px;
+    }
+    h2 {
+      margin: 0 0 8px 0;
+      color: #1e293b;
+      font-size: 22px;
+    }
+    p {
+      margin: 0 0 24px 0;
+      color: #64748b;
+      font-size: 14px;
+    }
+    .badge {
+      width: 110px;
+      height: 110px;
+      margin: 0 auto;
+      border-radius: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: bold;
+      animation: pulse-rotate 2s infinite ease-in-out;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Animated WebP</h2>
+    <p>CSS @keyframes (transform, opacity, color)</p>
+    <div class="badge">WebP</div>
+  </div>
+</body>
+</html>`;
 
 const App: React.FC = () => {
   const [assetList] = useState<string[]>(() => {
@@ -34,6 +116,10 @@ const App: React.FC = () => {
     const f = params.get("format");
     const t = params.get("textToPaths");
     const v = params.get("value");
+    const anim = params.get("anim");
+    const dur = params.get("dur");
+    const fps = params.get("fps");
+    const loop = params.get("loop");
     return {
       asset: !v ? a || assetList[0] : undefined,
       width: w ? parseInt(w) : 588,
@@ -45,6 +131,10 @@ const App: React.FC = () => {
       textToPaths: t !== null ? t === "true" : true,
       value: v,
       mediaType: params.get("mediaType") === "print" ? "print" : "screen",
+      animationEnabled: anim === "true",
+      animationDuration: dur ? parseInt(dur) || 2000 : 2000,
+      animationFps: fps ? parseInt(fps) || 15 : 15,
+      animationLoop: loop !== null ? parseInt(loop) || 0 : 0,
     };
   });
 
@@ -75,6 +165,7 @@ const App: React.FC = () => {
   const [renderTime, setRenderTime] = useState<number | null>(null);
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isOutputAnimated, setIsOutputAnimated] = useState<boolean>(false);
   const jxlSupport = useJxlSupport();
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -92,6 +183,10 @@ const App: React.FC = () => {
       const h = p.get("height");
       const f = p.get("format");
       const t = p.get("textToPaths");
+      const anim = p.get("anim");
+      const dur = p.get("dur");
+      const fps = p.get("fps");
+      const loop = p.get("loop");
 
       setParams({
         asset: a ?? undefined,
@@ -104,6 +199,10 @@ const App: React.FC = () => {
             : "svg",
         textToPaths: t !== null ? t === "true" : true,
         mediaType: p.get("mediaType") === "print" ? "print" : "screen",
+        animationEnabled: anim === "true",
+        animationDuration: dur ? parseInt(dur) || 2000 : 2000,
+        animationFps: fps ? parseInt(fps) || 15 : 15,
+        animationLoop: loop !== null ? parseInt(loop) || 0 : 0,
       });
 
       if (a) {
@@ -123,8 +222,11 @@ const App: React.FC = () => {
     const url = new URL(location.href);
     const p = url.searchParams;
     Object.entries(params).forEach(([name, value]) => {
-      if (value) p.set(name, String(value));
-      else p.delete(name);
+      if (value !== undefined && value !== "" && value !== false) {
+        p.set(name, String(value));
+      } else {
+        p.delete(name);
+      }
     });
     if (p.get("asset")) {
       p.delete("value");
@@ -135,6 +237,10 @@ const App: React.FC = () => {
     const f = p.get("format");
     const t = p.get("textToPaths");
     const a = p.get("asset");
+    const anim = p.get("anim");
+    const dur = p.get("dur");
+    const fps = p.get("fps");
+    const loop = p.get("loop");
     history.replaceState({}, "", url.toString());
     setParams((prev) => ({
       width: w ? parseInt(w) : 588,
@@ -147,6 +253,13 @@ const App: React.FC = () => {
       asset: a ?? undefined,
       value: params.value !== undefined ? (params.value as string) : prev.value,
       mediaType: p.get("mediaType") === "print" ? "print" : "screen",
+      animationEnabled:
+        params.anim !== undefined
+          ? params.anim === true || params.anim === "true"
+          : anim === "true",
+      animationDuration: dur ? parseInt(dur) || 2000 : prev.animationDuration,
+      animationFps: fps ? parseInt(fps) || 15 : prev.animationFps,
+      animationLoop: loop !== null ? parseInt(loop) || 0 : prev.animationLoop,
     }));
   };
 
@@ -157,12 +270,19 @@ const App: React.FC = () => {
     if (oldParams === params) return;
     memoryParam.current = params;
 
+    const debouncedKeys: (keyof Params)[] = [
+      "width",
+      "height",
+      "value",
+      "animationDuration",
+      "animationFps",
+      "animationLoop",
+    ];
+
     if (
       !oldParams ||
       oldParams["asset"] !== params["asset"] ||
-      (["width", "height", "value"] as (keyof Params)[]).every(
-        (v) => oldParams[v] === params[v],
-      )
+      debouncedKeys.every((v) => oldParams[v] === params[v])
     ) {
       handleConvert();
     } else {
@@ -222,10 +342,14 @@ const App: React.FC = () => {
         setTimeout(resizeIframe, 500);
       }
     }
-  }, [params]);
+  }, [params.value, params.width, params.height]);
 
   // Handle asset selection (Initial or when assetList is loaded)
   useEffect(() => {
+    if (params.asset === ANIMATION_SAMPLE_KEY && !params.value) {
+      loadAsset(ANIMATION_SAMPLE_KEY);
+      return;
+    }
     if (assetList.length === 0 || !params.asset) return;
 
     const initialAsset =
@@ -233,6 +357,16 @@ const App: React.FC = () => {
     loadAsset(initialAsset);
   }, []);
   const loadAsset = async (name: string) => {
+    if (name === ANIMATION_SAMPLE_KEY) {
+      shouldRenderImmediately.current = true;
+      updateParams({
+        asset: name,
+        value: ANIMATION_SAMPLE_HTML,
+        format: "webp",
+        anim: true,
+      });
+      return;
+    }
     try {
       const resp = await fetch(`assets/${name}`);
       const text = await resp.text();
@@ -275,6 +409,15 @@ const App: React.FC = () => {
         `[wasm-html-to-image] Rendering via Worker (ID: ${requestId})`,
       );
       const { width, height, format, textToPaths, mediaType } = params;
+      const animationOpt =
+        params.format === "webp" && params.animationEnabled
+          ? {
+              duration: params.animationDuration,
+              fps: params.animationFps,
+              loop: params.animationLoop,
+            }
+          : undefined;
+
       const result = await render({
         value: currentHtml,
         width,
@@ -283,6 +426,7 @@ const App: React.FC = () => {
         textToPaths,
         fontMap,
         mediaType,
+        animation: animationOpt,
         diagnostics: true,
         onDiagnostics: (report) => {
           if (requestId === latestRenderId.current) {
@@ -344,6 +488,7 @@ const App: React.FC = () => {
       const endTime = performance.now();
       setRenderTime(endTime - startTime);
       setRenderResult(result.data);
+      setIsOutputAnimated(Boolean(result.animation));
 
       if (result.data instanceof Uint8Array) {
         const mimeType =
@@ -517,6 +662,141 @@ const App: React.FC = () => {
                 <option value="pdf">PDF (Document)</option>
               </select>
             </label>
+            {params.format === "webp" && (
+              <div
+                style={{
+                  background: "#f0f9ff",
+                  border: "1px solid #bae6fd",
+                  borderRadius: "6px",
+                  padding: "10px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "8px",
+                }}
+              >
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    color: "#0369a1",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={params.animationEnabled}
+                    onChange={(e) =>
+                      updateParams({ anim: e.target.checked || undefined })
+                    }
+                  />
+                  Enable Animation (WebP)
+                </label>
+
+                {params.animationEnabled && (
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: "10px",
+                      fontSize: "12px",
+                      color: "#334155",
+                      paddingLeft: "4px",
+                    }}
+                  >
+                    <label style={{ display: "flex", flexDirection: "column" }}>
+                      Duration (ms)
+                      <input
+                        type="number"
+                        min={100}
+                        max={5000}
+                        step={100}
+                        value={params.animationDuration}
+                        onChange={(e) =>
+                          updateParams({
+                            dur: parseInt(e.target.value) || 2000,
+                          })
+                        }
+                        style={{
+                          width: "85px",
+                          padding: "2px 4px",
+                          borderRadius: "4px",
+                          border: "1px solid #cbd5e1",
+                        }}
+                      />
+                    </label>
+
+                    <label style={{ display: "flex", flexDirection: "column" }}>
+                      FPS
+                      <select
+                        value={params.animationFps}
+                        onChange={(e) =>
+                          updateParams({
+                            fps: parseInt(e.target.value) || 15,
+                          })
+                        }
+                        style={{
+                          padding: "2px 4px",
+                          borderRadius: "4px",
+                          border: "1px solid #cbd5e1",
+                        }}
+                      >
+                        <option value={10}>10 fps</option>
+                        <option value={15}>15 fps (default)</option>
+                        <option value={20}>20 fps</option>
+                        <option value={24}>24 fps</option>
+                        <option value={30}>30 fps</option>
+                      </select>
+                    </label>
+
+                    <label style={{ display: "flex", flexDirection: "column" }}>
+                      Loop
+                      <select
+                        value={params.animationLoop}
+                        onChange={(e) =>
+                          updateParams({
+                            loop: parseInt(e.target.value) || 0,
+                          })
+                        }
+                        style={{
+                          padding: "2px 4px",
+                          borderRadius: "4px",
+                          border: "1px solid #cbd5e1",
+                        }}
+                      >
+                        <option value={0}>Infinite (0)</option>
+                        <option value={1}>Play Once (1)</option>
+                        <option value={2}>2 times</option>
+                        <option value={3}>3 times</option>
+                        <option value={5}>5 times</option>
+                      </select>
+                    </label>
+
+                    <div
+                      style={{
+                        width: "100%",
+                        fontSize: "11px",
+                        color: "#64748b",
+                      }}
+                    >
+                      Estimated frames: ~
+                      {Math.min(
+                        75,
+                        Math.max(
+                          2,
+                          Math.round(
+                            (params.animationDuration * params.animationFps) /
+                              1000,
+                          ),
+                        ),
+                      )}{" "}
+                      (max 75 frames / 5000ms)
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
             {params.format === "svg" && (
               <label>
                 <input
@@ -582,7 +862,7 @@ const App: React.FC = () => {
         >
           <legend style={{ fontWeight: "bold" }}>Load Sample Assets</legend>
           <select
-            value={params.asset}
+            value={params.asset ?? ""}
             onChange={(e) => loadAsset(e.target.value)}
             style={{
               padding: "5px",
@@ -592,6 +872,9 @@ const App: React.FC = () => {
             }}
           >
             <option value="">-- Select Asset --</option>
+            <option value={ANIMATION_SAMPLE_KEY}>
+              ✨ CSS Animation (@keyframes)
+            </option>
             {assetList.map((asset) => (
               <option key={asset} value={asset}>
                 {asset}
@@ -680,7 +963,17 @@ const App: React.FC = () => {
         }}
       >
         <div>
-          <h3>HTML Live Preview (iframe):</h3>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              minHeight: "36px",
+              marginBottom: "8px",
+            }}
+          >
+            <h3 style={{ margin: 0 }}>HTML Live Preview (iframe):</h3>
+          </div>
           <div
             style={{
               border: "1px solid #ccc",
@@ -711,9 +1004,48 @@ const App: React.FC = () => {
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
+              minHeight: "36px",
+              marginBottom: "8px",
             }}
           >
-            <h3>{params.format.toUpperCase()} Render Preview:</h3>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <h3 style={{ margin: 0 }}>
+                {params.format.toUpperCase()} Render Preview:
+              </h3>
+              {params.format === "webp" && isOutputAnimated && (
+                <span
+                  style={{
+                    background: "#0284c7",
+                    color: "white",
+                    fontSize: "11px",
+                    fontWeight: "bold",
+                    padding: "2px 6px",
+                    borderRadius: "4px",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.5px",
+                  }}
+                >
+                  Animated
+                </span>
+              )}
+              {params.format === "webp" &&
+                params.animationEnabled &&
+                !isOutputAnimated &&
+                renderResult && (
+                  <span
+                    style={{
+                      background: "#e2e8f0",
+                      color: "#64748b",
+                      fontSize: "11px",
+                      padding: "2px 6px",
+                      borderRadius: "4px",
+                    }}
+                    title="No supported @keyframes found in HTML; rendered as static image"
+                  >
+                    Static (No @keyframes)
+                  </span>
+                )}
+            </div>
             {renderResult && (
               <button
                 onClick={handleDownload}
@@ -721,7 +1053,10 @@ const App: React.FC = () => {
                   background: "#FF9800",
                   color: "white",
                   border: "none",
-                  padding: "6px 15px",
+                  padding: "0 15px",
+                  height: "32px",
+                  display: "inline-flex",
+                  alignItems: "center",
                   cursor: "pointer",
                   borderRadius: "4px",
                 }}
@@ -732,7 +1067,8 @@ const App: React.FC = () => {
           </div>
           <div
             style={{
-              border: "1px solid #ddd",
+              border: "1px solid #ccc",
+              borderRadius: "4px",
               background: "white",
               height: "800px",
               display: "flex",
