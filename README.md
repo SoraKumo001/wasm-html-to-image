@@ -27,6 +27,13 @@ Runs seamlessly across **Node.js**, **Cloudflare Workers**, **Edge runtimes**, *
 | 🖼️ **Image Resizing & Optimization** | Fast format conversion, crop, and resize (Sharp alternative) | WebP, AVIF, JXL, PNG, JPEG |
 | 🪶 **ThumbHash Blur Placeholder** | Generate compact blur placeholders for instant progressive loading | ThumbHash |
 
+
+Supports vertical writing mode and CSS animations:
+
+<p align="center">
+  <img src="./doc/image01.webp" alt="Vertical writing mode and animation preview" width="100%" />
+</p>
+
 ---
 
 ## 📦 Installation
