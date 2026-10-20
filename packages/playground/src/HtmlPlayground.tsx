@@ -172,6 +172,26 @@ const App: React.FC = () => {
   const jxlSupport = useJxlSupport();
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const previewBoxRef = useRef<HTMLDivElement>(null);
+  // The live preview is scaled down (never up) to fit the box width, like the render preview.
+  const [previewScale, setPreviewScale] = useState(1);
+  useEffect(() => {
+    const box = previewBoxRef.current;
+    if (!box) return;
+    const update = () => {
+      // Leave room for the vertical scrollbar so no horizontal scrollbar appears.
+      const available = box.clientWidth - 18;
+      setPreviewScale(
+        params.width > 0 && available > 0
+          ? Math.min(1, available / params.width)
+          : 1,
+      );
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(box);
+    return () => observer.disconnect();
+  }, [params.width]);
   const latestRenderId = useRef<number>(0);
   const shouldRenderImmediately = useRef<boolean>(false);
   void shouldRenderImmediately;
@@ -996,6 +1016,7 @@ const App: React.FC = () => {
             <h3 style={{ margin: 0 }}>HTML Live Preview (iframe):</h3>
           </div>
           <div
+            ref={previewBoxRef}
             style={{
               border: "1px solid #ccc",
               borderRadius: "4px",
@@ -1014,6 +1035,8 @@ const App: React.FC = () => {
                 minHeight: "100%",
                 border: "none",
                 display: "block",
+                // `zoom` scales the layout box too, so the box scrolls by the scaled size.
+                zoom: previewScale,
               }}
             />
           </div>
