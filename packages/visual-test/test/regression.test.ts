@@ -811,6 +811,22 @@ describe("regression: layout and paint probes", () => {
     expect(near(first.at(10, 60), RED)).toBe(true); // second rule (used to stay black)
   });
 
+  it("an animated colour reaches nested descendants that inherit it", async () => {
+    const html = `<html><head><style>
+      @keyframes ink { from { color: #f00 } to { color: #00f } }
+      p { margin: 0; font: bold 40px/40px sans-serif; color: #000; animation: ink 400ms infinite; }
+      em { font-style: normal; }
+    </style></head><body style="margin:0;background:#fff"><p>III<em>III</em></p></body></html>`;
+    const { img } = await renderFirstFrame(html, 120, 50);
+    let redInEm = 0;
+    for (let y = 0; y < img.height; y++)
+      for (let x = 45; x < 110; x++) {
+        const i = (img.width * y + x) * 4;
+        if (img.data[i] > 200 && img.data[i + 1] < 80 && img.data[i + 2] < 80) redInEm++;
+      }
+    expect(redInEm).toBeGreaterThan(20); // the <em> glyph is red (it used to stay black)
+  });
+
   it("float margin box (not the border box) narrows the first line", async () => {
     const squares = '<i style="display:inline-block;width:16px;height:16px;background:#00f"></i>'.repeat(30);
     const { at } = await renderPng(

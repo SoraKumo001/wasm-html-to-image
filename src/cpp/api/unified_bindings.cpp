@@ -477,8 +477,10 @@ int satoru_render_animation_to_converter_val(SatoruInstance* satoru, ImageConver
             const std::string& style = styles[unit.target.get()];
             unit.target->set_attr("style", style.c_str());
             unit.target->refresh_styles();
-            unit.target->compute_styles(false);
         }
+        // Recursive: descendants inherit colour / font properties from the animated element
+        // (e.g. an <em> inside an animated <p>), so their computed styles must follow.
+        for (const auto& unit : units) unit.target->compute_styles(true);
         style_touched = true;
         // Paint-phase sync: re-collecting styled (now positioned at opacity<1
         // or carrying a transform) nodes keeps them in the positioned/stacking
@@ -504,8 +506,8 @@ int satoru_render_animation_to_converter_val(SatoruInstance* satoru, ImageConver
         for (const auto& unit : units) {
             unit.target->set_attr("style", unit.base_style.c_str());
             unit.target->refresh_styles();
-            unit.target->compute_styles(false);
         }
+        for (const auto& unit : units) unit.target->compute_styles(true);
         satoru->doc->root_render()->fetch_positioned();
         satoru->doc->root_render()->sort_positioned();
     }
