@@ -16,9 +16,10 @@ namespace
 		float px = 0;
 		float percent = 0;
 		float rem = 0;
+		bool is_number = false; // a plain <number> (stored in px), the only kind of operand * and / accept
 
-		calc_value& operator+=(const calc_value& other) { px += other.px; percent += other.percent; rem += other.rem; return *this; }
-		calc_value& operator-=(const calc_value& other) { px -= other.px; percent -= other.percent; rem -= other.rem; return *this; }
+		calc_value& operator+=(const calc_value& other) { px += other.px; percent += other.percent; rem += other.rem; is_number = is_number && other.is_number; return *this; }
+		calc_value& operator-=(const calc_value& other) { px -= other.px; percent -= other.percent; rem -= other.rem; is_number = is_number && other.is_number; return *this; }
 		calc_value& operator*=(float scale) { px *= scale; percent *= scale; rem *= scale; return *this; }
 		calc_value& operator/=(float div) { if (div != 0) { px /= div; percent /= div; rem /= div; } return *this; }
 	};
@@ -58,6 +59,7 @@ namespace
 		else if (t.type == NUMBER)
 		{
 			res.px = t.n.number;
+			res.is_number = true;
 		}
 		i++;
 		return res;
@@ -74,14 +76,15 @@ namespace
 			{
 				i++;
 				calc_value next = parse_calc_primary(tokens, i);
-				if (res.px != 0 || res.percent != 0) res *= next.px;
-				else res = next;
+				// One side is a <number>; the other keeps its unit (`2 * 1rem`, `(a + b) * 2`).
+				if (res.is_number) { float k = res.px; res = next; res *= k; }
+				else if (next.is_number) res *= next.px;
 			}
 			else if (tokens[i].type == '/')
 			{
 				i++;
 				calc_value next = parse_calc_primary(tokens, i);
-				if (next.px != 0) res /= next.px;
+				if (next.is_number && next.px != 0) res /= next.px;
 			}
 			else break;
 		}

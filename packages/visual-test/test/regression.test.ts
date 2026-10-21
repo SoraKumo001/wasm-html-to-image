@@ -3014,4 +3014,43 @@ describe("regression: layout and paint probes", () => {
     expect(darkPixels(shorthand)).toBeGreaterThan(darkPixels(dot) + 300);
     expect(darkPixels(longhand)).toBeGreaterThan(darkPixels(dot) + 300);
   });
+  it("a class + attribute compound selector checks the attribute", async () => {
+    // `.n[data-open=true]` used to drop the [..] block while parsing the class name, so it
+    // matched every .n element (MDN's closed navigation became position:fixed and collapsed).
+    const { at } = await renderPng(
+      `<style>.n[data-open=true]{background:#f00}.n{height:20px;background:#00f}</style>
+       <div class="n" data-open="false"></div>`,
+      100,
+      30,
+    );
+    expect(near(at(50, 10), BLUE)).toBe(true);
+    const on = await renderPng(
+      `<style>.n[data-open=true]{background:#f00}.n{height:20px;background:#00f}</style>
+       <div class="n" data-open="true"></div>`,
+      100,
+      30,
+    );
+    expect(near(on.at(50, 10), RED)).toBe(true);
+  });
+
+  it("calc() multiplies a length by a number on either side and over a parenthesised sum", async () => {
+    // MDN gates its layout on calc(1rem * 2 + (15rem + 2rem) * 2 + 31rem) = 67rem (1072px), so
+    // at 1000px the narrow-layout rules must apply. Heights keep the probe text-free.
+    const { at } = await renderPng(
+      `<style>
+         .a{height:10px;width:calc(2 * 10px)}
+         .b{height:10px;width:calc((10px + 20px) * 2)}
+         .c{height:10px;width:calc(10px * 3 + 40px)}
+       </style><div class="a" style="background:#00f"></div><div class="b" style="background:#00f"></div><div class="c" style="background:#00f"></div>`,
+      200,
+      40,
+    );
+    expect(near(at(15, 5), BLUE)).toBe(true); // 2 * 10px = 20px
+    expect(isWhite(at(25, 5))).toBe(true);
+    expect(near(at(55, 15), BLUE)).toBe(true); // (10 + 20) * 2 = 60px
+    expect(isWhite(at(65, 15))).toBe(true);
+    expect(near(at(65, 25), BLUE)).toBe(true); // 10 * 3 + 40 = 70px
+    expect(isWhite(at(75, 25))).toBe(true);
+  });
+
 });

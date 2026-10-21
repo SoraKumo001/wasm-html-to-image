@@ -477,6 +477,8 @@ css_attribute_selector parse_subclass_selector(const css_token_vector& tokens, i
                         if (t.ch == '>' || t.ch == '+' || t.ch == '~' || t.ch == ',' || t.ch == '{')
                             break;
                         if (t.ch == '.' || t.ch == '#' || t.ch == ':') break;
+                        // `.a[attr=v]`: the [...] block is an attribute selector, not part of the name
+                        if (t.type == SQUARE_BLOCK) break;
                     }
 
                     if (t.ch == '[' || t.ch == '(' || t.ch == '{') nest_level++;
