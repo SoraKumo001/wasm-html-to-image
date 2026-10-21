@@ -352,6 +352,14 @@ void document::create_node(void* gnode, elements_list& elements, bool parseTextN
 							is_placeholder = true;
 						}
 					}
+					if (text.empty() && type != "submit" && type != "button" && type != "reset" &&
+						type != "checkbox" && type != "radio" && type != "file" && type != "hidden" &&
+						type != "range" && type != "color" && type != "image")
+					{
+						// An empty field still has one line of content: its height is the line plus
+						// padding and border (the UA rule no longer fixes it), so give it a zero width space.
+						text = "â";
+					}
 					if (!text.empty())
 					{
 						auto txt = std::make_shared<el_text>(text.c_str(), shared_from_this());

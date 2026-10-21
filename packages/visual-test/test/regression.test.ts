@@ -3488,4 +3488,16 @@ describe("regression: layout and paint probes", () => {
     expect(sized / plain).toBeGreaterThan(1.15); // 16px vs 13px
     expect(sized / plain).toBeLessThan(1.3);
   });
+  it("a text input's height follows its padding and line-height instead of a fixed 21px", async () => {
+    // python.org's search field: `padding:6.4px 8px 4.8px; line-height:26px` is 37px tall in Chromium;
+    // the UA rule's fixed `height:21px` ignored both.
+    const h = async (style: string) =>
+      (await render({
+        value: `<html><body style="margin:0"><input style="display:block;border:0;box-sizing:border-box;${style}"></body></html>`,
+        width: 200,
+        format: "png",
+      })).height;
+    expect(await h("padding:6px 8px 5px;line-height:26px;font-size:16px")).toBe(37);
+    expect(await h("line-height:40px;font-size:16px;padding:0")).toBe(40);
+  });
 });
