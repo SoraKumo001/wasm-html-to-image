@@ -3246,6 +3246,44 @@ describe("regression: layout and paint probes", () => {
     expect(right.maxX - right.minX).toBe(base.maxX - base.minX); // same width, just moved
     expect(bottom.minY - base.minY).toBe(7);
   });
+  it("relative url() in a linked stylesheet resolves against the stylesheet, not the page", async () => {
+    // python.org links /static/stylesheets/style.css, whose fonts and images are
+    // `url(../fonts/..)`. They were resolved against the page (`/fonts/..`), failed, and the
+    // text fell back to a wider font that pushed the header out of shape.
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="#0000ff"/></svg>`;
+    const server = http.createServer((req, res) => {
+      if (req.url === "/index.html") {
+        res.writeHead(200, { "content-type": "text/html" });
+        res.end(`<html><head><link rel="stylesheet" href="static/css/site.css"></head>
+          <body style="margin:0"><div class="b"></div></body></html>`);
+      } else if (req.url === "/static/css/site.css") {
+        res.writeHead(200, { "content-type": "text/css" });
+        res.end(".b{width:20px;height:20px;background:url(../img/p.svg)}");
+      } else if (req.url === "/static/img/p.svg") {
+        res.writeHead(200, { "content-type": "image/svg+xml" });
+        res.end(svg);
+      } else {
+        res.writeHead(404);
+        res.end();
+      }
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const port = (server.address() as { port: number }).port;
+    try {
+      const { data } = await render({
+        url: `http://127.0.0.1:${port}/index.html`,
+        width: 60,
+        height: 30,
+        format: "png",
+      });
+      const img = PNG.sync.read(Buffer.from(data));
+      const i = (img.width * 10 + 10) * 4;
+      expect(near([img.data[i], img.data[i + 1], img.data[i + 2]], BLUE)).toBe(true);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
   it("an absolutely positioned box between inline items does not break the line", async () => {
     // python.org's search form holds a visually hidden `position:absolute` <label> between
     // inline-blocks. It was treated as a block-level child and split the line in three.

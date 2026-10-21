@@ -346,6 +346,54 @@ export function limitCodeForReason(reason: string): string {
  */
 export const FETCH_CONCURRENCY = 16;
 
+/**
+ * Resolve the relative `url(...)` and `@import` references of a fetched stylesheet against
+ * the stylesheet's own URL. The engine resolves them against the page, which is wrong as soon
+ * as the sheet lives in another directory (`url(../fonts/a.woff)` in `/static/css/a.css`).
+ * Absolute, protocol-relative, `data:`, `#` and root-relative references are left alone, and a
+ * root-relative sheet URL keeps its root-relative form.
+ */
+export function absolutizeCssUrls(css: string, cssUrl: string): string {
+  if (!css.includes("url(") && !css.includes("@import")) return css;
+  const dummy = "http://css-base.invalid/";
+  let base: URL;
+  try {
+    base = new URL(cssUrl, dummy);
+  } catch {
+    return css;
+  }
+  const keepRootRelative = cssUrl.startsWith("/");
+  const absoluteCssUrl = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(cssUrl);
+  const resolve = (ref: string): string => {
+    const t = ref.trim();
+    if (
+      t === "" ||
+      t.startsWith("#") ||
+      t.startsWith("/") ||
+      /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(t)
+    )
+      return ref;
+    try {
+      const u = new URL(t, base);
+      if (absoluteCssUrl) return u.href;
+      if (u.origin !== base.origin) return u.href;
+      const path = u.pathname + u.search + u.hash;
+      return keepRootRelative ? path : path.slice(1);
+    } catch {
+      return ref;
+    }
+  };
+  return css
+    .replace(
+      /url\(\s*(['"]?)([^'")]*)\1\s*\)/g,
+      (_m, q: string, ref: string) => `url(${q}${resolve(ref)}${q})`,
+    )
+    .replace(
+      /@import\s+(['"])([^'"]+)\1/g,
+      (_m, q: string, ref: string) => `@import ${q}${resolve(ref)}${q}`,
+    );
+}
+
 /** Run `fn` over `items` with at most `limit` calls in flight (`fn` must not reject). */
 export async function mapWithLimit<T>(
   items: readonly T[],
@@ -636,7 +684,10 @@ export async function resolveHtmlResources(
     });
     loadedCss.sort((a, b) => a.index - b.index);
     for (const css of loadedCss) {
-      (await addRes(satoruInst, css.url, 3, css.bytes)) as unknown;
+      const text = new TextDecoder().decode(css.bytes);
+      const fixed = absolutizeCssUrls(text, css.url);
+      const bytes = fixed === text ? css.bytes : new TextEncoder().encode(fixed);
+      (await addRes(satoruInst, css.url, 3, bytes)) as unknown;
     }
   }
   // Merge the C++ collect-phase breakdown into the JS timings.
