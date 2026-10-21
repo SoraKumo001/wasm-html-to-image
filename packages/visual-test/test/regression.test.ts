@@ -3339,4 +3339,47 @@ describe("regression: layout and paint probes", () => {
     expect(near(at(10, 10), BLUE)).toBe(true);
   });
 
+  it("mask-image url() images are fetched before the final paint", async () => {
+    // The mask image was only requested when the mask was painted, after the resource rounds,
+    // so an http-hosted mask never loaded and hid its whole box (MDN's icon buttons).
+    const circle = new PNG({ width: 24, height: 24 });
+    for (let y = 0; y < 24; y++) {
+      for (let x = 0; x < 24; x++) {
+        const i = (y * 24 + x) * 4;
+        circle.data[i + 3] = (x - 11.5) ** 2 + (y - 11.5) ** 2 < 100 ? 255 : 0;
+      }
+    }
+    const png = PNG.sync.write(circle);
+    const server = http.createServer((req, res) => {
+      if (req.url === "/index.html") {
+        res.writeHead(200, { "content-type": "text/html" });
+        res.end(`<html><body style="margin:0"><div style="width:24px;height:24px;background:#00f;mask-image:url(/c.png);mask-size:cover"></div></body></html>`);
+      } else if (req.url === "/c.png") {
+        res.writeHead(200, { "content-type": "image/png" });
+        res.end(png);
+      } else {
+        res.writeHead(404);
+        res.end();
+      }
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const port = (server.address() as { port: number }).port;
+    try {
+      const { data } = await render({
+        url: `http://127.0.0.1:${port}/index.html`,
+        width: 40,
+        height: 30,
+        format: "png",
+      });
+      const img = PNG.sync.read(Buffer.from(data));
+      const px = (x: number, y: number): Rgb => {
+        const i = (img.width * y + x) * 4;
+        return [img.data[i], img.data[i + 1], img.data[i + 2]];
+      };
+      expect(near(px(12, 12), BLUE)).toBe(true); // inside the circle
+      expect(img.data[(1 * img.width + 1) * 4 + 3]).toBe(0); // corner masked out
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
 });

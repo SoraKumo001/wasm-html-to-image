@@ -444,6 +444,34 @@ void litehtml::css_properties::compute(const element* el, const document::ptr& d
             m_mask = merged;
         }
     }
+    // `url(/a.svg)` without quotes is a URL token; the mask code only knows the function form
+    // `url("/a.svg")`, so normalise it (MDN writes its icon masks the unquoted way).
+    if (!m_mask.empty()) {
+        css_token_vector normalized;
+        normalized.reserve(m_mask.size());
+        for (const auto& tok : m_mask) {
+            if (tok.type == URL) {
+                css_token fn(CV_FUNCTION, string("url"));
+                fn.value.push_back(css_token(STRING, tok.str));
+                fn.repr = tok.repr;
+                normalized.push_back(fn);
+            } else {
+                normalized.push_back(tok);
+            }
+        }
+        m_mask = std::move(normalized);
+    }
+    // Mask images are requested while styles are computed, like background images: a request
+    // made only when the mask is painted comes after the resource-discovery rounds, so the
+    // image is never fetched and the masked box stays fully hidden (MDN's icon buttons).
+    for (const auto& layer : parse_comma_separated_list(m_mask)) {
+        for (const auto& tok : layer) {
+            if (tok.type == CV_FUNCTION && lowcase(tok.name) == "url" && !tok.value.empty() &&
+                !tok.value.front().str.empty()) {
+                doc->container()->load_image(tok.value.front().str.c_str(), "", true);
+            }
+        }
+    }
     m_clip = el->get_property<css_token_vector>(_clip_, false, css_token_vector(), offset(m_clip));
 
     // https://www.w3.org/TR/CSS22/visuren.html#dis-pos-flo
