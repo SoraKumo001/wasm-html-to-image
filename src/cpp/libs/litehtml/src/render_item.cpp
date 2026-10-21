@@ -727,10 +727,22 @@ void litehtml::render_item::render_positioned(render_type rt) {
 
             if (need_render) {
                 if (el->css().get_width().is_predefined() || el->css().get_height().is_predefined()) {
+                    // CSS 2.1 10.3.7/10.6.4 solve an auto width/height from the containing block
+                    // remainder as a border-box size. size_mode_exact_* carries the value the CSS
+                    // property would have, and calculate_containing_block_context() only strips
+                    // padding/border from it for border-box elements. A content-box element must
+                    // therefore get the remainder minus its own padding/border, or the used box
+                    // overflows the containing block by exactly that amount.
+                    auto exact_size = [&](pixel_t border_box_size, pixel_t content_offset) {
+                        if (el->css().get_box_sizing() == box_sizing_content_box) {
+                            return std::max<pixel_t>(0, border_box_size - content_offset);
+                        }
+                        return border_box_size;
+                    };
                     containing_block_context measure_cb = containing_block_size;
                     if (el->css().get_width().is_predefined()) {
                         if (!css_left.is_predefined() && !css_right.is_predefined()) {
-                            measure_cb.width = width;
+                            measure_cb.width = exact_size(width, el->content_offset_width());
                             measure_cb.size_mode |= (measure_cb.mode == writing_mode_horizontal_tb
                                                          ? containing_block_context::size_mode_exact_width
                                                          : containing_block_context::size_mode_exact_height);
@@ -740,7 +752,7 @@ void litehtml::render_item::render_positioned(render_type rt) {
                     }
                     if (el->css().get_height().is_predefined()) {
                         if (!css_top.is_predefined() && !css_bottom.is_predefined()) {
-                            measure_cb.height = height;
+                            measure_cb.height = exact_size(height, el->content_offset_height());
                             measure_cb.size_mode |= (measure_cb.mode == writing_mode_horizontal_tb
                                                          ? containing_block_context::size_mode_exact_height
                                                          : containing_block_context::size_mode_exact_width);

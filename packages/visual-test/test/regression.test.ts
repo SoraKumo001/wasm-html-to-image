@@ -2889,6 +2889,39 @@ describe("regression: layout and paint probes", () => {
     expect(redInVerticalCell(img, 2)).toBeGreaterThan(5);
   });
 
+  it("position:fixed/absolute fill the containing block with top+bottom/left+right and auto size", async () => {
+    // CSS 2.1 10.6.4/10.3.7: when top+bottom (or left+right) are set and the
+    // height/width is auto, the border box spans the containing block remainder.
+    // A content-box element must subtract its own padding/border from that
+    // remainder instead of adding it on top (which overflows by exactly that much).
+    const GREEN: Rgb = [0, 255, 0];
+
+    // viewport 300x200, fixed containing block = viewport.
+    // Remainder: 300-20-40 = 240 wide, 200-20-40 = 140 tall.
+    const fixed = await renderPng(
+      `<div style="position:fixed;left:20px;right:40px;top:20px;bottom:40px;
+         padding:10px;background:#00f"></div>`,
+    );
+    expect(near(fixed.at(25, 30), BLUE)).toBe(true);
+    expect(near(fixed.at(255, 30), BLUE)).toBe(true);
+    expect(isWhite(fixed.at(265, 30))).toBe(true); // would be blue if width grew by padding
+    expect(near(fixed.at(25, 155), BLUE)).toBe(true);
+    expect(isWhite(fixed.at(25, 165))).toBe(true); // would be blue if height grew by padding
+
+    // absolute containing block = the 300x160 relative wrapper.
+    // Remainder: 300-20-40 = 240 wide, 160-10-30 = 120 tall.
+    const absolute = await renderPng(
+      `<div style="position:relative;width:300px;height:160px">
+         <div style="position:absolute;left:20px;right:40px;top:10px;bottom:30px;
+           padding:10px;background:#0f0"></div>
+       </div>`,
+    );
+    expect(near(absolute.at(255, 15), GREEN)).toBe(true);
+    expect(isWhite(absolute.at(265, 15))).toBe(true);
+    expect(near(absolute.at(25, 125), GREEN)).toBe(true);
+    expect(isWhite(absolute.at(25, 145))).toBe(true);
+  });
+
   // Total dark ink of an image: a mark per glyph can only add ink, so comparing
   // the counts detects whether the custom emphasis character is painted at all
   // (the probe font has no descenders to confound the count).
