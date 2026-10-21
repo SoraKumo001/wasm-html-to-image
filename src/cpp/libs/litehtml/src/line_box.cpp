@@ -1071,6 +1071,13 @@ std::list< std::unique_ptr<litehtml::line_box_item> > litehtml::line_box::finish
             satoru::WritingModeContext item_wm = lbi->get_el()->get_wm_context();
 			inlines.back().box.x = lbi->left();
 			inlines.back().box.y = lbi->top() - lbi->get_el()->content_offset_top();
+			if(m_writing_mode == writing_mode_horizontal_tb)
+			{
+				// position:relative moves the inline box (its background and borders) too
+				auto rel = lbi->get_el()->relative_offset(containing_block_size);
+				inlines.back().box.x += rel.first;
+				inlines.back().box.y += rel.second;
+			}
             
             if (m_writing_mode == writing_mode_horizontal_tb)
             {
@@ -1098,7 +1105,8 @@ std::list< std::unique_ptr<litehtml::line_box_item> > litehtml::line_box::finish
 			if(!inlines.empty())
 			{
                 if (m_writing_mode == writing_mode_horizontal_tb)
-				    inlines.back().box.width = lbi->right() - inlines.back().box.x;
+				    // the box start was moved by position:relative; its extent was not
+				    inlines.back().box.width = lbi->right() - inlines.back().box.x + inlines.back().element->relative_offset(containing_block_size).first;
                 else
                     // Transposed from horizontal: the inline extent runs to the
                     // end marker's inline position plus the inline-end offset.
@@ -1115,7 +1123,7 @@ std::list< std::unique_ptr<litehtml::line_box_item> > litehtml::line_box::finish
 	for(auto iter = inlines.rbegin(); iter != inlines.rend(); ++iter)
 	{
         if (m_writing_mode == writing_mode_horizontal_tb)
-		    iter->box.width =  m_items.back()->right() - iter->box.x;
+		    iter->box.width =  m_items.back()->right() - iter->box.x + iter->element->relative_offset(containing_block_size).first;
         else
             iter->box.height = m_items.back()->bottom() - iter->box.y;
             

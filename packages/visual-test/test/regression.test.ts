@@ -3215,4 +3215,35 @@ describe("regression: layout and paint probes", () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   });
+  it("position:relative offsets an inline box once, background and text together", async () => {
+    // The offset was applied again each time the line box was finished (text drifted 6x the
+    // requested distance and left the page) and never reached the inline box's background.
+    const redBox = async (offset: string) => {
+      const { img } = await renderPng(
+        `<div style="font:14px/20px sans-serif"><a style="background:#f00;position:relative;${offset}">Donate Donate</a></div>`,
+        300,
+        100,
+      );
+      let minX = 999, maxX = -1, minY = 999, maxY = -1;
+      for (let y = 0; y < img.height; y++) {
+        for (let x = 0; x < img.width; x++) {
+          const i = (img.width * y + x) * 4;
+          if (img.data[i] === 255 && img.data[i + 1] === 0 && img.data[i + 2] === 0) {
+            minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+            minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+          }
+        }
+      }
+      return { minX, maxX, minY, maxY };
+    };
+    const base = await redBox("top:0");
+    const down = await redBox("top:19px");
+    const right = await redBox("left:50px");
+    const bottom = await redBox("bottom:-7px");
+    expect(down.minY - base.minY).toBe(19);
+    expect(down.maxY - base.maxY).toBe(19);
+    expect(right.minX - base.minX).toBe(50);
+    expect(right.maxX - right.minX).toBe(base.maxX - base.minX); // same width, just moved
+    expect(bottom.minY - base.minY).toBe(7);
+  });
 });

@@ -226,21 +226,37 @@ litehtml::pixel_t litehtml::render_item::calc_auto_margins(pixel_t parent_width)
     return 0;
 }
 
-void litehtml::render_item::apply_relative_shift(
-    const containing_block_context& containing_block_size) {
+std::pair<litehtml::pixel_t, litehtml::pixel_t> litehtml::render_item::relative_offset(
+    const containing_block_context& containing_block_size) const {
+    pixel_t inline_off = 0;
+    pixel_t block_off = 0;
     if (src_el()->css().get_position() == element_position_relative) {
         css_offsets offsets = src_el()->css().get_offsets();
         if (!offsets.left.is_predefined()) {
-            inline_shift(offsets.left.calc_percent(containing_block_size.inline_size()));
+            inline_off = offsets.left.calc_percent(containing_block_size.inline_size());
         } else if (!offsets.right.is_predefined()) {
-            inline_shift(-offsets.right.calc_percent(containing_block_size.inline_size()));
+            inline_off = -offsets.right.calc_percent(containing_block_size.inline_size());
         }
         if (!offsets.top.is_predefined()) {
-            block_shift(offsets.top.calc_percent(containing_block_size.block_size()));
+            block_off = offsets.top.calc_percent(containing_block_size.block_size());
         } else if (!offsets.bottom.is_predefined()) {
-            block_shift(-offsets.bottom.calc_percent(containing_block_size.block_size()));
+            block_off = -offsets.bottom.calc_percent(containing_block_size.block_size());
         }
     }
+    return {inline_off, block_off};
+}
+
+void litehtml::render_item::apply_relative_shift(
+    const containing_block_context& containing_block_size) {
+    if (src_el()->css().get_position() != element_position_relative) return;
+    // Already shifted at this very position (the line box was finished again without moving
+    // the item): shifting again would pile the offset up once per call.
+    if (m_relative_shifted && m_pos == m_relative_shifted_pos) return;
+    auto [inline_off, block_off] = relative_offset(containing_block_size);
+    if (inline_off != 0) inline_shift(inline_off);
+    if (block_off != 0) block_shift(block_off);
+    m_relative_shifted_pos = m_pos;
+    m_relative_shifted = true;
 }
 
 std::tuple<std::shared_ptr<litehtml::render_item>, std::shared_ptr<litehtml::render_item>,

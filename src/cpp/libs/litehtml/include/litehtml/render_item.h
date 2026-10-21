@@ -76,6 +76,10 @@ namespace litehtml
         containing_block_context m_cached_cb_context;
         containing_block_context m_self_size;
         pixel_t m_cached_parent_width = -1;
+        // Position right after the last relative shift. A line box is finished several times per
+        // layout; the shift must be applied once per fresh position, not once per call.
+        position m_relative_shifted_pos;
+        bool m_relative_shifted = false;
         bool m_is_measured = false;
         bool m_measured_once = false;
     public:
@@ -582,6 +586,8 @@ namespace litehtml
                 void place(pixel_t x, pixel_t y, const containing_block_context& containing_block_size, formatting_context* fmt_ctx);
                 void place_logical(pixel_t inline_pos, pixel_t block_pos, const containing_block_context& cb_context, formatting_context* fmt_ctx);
         void apply_relative_shift(const containing_block_context &containing_block_size);
+        // (inline, block) offset of a position:relative box; (0, 0) for any other.
+        std::pair<pixel_t, pixel_t> relative_offset(const containing_block_context &containing_block_size) const;
         void calc_outlines( pixel_t parent_width );
         pixel_t calc_auto_margins(pixel_t parent_width);        // returns left margin
 
