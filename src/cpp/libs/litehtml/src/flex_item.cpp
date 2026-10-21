@@ -441,8 +441,21 @@ void litehtml::flex_item_column_direction::direction_specific_init(const litehtm
 		!auto_margin_cross_start && !auto_margin_cross_end && !m_container_wm.is_vertical() &&
 		m_container_wm.get_inline_size(el->css()).is_predefined() &&
 		self_size.render_width.value > 0;
+	// A specified width (e.g. `width:100%` on an svg/img) is just as definite: its block size depends on it.
+	const css_length& cross_size = m_container_wm.get_inline_size(el->css());
+	const bool specified_cross = !m_container_wm.is_vertical() && !cross_size.is_predefined() &&
+		!cross_size.is_calc() && self_size.render_width.value > 0;
 	auto apply_stretch_width = [&](containing_block_context& cb)
 	{
+		if (specified_cross)
+		{
+			cb.width = cross_size.calc_percent(self_size.render_width.value);
+			cb.width.type = containing_block_context::cbc_value_type_absolute;
+			cb.render_width = cb.width;
+			cb.size_mode |= containing_block_context::size_mode_exact_width;
+			cb.size_mode &= ~(containing_block_context::size_mode_content | containing_block_context::size_mode_min_content);
+			return;
+		}
 		if (!stretch_cross) return;
 		cb.width = self_size.render_width.value - el->content_offset_width() + el->box_sizing_width();
 		cb.width.type = containing_block_context::cbc_value_type_absolute;

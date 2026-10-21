@@ -3728,6 +3728,21 @@ describe("regression: layout and paint probes", () => {
     expect(await h("display:flex;flex-direction:column")).toBe(98);
     expect(await h("display:grid")).toBe(98);
   });
+  it("a column flex item with a specified width measures its height at that width", async () => {
+    // `width:100%` on an svg: the item's flex base size used to be measured with the width reset to auto,
+    // so the viewBox's own 100x50 size gave a 50px height instead of 400 * 50/100 = 200 (+ text).
+    const h = async (item: string) =>
+      (await render({
+        value: `<!DOCTYPE html><html><body style="margin:0"><div style="display:flex;flex-direction:column;width:400px">${item}</div></body></html>`,
+        width: 600,
+        format: "png",
+      })).height;
+    const svg = `<svg viewBox="0 0 100 50" style="width:100%;display:block"></svg>`;
+    expect(await h(svg)).toBe(200);
+    expect(await h(`<div style="width:50%;padding:10px;border:5px solid">${svg}</div>`)).toBe(130);
+    expect(await h(`<div style="width:50%;padding:10px;border:5px solid;box-sizing:border-box">${svg}</div>`)).toBe(115);
+    expect(await h(`<div style="width:300px;margin:0 20px">${svg}</div>`)).toBe(150);
+  });
   it("@container understands inline-size / block-size and the range syntax", async () => {
     // Container is 600px wide: every query below matches except the last, which must not.
     const h = async (query: string) =>
