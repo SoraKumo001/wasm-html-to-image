@@ -3144,4 +3144,17 @@ describe("regression: layout and paint probes", () => {
     expect(near(at(250, 5), BLUE)).toBe(true); // float beside it on the same row
     expect(isWhite(at(250, 25))).toBe(true); // nothing wrapped to a second row
   });
+  it("floats whose percentage widths sum to exactly 100% stay on one row", async () => {
+    // python.org's four .small-widget columns: 4 * 23.40426% + 3 * 2.12766% = 100%. Float
+    // rounding made the last one overshoot the line by a hair and wrap below the others.
+    const w = "float:left;height:10px;width:23.40426%;margin-right:2.12766%";
+    const { at } = await renderPng(
+      `<div style="width:948px"><div style="${w};background:#f00"></div><div style="${w};background:#0f0"></div>
+         <div style="${w};background:#00f"></div><div style="${w};margin-right:0;background:#f0f"></div></div>`,
+      1000,
+      30,
+    );
+    expect(near(at(900, 5), [255, 0, 255])).toBe(true); // fourth column, first row
+    expect(isWhite(at(900, 15))).toBe(true); // nothing wrapped to a second row
+  });
 });
