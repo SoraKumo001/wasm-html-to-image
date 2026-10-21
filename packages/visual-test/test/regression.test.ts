@@ -3630,4 +3630,20 @@ describe("regression: layout and paint probes", () => {
     expect(await h("display:flex;flex-direction:column")).toBe(98);
     expect(await h("display:grid")).toBe(98);
   });
+  it("grid: negative line numbers count from the end, and a lone `dense` means `row dense`", async () => {
+    // tailwind's `col-span-full` is `grid-column: 1 / -1` and `grid-flow-dense` is `grid-auto-flow: dense`.
+    const h = async (flow: string, spec: string[]) =>
+      (await render({
+        value: `<!DOCTYPE html><html><body style="margin:0;width:600px"><div style="display:grid;grid-template-columns:repeat(30,minmax(0,1fr));${flow}gap:8px">${spec
+          .map((s) => `<div style="grid-column:${s};height:20px"></div>`)
+          .join("")}</div></body></html>`,
+        width: 600,
+        format: "png",
+      })).height;
+    // full row after a 12-wide item: the full item needs a row of its own (2 rows: 20 + 8 + 20)
+    expect(await h("", ["span 12 / span 12", "1 / -1"])).toBe(48);
+    // dense: the 18-wide item backfills the first row next to the 12-wide one (3 rows -> 2)
+    expect(await h("grid-auto-flow:dense;", ["span 12 / span 12", "1 / -1", "span 18 / span 18"])).toBe(48);
+    expect(await h("", ["span 12 / span 12", "1 / -1", "span 18 / span 18"])).toBe(76);
+  });
 });

@@ -627,6 +627,10 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         resolve_named(rs, row_names, false);
         resolve_named(re, row_names, true);
 
+        // Negative line numbers count from the end of the explicit grid (-1 is the last line).
+        if (!cs.is_span && cs.index < 0) cs.index = std::max(1, num_columns + 2 + cs.index);
+        if (!ce.is_span && ce.index < 0) ce.index = std::max(1, num_columns + 2 + ce.index);
+
         int item_col_start = 0;
         int item_col_span = 1;
         int item_row_start = 0;

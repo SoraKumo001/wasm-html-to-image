@@ -1179,6 +1179,8 @@ namespace litehtml
         else if (id == "column") flow = grid_auto_flow_column;
         else if (id == "dense") dense = true;
       }
+      // A lone `dense` means `row dense`.
+      if (flow < 0 && dense) flow = grid_auto_flow_row;
       if (flow >= 0)
       {
         int mapped = dense ? (flow == grid_auto_flow_column ? grid_auto_flow_column_dense
