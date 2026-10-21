@@ -646,7 +646,16 @@ void container_skia::link(const std::shared_ptr<litehtml::document>& /*doc*/,
     const char* rel = el->get_attr("rel");
     const char* href = el->get_attr("href");
     const char* media = el->get_attr("media");
-    if (rel && href && media && !strcmp(rel, "stylesheet") && href[0] && media[0]) {
+    bool isSheet = false;
+    if (rel) {
+        std::istringstream relTokens(rel);
+        std::string tok;
+        while (relTokens >> tok) {
+            if (tok == "stylesheet") isSheet = true;
+            else if (tok == "alternate") { isSheet = false; break; }
+        }
+    }
+    if (isSheet && href && media && href[0] && media[0]) {
         m_resourceManager->setCssMedia(href, media);
     }
 }

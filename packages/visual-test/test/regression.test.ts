@@ -3215,6 +3215,46 @@ describe("regression: layout and paint probes", () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   });
+  it('<link rel="preload stylesheet"> loads the sheet; "alternate stylesheet" does not', async () => {
+    // rel is a token list. Only the exact string "stylesheet" was recognised, so vuejs.org
+    // (rel="preload stylesheet") rendered completely unstyled.
+    const server = http.createServer((req, res) => {
+      if (req.url === "/index.html") {
+        res.writeHead(200, { "content-type": "text/html" });
+        res.end(`<html><head><link rel="preload stylesheet" href="a.css" as="style">
+          <link rel="alternate stylesheet" href="b.css"></head>
+          <body style="margin:0"><div class="a"></div><div class="b"></div></body></html>`);
+      } else if (req.url === "/a.css") {
+        res.writeHead(200, { "content-type": "text/css" });
+        res.end("div{height:10px;background:#f00}.a{background:#00f}");
+      } else if (req.url === "/b.css") {
+        res.writeHead(200, { "content-type": "text/css" });
+        res.end(".b{background:#0f0}");
+      } else {
+        res.writeHead(404);
+        res.end();
+      }
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const port = (server.address() as { port: number }).port;
+    try {
+      const { data } = await render({
+        url: `http://127.0.0.1:${port}/index.html`,
+        width: 100,
+        height: 30,
+        format: "png",
+      });
+      const img = PNG.sync.read(Buffer.from(data));
+      const at = (x: number, y: number): Rgb => {
+        const i = (img.width * y + x) * 4;
+        return [img.data[i], img.data[i + 1], img.data[i + 2]];
+      };
+      expect(near(at(50, 5), BLUE)).toBe(true); // a.css applied
+      expect(near(at(50, 15), RED)).toBe(true); // b.css (alternate) ignored
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
   it("position:relative offsets an inline box once, background and text together", async () => {
     // The offset was applied again each time the line box was finished (text drifted 6x the
     // requested distance and left the page) and never reached the inline box's background.
