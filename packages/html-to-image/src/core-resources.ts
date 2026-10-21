@@ -510,6 +510,10 @@ export async function resolveHtmlResources(
       bin instanceof Uint8Array ? bin : undefined,
     );
     if (pending.length === 0) break;
+    // Stylesheets cascade by document order, not by fetch completion order: a small
+    // later sheet must not land before (and so lose to) a large earlier one. They are
+    // buffered here and injected in discovery order once the whole round has settled.
+    const loadedCss: { index: number; url: string; bytes: Uint8Array }[] = [];
     await mapWithLimit(pending, FETCH_CONCURRENCY, async (r) => {
       const diag = ctx.diag;
       const entry: ResourceDiagnostic | undefined = diag
@@ -602,10 +606,14 @@ export async function resolveHtmlResources(
         }
         ctx.usage.totalResourceBytes += bytes.length;
         settle("loaded", bytes.length);
+        if (r.type === "css") {
+          loadedCss.push({ index: pending.indexOf(r), url: r.url, bytes });
+          return;
+        }
         (await addRes(
           satoruInst,
           r.url,
-          r.type === "image" ? 2 : r.type === "css" ? 3 : 1,
+          r.type === "image" ? 2 : 1,
           bytes,
         )) as unknown;
         if (r.type === "font") {
@@ -626,6 +634,10 @@ export async function resolveHtmlResources(
         diag?.warnings.push(d);
       }
     });
+    loadedCss.sort((a, b) => a.index - b.index);
+    for (const css of loadedCss) {
+      (await addRes(satoruInst, css.url, 3, css.bytes)) as unknown;
+    }
   }
   // Merge the C++ collect-phase breakdown into the JS timings.
   if (profileEnabled && ctx.diag) {

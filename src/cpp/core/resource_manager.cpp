@@ -1,5 +1,7 @@
 #include "resource_manager.h"
 
+#include <algorithm>
+#include <cstdint>
 #include <iostream>
 
 #include "../utils/skia_utils.h"
@@ -56,13 +58,23 @@ void ResourceManager::request(const std::string& url, const std::string& name, R
     // Check if this URL is already requested (regardless of name/type)
     if (!m_requestedUrls.insert(url).second) return;
 
+    m_requestSeq.emplace(url, m_nextRequestSeq++);
     m_requests.insert({url, name, characters, type, redraw_on_ready});
 }
 
 std::vector<ResourceRequest> ResourceManager::getPendingRequests() {
     std::vector<ResourceRequest> result(m_requests.begin(), m_requests.end());
+    std::stable_sort(result.begin(), result.end(),
+                     [this](const ResourceRequest& a, const ResourceRequest& b) {
+                         auto ia = m_requestSeq.find(a.url);
+                         auto ib = m_requestSeq.find(b.url);
+                         size_t sa = ia == m_requestSeq.end() ? SIZE_MAX : ia->second;
+                         size_t sb = ib == m_requestSeq.end() ? SIZE_MAX : ib->second;
+                         return sa < sb;
+                     });
     m_requests.clear();
     m_requestedUrls.clear();
+    m_requestSeq.clear();
     return result;
 }
 
@@ -214,6 +226,7 @@ bool ResourceManager::has(const std::string& url) const { return m_resolvedUrls.
 void ResourceManager::clear() {
     m_requests.clear();
     m_requestedUrls.clear();
+    m_requestSeq.clear();
     m_resolvedUrls.clear();
     m_urlToNames.clear();
 }

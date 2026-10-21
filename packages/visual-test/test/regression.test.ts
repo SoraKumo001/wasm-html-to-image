@@ -3079,4 +3079,42 @@ describe("regression: layout and paint probes", () => {
     expect(near(at(195, 5), BLUE)).toBe(true);
     expect(isWhite(at(205, 5))).toBe(true); // 40 + 10 + 150 = 200
   });
+  it("linked stylesheets cascade in document order, not fetch-completion order", async () => {
+    // python.org links style.css (large, slow) before mq.css (small, fast). The small sheet
+    // used to land first and then lose to the later arrival, so its min-width rules
+    // (`float:right`) never won and the header collapsed into a column.
+    const html = `<html><head><link rel="stylesheet" href="slow.css"><link rel="stylesheet" href="fast.css"></head>
+      <body style="margin:0;background:#fff"><div class="b" style="height:20px"></div></body></html>`;
+    const server = http.createServer((req, res) => {
+      if (req.url === "/index.html") {
+        res.writeHead(200, { "content-type": "text/html" });
+        res.end(html);
+      } else if (req.url === "/slow.css" || req.url === "/fast.css") {
+        const slow = req.url === "/slow.css";
+        setTimeout(() => {
+          res.writeHead(200, { "content-type": "text/css" });
+          res.end(slow ? ".b{background:#f00}" : ".b{background:#00f}");
+        }, slow ? 300 : 0);
+      } else {
+        res.writeHead(404);
+        res.end();
+      }
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const port = (server.address() as { port: number }).port;
+    try {
+      const { data } = await render({
+        url: `http://127.0.0.1:${port}/index.html`,
+        width: 100,
+        height: 40,
+        format: "png",
+      });
+      const img = PNG.sync.read(Buffer.from(data));
+      const i = (img.width * 10 + 10) * 4;
+      // fast.css is later in the document, so its blue wins over slow.css's red.
+      expect(near([img.data[i], img.data[i + 1], img.data[i + 2]], BLUE)).toBe(true);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
 });

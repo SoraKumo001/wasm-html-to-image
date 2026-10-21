@@ -52,6 +52,10 @@ class ResourceManager {
     SatoruContext& m_context;
     std::set<ResourceRequest> m_requests;
     std::unordered_set<std::string> m_requestedUrls;
+    // Request order of each URL: m_requests is a sorted set, but stylesheets must reach the
+    // page in document order (the cascade depends on it), so pending requests are re-ordered.
+    std::unordered_map<std::string, size_t> m_requestSeq;
+    size_t m_nextRequestSeq = 0;
     std::unordered_map<std::string, ResourceType> m_resolvedUrls;
     std::unordered_map<std::string, std::set<std::string>>
         m_urlToNames;  // Map URL to requested names (e.g. Font Families)
