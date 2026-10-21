@@ -203,6 +203,77 @@ std::shared_ptr<render_item> el_svg::create_render_item(
     return ret;
 }
 
+namespace {
+
+std::string trim_copy(const std::string& v) {
+    size_t b = v.find_first_not_of(" \t\r\n");
+    if (b == std::string::npos) return "";
+    size_t e = v.find_last_not_of(" \t\r\n");
+    return v.substr(b, e - b + 1);
+}
+
+// Resolve var() and light-dark() in a fill/stroke value the way the cascade would. Returns false
+// when the value is invalid at computed-value time (an undefined variable without a fallback), in
+// which case the declaration is dropped. light-dark() picks its light branch.
+bool resolve_paint(const element* el, const std::string& in, std::string& out, int depth = 0) {
+    if (depth > 16) return false;
+    out.clear();
+    size_t i = 0;
+    while (i < in.size()) {
+        size_t v = in.find("var(", i);
+        size_t l = in.find("light-dark(", i);
+        bool is_var = v != std::string::npos && (l == std::string::npos || v < l);
+        size_t start = is_var ? v : l;
+        if (start == std::string::npos) {
+            out.append(in, i, std::string::npos);
+            break;
+        }
+        out.append(in, i, start - i);
+        size_t p = start + (is_var ? 4 : 11);
+        int paren = 1;
+        size_t comma = std::string::npos;
+        while (p < in.size() && paren > 0) {
+            char c = in[p];
+            if (c == '(') paren++;
+            else if (c == ')') paren--;
+            else if (c == ',' && paren == 1 && comma == std::string::npos) comma = p;
+            if (paren > 0) p++;
+        }
+        if (paren != 0) return false;
+        size_t arg_start = start + (is_var ? 4 : 11);
+        std::string first = trim_copy(in.substr(arg_start, (comma == std::string::npos ? p : comma) - arg_start));
+        std::string second = comma == std::string::npos ? "" : trim_copy(in.substr(comma + 1, p - comma - 1));
+        std::string piece;
+        if (is_var) {
+            bool ok = false;
+            css_token_vector toks;
+            if (first.rfind("--", 0) == 0 && el->get_custom_property(_id(first), toks)) {
+                ok = resolve_paint(el, get_repr(toks), piece, depth + 1);
+            }
+            if (!ok) {
+                if (comma == std::string::npos) return false;
+                if (!resolve_paint(el, second, piece, depth + 1)) return false;
+            }
+        } else {
+            if (!resolve_paint(el, first, piece, depth + 1)) return false;
+        }
+        out += piece;
+        i = p + 1;
+    }
+    out = trim_copy(out);
+    return !out.empty();
+}
+
+// The fill/stroke the stylesheets give an element, resolved, or empty when it has none.
+std::string css_paint(const element* el, string_id property) {
+    const property_value& pv = el->get_property_value(property);
+    if (!pv.is<string>()) return "";
+    std::string resolved;
+    return resolve_paint(el, pv.get<string>(), resolved) ? resolved : "";
+}
+
+}  // namespace
+
 class html_tag_accessor : public html_tag {
    public:
     static const string_map& get_attrs(const html_tag* tag) {
@@ -238,10 +309,17 @@ void el_svg::write_element(std::ostream& os, const element::ptr& el) const {
             }
         }
 
+        // Stylesheet fill/stroke win over the presentation attributes of the same name.
+        const std::string css_fill = css_paint(el.get(), _fill_);
+        const std::string css_stroke = css_paint(el.get(), _stroke_);
+
         bool stroke_attr_written = false;
         for (auto const& attr : attrs) {
             std::string attr_name = map_attr(attr.first);
             std::string attr_val = attr.second;
+            if ((attr_name == "fill" && !css_fill.empty()) ||
+                (attr_name == "stroke" && !css_stroke.empty()))
+                continue;
             // Remove newlines and tabs from attribute values (common in base64 data URLs)
             attr_val.erase(std::remove(attr_val.begin(), attr_val.end(), '\n'), attr_val.end());
             attr_val.erase(std::remove(attr_val.begin(), attr_val.end(), '\r'), attr_val.end());
@@ -259,6 +337,11 @@ void el_svg::write_element(std::ostream& os, const element::ptr& el) const {
             } else if (attr_name != "xmlns" && attr_name != "xmlns:xlink") {
                 os << " " << attr_name << "=\"" << attr_val << "\"";
             }
+        }
+        if (!css_fill.empty()) os << " fill=\"" << css_fill << "\"";
+        if (!css_stroke.empty()) {
+            os << " stroke=\"" << (stroke_width_is_zero ? "none" : css_stroke) << "\"";
+            stroke_attr_written = true;
         }
         if (stroke_width_is_zero && !stroke_attr_written) {
             os << " stroke=\"none\"";
@@ -297,10 +380,16 @@ std::string el_svg::reconstruct_xml(int x, int y, int width, int height) const {
         }
     }
 
+    const std::string css_fill = css_paint(this, _fill_);
+    const std::string css_stroke = css_paint(this, _stroke_);
+
     bool stroke_attr_written = false;
     for (auto const& attr : m_attrs) {
         std::string attr_name = map_attr(attr.first);
         std::string attr_val = attr.second;
+        if ((attr_name == "fill" && !css_fill.empty()) ||
+            (attr_name == "stroke" && !css_stroke.empty()))
+            continue;
         // Remove newlines and tabs
         attr_val.erase(std::remove(attr_val.begin(), attr_val.end(), '\n'), attr_val.end());
         attr_val.erase(std::remove(attr_val.begin(), attr_val.end(), '\r'), attr_val.end());
@@ -322,6 +411,11 @@ std::string el_svg::reconstruct_xml(int x, int y, int width, int height) const {
         } else {
             ss << " " << attr_name << "=\"" << attr_val << "\"";
         }
+    }
+    if (!css_fill.empty()) ss << " fill=\"" << css_fill << "\"";
+    if (!css_stroke.empty()) {
+        ss << " stroke=\"" << (stroke_width_is_zero ? "none" : css_stroke) << "\"";
+        stroke_attr_written = true;
     }
     if (stroke_width_is_zero && !stroke_attr_written) {
         ss << " stroke=\"none\"";

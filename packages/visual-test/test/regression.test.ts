@@ -3309,4 +3309,34 @@ describe("regression: layout and paint probes", () => {
     };
     expect(rows(withAbs.img)).toBe(rows(plain.img)); // the blue box stays on the first line
   });
+  it("stylesheet fill/stroke (classes, var(), light-dark()) paint inline SVG shapes", async () => {
+    // The inline SVG was rebuilt from its attributes alone, so `.logo__letter{fill:...}` (MDN's
+    // logo, every CSS-coloured icon) never applied and the shapes came out black.
+    const cases: [string, string][] = [
+      ["class", ".r{fill:#00f}"],
+      ["descendant", "svg rect{fill:#00f}"],
+      ["var", ":root{--c:#00f}.r{fill:var(--c)}"],
+      ["var fallback", ".r{fill:var(--missing,#00f)}"],
+      ["nested var", ":root{--a:#00f;--b:var(--a)}.r{fill:var(--b)}"],
+      ["light-dark", ".r{fill:light-dark(#00f,#f00)}"],
+      ["overrides attribute", ".r{fill:#00f}"],
+    ];
+    for (const [name, css] of cases) {
+      const attr = name === "overrides attribute" ? ' fill="#f00"' : "";
+      const { at } = await renderPng(
+        `<style>${css}</style><svg width="20" height="20"><rect class="r" width="20" height="20"${attr}/></svg>`,
+        40,
+        30,
+      );
+      expect(near(at(10, 10), BLUE), name).toBe(true);
+    }
+    // An undefined variable without a fallback drops the declaration: the attribute survives.
+    const { at } = await renderPng(
+      `<style>.r{fill:var(--nope)}</style><svg width="20" height="20"><rect class="r" width="20" height="20" fill="#0000ff"/></svg>`,
+      40,
+      30,
+    );
+    expect(near(at(10, 10), BLUE)).toBe(true);
+  });
+
 });
