@@ -638,6 +638,19 @@ void container_skia::transform_text(litehtml::string& text, litehtml::text_trans
     }
     text = std::move(out);
 }
+// Called for a <link> whose stylesheet is fetched later (see import_css). Remember its media
+// attribute so the sheet is applied only where the media query matches.
+void container_skia::link(const std::shared_ptr<litehtml::document>& /*doc*/,
+                          const litehtml::element::ptr& el) {
+    if (!el || !m_resourceManager) return;
+    const char* rel = el->get_attr("rel");
+    const char* href = el->get_attr("href");
+    const char* media = el->get_attr("media");
+    if (rel && href && media && !strcmp(rel, "stylesheet") && href[0] && media[0]) {
+        m_resourceManager->setCssMedia(href, media);
+    }
+}
+
 void container_skia::import_css(litehtml::string& text, const litehtml::string& url,
                                 litehtml::string& baseurl) {
     if (!url.empty() && m_resourceManager) {

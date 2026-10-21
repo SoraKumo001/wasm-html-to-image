@@ -3157,4 +3157,62 @@ describe("regression: layout and paint probes", () => {
     expect(near(at(900, 5), [255, 0, 255])).toBe(true); // fourth column, first row
     expect(isWhite(at(900, 15))).toBe(true); // nothing wrapped to a second row
   });
+  it("the media attribute of <style> and <link rel=stylesheet> limits where the sheet applies", async () => {
+    // `element` keeps no attributes, so <style media> was dropped and print-only CSS applied on
+    // screen; fetched <link media> sheets were concatenated without their media query.
+    const paint = async (media: string) => {
+      const { at } = await renderPng(
+        `<style>div{height:20px;background:#f00}</style><style media="${media}">div{background:#00f}</style><div></div>`,
+        100,
+        30,
+      );
+      return near(at(50, 10), BLUE);
+    };
+    expect(await paint("screen")).toBe(true);
+    expect(await paint("not print, braille")).toBe(true);
+    expect(await paint("(min-width: 50px)")).toBe(true);
+    expect(await paint("print")).toBe(false);
+    expect(await paint("not screen")).toBe(false);
+    expect(await paint("(min-width: 600px)")).toBe(false);
+
+    const server = http.createServer((req, res) => {
+      if (req.url === "/index.html") {
+        res.writeHead(200, { "content-type": "text/html" });
+        res.end(`<html><head><link rel="stylesheet" href="base.css"><link rel="stylesheet" media="print" href="print.css">
+          <link rel="stylesheet" media="screen" href="screen.css"></head>
+          <body style="margin:0"><div class="a"></div><div class="b"></div></body></html>`);
+      } else if (req.url === "/base.css") {
+        res.writeHead(200, { "content-type": "text/css" });
+        res.end("div{height:10px;background:#f00}");
+      } else if (req.url === "/print.css") {
+        res.writeHead(200, { "content-type": "text/css" });
+        res.end(".a{background:#0f0}");
+      } else if (req.url === "/screen.css") {
+        res.writeHead(200, { "content-type": "text/css" });
+        res.end(".b{background:#00f}");
+      } else {
+        res.writeHead(404);
+        res.end();
+      }
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const port = (server.address() as { port: number }).port;
+    try {
+      const { data } = await render({
+        url: `http://127.0.0.1:${port}/index.html`,
+        width: 100,
+        height: 30,
+        format: "png",
+      });
+      const img = PNG.sync.read(Buffer.from(data));
+      const at = (x: number, y: number): Rgb => {
+        const i = (img.width * y + x) * 4;
+        return [img.data[i], img.data[i + 1], img.data[i + 2]];
+      };
+      expect(near(at(50, 5), RED)).toBe(true); // print.css must not turn .a green
+      expect(near(at(50, 15), BLUE)).toBe(true); // screen.css applies to .b
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
 });

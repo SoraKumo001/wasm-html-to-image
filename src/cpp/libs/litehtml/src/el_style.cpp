@@ -1,10 +1,19 @@
 #include "el_style.h"
 #include "document.h"
+#include <cstring>
 
 
 litehtml::el_style::el_style(const std::shared_ptr<document>& doc) : element(doc)
 {
 
+}
+
+void litehtml::el_style::set_attr(const char* name, const char* val)
+{
+	if(name && !strcmp(name, "media"))
+	{
+		m_media = val ? val : "";
+	}
 }
 
 void litehtml::el_style::parse_attributes()
@@ -15,7 +24,7 @@ void litehtml::el_style::parse_attributes()
 	{
 		el->get_text(text);
 	}
-	get_document()->add_stylesheet( text.c_str(), nullptr, get_attr("media") );
+	get_document()->add_stylesheet( text.c_str(), nullptr, m_media.c_str() );
 }
 
 bool litehtml::el_style::appendChild(const ptr &el)

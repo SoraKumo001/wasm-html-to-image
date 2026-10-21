@@ -45,6 +45,9 @@ class ResourceManager {
 
     bool has(const std::string& url) const;
 
+    // Media query of a <link rel=stylesheet media=...> still to be fetched.
+    void setCssMedia(const std::string& url, const std::string& media) { m_cssMedia[url] = media; }
+
     void clear();
     void clear(ResourceType type);
 
@@ -56,6 +59,7 @@ class ResourceManager {
     // page in document order (the cascade depends on it), so pending requests are re-ordered.
     std::unordered_map<std::string, size_t> m_requestSeq;
     size_t m_nextRequestSeq = 0;
+    std::unordered_map<std::string, std::string> m_cssMedia;
     std::unordered_map<std::string, ResourceType> m_resolvedUrls;
     std::unordered_map<std::string, std::set<std::string>>
         m_urlToNames;  // Map URL to requested names (e.g. Font Families)

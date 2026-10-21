@@ -215,6 +215,13 @@ void ResourceManager::add(const std::string& url, const uint8_t* data, size_t si
             return;
         }
         std::string css((const char*)data, size);
+        // A linked sheet applies only where its media attribute matches. @import cannot sit
+        // inside @media, so sheets that import others are left unconditional.
+        auto media = m_cssMedia.find(url);
+        if (media != m_cssMedia.end() && media->second != "all" &&
+            css.find("@import") == std::string::npos) {
+            css = "@media " + media->second + " {" + css + "\n}";
+        }
         if (m_context.addCss(css, CssChangeKind::ExternalResource)) {
             m_context.fontManager.scanFontFaces(css);
         }
