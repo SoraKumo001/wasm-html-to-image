@@ -85,6 +85,9 @@ class SatoruContext {
     sk_sp<SkData> m_lastPdf;
     sk_sp<SkData> m_lastSvg;
     std::string m_extraCss;
+    // CSS fetched for the page itself (<link rel=stylesheet>, @import). Author origin, so it
+    // is kept apart from m_extraCss (user origin: the `css` option, @font-face helpers).
+    std::string m_pageCss;
     std::unordered_set<std::string> m_extraCssBlocks;
     std::map<std::string, std::string> m_fontMap;
     uint64_t m_cssVersion = 0;
@@ -176,7 +179,9 @@ class SatoruContext {
     bool addCss(const std::string &css, CssChangeKind kind = CssChangeKind::Generic) {
         if (css.empty()) return false;
         if (!m_extraCssBlocks.insert(css).second) return false;
-        m_extraCss += strip_font_face_rules(css) + "\n";
+        std::string &bucket =
+            (kind == CssChangeKind::ExternalResource) ? m_pageCss : m_extraCss;
+        bucket += strip_font_face_rules(css) + "\n";
         m_cssVersion++;
         switch (kind) {
             case CssChangeKind::UserScan:
@@ -200,6 +205,7 @@ class SatoruContext {
         return true;
     }
     const std::string &getExtraCss() const { return m_extraCss; }
+    const std::string &getPageCss() const { return m_pageCss; }
     uint64_t getCssVersion() const { return m_cssVersion; }
     uint64_t getUserCssVersion() const { return m_userCssVersion; }
     uint64_t getExternalCssVersion() const { return m_externalCssVersion; }
@@ -234,8 +240,9 @@ class SatoruContext {
     }
     void markFontChanged() { m_fontVersion++; }
     void clearCss() {
-        if (m_extraCss.empty() && m_extraCssBlocks.empty()) return;
+        if (m_extraCss.empty() && m_pageCss.empty() && m_extraCssBlocks.empty()) return;
         m_extraCss.clear();
+        m_pageCss.clear();
         m_extraCssBlocks.clear();
         m_cssVersion++;
     }

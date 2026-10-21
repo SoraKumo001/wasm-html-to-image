@@ -1593,6 +1593,50 @@ describe("regression: layout and paint probes", () => {
     }
   });
 
+  it("an unlayered declaration in a fetched stylesheet beats a layered one from inline CSS", async () => {
+    // <link rel=stylesheet> content is page CSS (author origin, unlayered). Injecting it as
+    // a user stylesheet made every @layer block outrank it, so a losing `padding:var(...)`
+    // inside `@layer` won over the linked `padding:0 var(--gap)` (github.com hero, +128px).
+    const html = `<html><head><link rel="stylesheet" href="page.css"><style>
+      @layer brand { :root { --pad: 120px 0 } .box { padding: var(--pad) } }
+    </style></head><body style="margin:0;background:#fff"><div class="box"><div style="height:20px;background:#f00"></div></div></body></html>`;
+    const css = `:root{--gap:24px}.box{padding:0 var(--gap)}`;
+    const server = http.createServer((req, res) => {
+      if (req.url === "/index.html") {
+        res.writeHead(200, { "content-type": "text/html" });
+        res.end(html);
+      } else if (req.url === "/page.css") {
+        res.writeHead(200, { "content-type": "text/css" });
+        res.end(css);
+      } else {
+        res.writeHead(404);
+        res.end();
+      }
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const port = (server.address() as { port: number }).port;
+    try {
+      const { data } = await render({
+        url: `http://127.0.0.1:${port}/index.html`,
+        width: 300,
+        height: 200,
+        format: "png",
+      });
+      const img = PNG.sync.read(Buffer.from(data));
+      const at = (x: number, y: number): Rgb => {
+        const i = (img.width * y + x) * 4;
+        return [img.data[i], img.data[i + 1], img.data[i + 2]];
+      };
+      // padding:0 24px -> the child paints from the top, 24px in from the left.
+      expect(near(at(10, 10), [255, 255, 255])).toBe(true);
+      expect(near(at(30, 10), RED)).toBe(true);
+      // The layered 120px padding-top must not win: no red left below row ~20.
+      expect(near(at(30, 100), [255, 255, 255])).toBe(true);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
   it("sampled @keyframes opacity animation yields a multi-frame animated WebP", async () => {
     // The document carries the animation; `animation: { duration, fps }` asks
     // the renderer to sample it into frames (loop fixed to infinite, opacity

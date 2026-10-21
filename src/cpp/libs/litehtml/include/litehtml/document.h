@@ -154,11 +154,15 @@ namespace litehtml
 		}
 
 		// see doc/document_createFromString.txt
+		// `page_styles` holds CSS fetched for the document itself (<link rel=stylesheet> /
+		// @import). It is page content, so it is parsed at author origin (unlayered) rather
+		// than as a user stylesheet; `user_styles` stays user origin.
 		static document::ptr  createFromString(
 			const estring&       str,
 			document_container*  container,
 			const string&        master_styles = litehtml::master_css,
-			const string&        user_styles = "");
+			const string&        user_styles = "",
+			const string&        page_styles = "");
 
 	private:
 		uint_ptr	add_font(const font_description& descr, font_metrics* fm);

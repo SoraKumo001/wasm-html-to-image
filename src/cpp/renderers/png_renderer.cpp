@@ -89,8 +89,8 @@ bool renderHtmlToBitmap(const char* html, int width, int height, SatoruContext& 
     std::string css = master_css ? master_css : litehtml::master_css;
     css += "\nbr { display: -litehtml-br !important; }\n";
 
-    litehtml::document::ptr doc =
-        litehtml::document::createFromString(html, &container, css.c_str(), user_css);
+    litehtml::document::ptr doc = litehtml::document::createFromString(
+        html, &container, css.c_str(), user_css, context.getPageCss());
     if (!doc) return false;
 
     doc->render(width);

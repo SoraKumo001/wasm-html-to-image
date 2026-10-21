@@ -56,7 +56,8 @@ void render_template(const std::string& html, int width, int height, SkCanvas* c
                      litehtml::media_type media_type) {
     if (html.empty()) return;
     container_skia container(width, height, canvas, context, nullptr, false, media_type);
-    auto doc = litehtml::document::createFromString(html.c_str(), &container, master_css, user_css);
+    auto doc = litehtml::document::createFromString(html.c_str(), &container, master_css, user_css,
+                                                    context.getPageCss());
     if (doc) {
         doc->render(width);
         doc->draw(0, 0, 0, nullptr);
@@ -758,7 +759,8 @@ sk_sp<SkData> renderHtmlsToPdf(const std::vector<std::string>& htmls, int width,
                                          height > 0 ? height : k_default_viewport_height, nullptr,
                                          context, nullptr, false, media_type);
         auto measure_doc = litehtml::document::createFromString(html.c_str(), &measure_container,
-                                                                css.c_str(), user_css);
+                                                                css.c_str(), user_css,
+                                                                context.getPageCss());
         if (!measure_doc) continue;
 
         measure_doc->render(content_width);
@@ -803,7 +805,8 @@ sk_sp<SkData> renderHtmlsToPdf(const std::vector<std::string>& htmls, int width,
         container_skia render_container(content_width, measured_height, canvas, context, nullptr,
                                         false, media_type);
         auto render_doc = litehtml::document::createFromString(html.c_str(), &render_container,
-                                                               css.c_str(), user_css);
+                                                               css.c_str(), user_css,
+                                                               context.getPageCss());
         if (!render_doc) continue;
         render_doc->render(content_width);
         render_doc->draw(0, 0, 0, nullptr);
@@ -930,7 +933,8 @@ sk_sp<SkData> renderHtmlToPdf(const std::string& html, int width, int height,
     // document-reuse pattern already used elsewhere in this file.
     container_skia container(content_width, content_area_height, nullptr, context, nullptr, false,
                              media_type);
-    auto doc = litehtml::document::createFromString(html.c_str(), &container, css.c_str(), user_css);
+    auto doc = litehtml::document::createFromString(html.c_str(), &container, css.c_str(), user_css,
+                                                    context.getPageCss());
     if (!doc) return nullptr;
 
     doc->render(content_width);

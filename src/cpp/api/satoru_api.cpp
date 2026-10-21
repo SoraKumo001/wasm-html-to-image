@@ -216,7 +216,8 @@ void SatoruInstance::collect_resources(const std::string& html, int width, int h
             if (collect_profile_enabled) create_start = std::chrono::high_resolution_clock::now();
             doc = litehtml::document::createFromString(html.c_str(), render_container.get(),
                                                        get_full_master_css().c_str(),
-                                                       context.getExtraCss().c_str());
+                                                       context.getExtraCss().c_str(),
+                                                       context.getPageCss().c_str());
             if (collect_profile_enabled) {
                 auto create_end = std::chrono::high_resolution_clock::now();
                 profile_create_document_ms += elapsed_ms(create_start, create_end);

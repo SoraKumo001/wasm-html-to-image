@@ -1771,7 +1771,8 @@ std::string renderHtmlToSvg(const char* html, int width, int height, SatoruConte
     std::string css = master_css ? master_css : litehtml::master_css;
     css += "\nbr { display: -litehtml-br !important; }\n";
 
-    auto doc = litehtml::document::createFromString(html, container.get(), css.c_str(), user_css);
+    auto doc = litehtml::document::createFromString(html, container.get(), css.c_str(), user_css,
+                                                    context.getPageCss());
     if (!doc) {
         SATORU_LOG_ERROR(
             "[Satoru] Failed to create document in renderHtmlToSvg (returned nullptr)");

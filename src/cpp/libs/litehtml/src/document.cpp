@@ -53,7 +53,8 @@ document::ptr document::createFromString(
 	const estring& str,
 	document_container* container,
 	const string& master_styles,
-	const string& user_styles )
+	const string& user_styles,
+	const string& page_styles )
 {
 	// Create litehtml::document
 	document::ptr doc = make_shared<document>(container);
@@ -122,6 +123,14 @@ document::ptr document::createFromString(
 				media->add(mq_list);
 			}
 			doc->m_styles.parse_css_stylesheet(css.text, css.baseurl, doc, media, nullptr);
+		}
+		// CSS fetched for the page (<link rel=stylesheet>, @import) is author origin.
+		// Parsing it as a stylesheet of its own (instead of into m_user_css) keeps `@layer`
+		// blocks from outranking it: an unlayered author declaration always beats a layered
+		// one, exactly as in the browser.
+		if (!page_styles.empty())
+		{
+			doc->m_styles.parse_css_stylesheet(page_styles, "", doc, nullptr, nullptr);
 		}
 		doc->m_styles.sort_selectors();
 
