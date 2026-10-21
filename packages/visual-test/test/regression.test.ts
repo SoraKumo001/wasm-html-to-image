@@ -3215,6 +3215,22 @@ describe("regression: layout and paint probes", () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   });
+  it("-webkit-linear-gradient() uses the legacy angle and side-keyword syntax", async () => {
+    // The prefixed function was not recognised at all (vuejs.org's gradient headline text vanished).
+    const paint = async (grad: string) => {
+      const { at } = await renderPng(`<div style="width:100px;height:40px;background:${grad}"></div>`, 100, 40);
+      return at;
+    };
+    const lr = await paint("-webkit-linear-gradient(left, #f00, #00f)");
+    expect(lr(5, 20)[0]).toBeGreaterThan(200);
+    expect(lr(95, 20)[2]).toBeGreaterThan(200);
+    const tb = await paint("-webkit-linear-gradient(top, #f00, #00f)");
+    expect(tb(50, 2)[0]).toBeGreaterThan(200);
+    expect(tb(50, 37)[2]).toBeGreaterThan(200);
+    const ang = await paint("-webkit-linear-gradient(0deg, #f00, #00f)"); // 0deg legacy = towards east
+    expect(ang(5, 20)[0]).toBeGreaterThan(200);
+    expect(ang(95, 20)[2]).toBeGreaterThan(200);
+  });
   it("columns:N balances the columns by content size, not by item count", async () => {
     // Items were dealt out evenly by count: {a,b},{c,tall} made the second column 6 lines tall
     // where Chromium balances to {a,b,c},{tall} (5 lines).

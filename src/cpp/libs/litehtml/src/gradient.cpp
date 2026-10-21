@@ -94,7 +94,16 @@ bool parse_gradient(const css_token& token, gradient& result, document_container
 	if (token.type != CV_FUNCTION)
 		return false;
 
-	auto type = _id(lowcase(token.name));
+	string fn_name = lowcase(token.name);
+	// Legacy -webkit-[repeating-]linear-gradient(): angles run counter-clockwise from east and a
+	// bare side keyword names where the gradient starts.
+	bool legacy_linear = false;
+	if (fn_name == "-webkit-linear-gradient" || fn_name == "-webkit-repeating-linear-gradient")
+	{
+		legacy_linear = true;
+		fn_name = fn_name == "-webkit-linear-gradient" ? "linear-gradient" : "repeating-linear-gradient";
+	}
+	auto type = _id(fn_name);
 
 	if (!is_one_of(type,
 		_linear_gradient_, _repeating_linear_gradient_,
@@ -116,7 +125,31 @@ bool parse_gradient(const css_token& token, gradient& result, document_container
 
 	bool ok;
 	
-	if (grad.is_linear())
+	if (grad.is_linear() && legacy_linear)
+	{
+		float legacy_angle = 0;
+		const auto& first = list[0];
+		if (first.size() == 1 && parse_angle(first[0], legacy_angle))
+		{
+			legacy_angle = 90 - legacy_angle;
+			while (legacy_angle < 0) legacy_angle += 360;
+			while (legacy_angle >= 360) legacy_angle -= 360;
+			grad.angle = legacy_angle;
+			ok = true;
+		}
+		else if (first.size() == 1 && is_one_of(first[0].ident(), "left", "right", "top", "bottom"))
+		{
+			string side = first[0].ident();
+			grad.angle = side == "top" ? 180 : side == "bottom" ? 0 : side == "left" ? 90 : 270;
+			ok = true;
+		}
+		else
+		{
+			grad.angle = 180;
+			ok = false; // no direction: the first item is already a color stop
+		}
+	}
+	else if (grad.is_linear())
 		ok = parse_linear_gradient_direction_and_interpolation(list[0], grad);
 	else if (grad.is_radial())
 		ok = parse_radial_gradient_shape_size_position_interpolation(list[0], grad);
