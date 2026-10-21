@@ -1211,6 +1211,56 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                 else if (!l.is_predefined())
                     fixed2 += l.calc_percent(render_inline);
             }
+            // `auto` tracks only grow towards their max-content contribution while there is free space.
+            // When the tracks overflow a definite grid width, the auto tracks give back what they can:
+            // down to each track's minimum contribution, which is 0 for an item that is a scroll
+            // container (overflow other than visible) and its min-content size otherwise.
+            if (render_inline.value > 0 && fixed2 > render_inline)
+            {
+                std::vector<int> autos;
+                pixel_t auto_total = 0;
+                for (int i = 0; i < num_columns; i++)
+                    if (kinds[i] == 1) { autos.push_back(i); auto_total += m_grid_layout.column_widths[i]; }
+                if (!autos.empty())
+                {
+                    std::vector<pixel_t> minc(num_columns, 0);
+                    for (auto& item : m_grid_layout.items)
+                    {
+                        if (item.pos.col_end - item.pos.col_start != 1) continue;
+                        int c = item.pos.col_start;
+                        if (c >= num_columns || kinds[c] != 1) continue;
+                        if (item.el->src_el()->css().get_overflow() != overflow_visible) continue;
+                        containing_block_context cb = self_size;
+                        cb.size_mode |= containing_block_context::size_mode_min_content;
+                        pixel_t measured = item.el->measure(cb, fmt_ctx);
+                        pixel_t w = std::max((pixel_t)item.el->inline_size(), measured + item.el->content_offset_width());
+                        minc[c] = std::max(minc[c], std::min((pixel_t)std::ceil(w), m_grid_layout.column_widths[c]));
+                    }
+                    const pixel_t budget = render_inline - (fixed2 - auto_total);
+                    pixel_t min_total = 0;
+                    for (int i : autos) min_total += minc[i];
+                    // equal growth from the minimums, each track capped at its max-content size
+                    pixel_t lo = 0, hi = auto_total;
+                    if (budget > min_total)
+                    {
+                        for (int it = 0; it < 40; it++)
+                        {
+                            pixel_t t = (lo + hi) / 2, sum = 0;
+                            for (int i : autos) sum += std::min(m_grid_layout.column_widths[i], minc[i] + t);
+                            if (sum > budget) hi = t; else lo = t;
+                        }
+                    }
+                    else lo = 0;
+                    pixel_t new_total = 0;
+                    for (int i : autos)
+                    {
+                        m_grid_layout.column_widths[i] = std::min(m_grid_layout.column_widths[i], minc[i] + lo);
+                        new_total += m_grid_layout.column_widths[i];
+                    }
+                    fixed2 -= auto_total - new_total;
+                    content_total -= auto_total - new_total;
+                }
+            }
             pixel_t remaining = render_inline - fixed2;
             if (remaining < 0) remaining = 0;
             remaining = maximize_definite_minmax(remaining);

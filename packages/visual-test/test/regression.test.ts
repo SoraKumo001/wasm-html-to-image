@@ -3760,6 +3760,29 @@ describe("regression: layout and paint probes", () => {
     ]);
     expect(Math.abs(flexItem[0] - flexItem[1])).toBeLessThanOrEqual(1);
   });
+  it("grid: an auto column gives back width to its scroll-container items instead of overflowing", async () => {
+    // nodejs.org's code panel: a grid whose only column is `auto`, holding a flex tab row with
+    // overflow:auto. The column's minimum contribution is 0 (scroll container), so it stops at the
+    // grid's width instead of growing to the tabs' max-content width.
+    const tabs = `<div style="display:flex;overflow-x:auto;gap:8px">${["Create an HTTP Server", "Write Tests", "Read and Hash a File", "Streams Pipeline"]
+      .map((t) => `<button style="white-space:nowrap">${t}</button>`)
+      .join("")}</div>`;
+    const lastInk = async (html: string) => {
+      const { img, at } = await renderPng(html, 1000, 60);
+      for (let x = img.width - 1; x >= 0; x--)
+        for (let y = 0; y < img.height; y++) if (at(x, y)[0] < 140) return x;
+      return -1;
+    };
+    const grid = `<div style="display:grid;max-width:100%">${tabs}</div>`;
+    // fixed width, a block parent, and a flex row with non-stretch alignment (content-sized measure)
+    expect(await lastInk(`<div style="display:grid;width:300px">${tabs}</div>`)).toBeLessThan(301);
+    expect(await lastInk(`<div style="width:432px;margin-left:512px">${grid}</div>`)).toBeLessThan(945);
+    expect(
+      await lastInk(
+        `<div style="width:1000px"><main style="display:flex;gap:56px;align-items:flex-start"><section style="width:400px;flex:1 0;max-width:400px">left</section><section style="flex:1;min-width:0;max-width:672px"><div style="width:100%;max-width:100%">${grid}</div></section></main></div>`,
+      ),
+    ).toBeLessThan(1000);
+  });
   it("a column flex item with a specified width measures its height at that width", async () => {
     // `width:100%` on an svg: the item's flex base size used to be measured with the width reset to auto,
     // so the viewBox's own 100x50 size gave a 50px height instead of 400 * 50/100 = 200 (+ text).
