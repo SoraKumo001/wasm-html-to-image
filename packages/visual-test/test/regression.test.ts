@@ -3600,4 +3600,17 @@ describe("regression: layout and paint probes", () => {
     expect(await h("(color:rgb(from red r g b))")).toBeGreaterThanOrEqual(50);
     expect(await h("(not (margin-trim:inline))")).toBeGreaterThanOrEqual(50);
   });
+  it("a transparent or fully hidden box-shadow does not grow the page", async () => {
+    // Tailwind's `box-shadow: 0 0 #0000, ...` defaults added 10px of "shadow room" per element.
+    const h = async (shadow: string) =>
+      (await render({
+        value: `<!DOCTYPE html><html><body style="margin:0"><div style="height:30px;box-shadow:${shadow}"></div></body></html>`,
+        width: 100,
+        format: "png",
+      })).height;
+    const plain = await h("none");
+    expect(await h("0 0 #0000, inset 0 0 0 1px #888")).toBe(plain);
+    expect(await h("0 0 0 0 #f00")).toBe(plain);
+    expect(await h("0 4px 12px #f00")).toBeGreaterThan(plain); // a visible shadow still keeps its room
+  });
 });

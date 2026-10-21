@@ -902,7 +902,11 @@ void litehtml::render_item::calc_document_size(litehtml::size& sz, pixel_t x /*=
                 const auto& shadows = css().get_box_shadow();
                 if (!shadows.empty()) {
                     for (const auto& s : shadows) {
-                        if (!s.inset) {
+                        // A transparent shadow, or one entirely behind the box, paints nothing
+                        // outside it (Tailwind's `0 0 #0000` defaults) and must not grow the page.
+                        const bool paints_outside = s.color.alpha != 0 &&
+                            (s.x.val() != 0 || s.y.val() != 0 || s.blur.val() != 0 || s.spread.val() > 0);
+                        if (!s.inset && paints_outside) {
                             pixel_t offset_x = src_el()->get_document()->to_pixels(
                                 s.x, css().get_font_metrics(), 0);
                             pixel_t offset_y = src_el()->get_document()->to_pixels(
