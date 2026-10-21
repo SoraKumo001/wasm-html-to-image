@@ -3242,6 +3242,19 @@ describe("regression: layout and paint probes", () => {
     });
     expect(r.height).toBeLessThanOrEqual(110);
   });
+  it("a percentage flex-basis resolves against a definite width when a column flex item is measured", async () => {
+    // A stretched column flex item was measured as shrink-to-fit content and its row flex child
+    // turned `flex: 0 32%` into max-content: the boxes wrapped one per row and the wrapper took
+    // that height (vuejs.org's feature boxes left a ~180px gap).
+    const txt = "Truly reactive, compiler-optimized rendering system that rarely requires manual optimization.";
+    const box = `<div class="b"><p>${txt}</p></div>`;
+    const r = await render({
+      value: `<!DOCTYPE html><style>*{box-sizing:border-box}body{margin:0}.a{display:flex;flex-direction:column}.c{display:flex;flex-wrap:wrap}.b{flex:0 32%;padding:28px 36px}p{margin:0}</style><div class="a"><div><section class="c">${box.repeat(3)}</section></div></div>`,
+      width: 1000,
+      format: "png",
+    });
+    expect(r.height).toBeLessThan(170); // Chromium: 152 (one row), was 237
+  });
   it("a percentage flex-basis does not collapse an intrinsically sized flex container to min-content", async () => {
     // A flex item with a non-auto flex-basis had its available width zeroed even when it was
     // measured for its content size, so the wrapper reported its longest word as the width and a

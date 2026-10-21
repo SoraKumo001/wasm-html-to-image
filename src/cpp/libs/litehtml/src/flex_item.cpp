@@ -201,8 +201,14 @@ void litehtml::flex_item_row_direction::direction_specific_init(const litehtml::
 	// flex-basis as content for growable items or if basis is 0/percentage.
 	// CAUTION: Using flex_basis_content instead of flex_basis_max_content so it can wrap appropriately
 	// in normal flow.
+	// A percentage only falls back to content when the container's inline size is indefinite
+	// (an intrinsic-size query); measuring the height at a definite width resolves it normally,
+	// otherwise the items take their max-content width and wrap one per line.
 	if (!flex_basis_predefined && (self_size.size_mode & containing_block_context::size_mode_measure)) {
-		if (grow > 0 || el->css().get_flex_basis().units() == css_units_percentage || el->css().get_flex_basis().val() == 0) {
+		const bool indefinite = (self_size.size_mode & containing_block_context::size_mode_content) ||
+								parent_size <= 0;
+		if (grow > 0 || (el->css().get_flex_basis().units() == css_units_percentage && indefinite) ||
+			el->css().get_flex_basis().val() == 0) {
 			flex_basis_predefined = true;
 			predef = flex_basis_content;
 		}
@@ -429,6 +435,22 @@ void litehtml::flex_item_column_direction::direction_specific_init(const litehtm
     if(m_container_wm.inline_start(margins).is_predefined()) auto_margin_cross_start = true;
     if(m_container_wm.inline_end(margins).is_predefined()) auto_margin_cross_end = true;
 	
+	// A stretched item's block size is measured at its stretched cross size (the container's width),
+	// not as shrink-to-fit content: its percentage-based descendants need that definite width.
+	const bool stretch_cross = ((align & 0xFF) == flex_align_items_stretch || (align & 0xFF) == flex_align_items_normal) &&
+		!auto_margin_cross_start && !auto_margin_cross_end && !m_container_wm.is_vertical() &&
+		m_container_wm.get_inline_size(el->css()).is_predefined() &&
+		self_size.render_width.value > 0;
+	auto apply_stretch_width = [&](containing_block_context& cb)
+	{
+		if (!stretch_cross) return;
+		cb.width = self_size.render_width.value - el->content_offset_width() + el->box_sizing_width();
+		cb.width.type = containing_block_context::cbc_value_type_absolute;
+		cb.render_width = cb.width;
+		cb.size_mode |= containing_block_context::size_mode_exact_width;
+		cb.size_mode &= ~(containing_block_context::size_mode_content | containing_block_context::size_mode_min_content);
+	};
+
     // Manual branching for min/max
     const css_length& min_size_prop = m_container_wm.is_vertical() ? el->css().get_min_width() : el->css().get_min_height();
     const css_length& max_size_prop = m_container_wm.is_vertical() ? el->css().get_max_width() : el->css().get_max_height();
@@ -459,6 +481,7 @@ void litehtml::flex_item_column_direction::direction_specific_init(const litehtm
             measure_cb.height.type = containing_block_context::cbc_value_type_auto;
             measure_cb.size_mode &= ~(containing_block_context::size_mode_exact_width | containing_block_context::size_mode_exact_height);
             measure_cb.size_mode |= mode;
+            apply_stretch_width(measure_cb);
 
 			el->measure(measure_cb, fmt_ctx ? &fmt_ctx_copy : nullptr);
 			min_main_size = get_el_main_size();
@@ -543,6 +566,7 @@ void litehtml::flex_item_column_direction::direction_specific_init(const litehtm
 					measure_size.size_mode |= containing_block_context::size_mode_measure;
 					bool stretch = (align & 0xFF) == flex_align_items_stretch || (align & 0xFF) == flex_align_items_normal;
 					measure_size.size_mode |= containing_block_context::size_mode_content;
+					apply_stretch_width(measure_size);
 					formatting_context fmt_ctx_copy;
 					if(fmt_ctx) fmt_ctx_copy = *fmt_ctx;
 					el->measure(measure_size, fmt_ctx ? &fmt_ctx_copy : nullptr);
