@@ -18,6 +18,7 @@ const char* satoru_master_css =
     "pre { display: block; font-family: monospace; white-space: pre; margin-block-start: 1em; "
     "margin-block-end: 1em; }\n"
     "b, strong { font-weight: bold; }\n"
+    "code, kbd, samp, tt { font-family: monospace; }\n"
     "i, em { font-style: italic; }\n"
     "u { text-decoration: underline; }\n"
     "mark { background-color: yellow; color: black; }\n"

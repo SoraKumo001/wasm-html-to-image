@@ -93,6 +93,8 @@ namespace litehtml
     border_image m_border_image;
     uint_ptr m_font;
     css_length m_font_size;
+    // The size still comes from the font-size keyword scale (nothing in the chain set an absolute size).
+    bool m_font_size_keyword = true;
     string m_font_family;
     css_length m_font_weight;
     font_style m_font_style;
@@ -478,6 +480,7 @@ namespace litehtml
     void set_border_image(const border_image &val);
 
     pixel_t get_font_size() const;
+    bool font_size_is_keyword() const { return m_font_size_keyword; }
     void set_font_size(pixel_t mFontSize);
 
     uint_ptr get_font() const;

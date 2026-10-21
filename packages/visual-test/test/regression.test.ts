@@ -3463,4 +3463,29 @@ describe("regression: layout and paint probes", () => {
     });
     expect(r.height).toBe(20);
   });
+  it("default-sized monospace text is 13px like Chromium, unless a size was set explicitly", async () => {
+    // Chromium's fixed-font quirk: `font-family: monospace` alone at the default size is 13px.
+    // `<code>` also had no monospace rule at all. An ancestor's explicit px size opts out.
+    const inkWidth = async (body: string) => {
+      const { img } = await renderPng(body, 300, 40);
+      let lo = 1e9;
+      let hi = 0;
+      for (let y = 0; y < img.height; y++)
+        for (let x = 0; x < img.width; x++) {
+          const i = (y * img.width + x) * 4;
+          if (img.data[i] < 128) {
+            lo = Math.min(lo, x);
+            hi = Math.max(hi, x);
+          }
+        }
+      return hi - lo;
+    };
+    const text = "mmmmmmmmmm";
+    const plain = await inkWidth(`<code>${text}</code>`);
+    const pre = await inkWidth(`<pre style="margin:0">${text}</pre>`);
+    const sized = await inkWidth(`<div style="font-size:16px"><pre style="margin:0">${text}</pre></div>`);
+    expect(Math.abs(plain - pre)).toBeLessThanOrEqual(1); // <code> is monospace as well
+    expect(sized / plain).toBeGreaterThan(1.15); // 16px vs 13px
+    expect(sized / plain).toBeLessThan(1.3);
+  });
 });

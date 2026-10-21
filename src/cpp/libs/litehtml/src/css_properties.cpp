@@ -1164,6 +1164,27 @@ void litehtml::css_properties::compute_font(const element* el, const document::p
     // initialize font
     m_font_family = el->get_property<string>(
         _font_family_, true, doc->container()->get_default_font_name(), offset(m_font_family));
+    // Chromium quirk: a default-sized (medium) element whose font-family is exactly `monospace`
+    // is 13px, not 16px; `monospace, monospace` or any other size opts out. Only a size that
+    // still comes from the keyword scale qualifies: an ancestor's `font-size:16px` does not.
+    const property_value& own_size = el->get_property_value(_font_size_);
+    const bool declared_size = own_size.is<css_length>();
+    if (declared_size) {
+        m_font_size_keyword = sz.is_predefined();
+    } else {
+        m_font_size_keyword = el_parent ? el_parent->css().font_size_is_keyword() : true;
+    }
+    const bool size_is_default = declared_size ? (sz.is_predefined() && sz.predef() == font_size_medium)
+                                               : m_font_size_keyword;
+    if (size_is_default && parent_sz == doc_font_size) {
+        string fam = m_font_family;
+        trim(fam);
+        lcase(fam);
+        if (fam == "monospace") {
+            font_size = doc_font_size * 13 / 16;
+            m_font_size = (float)font_size;
+        }
+    }
     m_font_weight = el->get_property<css_length>(
         _font_weight_, true, css_length::predef_value(font_weight_normal), offset(m_font_weight));
     m_font_style = (font_style)el->get_property<int>(_font_style_, true, font_style_normal,
