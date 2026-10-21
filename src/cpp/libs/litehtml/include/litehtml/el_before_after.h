@@ -11,7 +11,10 @@ namespace litehtml
 		el_before_after_base(const std::shared_ptr<document>& doc, bool before);
 
 		void add_style(const style& style, selector_specificity specificity = selector_specificity()) override;
+		void rebuild_counters() override;
 	private:
+		string	m_content;
+		void	build_content();
 		void	add_text(const string& txt);
 		void	add_function(const string& fnc, const string& params);
 		static string convert_escape(const char* txt);

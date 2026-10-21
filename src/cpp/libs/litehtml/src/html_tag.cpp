@@ -2374,24 +2374,29 @@ void litehtml::html_tag::apply_first_letter()
 }
 
 
-void litehtml::html_tag::handle_counter_properties()
+static int s_refresh_depth = 0;
+
+void litehtml::html_tag::handle_counter_properties(const style& style)
 {
-        const auto& reset_property = m_style.get_property(_counter_reset_);
+        // Counters are rebuilt in document order once a refresh is over (rebuild_counters()); the
+        // refresh itself visits children before parents, which would apply increments before resets.
+        if (s_refresh_depth > 0) return;
+        // Only the declarations this rule contributes: handling the cascaded m_style on every
+        // add_style() applied counter-increment once per matching rule (line numbers counted 8x).
+        const auto& reset_property = style.get_property(_counter_reset_);
         if (reset_property.is<string_vector>()) {
                 auto reset_function = [&](const string_id&name_id, const int value) {
                         reset_counter(name_id, value);
                 };
-                parse_counter_tokens(reset_property.get<string_vector>(), 0, reset_function);        
-                return;
+                parse_counter_tokens(reset_property.get<string_vector>(), 0, reset_function);
         }
 
-        const auto& inc_property = m_style.get_property(_counter_increment_);
+        const auto& inc_property = style.get_property(_counter_increment_);
         if (inc_property.is<string_vector>()) {
                 auto inc_function = [&](const string_id&name_id, const int value) {
                         increment_counter(name_id, value);
                 };
                 parse_counter_tokens(inc_property.get<string_vector>(), 1, inc_function);
-                return;
         }
 }
 
@@ -2399,7 +2404,7 @@ void litehtml::html_tag::handle_counter_properties()
 void litehtml::html_tag::add_style(const style& style, selector_specificity specificity)
 {
         m_style.combine(style, specificity);
-        handle_counter_properties();
+        handle_counter_properties(style);
 }
 
 void litehtml::html_tag::reset_style()
@@ -2413,6 +2418,24 @@ const litehtml::property_value& litehtml::html_tag::get_property_value(string_id
 }
 
 void litehtml::html_tag::refresh_styles()
+{
+        s_refresh_depth++;
+        refresh_styles_impl();
+        s_refresh_depth--;
+        if (s_refresh_depth == 0) rebuild_counters();
+}
+
+void litehtml::html_tag::rebuild_counters()
+{
+        m_counter_values.clear();
+        handle_counter_properties(m_style);
+        for (auto& el : m_children)
+        {
+                el->rebuild_counters();
+        }
+}
+
+void litehtml::html_tag::refresh_styles_impl()
 {
         for (auto& el : m_children)
         {

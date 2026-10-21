@@ -3416,4 +3416,21 @@ describe("regression: layout and paint probes", () => {
     await renderPng(html, 600, 300);
     expect(Date.now() - t).toBeLessThan(1800);
   });
+  it("a counter() reads once per element, even when styles are refreshed for a second layout pass", async () => {
+    // nodejs.org numbers its code lines with `.line:after{counter-increment:line;content:counter(line)}`.
+    // The increment ran once per matching rule and again on the second (table / container query)
+    // style refresh, so the first line read 15 instead of 1.
+    const lines = Array.from({ length: 9 }, () => `<div class="l"></div>`).join("");
+    const { at } = await renderPng(
+      `<style>.c{counter-reset:n;font:12px monospace}.l{height:14px;color:#000}
+       .l:after{counter-increment:n;content:counter(n)}.l:after{color:#000}</style>
+       <table><tr><td></td></tr></table><div class="c">${lines}</div>`,
+      120,
+      160,
+    );
+    // The ninth line is a single digit: nothing is drawn right of x=9 on its row.
+    let ink = 0;
+    for (let y = 0; y < 160; y++) for (let x = 12; x < 40; x++) if (!isWhite(at(x, y))) ink++;
+    expect(ink).toBe(0);
+  });
 });

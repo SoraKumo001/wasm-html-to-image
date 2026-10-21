@@ -51,6 +51,8 @@ namespace litehtml
 		const char*			get_attr(const char* name, const char* def = nullptr) const override;
 		void				apply_stylesheet(const litehtml::css& stylesheet) override;
 		void				refresh_styles() override;
+		void				rebuild_counters() override;
+		void				refresh_styles_impl();
 		void				reset_style() override;
 
 		bool				is_white_space() const override;
@@ -127,8 +129,9 @@ namespace litehtml
 		void map_to_dimension_property(string_id prop_name, string attr_value);
 		void map_to_dimension_property_ignoring_zero(string_id prop_name, string attr_value);
 
+	protected:
+		void				handle_counter_properties(const style& style);
 	private:
-		void				handle_counter_properties();
 		style				m_first_letter_style;
 		bool				m_has_first_letter_style = false;
 		bool				m_first_letter_applied = false;

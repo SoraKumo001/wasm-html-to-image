@@ -19,8 +19,25 @@ void litehtml::el_before_after_base::add_style(const style& style, selector_spec
 	const auto& content_property = style.get_property(_content_);
 	if(content_property.is<string>() && !content_property.get<string>().empty())
 	{
+		m_content = content_property.get<string>();
+		build_content();
+	}
+}
+
+void litehtml::el_before_after_base::rebuild_counters()
+{
+	html_tag::rebuild_counters();
+	if(!m_content.empty())
+	{
+		build_content();
+	}
+}
+
+void litehtml::el_before_after_base::build_content()
+{
+	{
 		m_children.clear();
-		const string& str = content_property.get<string>();
+		const string str = m_content;
 		int idx = value_index(str, content_property_string);
 		if(idx < 0)
 		{
