@@ -3433,4 +3433,13 @@ describe("regression: layout and paint probes", () => {
     for (let y = 0; y < 160; y++) for (let x = 12; x < 40; x++) if (!isWhite(at(x, y))) ink++;
     expect(ink).toBe(0);
   });
+  it("white-space-only text between grid items makes no grid row, even with white-space:pre", async () => {
+    // Shiki code blocks: `code{display:grid}` holding `<span class=line>` elements separated by
+    // newline text. Under `pre` that text was an anonymous grid item that doubled every row.
+    const grid = (sep: string) =>
+      `<body style="margin:0"><div style="display:grid;white-space:pre;font:10px/10px sans-serif"><div>a</div>${sep}<div>b</div>${sep}<div>c</div></div></body>`;
+    const withText = await render({ value: grid("\n"), width: 100, format: "png" });
+    const without = await render({ value: grid(""), width: 100, format: "png" });
+    expect(withText.height).toBe(without.height);
+  });
 });

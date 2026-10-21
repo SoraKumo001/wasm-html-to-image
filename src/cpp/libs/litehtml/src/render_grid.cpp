@@ -114,7 +114,12 @@ std::shared_ptr<render_item> render_item_grid::init()
     {
         if (el->src_el()->css().get_display() == display_inline_text || el->src_el()->is_text())
         {
-            if (!el->src_el()->is_white_space())
+            // A run of only white space generates no grid item, whatever white-space says
+            // (code blocks keep a newline between their line spans).
+            string run;
+            el->src_el()->get_text(run);
+            const bool blank = !run.empty() && run.find_first_not_of(" \t\r\n\f") == string::npos;
+            if (!el->src_el()->is_white_space() && !blank)
             {
                 current_inlines.push_back(el);
             }
