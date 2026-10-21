@@ -3728,6 +3728,38 @@ describe("regression: layout and paint probes", () => {
     expect(await h("display:flex;flex-direction:column")).toBe(98);
     expect(await h("display:grid")).toBe(98);
   });
+  it("grid: align-items/self baseline aligns the first baselines of a row's items", async () => {
+    // "HHH" has no descender, so the lowest ink row of each column is its baseline.
+    const bottoms = async (style: string, items: string[]) => {
+      const { img, at } = await renderPng(
+        `<div style="display:grid;grid-template-columns:repeat(${items.length},100px);font-family:sans-serif;${style}">${items
+          .map((s) => `<div style="${s}">HHH</div>`)
+          .join("")}</div>`,
+        100 * items.length,
+        120,
+      );
+      return items.map((_, c) => {
+        let last = -1;
+        for (let y = 0; y < img.height; y++)
+          for (let x = c * 100; x < c * 100 + 100; x++) if (!isWhite(at(x, y))) { last = y; break; }
+        return last;
+      });
+    };
+    const sizes = ["font-size:14px", "font-size:36px", "font-size:22px;padding-top:12px"];
+    const plain = await bottoms("align-items:start", sizes);
+    expect(Math.max(...plain) - Math.min(...plain)).toBeGreaterThan(10);
+    const base = await bottoms("align-items:baseline", sizes);
+    expect(Math.max(...base) - Math.min(...base)).toBeLessThanOrEqual(1);
+    // align-self on a single item; the others keep the default stretch (top) position
+    const self = await bottoms("", ["font-size:14px;align-self:baseline", "font-size:36px;align-self:baseline", "font-size:22px"]);
+    expect(Math.abs(self[0] - self[1])).toBeLessThanOrEqual(1);
+    // a baseline item that is a flex container uses its first item's baseline, wherever that sits
+    const flexItem = await bottoms("align-items:baseline", [
+      "font-size:14px",
+      "font-size:36px;display:flex;align-items:center;height:80px",
+    ]);
+    expect(Math.abs(flexItem[0] - flexItem[1])).toBeLessThanOrEqual(1);
+  });
   it("a column flex item with a specified width measures its height at that width", async () => {
     // `width:100%` on an svg: the item's flex base size used to be measured with the width reset to auto,
     // so the viewBox's own 100x50 size gave a 50px height instead of 400 * 50/100 = 200 (+ text).

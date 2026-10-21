@@ -1541,8 +1541,14 @@ void litehtml::render_item_grid::place_grid_items(pixel_t x, pixel_t y, const co
     // physical width of the grid container in vertical writing (the block extent rows stack in)
     const pixel_t block_extent = (self_size.render_width.type != containing_block_context::cbc_value_type_auto) ? (pixel_t)self_size.render_width : m_grid_layout.total_grid_height;
 
-    for (auto& item : m_grid_layout.items)
+    // `align-items/self: baseline`: the items of a row that opt in share one baseline, so the first
+    // pass only measures them to find each row's largest ascent; the second pass places everything.
+    std::vector<pixel_t> item_baseline(m_grid_layout.items.size(), 0);
+    std::map<int, pixel_t> row_baseline;
+    for (int pass = 0; pass < 2; pass++)
+    for (size_t item_idx = 0; item_idx < m_grid_layout.items.size(); item_idx++)
     {
+        auto& item = m_grid_layout.items[item_idx];
         pixel_t item_rel_x = m_grid_layout.col_offsets[item.pos.col_start];
         pixel_t item_rel_y = m_grid_layout.row_offsets[item.pos.row_start];
         
@@ -1630,16 +1636,30 @@ void litehtml::render_item_grid::place_grid_items(pixel_t x, pixel_t y, const co
                 cb.height = cell_h;
             }
         }
+        const bool baseline_aligned = !vert && (aln & 0xFF) == flex_align_items_baseline;
+        if (pass == 0 && !baseline_aligned) continue;
         item.el->measure(cb, fmt_ctx);
+        if (pass == 0)
+        {
+            item.el->place(x + place_x, y + place_y, cb, fmt_ctx);
+            item_baseline[item_idx] = item.el->get_first_baseline();
+            auto it = row_baseline.find(item.pos.row_start);
+            if (it == row_baseline.end() || it->second < item_baseline[item_idx]) row_baseline[item.pos.row_start] = item_baseline[item_idx];
+            continue;
+        }
         if (!vert)
         {
+            if (baseline_aligned)
+            {
+                shift_y = row_baseline[item.pos.row_start] - item_baseline[item_idx];
+            }
             if (!j_stretch)
             {
                 const pixel_t free_w = cell_w - item.el->width();
                 if (jst == flex_justify_content_center) shift_x = free_w / 2;
                 else if (jst == flex_justify_content_end || jst == flex_justify_content_flex_end || jst == flex_justify_content_right) shift_x = free_w;
             }
-            if (!a_stretch)
+            if (!a_stretch && !baseline_aligned)
             {
                 const pixel_t free_h = cell_h - item.el->height();
                 const int a8 = aln & 0xFF;
