@@ -30,7 +30,12 @@ litehtml::pixel_t litehtml::render_item_block::place_float(const std::shared_ptr
 	bool skip_ledger = (self_size.size_mode & containing_block_context::size_mode_measure) &&
 					   self_size.mode == writing_mode_horizontal_tb;
 
-	if(min_rendered_inline_size < el->inline_size() && el->src_el()->css().get_width().is_predefined())
+	// A width:auto float that shrank to fit its content is laid out at that width. Every later
+	// placement must hand it the same inline size: passing the container's width instead makes it
+	// lay its children out again at the wide size, so a descendant positioned from the right edge
+	// (an inner float:right, text-align:right) ends up outside the narrow box.
+	const bool shrunk_to_fit = min_rendered_inline_size < el->inline_size() && el->src_el()->css().get_width().is_predefined();
+	if(shrunk_to_fit)
 	{
 		min_rendered_inline_size = el->measure(self_size.new_inline_size(min_rendered_inline_size, self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content)), fmt_ctx);
 		if (!(self_size.size_mode & containing_block_context::size_mode_measure))
@@ -46,7 +51,7 @@ litehtml::pixel_t litehtml::render_item_block::place_float(const std::shared_ptr
 			line_block_start = fmt_ctx->find_next_line_top(el->block_start_pos(), el->inline_size(), self_size.render_inline_size());
 			if (!(self_size.size_mode & containing_block_context::size_mode_measure))
 			{
-				el->place_logical(fmt_ctx->get_line_left(line_block_start), line_block_start, self_size.new_inline_size(line_inline_end, self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content)), fmt_ctx);
+				el->place_logical(fmt_ctx->get_line_left(line_block_start), line_block_start, self_size.new_inline_size(shrunk_to_fit ? min_rendered_inline_size : line_inline_end, self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content)), fmt_ctx);
 			}
         }
 		if(skip_ledger)
@@ -66,13 +71,13 @@ litehtml::pixel_t litehtml::render_item_block::place_float(const std::shared_ptr
             pixel_t new_block_start = fmt_ctx->find_next_line_top(el->block_start_pos(), el->inline_size(), self_size.render_inline_size());
 			if (!(self_size.size_mode & containing_block_context::size_mode_measure))
 			{
-				el->place_logical(fmt_ctx->get_line_right(new_block_start, self_size.render_inline_size()) - el->inline_size(), new_block_start, self_size.new_inline_size(self_size.render_inline_size(), self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content)), fmt_ctx);
+				el->place_logical(fmt_ctx->get_line_right(new_block_start, self_size.render_inline_size()) - el->inline_size(), new_block_start, self_size.new_inline_size(shrunk_to_fit ? min_rendered_inline_size : self_size.render_inline_size(), self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content)), fmt_ctx);
 			}
         } else
         {
 			if (!(self_size.size_mode & containing_block_context::size_mode_measure))
 			{
-				el->place_logical(line_inline_end - el->inline_size(), line_block_start, self_size.new_inline_size(self_size.render_inline_size(), self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content)), fmt_ctx);
+				el->place_logical(line_inline_end - el->inline_size(), line_block_start, self_size.new_inline_size(shrunk_to_fit ? min_rendered_inline_size : self_size.render_inline_size(), self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content)), fmt_ctx);
 			}
         }
 		if(skip_ledger)

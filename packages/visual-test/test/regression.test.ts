@@ -3117,4 +3117,17 @@ describe("regression: layout and paint probes", () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   });
+  it("a shrink-to-fit float keeps its inner float:right inside the narrow box", async () => {
+    // python.org's .options-bar-container (float:right) holds a float:right bar. The outer box
+    // shrinks to its content, but its children were left where the full-width pass put them
+    // (at the container's far right edge), so the bar painted outside and vanished.
+    const { at } = await renderPng(
+      `<div style="width:300px"><div style="float:right"><div style="float:right;width:100px;height:10px;background:#00f"></div></div></div>`,
+      300,
+      20,
+    );
+    expect(near(at(250, 5), BLUE)).toBe(true); // x=200..299
+    expect(isWhite(at(150, 5))).toBe(true);
+  });
+
 });
