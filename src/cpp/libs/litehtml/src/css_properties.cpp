@@ -1673,11 +1673,16 @@ T litehtml::css_properties::get_logical_property(const element* el, string_id lo
         if (!best || v_logical.m_priority >= best->m_priority) best = &v_logical;
     }
 
-    if (best->is<inherit>()) {
+    if (best->is<inherit>() || (best->is<unset>() && inherited)) {
         if (auto p = el->parent())
             return *(const T*)((litehtml::byte*)&p->css() + member_offset);
         else
             return default_value;
+    }
+
+    // CSS-wide keywords `initial` / non-inherited `unset` mean "use the initial value".
+    if (best->is<initial>() || best->is<unset>()) {
+        return default_value;
     }
 
     // Guard: if the value is an unresolved css_token_vector (e.g. from var()),

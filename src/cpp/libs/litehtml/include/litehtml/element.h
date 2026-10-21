@@ -151,7 +151,17 @@ namespace litehtml
 			{
 				return value.get<Type>();
 			}
-			else if (inherited || value.is<inherit>())
+			// CSS-wide keywords: `initial` and non-inherited `unset` resolve to the
+			// property's initial value; `unset` on an inherited property inherits.
+			if (value.is<initial>())
+			{
+				return default_value;
+			}
+			if (value.is<unset>() && !inherited)
+			{
+				return default_value;
+			}
+			if (inherited || value.is<inherit>() || value.is<unset>())
 			{
 				if (auto _parent = parent())
 				{

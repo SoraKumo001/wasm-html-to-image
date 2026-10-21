@@ -1475,6 +1475,30 @@ describe("regression: layout and paint probes", () => {
     expect(near(same.at(50, 20), RED)).toBe(true);
     expect(near(same.at(150, 20), BLUE)).toBe(true);
   });
+  it("aspect-ratio:unset / initial cancel an earlier aspect-ratio", async () => {
+    // GitHub resets `aspect-ratio:1` with a doubled-class rule
+    // (`.lp-SectionHero-content.lp-SectionHero-content{aspect-ratio:unset}`). Before the
+    // fix the keyword was dropped, the ratio survived and the 1000px-wide hero became
+    // 1000px tall instead of sizing from its content.
+    const doc = (kw: string) =>
+      `<style>.box{width:200px;aspect-ratio:1;background:#f00}.box.box{aspect-ratio:${kw}}.box>div{height:30px;background:#00f}</style>` +
+      `<div class="box"><div></div></div><div style="height:10px;background:#0f0"></div>`;
+    const height = async (kw: string) =>
+      (await render({ value: `<html><body style="margin:0">${doc(kw)}</body></html>`, width: 300, format: "png" })).height;
+    // Chromium: content 30px + marker 10px. Without the reset the box keeps 1:1 (200px).
+    expect(await height("unset")).toBe(40);
+    expect(await height("initial")).toBe(40);
+    expect(await height("auto")).toBe(40);
+    // `unset` inherits on inherited properties, `initial` does not.
+    const inherited = await renderPng(
+      `<style>.p{color:#f00}.u{color:unset;border:10px solid;width:40px;height:20px;background:#00f}.i{color:initial;border:10px solid;width:40px;height:20px;background:#00f}</style>` +
+        `<div class="p"><div class="u"></div><div class="i"></div></div>`,
+      300,
+      100,
+    );
+    expect(near(inherited.at(5, 5), RED)).toBe(true); // color:unset -> inherited red border
+    expect(near(inherited.at(20, 45), RED)).toBe(false); // color:initial -> initial colour, not the parent's
+  });
   it("display:contents generates no box: its children take part in the parent's layout", async () => {
     const h = async (b: string) => (await render({ value: `<html><body style="margin:0">${b}</body></html>`, width: 400, format: "png" })).height;
     expect(

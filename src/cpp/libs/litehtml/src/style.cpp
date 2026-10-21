@@ -447,6 +447,33 @@ namespace litehtml
       add_parsed_property(name, property_value(inherit(), important, false, m_layer, m_specificity));
   }
 
+  // `initial` / `unset` are stored as their own value types (expanding shorthands like
+  // `inherit` does); the inherited-vs-initial decision for `unset` happens in
+  // element::get_property, where the property's inherited flag is known.
+  void style::initial_property(string_id name, bool important)
+  {
+    auto atomic_properties = at(shorthands, name);
+    if (!atomic_properties.empty())
+    {
+      for (auto atomic : atomic_properties)
+        add_parsed_property(atomic, property_value(initial(), important, false, m_layer, m_specificity));
+    }
+    else
+      add_parsed_property(name, property_value(initial(), important, false, m_layer, m_specificity));
+  }
+
+  void style::unset_property(string_id name, bool important)
+  {
+    auto atomic_properties = at(shorthands, name);
+    if (!atomic_properties.empty())
+    {
+      for (auto atomic : atomic_properties)
+        add_parsed_property(atomic, property_value(unset(), important, false, m_layer, m_specificity));
+    }
+    else
+      add_parsed_property(name, property_value(unset(), important, false, m_layer, m_specificity));
+  }
+
   void style::add_length_property(string_id name, css_token val, string keywords, int options, bool important)
   {
     css_length length;
@@ -473,6 +500,15 @@ namespace litehtml
 
     if (ident == "inherit")
       return inherit_property(name, important);
+
+    // CSS-wide keywords. `initial` resets to the property's initial value; `unset`
+    // behaves as `inherit` for inherited properties and as `initial` otherwise. The
+    // value type carries the keyword so the inherited/non-inherited decision is made
+    // where the property's inherited flag is known (element::get_property).
+    if (ident == "initial")
+      return initial_property(name, important);
+    if (ident == "unset")
+      return unset_property(name, important);
 
     int idx[4];
     web_color clr[4];

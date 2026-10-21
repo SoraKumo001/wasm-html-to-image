@@ -13,6 +13,8 @@ namespace litehtml
 {
         struct invalid {}; // indicates "not found" condition in style::get_property
         struct inherit {}; // "inherit" was specified as the value of this property
+        struct initial {}; // "initial" was specified: use the property's initial value
+        struct unset {};   // "unset" was specified: initial, or inherit for inherited properties
 
         struct css_priority {
             bool important;
@@ -41,6 +43,8 @@ namespace litehtml
         struct property_value : variant<
                 invalid,
                 inherit,
+                initial,
+                unset,
                 int,
                 int_vector,
                 css_length,
@@ -107,6 +111,8 @@ namespace litehtml
 
         private:
                 void inherit_property(string_id name, bool important);
+                void initial_property(string_id name, bool important);
+                void unset_property(string_id name, bool important);
 
                 void parse_background(const css_token_vector& tokens, const string& baseurl, bool important, document_container* container);
                 bool parse_bg_layer(const css_token_vector& tokens, document_container* container, background& bg, bool final_layer);
