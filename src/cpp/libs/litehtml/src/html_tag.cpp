@@ -336,12 +336,21 @@ litehtml::element::ptr litehtml::html_tag::select_one( const css_selector& selec
 
 void litehtml::html_tag::apply_stylesheet( const litehtml::css& stylesheet )
 {
+	// Rules of equal layer and specificity must apply in source order whichever bucket (id, class,
+	// tag, universal) they come from, so collect the candidates first and sort them.
+	std::vector<const css_selector::ptr*> candidates;
 	auto apply_selectors = [&](const css_selector::vector* selectors)
 	{
 		if (!selectors) return;
-
-		for(const auto& sel : *selectors)
+		for(const auto& sel : *selectors) candidates.push_back(&sel);
+	};
+	auto apply_candidates = [&]()
+	{
+		std::stable_sort(candidates.begin(), candidates.end(),
+			[](const css_selector::ptr* a, const css_selector::ptr* b) { return **a < **b; });
+		for(const css_selector::ptr* sel_ptr : candidates)
 		{
+			const auto& sel = *sel_ptr;
 			int apply = select(*sel, false);
 
 			if(apply != select_no_match)
@@ -449,6 +458,7 @@ void litehtml::html_tag::apply_stylesheet( const litehtml::css& stylesheet )
 	}
 
 	apply_selectors(&stylesheet.universal_selectors());
+	apply_candidates();
 
 	for(auto& el : m_children)
 	{

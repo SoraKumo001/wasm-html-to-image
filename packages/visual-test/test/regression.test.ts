@@ -3538,4 +3538,17 @@ describe("regression: layout and paint probes", () => {
     expect(Math.abs(block.height - 75.6)).toBeLessThan(1); // 84 * 18.9 / 21
     expect(Math.abs(flex.height - 75.6)).toBeLessThan(1);
   });
+  it("equal-specificity rules apply in source order, not in the order of the element's classes", async () => {
+    // react.dev: `.flex{display:flex}` ... `.uwu-visible{display:none}` on class="uwu-visible flex":
+    // the class buckets were applied in attribute order, so `.flex` (listed second) won.
+    const { at } = await renderPng(
+      `<style>.flex{display:flex}.hide{display:none}.a{color:#f00}.b{color:#00f}</style>
+       <div class="hide flex" style="height:20px;background:#f00"></div>
+       <div class="b a" style="height:20px;background:currentColor"></div>`,
+      60,
+      40,
+    );
+    expect(near(at(30, 5), [0, 0, 255])).toBe(true); // .b is later than .a: blue, although `a` is listed last
+    expect(isWhite(at(30, 25))).toBe(true); // the .hide.flex box is display:none, so nothing else is drawn
+  });
 });
