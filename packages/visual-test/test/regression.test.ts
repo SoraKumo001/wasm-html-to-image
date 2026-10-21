@@ -3513,4 +3513,17 @@ describe("regression: layout and paint probes", () => {
     expect(near(at(10 + 5 + 16 + 5 - 3, 20), RED)).toBe(true);
     expect(isWhite(at(10 + 5 + 16 + 5 + 6, 20))).toBe(true); // right margin (box ends at ~36px)
   });
+  it("grid items honor justify-items / align-items / justify-self / align-self", async () => {
+    const { at } = await renderPng(
+      `<div style="display:grid;grid-template-columns:100px;justify-items:center"><div style="height:10px;width:40px;background:#f00"></div></div>
+       <div style="display:grid;grid-template-columns:100px;height:50px"><div style="height:10px;width:40px;background:#f00;align-self:end;justify-self:end"></div></div>`,
+      200,
+      70,
+    );
+    expect(near(at(35, 5), RED)).toBe(true); // centered in the 100px column: 30..70
+    expect(isWhite(at(25, 5))).toBe(true);
+    expect(isWhite(at(75, 5))).toBe(true);
+    expect(near(at(80, 55), RED)).toBe(true); // end/end of the 100x50 area: x 60..100, y 50..60
+    expect(isWhite(at(50, 55))).toBe(true);
+  });
 });

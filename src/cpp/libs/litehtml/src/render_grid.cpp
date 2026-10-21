@@ -1555,8 +1555,50 @@ void litehtml::render_item_grid::place_grid_items(pixel_t x, pixel_t y, const co
             place_x = css().get_writing_mode() == writing_mode_vertical_rl ? block_extent - item_rel_y - cell_w : item_rel_y;
         }
 
+        // justify-/align-self (falling back to the container's justify-/align-items): anything
+        // but stretch/normal sizes the item to its content and positions it in its grid area.
+        pixel_t shift_x = 0;
+        pixel_t shift_y = 0;
+        flex_justify_content jst = item.el->src_el()->css().get_justify_self();
+        if (jst == flex_justify_content_auto) jst = css().get_justify_items();
+        flex_align_items aln = item.el->src_el()->css().get_align_self();
+        if (aln == flex_align_items_auto) aln = css().get_flex_align_items();
+        const bool j_stretch = jst == flex_justify_content_auto || jst == flex_justify_content_normal || jst == flex_justify_content_stretch;
+        const bool a_stretch = (aln & 0xFF) == flex_align_items_auto || (aln & 0xFF) == flex_align_items_normal || (aln & 0xFF) == flex_align_items_stretch;
+        if (!vert)
+        {
+            if (!j_stretch && item.el->src_el()->css().get_width().is_predefined())
+            {
+                cb.size_mode &= ~containing_block_context::size_mode_exact_width;
+                cb.size_mode |= containing_block_context::size_mode_content;
+                cb.render_width = cell_w;
+                cb.width = cell_w;
+            }
+            if (!a_stretch && item.el->src_el()->css().get_height().is_predefined())
+            {
+                cb.size_mode &= ~containing_block_context::size_mode_exact_height;
+                cb.render_height = cell_h;
+                cb.height = cell_h;
+            }
+        }
         item.el->measure(cb, fmt_ctx);
-        item.el->place(x + place_x, y + place_y, cb, fmt_ctx);
+        if (!vert)
+        {
+            if (!j_stretch)
+            {
+                const pixel_t free_w = cell_w - item.el->width();
+                if (jst == flex_justify_content_center) shift_x = free_w / 2;
+                else if (jst == flex_justify_content_end || jst == flex_justify_content_flex_end || jst == flex_justify_content_right) shift_x = free_w;
+            }
+            if (!a_stretch)
+            {
+                const pixel_t free_h = cell_h - item.el->height();
+                const int a8 = aln & 0xFF;
+                if (a8 == flex_align_items_center) shift_y = free_h / 2;
+                else if (a8 == flex_align_items_end || a8 == flex_align_items_flex_end || a8 == flex_align_items_self_end) shift_y = free_h;
+            }
+        }
+        item.el->place(x + place_x + shift_x, y + place_y + shift_y, cb, fmt_ctx);
     }
 }
 

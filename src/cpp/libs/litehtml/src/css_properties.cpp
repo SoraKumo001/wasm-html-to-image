@@ -1673,6 +1673,8 @@ void litehtml::css_properties::compute_grid(const element* el, const document::p
         _align_self_, false, flex_align_items_auto, offset(m_align_self));
     m_justify_self = (flex_justify_content)el->get_property<int>(
         _justify_self_, false, flex_justify_content_auto, offset(m_justify_self));
+    m_justify_items = (flex_justify_content)el->get_property<int>(
+        _justify_items_, false, flex_justify_content_normal, offset(m_justify_items));
 }
 
 // https://www.w3.org/TR/css-values-4/#snap-a-length-as-a-border-width

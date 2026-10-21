@@ -147,6 +147,7 @@ namespace litehtml
     flex_align_content m_flex_align_content;
 
     flex_justify_content m_justify_self;
+    flex_justify_content m_justify_items;
     flex_align_items m_align_self;
 
     length_vector m_grid_template_columns;
@@ -290,6 +291,7 @@ namespace litehtml
                        m_flex_align_self(flex_align_items_auto),
                        m_flex_align_content(flex_align_content_stretch),
                        m_justify_self(flex_justify_content_auto),
+                       m_justify_items(flex_justify_content_normal),
                        m_align_self(flex_align_items_auto),
                        m_grid_column_start(),
                        m_grid_column_end(),
@@ -545,6 +547,7 @@ namespace litehtml
     flex_align_content get_flex_align_content() const;
 
     flex_justify_content get_justify_self() const;
+    flex_justify_content get_justify_items() const { return m_justify_items; }
     flex_align_items get_align_self() const;
 
     const length_vector &get_grid_template_columns() const;
