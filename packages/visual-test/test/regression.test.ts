@@ -2141,6 +2141,33 @@ describe("regression: layout and paint probes", () => {
     );
   });
 
+  it("overflow-wrap: break-word moves a word that fits a line instead of splitting it", async () => {
+    // "happens" fits a whole line, so it must move there as a unit. The engine
+    // split every word into characters and then filled the line to its pixel
+    // edge, cutting the word ("... building hap" / "pens together").
+    const doc = (wrap: string) =>
+      `<div style="width:400px;font-family:'RobotoProbe',sans-serif;font-size:32px;line-height:40px;color:#000;${wrap}">The future of building <span style="color:#f00">happens</span> together</div>`;
+    const redInRows = (img: PNG, from: number, to: number) => {
+      let count = 0;
+      for (let y = from; y < to; y++)
+        for (let x = 0; x < img.width; x++) if (isRedPixel(img, x, y)) count++;
+      return count;
+    };
+    // Split the two lines anywhere between them; the probe font may or may not be
+    // available, so the exact line box height is not part of the assertion.
+    const split = (img: PNG) => Math.floor(img.height / 2);
+
+    const broken = await renderProbeText(doc("overflow-wrap:break-word"), 400);
+    expect(broken.height).toBeGreaterThan(60); // two lines, not one
+    expect(broken.height).toBeLessThan(100); // not three
+    expect(redInRows(broken, 0, split(broken))).toBe(0); // no part of "happens" on line 1
+    expect(redInRows(broken, split(broken), broken.height)).toBeGreaterThan(0);
+
+    // anywhere still breaks inside the word to fill the line.
+    const anywhere = await renderProbeText(doc("overflow-wrap:anywhere"), 400);
+    expect(redInRows(anywhere, 0, split(anywhere))).toBeGreaterThan(0);
+  });
+
   it("grid-auto-rows sizes implicit rows", async () => {
     const r = await render({
       value: `<html><body style="margin:0"><div style="display:grid;grid-template-columns:40px;grid-template-rows:10px;grid-auto-rows:40px;width:40px;font-size:0">

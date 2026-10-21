@@ -1,6 +1,7 @@
 #include "html.h"
 #include "line_box.h"
 #include "element.h"
+#include "el_text.h"
 #include "render_item.h"
 #include "document.h"
 #include "document_container.h"
@@ -1192,6 +1193,23 @@ bool litehtml::line_box::can_hold(const std::unique_ptr<line_box_item>& item, wh
 
 		if (m_writing_mode == writing_mode_horizontal_tb)
 		{
+			// `overflow-wrap: break-word` keeps a word on the line while it fits a
+			// line by itself: break before the word instead of filling the line into
+			// the middle of the word. A word wider than the whole line still falls
+			// through to the per-character test below and is cut at the line edge.
+			if (auto word = std::dynamic_pointer_cast<litehtml::el_text>(item->get_el()->src_el()))
+			{
+				if (word->is_word_break_start())
+				{
+					const pixel_t word_width = word->word_break_width();
+					const pixel_t line_width = m_wrap_end - m_inline_pos;
+					if (word_width > 0 && word_width + 0.01f <= line_width &&
+						m_inline_size + word_width > line_width + 0.01f)
+					{
+						return false;
+					}
+				}
+			}
 			pixel_t item_inline_size = (m_writing_mode == writing_mode_horizontal_tb) ? item->width() : item->get_el()->height();
 			if (m_inline_pos + m_inline_size + item_inline_size > m_wrap_end + 0.01)
 			{

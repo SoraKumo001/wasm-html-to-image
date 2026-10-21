@@ -149,6 +149,23 @@ void litehtml::el_text::apply_word_break()
 {
 }
 
+void litehtml::el_text::set_word_break_start(const std::vector<std::shared_ptr<el_text>>& chars)
+{
+	m_word_break_part = true;
+	m_word_break_start = true;
+	m_word_break_chars = chars;
+}
+
+litehtml::pixel_t litehtml::el_text::word_break_width() const
+{
+	pixel_t width = 0;
+	for (const auto& txt : m_word_break_chars)
+	{
+		if (txt) width += txt->m_size.width;
+	}
+	return width;
+}
+
 litehtml::pixel_t litehtml::el_text::set_hyphen_visible(bool visible)
 {
 	element::ptr el_parent = parent();

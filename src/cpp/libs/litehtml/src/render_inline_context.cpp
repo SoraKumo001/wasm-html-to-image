@@ -66,6 +66,16 @@ litehtml::pixel_t widest_word(const std::vector<std::unique_ptr<litehtml::line_b
 		{
 			if(item->get_type() != litehtml::line_box_item::type_text_part) continue;
 			if(item->get_el()->src_el()->is_white_space()) continue;
+			// A break-word word is one item per character; the lower bound is the
+			// width of the whole word, not of a single glyph.
+			if(auto txt = std::dynamic_pointer_cast<litehtml::el_text>(item->get_el()->src_el()))
+			{
+				if(txt->is_word_break_part())
+				{
+					if(txt->is_word_break_start()) widest = std::max(widest, txt->word_break_width());
+					continue;
+				}
+			}
 			widest = std::max(widest, item->width());
 		}
 	}

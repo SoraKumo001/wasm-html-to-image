@@ -769,6 +769,14 @@ void litehtml::html_tag::apply_word_break()
 
 	word_break wb = m_css.get_word_break();
 	overflow_wrap ow = m_css.get_overflow_wrap();
+	// `overflow-wrap: anywhere` and `word-break: break-all` (and line-break: anywhere)
+	// allow a break between any two characters. `break-word` only does so when a word
+	// does not fit a line by itself, so those runs keep their word grouping and the
+	// line box moves the whole word to the next line while it still fits one.
+	const bool break_anywhere = wb == word_break_break_all || ow == overflow_wrap_anywhere ||
+	                            m_css.get_line_break() == line_break_anywhere;
+	const bool keep_whole_word = !break_anywhere &&
+	                             (wb == word_break_break_word || ow == overflow_wrap_break_word);
 	if(wb == word_break_break_all || wb == word_break_break_word || ow == overflow_wrap_break_word || ow == overflow_wrap_anywhere ||
 	   m_css.get_line_break() == line_break_anywhere)
 	{
@@ -792,6 +800,7 @@ void litehtml::html_tag::apply_word_break()
 					it = m_children.erase(it);
 					
 					p = text.c_str();
+					std::vector<std::shared_ptr<el_text>> chars;
 					while(*p)
 					{
 						const char* next_p = p;
@@ -801,9 +810,21 @@ void litehtml::html_tag::apply_word_break()
 						auto new_el = std::make_shared<el_text>(char_str.c_str(), get_document());
 						new_el->parent(shared_from_this());
 						new_el->compute_styles(false);
-						
-						m_children.insert(it, new_el);
+
+						chars.push_back(new_el);
 						p = next_p;
+					}
+					if(keep_whole_word)
+					{
+						for(const auto& ch : chars)
+						{
+							ch->set_word_break_member();
+						}
+						chars.front()->set_word_break_start(chars);
+					}
+					for(const auto& ch : chars)
+					{
+						m_children.insert(it, ch);
 					}
 					// it now points to the element after the inserted ones
 				}
