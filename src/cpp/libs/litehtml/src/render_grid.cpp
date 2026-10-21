@@ -911,8 +911,72 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
 
     fixed_width += m_grid_layout.column_gap * (num_columns - 1);
 
+    // Intrinsic sizing: when the grid's own inline size is indefinite (e.g. a column flex
+    // item's cross size measured with size_mode_content), fr tracks are sized from their
+    // items' max-content contributions instead of sharing the available width. Without this
+    // a width:auto grid never shrinks below the space it is measured in, so an outer
+    // shrink-to-fit flex item is forced to the available width by any 1fr track.
+    const bool content_inline =
+        (self_size.size_mode & (containing_block_context::size_mode_content |
+                                containing_block_context::size_mode_min_content)) != 0 &&
+        render_inline.type == containing_block_context::cbc_value_type_auto;
+    std::vector<pixel_t> fr_contrib(num_columns, 0);
+    if (content_inline && total_fr > 0)
+    {
+        for (auto& item : m_grid_layout.items)
+        {
+            containing_block_context cb = self_size;
+            cb.size_mode |= containing_block_context::size_mode_content;
+            pixel_t measured = item.el->measure(cb, fmt_ctx);
+            // inline_size() is the margin box; for text-only content the measured content
+            // width can be larger than an empty box, so take both into account.
+            pixel_t w = std::max((pixel_t)item.el->inline_size(),
+                                 measured + item.el->content_offset_width());
+
+            const int span = item.pos.col_end - item.pos.col_start;
+            pixel_t factors = 0;
+            for (int c = item.pos.col_start; c < item.pos.col_end && c < num_columns; c++)
+            {
+                const auto& len = columns_template[c];
+                if (len.units() == css_units_fr)
+                {
+                    factors += len.val();
+                }
+                else if (len.is_calc() && len.get_op() == css_length::op_minmax &&
+                         len.get_operands()[1].units() == css_units_fr)
+                {
+                    factors += len.get_operands()[1].val();
+                }
+            }
+            if (factors <= 0) continue;
+
+            // A spanning item's contribution covers the gaps between its tracks first;
+            // the remainder is shared by the spanned fr tracks in proportion to their factor.
+            pixel_t inner = w - m_grid_layout.column_gap * (span - 1);
+            if (inner < 0) inner = 0;
+            for (int c = item.pos.col_start; c < item.pos.col_end && c < num_columns; c++)
+            {
+                const auto& len = columns_template[c];
+                pixel_t factor = 0;
+                if (len.units() == css_units_fr)
+                {
+                    factor = len.val();
+                }
+                else if (len.is_calc() && len.get_op() == css_length::op_minmax &&
+                         len.get_operands()[1].units() == css_units_fr)
+                {
+                    factor = len.get_operands()[1].val();
+                }
+                if (factor > 0)
+                {
+                    fr_contrib[c] = std::max(fr_contrib[c], (pixel_t)(inner * factor / factors));
+                }
+            }
+        }
+    }
+
     // Distribute remaining space to fr columns
-    if (total_fr > 0)
+    if (total_fr > 0 && !content_inline)
     {
         pixel_t remaining_width = render_inline - fixed_width;
         if (remaining_width < 0) remaining_width = 0;
@@ -941,6 +1005,14 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         if (src_el()->css().get_display() != display_inline_grid)
         {
             m_grid_layout.column_widths[0] = render_inline;
+        }
+    }
+
+    if (content_inline && total_fr > 0)
+    {
+        for (int i = 0; i < num_columns && i < (int)m_grid_layout.column_widths.size(); i++)
+        {
+            m_grid_layout.column_widths[i] = std::max(m_grid_layout.column_widths[i], fr_contrib[i]);
         }
     }
 

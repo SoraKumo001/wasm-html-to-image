@@ -1628,6 +1628,25 @@ static bool percent_height_is_indefinite(const litehtml::css_length& len,
     return is_percent && cb_context.height.type == litehtml::containing_block_context::cbc_value_type_auto;
 }
 
+// A percentage inline-size is cyclic when the containing block's inline-size is itself being
+// derived from its content (shrink-to-fit / intrinsic measurement, e.g. a column flex item's
+// cross size measured in flex_line::init). Resolving it against the available width would make
+// the measured size equal to the available width - a width:100% child would stop the parent from
+// ever shrinking below it. CSS treats such a percentage as auto during intrinsic sizing, so it
+// contributes the element's own content size instead.
+static bool percent_width_is_indefinite(const litehtml::css_length& len,
+                                        const litehtml::containing_block_context& cb_context) {
+    if (len.is_predefined()) return false;
+    const bool is_percent = len.units() == litehtml::css_units_percentage ||
+                            (len.is_calc() && len.calc_percent() != 0);
+    if (!is_percent) return false;
+    const bool content_sized =
+        (cb_context.size_mode & (litehtml::containing_block_context::size_mode_content |
+                                 litehtml::containing_block_context::size_mode_min_content)) != 0;
+    return content_sized &&
+           cb_context.width.type == litehtml::containing_block_context::cbc_value_type_auto;
+}
+
 void litehtml::render_item::calc_cb_length(const css_length& len, pixel_t percent_base,
                                            containing_block_context::typed_pixel& out_value) const {
     if (!len.is_predefined()) {
@@ -1706,7 +1725,7 @@ litehtml::containing_block_context litehtml::render_item::calculate_containing_b
                     }
                 }
             }
-            if (width) {
+            if (width && !percent_width_is_indefinite(*width, cb_context)) {
                 // Mapping physical width to parent's physical width
                 calc_cb_length(*width, cb_context.width, ret.width);
             }

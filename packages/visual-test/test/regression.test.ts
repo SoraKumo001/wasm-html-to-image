@@ -380,6 +380,32 @@ describe("regression: layout and paint probes", () => {
     expect(isWhite(at(650, 20))).toBe(true); // at the 800px intrinsic width this would be painted
   });
 
+  it("a column flex item's fit-content cross size ignores a cyclic width:100% child", async () => {
+    // The flex line measures the item's cross size with content sizing, so the containing
+    // block width is indefinite. A width:100% child is cyclic there and must behave as auto
+    // (its own content size), not resolve against the 600px available width. Otherwise the
+    // item is always as wide as the container and cannot be centred/shrunk. The second case
+    // adds the GitHub hero shape: the percentage child is a grid whose fr tracks have to be
+    // sized from their spanning item's max-content contribution under the same constraint.
+    const blueAt = 300;
+    const whiteAt = 50;
+    const cases = [
+      `<div style="width:100%"><div style="width:200px;height:20px;background:#00f"></div></div>`,
+      `<div style="width:100%;display:grid;grid-template-columns:repeat(2,minmax(0px,1fr));column-gap:20px">
+         <div style="grid-column:auto / span 2;width:200px;height:20px;background:#00f"></div></div>`,
+    ];
+    for (const child of cases) {
+      const { at } = await renderPng(
+        `<div style="display:flex;flex-direction:column;align-items:center;width:600px">
+           <div style="padding:0 20px">${child}</div></div>`,
+        700,
+        60,
+      );
+      expect(near(at(blueAt, 10), BLUE), child).toBe(true); // item content starts at (600-240)/2+20
+      expect(isWhite(at(whiteAt, 10)), child).toBe(true); // no longer painted at the container edge
+    }
+  });
+
   it("aspect-ratio gives a replaced element's auto height, overriding the intrinsic ratio", async () => {
     // GitHub's hero media is <img style="width:100%;aspect-ratio:1206/684">. The ratio has to
     // size the box even when the intrinsic ratio differs, and even when the image cannot be
