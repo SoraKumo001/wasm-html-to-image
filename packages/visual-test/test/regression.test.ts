@@ -3130,4 +3130,18 @@ describe("regression: layout and paint probes", () => {
     expect(isWhite(at(150, 5))).toBe(true);
   });
 
+  it("a shrink-to-fit float is as wide as its inline content plus the float beside it", async () => {
+    // Chromium's max-content for `Donate <float:right bar>` is the line plus the float. Taking
+    // only the wider of the two made the box too narrow and the float wrapped below the text.
+    const { at } = await renderPng(
+      `<div style="width:300px"><div style="float:right">
+         <span style="display:inline-block;width:40px;height:10px;background:#f00"></span>
+         <div style="float:right;width:100px;height:10px;background:#00f"></div></div></div>`,
+      300,
+      40,
+    );
+    expect(near(at(165, 15), RED)).toBe(true); // inline part starts at 300 - 140 (sits on the baseline)
+    expect(near(at(250, 5), BLUE)).toBe(true); // float beside it on the same row
+    expect(isWhite(at(250, 25))).toBe(true); // nothing wrapped to a second row
+  });
 });

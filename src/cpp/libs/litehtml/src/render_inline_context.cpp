@@ -87,6 +87,7 @@ void litehtml::render_item_inline_context::layout_lines(const containing_block_c
 {
     m_line_boxes.clear();
 	m_max_line_width = 0;
+	m_measure_float_width = 0;
 	m_is_clamped = false;
 	m_wrap_eligible = true;
 	m_wrap_end = (wrap_end < 0) ? (pixel_t)self_size.render_inline_size() : wrap_end;
@@ -382,7 +383,8 @@ std::list<std::unique_ptr<litehtml::line_box_item> > litehtml::render_item_inlin
             m_line_boxes.pop_back();
         } else
 		{
-			m_max_line_width = std::max(m_max_line_width, m_line_boxes.back()->inline_size());
+			m_max_line_width = std::max(m_max_line_width, m_line_boxes.back()->inline_size() + m_measure_float_width);
+			m_measure_float_width = 0;
 		}
     }
     return ret;
@@ -540,6 +542,12 @@ void litehtml::render_item_inline_context::place_inline(std::unique_ptr<line_box
             line_top = m_line_boxes.back()->top();
         }
         pixel_t ret = place_float(item->get_el(), line_top, self_size, fmt_ctx);
+		if((self_size.size_mode & containing_block_context::size_mode_measure) &&
+		   self_size.mode == writing_mode_horizontal_tb &&
+		   item->get_el()->src_el()->css().get_clear() == clear_none)
+		{
+			m_measure_float_width += ret;
+		}
 		if(ret > m_max_line_width)
 		{
 			m_max_line_width = ret;

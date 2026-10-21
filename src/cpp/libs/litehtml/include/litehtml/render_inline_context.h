@@ -30,6 +30,10 @@ namespace litehtml
 	protected:
 		std::vector<std::unique_ptr<litehtml::line_box> > m_line_boxes;
 		pixel_t m_max_line_width;
+		// Measure pass only: width of the floats met since the last finished line. Floats are not
+		// placed while measuring, so they cannot narrow a line; the line they sit beside needs their
+		// width on top of its own for the box to be as wide as its content (max-content).
+		pixel_t m_measure_float_width = 0;
 		bool m_is_clamped;
 		// Line-breaking inline end used by the running layout pass. It equals the
 		// block's content inline-size unless text-wrap-style narrowing is active.
