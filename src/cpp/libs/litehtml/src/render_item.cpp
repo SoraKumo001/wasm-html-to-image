@@ -1791,7 +1791,12 @@ litehtml::containing_block_context litehtml::render_item::calculate_containing_b
                     }
                     if (is_main_axis_width) {
                         ret.width.type = containing_block_context::cbc_value_type_auto;
-                        ret.width.value = 0;
+                        // An intrinsic-size query keeps the available width: zeroing it measures the
+                        // item's content at min-content width (a percentage flex-basis then makes the
+                        // whole container collapse to its longest word).
+                        if (!(cb_context.size_mode & containing_block_context::size_mode_content)) {
+                            ret.width.value = 0;
+                        }
                         width = nullptr;
                     }
                 }

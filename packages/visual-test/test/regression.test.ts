@@ -3215,6 +3215,24 @@ describe("regression: layout and paint probes", () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   });
+  it("a percentage flex-basis does not collapse an intrinsically sized flex container to min-content", async () => {
+    // A flex item with a non-auto flex-basis had its available width zeroed even when it was
+    // measured for its content size, so the wrapper reported its longest word as the width and a
+    // column flex parent took the 10-line height (vuejs.org rendered 1.85x too tall).
+    const txt = "Truly reactive, compiler-optimized rendering system that rarely requires manual optimization.";
+    const heightOf = async (body: string) => {
+      const r = await render({
+        value: `<!DOCTYPE html><style>body{margin:0}.a{display:flex;flex-direction:column}.c{display:flex;flex-wrap:wrap}.b{flex:0 32%}p{margin:0}</style>${body}`,
+        width: 1000,
+        format: "png",
+      });
+      return r.height;
+    };
+    const col = await heightOf(`<div class="a"><div><section class="c"><div class="b"><p>${txt}</p></div></section></div></div>`);
+    expect(col).toBeLessThan(110); // Chromium: 3 lines of 24px = 72 (+ rounding), was 240
+    const shrink = await heightOf(`<div style="display:inline-block"><div class="c"><div class="b"><p>${txt}</p></div></div></div>`);
+    expect(shrink).toBeLessThan(110); // Chromium: 4 lines = 96, was 231
+  });
   it('<link rel="preload stylesheet"> loads the sheet; "alternate stylesheet" does not', async () => {
     // rel is a token list. Only the exact string "stylesheet" was recognised, so vuejs.org
     // (rel="preload stylesheet") rendered completely unstyled.
