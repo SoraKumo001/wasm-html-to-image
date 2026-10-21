@@ -217,7 +217,7 @@ void container_skia::draw_box_shadow(litehtml::uint_ptr hdc, const litehtml::sha
         if (inset) {
             m_canvas->clipRRect(box_rrect, true);
             SkRRect shadow_rrect = box_rrect;
-            shadow_rrect.inset(-(float)s.spread.val(), -(float)s.spread.val());
+            shadow_rrect.inset((float)s.spread.val(), (float)s.spread.val());
             SkPaint p;
             p.setAntiAlias(true);
             p.setColor(shadow_color);

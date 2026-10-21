@@ -3551,4 +3551,16 @@ describe("regression: layout and paint probes", () => {
     expect(near(at(30, 5), [0, 0, 255])).toBe(true); // .b is later than .a: blue, although `a` is listed last
     expect(isWhite(at(30, 25))).toBe(true); // the .hide.flex box is display:none, so nothing else is drawn
   });
+  it("an inset box-shadow with a spread draws an inner ring (tailwind's shadow-*-stroke borders)", async () => {
+    const { at } = await renderPng(
+      `<div style="width:60px;height:30px;background:#fff;--s:inset 0 0 0 3px #f00;box-shadow:var(--a,0 0 #0000),var(--s)"></div>`,
+      80,
+      40,
+    );
+    expect(near(at(0, 15), RED)).toBe(true);
+    expect(near(at(2, 15), RED)).toBe(true);
+    expect(isWhite(at(4, 15))).toBe(true);
+    expect(near(at(30, 1), RED)).toBe(true);
+    expect(isWhite(at(30, 15))).toBe(true);
+  });
 });
