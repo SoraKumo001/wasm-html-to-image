@@ -3563,4 +3563,17 @@ describe("regression: layout and paint probes", () => {
     expect(near(at(30, 1), RED)).toBe(true);
     expect(isWhite(at(30, 15))).toBe(true);
   });
+  it("a percentage flex-basis (flex: 1 1) in an auto-height column sizes to content", async () => {
+    // react.dev's sandpack code blocks: `.sp-stack{display:flex;flex-direction:column}` holding
+    // `.sp-code-editor{flex:1 1;overflow:auto}`. The basis is 0% of an indefinite height, i.e. content;
+    // the editor collapsed to nothing.
+    const h = async (item: string) =>
+      (await render({
+        value: `<!DOCTYPE html><html><body style="margin:0"><div style="display:flex;flex-direction:column"><div style="${item}"><div style="height:50px">a</div></div></div></body></html>`,
+        width: 200,
+        format: "png",
+      })).height;
+    expect(await h("flex:1 1;overflow:auto")).toBe(50);
+    expect(await h("flex-basis:0%;overflow:auto")).toBe(50);
+  });
 });

@@ -507,6 +507,16 @@ void litehtml::flex_item_column_direction::direction_specific_init(const litehtm
 		}
 	}
 
+	// A percentage flex-basis (`flex: 1 1` is `1 1 0%`) against an indefinite container height
+	// behaves as content.
+	if (!flex_basis_predefined && !m_container_wm.is_vertical() &&
+		el->css().get_flex_basis().units() == css_units_percentage &&
+		self_size.render_height.type == containing_block_context::cbc_value_type_auto)
+	{
+		flex_basis_predefined = true;
+		predef = flex_basis_fit_content;
+	}
+
 	if (flex_basis_predefined)
 	{
 		if(predef == flex_basis_auto && size_prop.is_predefined()) predef = flex_basis_fit_content;

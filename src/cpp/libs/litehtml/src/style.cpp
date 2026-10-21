@@ -2967,7 +2967,7 @@ namespace litehtml
     {
       float m_grow = 1;
       float m_shrink = 1;
-      css_length m_basis = 0;
+      css_length m_basis = css_length(0, css_units_percentage);
       bool grow(const css_token &tok)
       {
         if (tok.type != NUMBER || tok.n.number < 0)
