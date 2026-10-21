@@ -119,6 +119,7 @@ litehtml::pixel_t litehtml::render_item::measure(
 
             // Trigger style re-computation for all descendants based on new container size
             src_el()->compute_styles(true);
+            src_el()->get_document()->invalidate_measure_memos();
 
             // Re-measure after restyle to apply changes
             if (src_el()->is_block_formatting_context() || !fmt_ctx) {

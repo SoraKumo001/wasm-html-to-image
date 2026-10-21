@@ -3613,4 +3613,21 @@ describe("regression: layout and paint probes", () => {
     expect(await h("0 0 0 0 #f00")).toBe(plain);
     expect(await h("0 4px 12px #f00")).toBeGreaterThan(plain); // a visible shadow still keeps its room
   });
+  it("@container queries see a flex or grid container's size", async () => {
+    // tailwind's `@container flex flex-col` cards: the query reads the container's render item, and
+    // flex/grid items never registered themselves, so the container looked 0px wide (query never matched).
+    const h = async (container: string) =>
+      (await render({
+        value: `<!DOCTYPE html><html><head><style>*{box-sizing:border-box}.c{container-type:inline-size}
+          .row{display:flex;flex-direction:column;gap:24px;padding:24px}
+          @container (min-width:28rem){.row{flex-direction:row}}
+          .i{height:50px;width:100px}.t{height:30px}</style></head>
+          <body style="margin:0;width:600px"><div class="c" style="${container}"><div class="row"><div class="i"></div><div class="t"></div></div></div></body></html>`,
+        width: 600,
+        format: "png",
+      })).height;
+    expect(await h("")).toBe(98); // row layout: 50 + 2 * 24
+    expect(await h("display:flex;flex-direction:column")).toBe(98);
+    expect(await h("display:grid")).toBe(98);
+  });
 });

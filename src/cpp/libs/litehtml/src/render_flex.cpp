@@ -517,6 +517,7 @@ std::list<litehtml::flex_line> litehtml::render_item_flex::get_lines(const liteh
 
 std::shared_ptr<litehtml::render_item> litehtml::render_item_flex::init()
 {
+    src_el()->add_render(shared_from_this());
     // Compound ruby (<ruby> with two or more <rt>, or with an <rtc>) is laid out as a
     // two-item column-reverse flex box: one anonymous block for the base and one for all
     // annotations. The annotation block collects the contents of every <rt>/<rtc> so the

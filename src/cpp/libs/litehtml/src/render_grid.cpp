@@ -19,6 +19,7 @@ std::shared_ptr<render_item> render_item_grid::init()
 {
     if (m_initialized) return shared_from_this();
     m_initialized = true;
+    src_el()->add_render(shared_from_this());
 
     int column_count = src_el()->css().get_column_count();
     // Width-driven multicol (`column-width`, with or without `column-count`):

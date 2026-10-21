@@ -59,6 +59,8 @@ namespace litehtml
 		bool measure_budget_exhausted() { return ++m_measure_calls > k_measure_budget; }
 		bool measure_budget_over() const { return m_measure_calls > k_measure_budget; }
 		void reset_measure_budget() { m_measure_calls = 0; ++m_layout_epoch; }
+		// Drops the per-pass memos of intrinsic-size queries (styles changed mid-pass).
+		void invalidate_measure_memos() { ++m_layout_epoch; }
 		unsigned layout_epoch() const { return m_layout_epoch; }
 		typedef std::shared_ptr<document>	ptr;
 		typedef std::weak_ptr<document>		weak_ptr;
