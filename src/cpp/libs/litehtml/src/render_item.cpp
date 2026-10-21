@@ -56,6 +56,28 @@ litehtml::pixel_t litehtml::render_item::measure(
                    : m_pos.height + content_offset_height();
     }
 
+    // Intrinsic-size queries are answered from a per-pass memo. The subtree is not touched, so the
+    // measured state stays consistent with m_cached_cb_context; m_is_measured is cleared because
+    // m_pos now holds another context's size and a real measure must run before it is trusted.
+    document* memo_doc = src_el()->get_document().get();
+    const bool memoizable = css().get_writing_mode() == writing_mode_horizontal_tb &&
+                            (containing_block_size.size_mode & containing_block_context::size_mode_measure) &&
+                            (src_el()->is_block_formatting_context() || !fmt_ctx);
+    if (memoizable) {
+        if (m_memo_epoch != memo_doc->layout_epoch()) {
+            m_memo_epoch = memo_doc->layout_epoch();
+            m_measure_memo.clear();
+        }
+        for (const auto& e : m_measure_memo) {
+            if (e.cb == containing_block_size) {
+                m_pos.width = e.w;
+                m_pos.height = e.h;
+                m_is_measured = false;
+                return e.ret;
+            }
+        }
+    }
+
     // Safety net for pathological nesting (deep flex/table trees re-measure every child several
     // times per level, i.e. exponentially). Once a layout pass has used its measure budget, an
     // element that already has a measured state keeps it instead of being measured again, which
@@ -106,6 +128,11 @@ litehtml::pixel_t litehtml::render_item::measure(
                 measured_size = _measure(containing_block_size, fmt_ctx);
             }
         }
+    }
+
+    if (memoizable) {
+        if (m_measure_memo.size() >= 8) m_measure_memo.erase(m_measure_memo.begin());
+        m_measure_memo.push_back({containing_block_size, measured_size, m_pos.width, m_pos.height});
     }
 
     return measured_size;

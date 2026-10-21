@@ -86,6 +86,12 @@ namespace litehtml
         // Memo of pure width queries (table intrinsic-size probes) valid for one layout pass.
         unsigned m_query_epoch = ~0u;
         std::vector<std::pair<containing_block_context, pixel_t>> m_query_cache;
+        // Memo of intrinsic-size measures (size_mode_measure) valid for one layout pass: the result
+        // is a pure function of (element, cb), but the same query is issued many times by nested
+        // flex containers (3^depth without it).
+        struct measure_memo_entry { containing_block_context cb; pixel_t ret; pixel_t w; pixel_t h; };
+        unsigned m_memo_epoch = ~0u;
+        std::vector<measure_memo_entry> m_measure_memo;
     protected:
         bool m_placed_once = false;
         int m_cached_bidi_base_level = -1;

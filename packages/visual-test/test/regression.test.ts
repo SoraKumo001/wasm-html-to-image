@@ -3398,4 +3398,22 @@ describe("regression: layout and paint probes", () => {
     expect(near(at(250, 5), RED)).toBe(true); // ... and far past the 40px padding
     expect(isWhite(at(299, 5))).toBe(true); // 2 + 296 = the box ends at 298
   });
+  it("deeply nested flex containers do not re-measure their subtree exponentially", async () => {
+    // Every flex container asks each item for its min-content and max-content size before the real
+    // measure, and each of those recursed into the whole subtree: ~4^depth measures. nodejs.org's
+    // hero (flex > flex-col > flex > inline-flex > inline-flex buttons) spent 10s and exhausted the
+    // measure budget. Intrinsic-size queries are now memoized per pass (~3s -> ~0.3s here).
+    const btn = `<a style="display:inline-flex;align-items:center;gap:4px;padding:2px 6px"><svg width="20" height="20" viewBox="0 0 20 20"><rect width="20" height="20" fill="#f00"/></svg></a>`;
+    let html =
+      `<div style="display:flex;justify-content:center">` +
+      Array.from({ length: 3 }, () => `<div style="display:inline-flex;gap:4px">${btn}${btn}${btn}${btn}</div>`).join("") +
+      `</div>`;
+    for (let i = 0; i < 5; i++) {
+      html = `<div style="display:flex;flex-direction:${i % 2 ? "row" : "column"};gap:4px"><div style="display:flex">x</div>${html}</div>`;
+    }
+    await renderPng("<p>warm up</p>", 100, 20);
+    const t = Date.now();
+    await renderPng(html, 600, 300);
+    expect(Date.now() - t).toBeLessThan(1800);
+  });
 });
