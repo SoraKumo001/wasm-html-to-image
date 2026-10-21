@@ -266,7 +266,13 @@ litehtml::render_item::split_inlines() {
                std::shared_ptr<litehtml::render_item> >
         ret;
     for (const auto& child : m_children) {
-        if (child->src_el()->is_block_box() && child->src_el()->css().get_float() == float_none) {
+        // An absolutely positioned box is out of flow: it never splits the line it sits in
+        // (horizontal writing only; vertical writing keeps the block-level treatment).
+        const auto child_pos = child->src_el()->css().get_position();
+        const bool out_of_flow = src_el()->css().get_writing_mode() == writing_mode_horizontal_tb &&
+                                 (child_pos == element_position_absolute || child_pos == element_position_fixed);
+        if (child->src_el()->is_block_box() && child->src_el()->css().get_float() == float_none &&
+            !out_of_flow) {
             std::get<0>(ret) = clone();
             std::get<1>(ret) = child;
             std::get<2>(ret) = clone();

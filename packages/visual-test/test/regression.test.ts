@@ -3246,4 +3246,29 @@ describe("regression: layout and paint probes", () => {
     expect(right.maxX - right.minX).toBe(base.maxX - base.minX); // same width, just moved
     expect(bottom.minY - base.minY).toBe(7);
   });
+  it("an absolutely positioned box between inline items does not break the line", async () => {
+    // python.org's search form holds a visually hidden `position:absolute` <label> between
+    // inline-blocks. It was treated as a block-level child and split the line in three.
+    const html = (mid: string) =>
+      `<div style="font:14px/20px sans-serif;display:inline-block;background:#eee">
+         <span style="display:inline-block;width:30px;height:20px;background:#f00"></span>${mid}
+         <span style="display:inline-block;width:100px;height:20px;background:#00f"></span></div>`;
+    const plain = await renderPng(html(""), 300, 100);
+    const withAbs = await renderPng(
+      html(`<label style="position:absolute;width:1px;height:1px;overflow:hidden">Search</label>`),
+      300,
+      100,
+    );
+    const rows = (img: PNG) => {
+      let last = -1;
+      for (let y = 0; y < img.height; y++) {
+        for (let x = 0; x < img.width; x++) {
+          const i = (img.width * y + x) * 4;
+          if (img.data[i] === 0 && img.data[i + 1] === 0 && img.data[i + 2] === 255) last = y;
+        }
+      }
+      return last;
+    };
+    expect(rows(withAbs.img)).toBe(rows(plain.img)); // the blue box stays on the first line
+  });
 });

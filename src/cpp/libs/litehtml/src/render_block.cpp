@@ -167,7 +167,10 @@ std::shared_ptr<litehtml::render_item> litehtml::render_item_block::init()
 	bool has_inlines = false;
     for (const auto& el : m_children)
     {
-	if(!el->src_el()->is_float())
+	const auto el_pos = el->src_el()->css().get_position();
+	const bool out_of_flow = src_el()->css().get_writing_mode() == writing_mode_horizontal_tb &&
+	                         (el_pos == element_position_absolute || el_pos == element_position_fixed);
+	if(!el->src_el()->is_float() && !out_of_flow)
 		{
 			if (el->src_el()->is_block_box())
 			{
