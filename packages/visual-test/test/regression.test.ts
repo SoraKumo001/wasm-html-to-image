@@ -3728,6 +3728,23 @@ describe("regression: layout and paint probes", () => {
     expect(await h("display:flex;flex-direction:column")).toBe(98);
     expect(await h("display:grid")).toBe(98);
   });
+  it("@container understands inline-size / block-size and the range syntax", async () => {
+    // Container is 600px wide: every query below matches except the last, which must not.
+    const h = async (query: string) =>
+      (await render({
+        value: `<!DOCTYPE html><html><head><style>.c{container-type:inline-size}.i{height:10px}
+          @container ${query}{.i{height:50px}}</style></head>
+          <body style="margin:0;width:600px"><div class="c"><div class="i"></div></div></body></html>`,
+        width: 600,
+        format: "png",
+      })).height;
+    expect(await h("(inline-size >= 500px)")).toBe(50);
+    expect(await h("(min-inline-size: 500px)")).toBe(50);
+    expect(await h("(400px < inline-size <= 600px)")).toBe(50);
+    expect(await h("(width > 500px)")).toBe(50);
+    expect(await h("(inline-size >= 700px)")).toBe(10);
+    expect(await h("(inline-size < 500px)")).toBe(10);
+  });
   it("grid: negative line numbers count from the end, and a lone `dense` means `row dense`", async () => {
     // tailwind's `col-span-full` is `grid-column: 1 / -1` and `grid-flow-dense` is `grid-auto-flow: dense`.
     const h = async (flow: string, spec: string[]) =>

@@ -95,10 +95,32 @@ bool container_query_list_list::check(const html_tag* el) const
 
 media_query_list parse_media_query_list(const css_token_vector& tokens, shared_ptr<document> doc);
 
+// Container size features are the logical inline-size / block-size; the media feature parser only knows
+// width / height, so rename them (horizontal writing mode: inline = width, block = height).
+static void rename_logical_size_features(css_token_vector& tokens)
+{
+	for (auto& t : tokens)
+	{
+		if (t.type == IDENT)
+		{
+			const string id = t.ident();
+			const string prefix = (id.compare(0, 4, "min-") == 0 || id.compare(0, 4, "max-") == 0) ? id.substr(0, 4) : "";
+			const string base = id.substr(prefix.size());
+			if (base == "inline-size") t.name = prefix + "width";
+			else if (base == "block-size") t.name = prefix + "height";
+		}
+		else if (t.is_component_value())
+		{
+			rename_logical_size_features(t.value);
+		}
+	}
+}
+
 container_query_list parse_container_query_list(const css_token_vector& _tokens, shared_ptr<document> doc)
 {
 	css_token_vector tokens = normalize(_tokens, f_componentize | f_remove_whitespace);
 	if (tokens.empty()) return {};
+	rename_logical_size_features(tokens);
 
 	container_query_list result;
 	
