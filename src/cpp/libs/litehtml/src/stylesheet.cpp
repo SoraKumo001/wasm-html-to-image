@@ -478,6 +478,32 @@ bool css::evaluate_supports_feature(const css_token& block, shared_ptr<document>
 
 	if (value_tokens.empty()) return false;
 
+	// Features Chromium (the reference) does not implement: Tailwind's @supports hacks for old
+	// Safari/Firefox must evaluate false here too, or their fallback rules override the real ones.
+	if (prop_name == "margin-trim" || prop_name == "-webkit-hyphens" ||
+		prop_name.compare(0, 5, "-moz-") == 0 || prop_name.compare(0, 4, "-ms-") == 0)
+	{
+		return false;
+	}
+
+	// Relative color syntax (`rgb(from red r g b)`) is supported by Chromium.
+	for (const auto& vt : value_tokens)
+	{
+		if (vt.type == CV_FUNCTION)
+		{
+			const string fn = lowcase(vt.name);
+			if (is_one_of(fn, "rgb", "rgba", "hsl", "hsla", "hwb", "lab", "lch", "oklab", "oklch", "color"))
+			{
+				for (const auto& arg : vt.value)
+				{
+					if (arg.type == WHITESPACE) continue;
+					if (arg.type == IDENT && lowcase(arg.name) == "from") return true;
+					break;
+				}
+			}
+		}
+	}
+
 	// Check if property is known
 	string_id id = _id(prop_name);
 	if (id == empty_id) return false;

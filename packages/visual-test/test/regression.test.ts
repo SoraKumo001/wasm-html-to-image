@@ -3583,4 +3583,21 @@ describe("regression: layout and paint probes", () => {
     });
     expect(centered.height).toBe(50);
   });
+  it("@supports follows Chromium: no margin-trim / -webkit-hyphens / -moz-*, but relative color syntax", async () => {
+    // Tailwind v4's `@layer properties` sits behind a Safari/Firefox-only @supports hack; applying it
+    // reset every --tw-* custom property to `initial` and inflated the layout.
+    const h = async (cond: string) =>
+      (await render({
+        value: `<!DOCTYPE html><html><head><style>body{margin:0}@supports ${cond}{div{height:50px}}</style></head><body><div></div></body></html>`,
+        width: 100,
+        format: "png",
+      })).height;
+    const hit = await h("(display:block)");
+    expect(hit).toBeGreaterThanOrEqual(50);
+    for (const cond of ["(margin-trim:inline)", "(-webkit-hyphens:none)", "(-moz-orient:inline)"]) {
+      expect(await h(cond)).toBeLessThan(50);
+    }
+    expect(await h("(color:rgb(from red r g b))")).toBeGreaterThanOrEqual(50);
+    expect(await h("(not (margin-trim:inline))")).toBeGreaterThanOrEqual(50);
+  });
 });
