@@ -3760,6 +3760,29 @@ describe("regression: layout and paint probes", () => {
     ]);
     expect(Math.abs(flexItem[0] - flexItem[1])).toBeLessThanOrEqual(1);
   });
+  it("absolute: inset:0 with margin:auto centres the box, and an aspect-ratio fixes its height", async () => {
+    // nodejs.org's glow is `position:absolute; inset:0; margin:auto; width:300px; aspect-ratio:1`.
+    // The auto margins solved for the over-constrained box were reset by the re-measure, and the
+    // height was stretched to the containing block instead of following the ratio.
+    const bbox = async (box: string) => {
+      const { img, at } = await renderPng(
+        `<div style="position:relative;width:600px;height:400px"><div style="position:absolute;inset:0;margin:auto;${box};background:#f00"></div></div>`,
+        600,
+        400,
+      );
+      let x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1;
+      for (let y = 0; y < img.height; y++)
+        for (let x = 0; x < img.width; x++)
+          if (near(at(x, y), RED, 40)) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+      return [x0, y0, x1, y1];
+    };
+    expect(await bbox("width:300px;height:200px")).toEqual([150, 100, 449, 299]);
+    expect(await bbox("width:300px;aspect-ratio:1")).toEqual([150, 50, 449, 349]);
+    expect(await bbox("width:300px")).toEqual([150, 0, 449, 399]);
+    // border-box (tailwind's preflight): the margin box must not be taken for the border box
+    expect(await bbox("box-sizing:border-box;width:300px;aspect-ratio:1")).toEqual([150, 50, 449, 349]);
+    expect(await bbox("box-sizing:border-box;width:300px;height:200px")).toEqual([150, 100, 449, 299]);
+  });
   it("grid: an auto column gives back width to its scroll-container items instead of overflowing", async () => {
     // nodejs.org's code panel: a grid whose only column is `auto`, holding a flex tab row with
     // overflow:auto. The column's minimum contribution is 0 (scroll container), so it stops at the

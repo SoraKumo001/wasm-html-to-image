@@ -544,6 +544,24 @@ void litehtml::render_item::render_positioned(render_type rt) {
                         }
                     }
                     height += el->content_offset_height();
+                } else if (!el->css().get_aspect_ratio().is_auto() && !el_width.is_predefined() &&
+                           el->css().get_aspect_ratio().width > 0) {
+                    // A definite width and a preferred aspect ratio fix the height; the insets then
+                    // only position the box (auto margins centre it) instead of stretching it.
+                    const aspect_ratio ar = el->css().get_aspect_ratio();
+                    height = el->get_predefined_width(containing_block_size.width) * ar.height / ar.width +
+                             el->content_offset_height();
+                    pixel_t remained = containing_block_size.height - height - top - bottom;
+                    const auto& m = el->css().get_margins();
+                    if (m.top.is_predefined() && m.bottom.is_predefined()) {
+                        el->m_margins.top = el->m_margins.bottom = remained / 2;
+                    } else if (m.top.is_predefined()) {
+                        el->m_margins.top = remained;
+                    } else if (m.bottom.is_predefined()) {
+                        el->m_margins.bottom = remained;
+                    }
+                    if (m.top.is_predefined()) height += el->m_margins.top;
+                    if (m.bottom.is_predefined()) height += el->m_margins.bottom;
                 } else {
                     height = containing_block_size.height - top - bottom;
                 }
@@ -776,6 +794,16 @@ void litehtml::render_item::render_positioned(render_type rt) {
             }
 
             if (need_render) {
+                // measure() recomputes the margins from the CSS, which turns the `auto` margins solved
+                // above (centering an over-constrained box) back into 0, so put them back afterwards.
+                const auto solved_margins = el->m_margins;
+                const auto& css_margins = el->css().get_margins();
+                auto restore_auto_margins = [&]() {
+                    if (css_margins.left.is_predefined()) el->m_margins.left = solved_margins.left;
+                    if (css_margins.right.is_predefined()) el->m_margins.right = solved_margins.right;
+                    if (css_margins.top.is_predefined()) el->m_margins.top = solved_margins.top;
+                    if (css_margins.bottom.is_predefined()) el->m_margins.bottom = solved_margins.bottom;
+                };
                 if (el->css().get_width().is_predefined() || el->css().get_height().is_predefined()) {
                     // CSS 2.1 10.3.7/10.6.4 solve an auto width/height from the containing block
                     // remainder as a border-box size. size_mode_exact_* carries the value the CSS
@@ -783,16 +811,18 @@ void litehtml::render_item::render_positioned(render_type rt) {
                     // padding/border from it for border-box elements. A content-box element must
                     // therefore get the remainder minus its own padding/border, or the used box
                     // overflows the containing block by exactly that amount.
-                    auto exact_size = [&](pixel_t border_box_size, pixel_t content_offset) {
+                    // The solved sizes above are margin boxes; a border-box size excludes the margins.
+                    auto exact_size = [&](pixel_t margin_box_size, pixel_t content_offset, pixel_t margins) {
                         if (el->css().get_box_sizing() == box_sizing_content_box) {
-                            return std::max<pixel_t>(0, border_box_size - content_offset);
+                            return std::max<pixel_t>(0, margin_box_size - content_offset);
                         }
-                        return border_box_size;
+                        return std::max<pixel_t>(0, margin_box_size - margins);
                     };
                     containing_block_context measure_cb = containing_block_size;
                     if (el->css().get_width().is_predefined()) {
                         if (!css_left.is_predefined() && !css_right.is_predefined()) {
-                            measure_cb.width = exact_size(width, el->content_offset_width());
+                            measure_cb.width = exact_size(width, el->content_offset_width(),
+                                                          el->m_margins.left + el->m_margins.right);
                             measure_cb.size_mode |= (measure_cb.mode == writing_mode_horizontal_tb
                                                          ? containing_block_context::size_mode_exact_width
                                                          : containing_block_context::size_mode_exact_height);
@@ -802,7 +832,8 @@ void litehtml::render_item::render_positioned(render_type rt) {
                     }
                     if (el->css().get_height().is_predefined()) {
                         if (!css_top.is_predefined() && !css_bottom.is_predefined()) {
-                            measure_cb.height = exact_size(height, el->content_offset_height());
+                            measure_cb.height = exact_size(height, el->content_offset_height(),
+                                                           el->m_margins.top + el->m_margins.bottom);
                             measure_cb.size_mode |= (measure_cb.mode == writing_mode_horizontal_tb
                                                          ? containing_block_context::size_mode_exact_height
                                                          : containing_block_context::size_mode_exact_width);
@@ -816,9 +847,11 @@ void litehtml::render_item::render_positioned(render_type rt) {
                         }
                     }
                     el->measure(measure_cb, nullptr);
+                    restore_auto_margins();
                     el->place(left, top, measure_cb, nullptr);
                 } else {
                     el->measure(containing_block_size, nullptr);
+                    restore_auto_margins();
                     el->place(left, top, containing_block_size, nullptr);
                 }
             }
