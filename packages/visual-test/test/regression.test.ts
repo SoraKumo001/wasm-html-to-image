@@ -3526,4 +3526,16 @@ describe("regression: layout and paint probes", () => {
     expect(near(at(80, 55), RED)).toBe(true); // end/end of the 100x50 area: x 60..100, y 50..60
     expect(isWhite(at(50, 55))).toBe(true);
   });
+  it("an svg with width/height=\"100%\" sizes from its viewBox, also as a flex-column item", async () => {
+    // react.dev's hero logo: `<svg width="100%" height="100%" viewBox=...>` (width set by a class) in a
+    // flex column. "100%" was read as 100px by atof() and the percentage height resolved against
+    // the viewport: the page grew to 600M px and the render failed.
+    const page = (inner: string) =>
+      `<!DOCTYPE html><html><body style="margin:0">${inner}</body></html>`;
+    const svg = `<svg width="100%" height="100%" viewBox="0 0 21 18.9" style="width:84px"><rect width="21" height="18.9" fill="#f00"/></svg>`;
+    const block = await render({ value: page(`<div>${svg}</div>`), width: 200, format: "png" });
+    const flex = await render({ value: page(`<div style="display:flex;flex-direction:column">${svg}</div>`), width: 200, format: "png" });
+    expect(Math.abs(block.height - 75.6)).toBeLessThan(1); // 84 * 18.9 / 21
+    expect(Math.abs(flex.height - 75.6)).toBeLessThan(1);
+  });
 });

@@ -510,6 +510,13 @@ void litehtml::flex_item_column_direction::direction_specific_init(const litehtm
 	if (flex_basis_predefined)
 	{
 		if(predef == flex_basis_auto && size_prop.is_predefined()) predef = flex_basis_fit_content;
+		// A percentage block size against an indefinite container height behaves as auto.
+		if(predef == flex_basis_auto && !m_container_wm.is_vertical() &&
+		   size_prop.units() == css_units_percentage &&
+		   self_size.render_height.type == containing_block_context::cbc_value_type_auto)
+		{
+			predef = flex_basis_fit_content;
+		}
 		switch (predef)
 		{
 			case flex_basis_auto:

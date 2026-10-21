@@ -162,14 +162,14 @@ void el_svg::get_content_size(size& sz, pixel_t max_width) {
     sz.width = absolute_px(css().get_width());
     sz.height = absolute_px(css().get_height());
 
-    if (sz.width == 0) {
-        const char* str_w = get_attr("width");
-        if (str_w) sz.width = (pixel_t)atof(str_w);
-    }
-    if (sz.height == 0) {
-        const char* str_h = get_attr("height");
-        if (str_h) sz.height = (pixel_t)atof(str_h);
-    }
+    // A percentage attribute ("100%") is not a pixel size: atof() would read it as 100px.
+    auto attr_px = [&](const char* name) -> pixel_t {
+        const char* v = get_attr(name);
+        if (!v || strchr(v, '%')) return 0;
+        return (pixel_t)atof(v);
+    };
+    if (sz.width == 0) sz.width = attr_px("width");
+    if (sz.height == 0) sz.height = attr_px("height");
 
     if (sz.width == 0 || sz.height == 0) {
         const char* str_vb = get_attr("viewbox");
