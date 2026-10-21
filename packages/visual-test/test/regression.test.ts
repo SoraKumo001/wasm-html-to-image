@@ -3382,4 +3382,20 @@ describe("regression: layout and paint probes", () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   });
+  it("an absolute box with an auto height keeps its calc()/percentage width", async () => {
+    // MDN's visually hidden skip links: `ul{position:absolute;width:calc(100% - 4px)}` holding
+    // `a{position:absolute;left:0;right:0}`. The auto height made the box measure as shrink-to-fit,
+    // which turned the calc() width into auto: the ul collapsed to its padding and the links
+    // wrapped one letter per line, with the tail of the column showing at the top-left.
+    const { at } = await renderPng(
+      `<style>*{box-sizing:border-box}</style>
+       <ul style="margin:0;list-style:none;position:absolute;top:0;left:2px;right:2px;padding-left:40px;width:calc(100% - 4px)">
+         <li><a style="position:absolute;left:0;right:0;top:0;height:10px;background:#f00"></a></li></ul>`,
+      300,
+      30,
+    );
+    expect(near(at(20, 5), RED)).toBe(true); // inside the padding box
+    expect(near(at(250, 5), RED)).toBe(true); // ... and far past the 40px padding
+    expect(isWhite(at(299, 5))).toBe(true); // 2 + 296 = the box ends at 298
+  });
 });

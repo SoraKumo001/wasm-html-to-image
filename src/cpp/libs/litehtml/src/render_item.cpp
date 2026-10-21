@@ -778,7 +778,12 @@ void litehtml::render_item::render_positioned(render_type rt) {
                             measure_cb.size_mode |= (measure_cb.mode == writing_mode_horizontal_tb
                                                          ? containing_block_context::size_mode_exact_height
                                                          : containing_block_context::size_mode_exact_width);
-                        } else {
+                        } else if (measure_cb.mode != writing_mode_horizontal_tb ||
+                                   el->css().get_width().is_predefined()) {
+                            // An auto height is solved from the content anyway. The content flag
+                            // is a shrink-to-fit request for the inline size too, so it must not
+                            // be set when the width is definite: it would turn a percentage or
+                            // calc() width (`width: calc(100% - 4px)`) into auto.
                             measure_cb.size_mode |= containing_block_context::size_mode_content;
                         }
                     }
