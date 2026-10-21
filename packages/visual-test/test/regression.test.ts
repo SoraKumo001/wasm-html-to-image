@@ -3575,5 +3575,12 @@ describe("regression: layout and paint probes", () => {
       })).height;
     expect(await h("flex:1 1;overflow:auto")).toBe(50);
     expect(await h("flex-basis:0%;overflow:auto")).toBe(50);
+    // ... also when an align-items:center row measures it first (column items had no content basis in measure mode)
+    const centered = await render({
+      value: `<!DOCTYPE html><html><body style="margin:0"><div style="display:flex;align-items:center"><div style="display:flex;flex-direction:column"><div style="flex:1 1;overflow:auto"><div style="height:50px">a</div></div></div></div></body></html>`,
+      width: 200,
+      format: "png",
+    });
+    expect(centered.height).toBe(50);
   });
 });

@@ -532,6 +532,7 @@ void litehtml::flex_item_column_direction::direction_specific_init(const litehtm
 			case flex_basis_auto:
 				flex_base_size = size_prop.calc_percent(parent_size) + render_offset - el->box_sizing_block(m_container_wm);
 				break;
+			case flex_basis_content:
 			case flex_basis_max_content:
 			case flex_basis_fit_content:
 				{
