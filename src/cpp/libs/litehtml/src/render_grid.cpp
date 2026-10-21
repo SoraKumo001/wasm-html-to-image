@@ -1362,7 +1362,9 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             pixel_t min_h = min_content_h + (vert ? item.el->content_offset_width() : item.el->content_offset_height());
             // The one-line floor only applies to content that actually laid out: an empty item
             // (e.g. a collapsed accordion panel) has a zero height and must not reserve a line.
-            if (content_h > 0 && total_h < min_h) total_h = min_h;
+            // An item with a definite block size is exactly that tall, however small its line is.
+            const css_length& item_block_size = vert ? item.el->src_el()->css().get_width() : item.el->src_el()->css().get_height();
+            if (content_h > 0 && total_h < min_h && item_block_size.is_predefined()) total_h = min_h;
 
             pixel_t current_total = 0;
             for (int i = item.pos.row_start; i < item.pos.row_end && i < num_rows; i++)
@@ -1523,6 +1525,25 @@ void litehtml::render_item_grid::place_grid_items(pixel_t x, pixel_t y, const co
         cb.height = cb.render_height;
         cb.size_mode |= containing_block_context::size_mode_exact_height;
         cb.size_mode |= containing_block_context::size_mode_exact_width;
+        if (!vert)
+        {
+            // Only an auto-sized item stretches to its grid area (align/justify-self: normal); an
+            // item with a definite width or height keeps it and sits at the start of the area.
+            const css_length& item_w = item.el->src_el()->css().get_width();
+            const css_length& item_h = item.el->src_el()->css().get_height();
+            if (!item_w.is_predefined())
+            {
+                cb.size_mode &= ~containing_block_context::size_mode_exact_width;
+                cb.render_width = cell_w;
+                cb.width = cell_w;
+            }
+            if (!item_h.is_predefined())
+            {
+                cb.size_mode &= ~containing_block_context::size_mode_exact_height;
+                cb.render_height = cell_h;
+                cb.height = cell_h;
+            }
+        }
 
         pixel_t place_x = item_rel_x;
         pixel_t place_y = item_rel_y;

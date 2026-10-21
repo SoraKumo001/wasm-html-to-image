@@ -3442,4 +3442,25 @@ describe("regression: layout and paint probes", () => {
     const without = await render({ value: grid(""), width: 100, format: "png" });
     expect(withText.height).toBe(without.height);
   });
+  it("grid items with a definite width or height are not stretched to their area", async () => {
+    const { at } = await renderPng(
+      `<div style="display:grid;grid-template-columns:100px 100px"><div style="width:60px;height:10px;background:#f00"></div><div style="height:10px;background:#00f"></div></div>
+       <div style="display:grid;grid-template-columns:100px"><div style="width:50%;height:10px;background:#f00"></div></div>`,
+      220,
+      40,
+    );
+    expect(near(at(55, 5), RED)).toBe(true); // 60px wide
+    expect(isWhite(at(65, 5))).toBe(true); // ... not the 100px column
+    expect(near(at(150, 5), [0, 0, 255])).toBe(true); // an auto-width sibling still stretches
+    expect(near(at(45, 15), RED)).toBe(true); // 50% of the 100px area
+    expect(isWhite(at(55, 15))).toBe(true);
+  });
+  it("a grid item with a definite height reserves no extra line", async () => {
+    const r = await render({
+      value: `<body style="margin:0;font:16px sans-serif"><div style="display:grid"><div style="height:10px"></div><div style="height:10px"></div></div></body>`,
+      width: 100,
+      format: "png",
+    });
+    expect(r.height).toBe(20);
+  });
 });
