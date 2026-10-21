@@ -78,17 +78,27 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
 				// though for margins it might not matter, but el->get_margins() must be fresh.
 				pixel_t current_margin = el->get_wm_context().block_start(el->get_margins());
 
-				// Collapse top margin
+				// Collapse top margin. A negative margin overlaps the previous box (or pulls
+				// the first box above the parent's content edge) instead of adding space, so
+				// the margin box may not be pushed down by its own negative part.
 				if(is_first && collapse_top_margin())
 				{
-					block_offset -= current_margin;
+					if (current_margin > 0)
+					{
+						block_offset -= current_margin;
+					}
 					if (current_margin > block_start_margin)
 					{
 						block_start_margin = current_margin;
 					}
 				} else
 				{
-					block_offset -= std::min(last_block_margin, current_margin);
+					// CSS 2.1 §8.3.1: adjoining margins collapse to the largest positive
+					// margin plus the most negative one. `block_offset` already includes the
+					// previous bottom margin, so only the difference has to be removed.
+					pixel_t collapse = std::max<pixel_t>(0, std::max(last_block_margin, current_margin)) +
+					                   std::min<pixel_t>(0, std::min(last_block_margin, current_margin));
+					block_offset -= last_block_margin + current_margin - collapse;
 				}
 
 				if (!(self_size.size_mode & containing_block_context::size_mode_measure))

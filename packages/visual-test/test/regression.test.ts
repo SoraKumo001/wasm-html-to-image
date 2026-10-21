@@ -1475,6 +1475,27 @@ describe("regression: layout and paint probes", () => {
     expect(near(same.at(50, 20), RED)).toBe(true);
     expect(near(same.at(150, 20), BLUE)).toBe(true);
   });
+  it("negative vertical margins overlap instead of adding space", async () => {
+    // Adjoining margins collapse to the largest positive plus the most negative one
+    // (CSS 2.1 §8.3.1); before the fix the negative part was pushed the box *down*
+    // (GitHub's `.lp-Cta-mascots-wrap{margin-top:-10%;margin-bottom:-10%}`).
+    const h = async (body: string) =>
+      (await render({ value: `<html><body style="margin:0">${body}</body></html>`, width: 300, format: "png" })).height;
+    // Chromium: 100 + 100 - 100 + 10 = 110 (the blue box overlaps the red one).
+    expect(
+      await h(
+        `<div style="height:100px;background:#f00"></div><div style="height:100px;background:#00f;margin-top:-100px"></div><div style="height:10px;background:#0f0"></div>`,
+      ),
+    ).toBe(110);
+    // 20px bottom + -5px top collapse to 15px: 50 + 20 + 15 + 20 = 105.
+    expect(
+      await h(
+        `<div style="height:50px"></div><div style="height:20px;margin-bottom:20px"></div><div style="height:20px;margin-top:-5px"></div>`,
+      ),
+    ).toBe(105);
+    // A negative first-child margin pulls the content up: 40 - 10 + 10 = 40.
+    expect(await h(`<div style="height:40px;background:#00f;margin-top:-10px"></div><div style="height:10px;background:#0f0"></div>`)).toBe(40);
+  });
   it("aspect-ratio:unset / initial cancel an earlier aspect-ratio", async () => {
     // GitHub resets `aspect-ratio:1` with a doubled-class rule
     // (`.lp-SectionHero-content.lp-SectionHero-content{aspect-ratio:unset}`). Before the
