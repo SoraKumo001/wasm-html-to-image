@@ -83,7 +83,7 @@ namespace litehtml
 		media_features						m_media;
 		long								m_measure_calls = 0;
 		unsigned							m_layout_epoch = 0;
-		static constexpr long				k_measure_budget = 1000000;
+		static constexpr long				k_measure_budget = 2000000;
 		string								m_lang;
 		string								m_culture;
 		string								m_text;
