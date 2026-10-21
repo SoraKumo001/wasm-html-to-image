@@ -911,6 +911,56 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
 
     fixed_width += m_grid_layout.column_gap * (num_columns - 1);
 
+    // minmax(<length>, <length>) tracks are content-independent: they start at their minimum and
+    // the free space is handed out to them (before any fr track) up to their maximum
+    // ("maximize tracks"). Returns the free space left over.
+    auto is_definite_minmax = [&](int i)
+    {
+        if (i >= (int)columns_template.size()) return false;
+        const auto& l = columns_template[i];
+        if (!l.is_calc() || l.get_op() != css_length::op_minmax || l.get_operands().size() != 2) return false;
+        const auto& mn = l.get_operands()[0];
+        const auto& mx = l.get_operands()[1];
+        return !mn.is_predefined() && !mx.is_predefined() && mx.units() != css_units_fr;
+    };
+    auto maximize_definite_minmax = [&](pixel_t free) -> pixel_t
+    {
+        std::vector<int> active;
+        std::vector<pixel_t> mins(num_columns, 0), caps(num_columns, 0);
+        for (int i = 0; i < num_columns; i++)
+        {
+            if (!is_definite_minmax(i)) continue;
+            const auto& ops = columns_template[i].get_operands();
+            mins[i] = ops[0].calc_percent(render_inline);
+            caps[i] = std::max(mins[i], ops[1].calc_percent(render_inline));
+            m_grid_layout.column_widths[i] = mins[i];
+            active.push_back(i);
+        }
+        if (free < 0) free = 0;
+        while (!active.empty() && free > 0.01f)
+        {
+            pixel_t share = free / (pixel_t)active.size();
+            bool capped = false;
+            for (size_t k = 0; k < active.size();)
+            {
+                int i = active[k];
+                pixel_t room = caps[i] - m_grid_layout.column_widths[i];
+                if (room <= share)
+                {
+                    m_grid_layout.column_widths[i] = caps[i];
+                    free -= room;
+                    active.erase(active.begin() + k);
+                    capped = true;
+                }
+                else k++;
+            }
+            if (capped) continue;
+            for (int i : active) m_grid_layout.column_widths[i] += share;
+            free = 0;
+        }
+        return free;
+    };
+
     // Intrinsic sizing: when the grid's own inline size is indefinite (e.g. a column flex
     // item's cross size measured with size_mode_content), fr tracks are sized from their
     // items' max-content contributions instead of sharing the available width. Without this
@@ -976,9 +1026,18 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
     }
 
     // Distribute remaining space to fr columns
+    if (!content_inline)
+    {
+        pixel_t free_width = render_inline - fixed_width;
+        if (free_width < 0) free_width = 0;
+        maximize_definite_minmax(free_width);
+    }
     if (total_fr > 0 && !content_inline)
     {
         pixel_t remaining_width = render_inline - fixed_width;
+        if (remaining_width < 0) remaining_width = 0;
+        for (int i = 0; i < num_columns; i++)
+            if (is_definite_minmax(i)) remaining_width -= m_grid_layout.column_widths[i] - columns_template[i].get_operands()[0].calc_percent(render_inline);
         if (remaining_width < 0) remaining_width = 0;
 
         for (int i = 0; i < num_columns; i++)
@@ -1029,7 +1088,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             {
                 if (l.get_op() == css_length::op_fit_content) kinds[i] = 4;
                 else if (l.get_op() == css_length::op_minmax && l.get_operands().size() == 2 &&
-                         l.get_operands()[1].units() != css_units_fr)
+                         l.get_operands()[1].units() != css_units_fr && !is_definite_minmax(i))
                     kinds[i] = 5;  // minmax(min, <length|auto|max-content>): content clamped to [min, max]
             }
             else if (l.is_predefined())
@@ -1100,6 +1159,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             }
             pixel_t remaining = render_inline - fixed2;
             if (remaining < 0) remaining = 0;
+            remaining = maximize_definite_minmax(remaining);
             if (fr_sum > 0)
             {
                 for (int i = 0; i < num_columns; i++)
@@ -1110,6 +1170,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                     {
                         m_grid_layout.column_widths[i] = (pixel_t)(remaining * (l.val() / fr_sum));
                     }
+                    else if (is_definite_minmax(i)) continue;
                     else if (l.is_calc() && l.get_op() == css_length::op_minmax)
                     {
                         m_grid_layout.column_widths[i] = l.get_operands()[0].calc_percent(render_inline);

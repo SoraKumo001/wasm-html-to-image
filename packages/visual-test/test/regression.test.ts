@@ -1232,10 +1232,21 @@ describe("regression: layout and paint probes", () => {
       while (x < 300 && at(x, 5)[0] > 200 && at(x, 5)[2] < 60) x++;
       return { redEnd: x, blueAtRedEnd: near(at(x + 1, 5), BLUE) };
     };
-    for (const tpl of ["auto 1fr", "max-content 1fr", "fit-content(200px) 1fr", "minmax(0, 200px) 1fr"]) {
+    for (const tpl of ["auto 1fr", "max-content 1fr", "fit-content(200px) 1fr"]) {
       const r = await widths(tpl);
       expect(r.redEnd, tpl).toBe(60);
       expect(r.blueAtRedEnd, tpl).toBe(true);
+    }
+    // minmax(<length>, <length>) is not content-sized: the free space grows the track to its
+    // maximum (Chromium: columns 200px 100px, so the second item starts at x=200).
+    {
+      const { at } = await renderPng(
+        `<div style="display:grid;grid-template-columns:minmax(0,200px) 1fr;width:300px">${cell("#f00")}${cell("#00f")}</div>`,
+        320,
+        20,
+      );
+      expect(near(at(210, 5), BLUE)).toBe(true);
+      expect(near(at(190, 5), BLUE)).toBe(false);
     }
     // inline children of a grid container become grid items (one per cell, not overlapped)
     const { at } = await renderPng(
@@ -3053,4 +3064,19 @@ describe("regression: layout and paint probes", () => {
     expect(isWhite(at(75, 25))).toBe(true);
   });
 
+  it("grid minmax(<length>, <length>) tracks grow to their maximum before fr tracks", async () => {
+    // MDN: [..] minmax(15rem,1fr) 2rem minmax(0,48rem) minmax(0,1fr). The content track is not
+    // content-sized: it takes the free space up to 48rem, leaving the fr tracks at their minimum.
+    const { at } = await renderPng(
+      `<div style="display:grid;grid-template-columns:minmax(40px,1fr) 10px minmax(0,150px) minmax(0,1fr);width:200px;height:10px">
+         <div style="background:#f00"></div><div></div><div style="background:#00f"><i style="display:block;width:5px"></i></div>
+       </div>`,
+      300,
+      20,
+    );
+    expect(near(at(20, 5), RED)).toBe(true); // 40px track
+    expect(near(at(60, 5), BLUE)).toBe(true); // 150px track starts at 50
+    expect(near(at(195, 5), BLUE)).toBe(true);
+    expect(isWhite(at(205, 5))).toBe(true); // 40 + 10 + 150 = 200
+  });
 });
