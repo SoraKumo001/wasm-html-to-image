@@ -3215,6 +3215,17 @@ describe("regression: layout and paint probes", () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   });
+  it("columns:N balances the columns by content size, not by item count", async () => {
+    // Items were dealt out evenly by count: {a,b},{c,tall} made the second column 6 lines tall
+    // where Chromium balances to {a,b,c},{tall} (5 lines).
+    const line = (t: string) => `<div style="height:20px">${t}</div>`;
+    const r = await render({
+      value: `<!DOCTYPE html><body style="margin:0"><div style="columns:2"><div style="break-inside:avoid">${line("a")}</div><div style="break-inside:avoid">${line("b")}</div><div style="break-inside:avoid">${line("c")}</div><div style="break-inside:avoid">${[1, 2, 3, 4, 5].map((n) => line(`t${n}`)).join("")}</div></div>`,
+      width: 400,
+      format: "png",
+    });
+    expect(r.height).toBeLessThanOrEqual(110);
+  });
   it("a percentage flex-basis does not collapse an intrinsically sized flex container to min-content", async () => {
     // A flex item with a non-auto flex-basis had its available width zeroed even when it was
     // measured for its content size, so the wrapper reported its longest word as the width and a

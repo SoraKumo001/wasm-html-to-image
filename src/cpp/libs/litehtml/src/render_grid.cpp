@@ -1,3 +1,4 @@
+#include <functional>
 #include <sstream>
 #include <map>
 #include <cmath>
@@ -192,11 +193,54 @@ std::vector<std::shared_ptr<render_item>> render_item_grid::group_into_columns(
         columns.push_back(anon_ri);
     }
 
-    size_t items_per_col = (items.size() + column_count - 1) / column_count;
-    if (items_per_col == 0) items_per_col = 1;
+    // Balance the columns like a multicol container does: items are not measured yet, so an
+    // item weighs as many lines as it has text runs. The contiguous split with the smallest
+    // tallest column wins (binary search on the column cap, greedy fill).
+    std::vector<int> weight(items.size(), 1);
+    std::function<int(const std::shared_ptr<render_item>&)> count_text =
+        [&](const std::shared_ptr<render_item>& ri) -> int
+    {
+        int n = 0;
+        for (const auto& ch : ri->children())
+        {
+            if (ch->src_el()->is_text()) n += 1;
+            else n += count_text(ch);
+        }
+        return n;
+    };
+    int total = 0, biggest = 1;
     for (size_t i = 0; i < items.size(); i++)
     {
-        size_t col_idx = std::min((size_t)(i / items_per_col), (size_t)(column_count - 1));
+        weight[i] = std::max(1, count_text(items[i]));
+        total += weight[i];
+        biggest = std::max(biggest, weight[i]);
+    }
+    auto columns_needed = [&](int cap)
+    {
+        int cols = 1, cur = 0;
+        for (int w : weight)
+        {
+            if (cur + w > cap) { cols++; cur = 0; }
+            cur += w;
+        }
+        return cols;
+    };
+    int lo = biggest, hi = total;
+    while (lo < hi)
+    {
+        int mid = (lo + hi) / 2;
+        if (columns_needed(mid) <= column_count) hi = mid; else lo = mid + 1;
+    }
+    size_t col_idx = 0;
+    int cur = 0;
+    for (size_t i = 0; i < items.size(); i++)
+    {
+        if (cur + weight[i] > lo && col_idx + 1 < (size_t)column_count && cur > 0)
+        {
+            col_idx++;
+            cur = 0;
+        }
+        cur += weight[i];
         columns[col_idx]->add_child(items[i]);
         items[i]->parent(columns[col_idx]);
     }
