@@ -3500,4 +3500,17 @@ describe("regression: layout and paint probes", () => {
     expect(await h("padding:6px 8px 5px;line-height:26px;font-size:16px")).toBe(37);
     expect(await h("line-height:40px;font-size:16px;padding:0")).toBe(40);
   });
+  it("an inline box's background stops at its border edge, not at its margins", async () => {
+    // python.org's Donate button: `a{margin-right:8px;padding:0 12px;background:...}` was painted
+    // 8px too wide because the margin was part of the inline fragment box.
+    const { at } = await renderPng(
+      `<div style="font:16px/20px monospace;padding-top:10px"><span style="margin:0 10px;padding:0 5px;background:#f00;color:#f00">xx</span></div>`,
+      120,
+      40,
+    );
+    expect(isWhite(at(4, 20))).toBe(true); // left margin
+    expect(near(at(13, 20), RED)).toBe(true); // padding starts at 10px
+    expect(near(at(10 + 5 + 16 + 5 - 3, 20), RED)).toBe(true);
+    expect(isWhite(at(10 + 5 + 16 + 5 + 6, 20))).toBe(true); // right margin (box ends at ~36px)
+  });
 });

@@ -1077,6 +1077,11 @@ std::list< std::unique_ptr<litehtml::line_box_item> > litehtml::line_box::finish
 				auto rel = lbi->get_el()->relative_offset(containing_block_size);
 				inlines.back().box.x += rel.first;
 				inlines.back().box.y += rel.second;
+				// the box is the border box: the margin before the first fragment is outside it
+				if(lbi->get_type() == line_box_item::type_inline_start)
+				{
+					inlines.back().box.x += lbi->get_el()->get_margins().left;
+				}
 			}
             
             if (m_writing_mode == writing_mode_horizontal_tb)
@@ -1106,7 +1111,7 @@ std::list< std::unique_ptr<litehtml::line_box_item> > litehtml::line_box::finish
 			{
                 if (m_writing_mode == writing_mode_horizontal_tb)
 				    // the box start was moved by position:relative; its extent was not
-				    inlines.back().box.width = lbi->right() - inlines.back().box.x + inlines.back().element->relative_offset(containing_block_size).first;
+				    inlines.back().box.width = lbi->right() - inlines.back().box.x + inlines.back().element->relative_offset(containing_block_size).first - inlines.back().element->get_margins().right;
                 else
                     // Transposed from horizontal: the inline extent runs to the
                     // end marker's inline position plus the inline-end offset.
