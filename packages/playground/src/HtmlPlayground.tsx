@@ -21,94 +21,36 @@ type Params = {
   animationLoop: number;
 };
 
-import SHOWCASE_SAMPLE_HTML from "./showcase-sample.html?raw";
-
 const SHOWCASE_SAMPLE_KEY = "showcase-sample";
+const SHOWCASE_ASSET = "animations/showcase-sample.html";
 const ANIMATION_SAMPLE_KEY = "animation-sample";
-const ANIMATION_SAMPLE_HTML = `<!DOCTYPE html>
-<html>
-<head>
-  <style>
-    @keyframes pulse-rotate {
-      0% {
-        transform: rotate(0deg) scale(0.85);
-        opacity: 0.6;
-        background-color: #3b82f6;
-        color: #ffffff;
-      }
-      50% {
-        transform: rotate(180deg) scale(1.1);
-        opacity: 1;
-        background-color: #ef4444;
-        color: #ffffff;
-      }
-      100% {
-        transform: rotate(360deg) scale(0.85);
-        opacity: 0.6;
-        background-color: #3b82f6;
-        color: #ffffff;
-      }
-    }
-    body {
-      font-family: system-ui, -apple-system, sans-serif;
-      margin: 0;
-      padding: 30px;
-      background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      min-height: 480px;
-      box-sizing: border-box;
-    }
-    .card {
-      background: white;
-      border-radius: 16px;
-      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
-      padding: 32px 48px;
-      text-align: center;
-      max-width: 420px;
-    }
-    h2 {
-      margin: 0 0 8px 0;
-      color: #1e293b;
-      font-size: 22px;
-    }
-    p {
-      margin: 0 0 24px 0;
-      color: #64748b;
-      font-size: 14px;
-    }
-    .badge {
-      width: 110px;
-      height: 110px;
-      margin: 0 auto;
-      border-radius: 24px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 18px;
-      font-weight: bold;
-      animation: pulse-rotate 2s infinite ease-in-out;
-    }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <h2>Animated WebP</h2>
-    <p>CSS @keyframes (transform, opacity, color)</p>
-    <div class="badge">WebP</div>
-  </div>
-</body>
-</html>`;
+const ANIMATION_SAMPLE_ASSET = "animations/animation-sample.html";
+
+const isAnimationAsset = (name?: string) =>
+  Boolean(
+    name &&
+      (name.startsWith("animations/") ||
+        name.startsWith("animation/") ||
+        name === ANIMATION_SAMPLE_KEY ||
+        name === SHOWCASE_SAMPLE_KEY),
+  );
 
 const App: React.FC = () => {
   const [assetList] = useState<string[]>(() => {
-    const assetFiles = import.meta.glob("../../visual-test/assets/*.html", {
-      query: "?url",
-      import: "default",
-    });
-    return Object.keys(assetFiles).map((path) => path.split("/").pop()!);
+    const assetFiles = import.meta.glob(
+      [
+        "../../visual-test/assets/*.html",
+        "../../visual-test/assets/animations/*.html",
+        "../../visual-test/assets/animation/*.html",
+      ],
+      {
+        query: "?url",
+        import: "default",
+      },
+    );
+    return Object.keys(assetFiles)
+      .map((path) => path.replace("../../visual-test/assets/", ""))
+      .sort((a, b) => a.localeCompare(b));
   });
   // Initialize state from URL parameters
   const [params, setParams] = useState<Params>(() => {
@@ -373,8 +315,10 @@ const App: React.FC = () => {
   useEffect(() => {
     if (
       (params.asset === ANIMATION_SAMPLE_KEY ||
-        params.asset === SHOWCASE_SAMPLE_KEY) &&
-      !params.value
+        params.asset === SHOWCASE_SAMPLE_KEY ||
+        isAnimationAsset(params.asset)) &&
+      !params.value &&
+      params.asset
     ) {
       loadAsset(params.asset);
       return;
@@ -386,32 +330,34 @@ const App: React.FC = () => {
     loadAsset(initialAsset);
   }, []);
   const loadAsset = async (name: string) => {
-    if (name === SHOWCASE_SAMPLE_KEY) {
-      shouldRenderImmediately.current = true;
-      updateParams({
-        asset: name,
-        value: SHOWCASE_SAMPLE_HTML,
-        width: 900,
-        format: "webp",
-        anim: true,
-      });
-      return;
-    }
-    if (name === ANIMATION_SAMPLE_KEY) {
-      shouldRenderImmediately.current = true;
-      updateParams({
-        asset: name,
-        value: ANIMATION_SAMPLE_HTML,
-        format: "webp",
-        anim: true,
-      });
-      return;
-    }
+    const targetAsset =
+      name === SHOWCASE_SAMPLE_KEY
+        ? SHOWCASE_ASSET
+        : name === ANIMATION_SAMPLE_KEY
+          ? ANIMATION_SAMPLE_ASSET
+          : name;
     try {
-      const resp = await fetch(`assets/${name}`);
+      const resp = await fetch(`assets/${targetAsset}`);
       const text = await resp.text();
       shouldRenderImmediately.current = true;
-      updateParams({ asset: name, value: text });
+      const isAnim = isAnimationAsset(name) || isAnimationAsset(targetAsset);
+      const isShowcase = targetAsset === SHOWCASE_ASSET;
+      updateParams({
+        asset: name,
+        value: text,
+        ...(isShowcase ? { width: 900 } : {}),
+        ...(isAnim
+          ? {
+              anim: true,
+              format:
+                params.format === "png" ||
+                params.format === "svg" ||
+                params.format === "pdf"
+                  ? "webp"
+                  : params.format,
+            }
+          : {}),
+      });
     } catch (e) {
       console.error("Failed to load asset", e);
     }
@@ -902,7 +848,13 @@ const App: React.FC = () => {
         >
           <legend style={{ fontWeight: "bold" }}>Load Sample Assets</legend>
           <select
-            value={params.asset ?? ""}
+            value={
+              params.asset === SHOWCASE_SAMPLE_KEY
+                ? SHOWCASE_ASSET
+                : params.asset === ANIMATION_SAMPLE_KEY
+                  ? ANIMATION_SAMPLE_ASSET
+                  : params.asset ?? ""
+            }
             onChange={(e) => loadAsset(e.target.value)}
             style={{
               padding: "5px",
@@ -912,17 +864,26 @@ const App: React.FC = () => {
             }}
           >
             <option value="">-- Select Asset --</option>
-            <option value={SHOWCASE_SAMPLE_KEY}>
-              🌟 Showcase (new CSS, vertical writing, animation)
-            </option>
-            <option value={ANIMATION_SAMPLE_KEY}>
-              ✨ CSS Animation (@keyframes)
-            </option>
-            {assetList.map((asset) => (
-              <option key={asset} value={asset}>
-                {asset}
-              </option>
-            ))}
+            {assetList.some(isAnimationAsset) && (
+              <optgroup label="Animation Samples">
+                {assetList
+                  .filter(isAnimationAsset)
+                  .map((asset) => (
+                    <option key={asset} value={asset}>
+                      {asset.split("/").pop()}
+                    </option>
+                  ))}
+              </optgroup>
+            )}
+            <optgroup label="Static Assets">
+              {assetList
+                .filter((asset) => !isAnimationAsset(asset))
+                .map((asset) => (
+                  <option key={asset} value={asset}>
+                    {asset.split("/").pop()}
+                  </option>
+                ))}
+            </optgroup>
           </select>
         </fieldset>
       </div>
