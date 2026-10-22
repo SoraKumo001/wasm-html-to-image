@@ -3166,4 +3166,17 @@ describe("inline-block inside flex and grid items", () => {
     expect(await height("grid")).toBe(block);
     expect(await height("flex")).toBe(block);
   });
+  it("a button and a submit input default to vertical-align: baseline, like Chromium", async () => {
+    // vertical-align: middle in the user-agent sheet lifted them off the baseline and grew the line.
+    const height = async (control: string) =>
+      (await render({
+        value: `<!DOCTYPE html><html><body style="margin:0"><div style="font-size:30px;line-height:36px">x${control}</div></body></html>`,
+        width: 300,
+        format: "png",
+      })).height;
+    expect(await height(`<button>y</button>`)).toBe(await height(`<button style="vertical-align:baseline">y</button>`));
+    expect(await height(`<input type="submit" value="y">`)).toBe(
+      await height(`<input type="submit" value="y" style="vertical-align:baseline">`),
+    );
+  });
 });
