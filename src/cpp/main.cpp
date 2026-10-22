@@ -78,6 +78,7 @@ EMSCRIPTEN_BINDINGS(html_to_image) {
     // get_pending_resources は実体ありのため登録
     // (外部フォント/画像の解決に必須)。
     function("satoru_collect_resources", &satoru_collect_resources_val, allow_raw_pointers());
+    function("satoru_layout_json", &satoru_layout_json_val, allow_raw_pointers());
     function("satoru_get_pending_resources", &satoru_get_pending_resources_val,
              allow_raw_pointers());
     function("satoru_add_resource", &satoru_add_resource_val, allow_raw_pointers());

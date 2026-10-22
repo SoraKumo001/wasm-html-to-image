@@ -19,6 +19,7 @@ export type {
   OutputFormat,
   RenderOptions,
   HtmlToImageOptions,
+  LayoutBox,
   RenderResult,
   DiagnosticMessage,
   FontDiagnostic,

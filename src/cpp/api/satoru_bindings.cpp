@@ -1,4 +1,5 @@
 #include "satoru_bindings.h"
+#include "layout_json.h"
 
 #include <map>
 
@@ -139,6 +140,14 @@ val satoru_render_val(SatoruInstance* inst, val htmls, int width, int height, in
 
 // satoru_set_font_map: C APIは const std::map<std::string,std::string>& 受けのためJS直結不可。
 // JSオブジェクト {family: url} 受けのvalラッパ経由で登録する。
+// Debug: every element's border box as JSON (see api/layout_json.h). `htmls` is one page.
+std::string satoru_layout_json_val(SatoruInstance* inst, val htmls, int width, int height,
+                                   int mediaType) {
+    std::vector<std::string> pages = val_to_html_vector(htmls);
+    if (!inst || pages.empty()) return "[]";
+    return satoru_api_layout_json(inst, pages[0], width, height, mediaType);
+}
+
 void satoru_set_font_map_val(SatoruInstance* inst, val fontMap) {
     if (!inst || fontMap.isUndefined() || fontMap.isNull()) return;
     std::map<std::string, std::string> m;

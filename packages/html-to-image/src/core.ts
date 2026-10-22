@@ -110,6 +110,22 @@ export interface RenderOptions {
  * - Image input: render stage is skipped; `width`/`height`/`crop`/`fit`
  *   are applied as output resize on the encode stage.
  */
+/** One element's border box from `onLayout` (page coordinates, CSS px). */
+export interface LayoutBox {
+  /** Path of element-child indexes from the root, e.g. "0.1.3". */
+  p: string;
+  /** Lower-case tag name. */
+  t: string;
+  /** `id` attribute ("" when absent). */
+  i: string;
+  /** `class` attribute, truncated ("" when absent). */
+  c: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 export interface HtmlToImageOptions extends RenderOptions {
   /** Encode quality 0-100 (encode stage only, default 85; ignored for svg/pdf). */
   quality?: number;
@@ -168,6 +184,13 @@ export interface HtmlToImageOptions extends RenderOptions {
   diagnostics?: boolean;
   /** Receives the diagnostics report when `diagnostics` is enabled. */
   onDiagnostics?: (report: RenderDiagnostics) => void;
+  /**
+   * Debug aid for comparing against a reference browser: receives every laid-out element's border
+   * box in page coordinates (HTML input only; `html-to-image` instance pipeline). `p` is the
+   * element's path among element children of the shadow-flattened tree ("0.1.3"), so a browser
+   * walk produces the same keys. Inline boxes are omitted except replaced ones (img, svg, ...).
+   */
+  onLayout?: (boxes: LayoutBox[]) => void;
   /**
    * Override hook for resource resolution, applied to every fetch path
    * (discovery fetches, fallback-font URLs, HTML `url` fetch). Return

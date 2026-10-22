@@ -91,6 +91,14 @@ export interface HtmlToImageModule {
     height: number,
     mediaType: number,
   ): unknown;
+  /** Debug: JSON array of every element's border box (see `onLayout`). */
+  satoru_layout_json?(
+    inst: WasmInstancePtr,
+    html: string | string[],
+    width: number,
+    height: number,
+    mediaType: number,
+  ): string;
   satoru_get_pending_resources?(inst: WasmInstancePtr): unknown;
   satoru_add_resource?(
     inst: WasmInstancePtr,

@@ -33,6 +33,7 @@ import {
 } from "./core-resources.js";
 import type {
   HtmlToImageOptions,
+  LayoutBox,
   OutputFormat,
   RenderResult,
 } from "./core.js";
@@ -90,6 +91,7 @@ export interface Orchestration {
   onLog: HtmlToImageOptions["onLog"];
   diagnostics: boolean;
   onDiagnostics: HtmlToImageOptions["onDiagnostics"];
+  onLayout: HtmlToImageOptions["onLayout"];
   resolveResource: ResolveResourceHook | undefined;
   mediaType: "screen" | "print";
   textToPaths: boolean | undefined;
@@ -164,6 +166,7 @@ export function createOrchestration(
     onLog,
     diagnostics = false,
     onDiagnostics,
+    onLayout,
     resolveResource,
     mediaType = "screen",
     textToPaths,
@@ -319,6 +322,7 @@ export function createOrchestration(
     onLog,
     diagnostics,
     onDiagnostics,
+    onLayout,
     resolveResource,
     mediaType,
     textToPaths,
@@ -653,6 +657,21 @@ export async function tryRunHtmlInstance(
     );
     addTime("resolveResources", now() - resolveStart);
     emitLog(LogLevel.Info, "resources resolved");
+
+    if (orch.onLayout && typeof module.satoru_layout_json === "function") {
+      const page = Array.isArray(htmls) ? htmls[0] : htmls;
+      orch.onLayout(
+        JSON.parse(
+          module.satoru_layout_json(
+            sInst,
+            page,
+            width,
+            height ?? 0,
+            orch.mediaTypeInt,
+          ),
+        ) as LayoutBox[],
+      );
+    }
 
     if (format === "svg" || format === "pdf") {
       const renderStart = now();

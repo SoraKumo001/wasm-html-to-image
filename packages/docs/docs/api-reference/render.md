@@ -104,6 +104,7 @@ export interface RenderResult<T = Uint8Array | string> {
 | `onLog`           | `(level: LogLevel, message: string) => void`   | ログ受信用コールバック                                             |
 | `diagnostics`     | `boolean`                                      | 詳細な診断レポートを収集するか                                     |
 | `onDiagnostics`   | `(report: RenderDiagnostics) => void`          | 診断レポート受信用コールバック                                     |
+| `onLayout`        | `(boxes: LayoutBox[]) => void`                 | デバッグ用。レイアウト済みの全要素のボーダーボックス（ページ座標）を受け取る。HTML 入力のみ。ブラウザとの差分調査に使う |
 | `limits`          | `RenderLimits`                                 | 最大リソース数、最大メモリサイズなどの安全上限                     |
 
 ### 信頼できない HTML を描画するとき (`limits`)
