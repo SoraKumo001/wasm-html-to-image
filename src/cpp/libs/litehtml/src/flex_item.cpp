@@ -207,8 +207,11 @@ void litehtml::flex_item_row_direction::direction_specific_init(const litehtml::
 	if (!flex_basis_predefined && (self_size.size_mode & containing_block_context::size_mode_measure)) {
 		const bool indefinite = (self_size.size_mode & containing_block_context::size_mode_content) ||
 								parent_size <= 0;
-		if (grow > 0 || (el->css().get_flex_basis().units() == css_units_percentage && indefinite) ||
-			el->css().get_flex_basis().val() == 0) {
+		// Growable items and a zero basis measure as content only for an intrinsic-size query; at a
+		// definite inline size the basis is what the final layout uses, or the line breaking of a
+		// wrapping container would differ from the layout and its height would be overestimated.
+		if (indefinite && (grow > 0 || el->css().get_flex_basis().units() == css_units_percentage ||
+			el->css().get_flex_basis().val() == 0)) {
 			flex_basis_predefined = true;
 			predef = flex_basis_content;
 		}
@@ -217,6 +220,18 @@ void litehtml::flex_item_row_direction::direction_specific_init(const litehtml::
 	if (flex_basis_predefined)
 	{
 		if(predef == flex_basis_auto && size_prop.is_predefined()) predef = flex_basis_content;
+		// A percentage width (`width:100%`) is cyclic while the container is being sized from its
+		// content (an intrinsic-size query with an indefinite inline size): it behaves as auto, so the
+		// item contributes its content size instead of the available width. Otherwise an empty
+		// `width:100%` child makes its wrapper as wide as the space it is measured in, and the items
+		// of a wrapping flex container each fill a line.
+		if (predef == flex_basis_auto && !m_container_wm.is_vertical() &&
+			(size_prop.units() == css_units_percentage || (size_prop.is_calc() && size_prop.calc_percent() != 0)) &&
+			(self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content)) &&
+			self_size.render_inline_size().type == containing_block_context::cbc_value_type_auto)
+		{
+			predef = flex_basis_content;
+		}
 
 		switch (predef)
 		{

@@ -3760,6 +3760,24 @@ describe("regression: layout and paint probes", () => {
     ]);
     expect(Math.abs(flexItem[0] - flexItem[1])).toBeLessThanOrEqual(1);
   });
+  it("an empty width:100% flex child does not make its wrapper's min-content as wide as the line", async () => {
+    // tailwind cards: wrapping-flex items hold a `display:flex;width:100%` row. While the items are
+    // sized from their content that percentage is cyclic (auto), so two cards share one line.
+    const h = async (html: string) => (await render({ value: `<!DOCTYPE html><body style="margin:0">${html}</body>`, width: 800, format: "png" })).height;
+    const card = `<div style="flex:1 1 0%"><div style="display:flex;width:100%;flex:1 1 0%;padding:20px;box-sizing:border-box"><div style="display:flex;width:100%"></div></div></div>`;
+    const row = (inner: string) => `<div style="width:768px"><div style="display:flex"><div style="width:100%"><div style="display:flex;flex-wrap:wrap">${inner}</div></div></div></div>`;
+    expect(await h(row(card + card))).toBe(40); // one line of 40px cards, not two
+    expect(await h(row(card + card + card + card))).toBe(40);
+  });
+  it("flex-wrap: a growable item is sized by its basis at a definite width, not by its max-content", async () => {
+    // item 2 is `flex:1 1 0%` with a long text: its basis is 0 (the text may wrap), so both items
+    // fit on one line; sized by max-content (the intrinsic-size rule) they wrapped onto two.
+    const h = async (html: string) => (await render({ value: `<!DOCTYPE html><body style="margin:0;font:16px sans-serif">${html}</body>`, width: 800, format: "png" })).height;
+    const wrap = `<div style="width:500px;display:flex;flex-direction:column"><div style="display:flex;flex-wrap:wrap"><div style="width:300px;height:30px"></div><div style="flex:1 1 0%">aaaaaaaa bbbbbbbb cccccccc dddddddd eeeeeeee ffffffff gggggggg hhhhhhhh</div></div></div>`;
+    // one line: the 200px-wide text beside the 300px box wraps to ~4 lines (Chromium: 96px); on two
+    // lines the text would have the full 500px and the height would be ~76px
+    expect(await h(wrap)).toBeGreaterThan(85);
+  });
   it("grid: text placed directly in the container is drawn, with its spaces", async () => {
     // A grid whose only children are text got no parent on the anonymous item wrapping them, so
     // nothing was drawn; and the space between two words was dropped as an empty grid item.
