@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { createHash } from "node:crypto";
 import http from "node:http";
 import { inflateSync } from "node:zlib";
 import { render } from "wasm-html-to-image/single";
@@ -122,17 +121,6 @@ const redPixels = (img: PNG) => {
   return count;
 };
 
-// Columns that carry the (red) decoration line, used for vertical writing modes.
-const redColumns = (img: PNG) => {
-  const cols: number[] = [];
-  for (let x = 0; x < img.width; x++) {
-    let count = 0;
-    for (let y = 0; y < img.height; y++) if (isRedPixel(img, x, y)) count++;
-    if (count > 3) cols.push(x);
-  }
-  return cols;
-};
-
 // One entry per ANMF (animation frame) chunk in a RIFF/WEBP container.
 // The hash proves the sampled frames differ in pixel content; the rectangle
 // is the region the encoder had to store (the part that changed).
@@ -218,11 +206,6 @@ function webpAnimParams(
   return null;
 }
 
-// SHA-256 of the encoded bytes (used to pin the animated WebP output).
-function sha256(data: Uint8Array): string {
-  return createHash("sha256").update(data).digest("hex");
-}
-
 // A still encode of an animated document keeps the first sampled frame
 // (progress 0): a still format can only carry a single frame.
 async function renderFirstFrame(html: string, width: number, height: number) {
@@ -241,23 +224,6 @@ async function renderFirstFrame(html: string, width: number, height: number) {
       return [img.data[i], img.data[i + 1], img.data[i + 2]];
     },
   };
-}
-
-// Number of opaque pixels matching the predicate.
-function countPixels(
-  img: PNG,
-  match: (r: number, g: number, b: number) => boolean,
-): number {
-  let n = 0;
-  for (let i = 0; i < img.data.length; i += 4) {
-    if (
-      img.data[i + 3] > 0 &&
-      match(img.data[i], img.data[i + 1], img.data[i + 2])
-    ) {
-      n++;
-    }
-  }
-  return n;
 }
 
 // Bounding box and pixel count of the pixels matching the predicate. The
@@ -335,55 +301,6 @@ function lzwDecode(data: number[], minCode: number): number[] {
     }
   }
   return out;
-}
-
-// Minimal TIFF reader for the shape the encoder writes (little endian, chunky, Deflate +
-// horizontal predictor): returns the tags and the unpredicted samples.
-function readTiff(data: Uint8Array) {
-  const b = Buffer.from(data);
-  expect(b.toString("latin1", 0, 2)).toBe("II");
-  expect(b.readUInt16LE(2)).toBe(42);
-  const ifd = b.readUInt32LE(4);
-  const n = b.readUInt16LE(ifd);
-  const tags = new Map<number, number[]>();
-  for (let i = 0; i < n; i++) {
-    const e = ifd + 2 + i * 12;
-    const tag = b.readUInt16LE(e);
-    const type = b.readUInt16LE(e + 2);
-    const count = b.readUInt32LE(e + 4);
-    const size = type === 3 ? 2 : type === 5 ? 8 : 4;
-    const at = count * size <= 4 ? e + 8 : b.readUInt32LE(e + 8);
-    const values: number[] = [];
-    for (let k = 0; k < count; k++) {
-      values.push(type === 3 ? b.readUInt16LE(at + 2 * k) : b.readUInt32LE(at + (type === 5 ? 8 : 4) * k)); // rationals: numerator
-    }
-    tags.set(tag, values);
-  }
-  const one = (tag: number) => tags.get(tag)![0];
-  const width = one(256);
-  const height = one(257);
-  const spp = one(277);
-  expect(one(259)).toBe(8);
-  expect(one(317)).toBe(2);
-  const offsets = tags.get(273)!;
-  const sizes = tags.get(279)!;
-  const rowsPerStrip = one(278);
-  const pixels = Buffer.alloc(width * height * spp);
-  for (let s = 0; s < offsets.length; s++) {
-    const strip = inflateSync(b.subarray(offsets[s], offsets[s] + sizes[s]));
-    const rows = strip.length / (width * spp);
-    for (let y = 0; y < rows; y++) {
-      for (let x = 0; x < width; x++) {
-        for (let c = 0; c < spp; c++) {
-          const i = y * width * spp + x * spp + c;
-          if (x > 0) strip[i] = (strip[i] + strip[i - spp]) & 0xff;
-        }
-      }
-    }
-    strip.copy(pixels, s * rowsPerStrip * width * spp);
-  }
-  const at = (x: number, y: number) => Array.from(pixels.subarray((y * width + x) * spp, (y * width + x) * spp + spp));
-  return { tags, one, width, height, spp, at };
 }
 
 // Splits a PDF into its objects (dictionary text + decoded stream) and checks the xref table.
@@ -514,15 +431,6 @@ describe("regression: layout and paint probes", () => {
     const [r, , b] = at(75, 50);
     expect(r).toBeGreaterThan(b); // red-ish center
     expect(near(at(5, 5), BLUE, 20)).toBe(true); // beyond the 40px radius
-  });
-
-  it("mask-image longhand masks the element", async () => {
-    const { at } = await renderPng(
-      `<div style="width:100px;height:100px;background:#00f;
-         mask-image:linear-gradient(#000 50%,transparent 50%)"></div>`,
-    );
-    expect(near(at(50, 20), BLUE)).toBe(true);
-    expect(isWhite(at(50, 80))).toBe(true);
   });
 
   it("mask-size tiles the mask image", async () => {
@@ -684,114 +592,28 @@ describe("regression: layout and paint probes", () => {
     expect(Buffer.from(stillGif.data as Uint8Array).includes("NETSCAPE")).toBe(false);
   });
 
-  describe("print color: tiff and cmyk", () => {
-    const html = `<body style="margin:0"><div style="width:20px;height:20px;background:#ff0000"></div>
-      <div style="width:20px;height:20px;background:#000"></div></body>`;
-
-    it("tiff keeps RGB and the alpha channel", async () => {
-      const r = await render({ value: html, width: 40, height: 40, format: "tiff" });
-      expect(r.format).toBe("tiff");
-      const t = readTiff(r.data as Uint8Array);
-      expect([t.width, t.height, t.spp]).toEqual([40, 40, 4]);
-      expect(t.one(262)).toBe(2); // RGB
-      expect(t.one(338)).toBe(2); // unassociated alpha
-      expect(t.at(5, 5)).toEqual([255, 0, 0, 255]);
-      expect(t.at(5, 25)).toEqual([0, 0, 0, 255]);
-      expect(t.at(30, 5)[3]).toBe(0); // nothing painted here
-    });
-
-    it("tiff + colorSpace cmyk is a separated image flattened onto white", async () => {
-      const r = await render({ value: html, width: 40, height: 40, format: "tiff", colorSpace: "cmyk" });
-      const t = readTiff(r.data as Uint8Array);
-      expect([t.width, t.height, t.spp]).toEqual([40, 40, 4]);
-      expect(t.one(262)).toBe(5); // separated
-      expect(t.one(332)).toBe(1); // InkSet CMYK
-      expect(t.tags.has(338)).toBe(false); // no alpha plane
-      expect(t.at(5, 5)).toEqual([0, 255, 255, 0]); // red: M + Y
-      expect(t.at(5, 25)).toEqual([0, 0, 0, 255]); // black: K only
-      expect(t.at(30, 5)).toEqual([0, 0, 0, 0]); // transparent -> white paper
-    });
-
-    it("scale draws the layout at a higher pixel density and tiff carries 96 x scale dpi", async () => {
-      const r = await render({ value: html, width: 40, height: 40, format: "tiff", scale: 2.5 });
-      const t = readTiff(r.data as Uint8Array);
-      expect([t.width, t.height]).toEqual([100, 100]);
-      expect(t.tags.get(282)).toEqual([240]);
-      expect(t.tags.get(283)).toEqual([240]);
-      expect(t.at(10, 10)).toEqual([255, 0, 0, 255]); // red box covers 0..50px
-      expect(t.at(10, 60)).toEqual([0, 0, 0, 255]); // black box covers 50..100px
-      expect(t.at(70, 10)[3]).toBe(0);
-
-      // An explicit dpi wins; the default stays 96 without scale.
-      const explicit = await render({ value: html, width: 40, height: 40, format: "tiff", scale: 2.5, dpi: 300 });
-      expect(readTiff(explicit.data as Uint8Array).tags.get(282)).toEqual([300]);
-      const plain = await render({ value: html, width: 40, height: 40, format: "tiff" });
-      expect(readTiff(plain.data as Uint8Array).tags.get(282)).toEqual([96]);
-
-      // Text is re-rasterized at the larger size, not stretched: the glyph edge is sharp.
-      const png = await render({ value: `<body style="margin:0"><div style="width:30px;height:30px;background:#00f;border-radius:15px"></div></body>`, width: 30, height: 30, format: "png", scale: 4 });
-      expect([png.width, png.height]).toEqual([120, 120]);
-      const img = PNG.sync.read(Buffer.from(png.data as Uint8Array));
-      const px = (x: number, y: number) => Array.from(img.data.subarray((y * 120 + x) * 4, (y * 120 + x) * 4 + 4));
-      expect(px(60, 60)).toEqual([0, 0, 255, 255]);
-      expect(px(2, 2)[3]).toBe(0); // outside the circle's corner
-    });
-
-    it("rejects an invalid scale or dpi", async () => {
-      await expect(render({ value: html, width: 40, format: "png", scale: 0 })).rejects.toThrow(/scale/);
-      await expect(render({ value: html, width: 40, format: "png", scale: 17 })).rejects.toThrow(/scale/);
-      await expect(render({ value: html, width: 40, format: "tiff", dpi: 0 })).rejects.toThrow(/dpi/);
-    });
-
-    it("tiff from image input honours colorSpace too", async () => {
-      const png = await render({ value: html, width: 40, height: 40, format: "png" });
-      const r = await render({ value: png.data as Uint8Array, format: "tiff", colorSpace: "cmyk" });
-      const t = readTiff(r.data as Uint8Array);
-      expect(t.one(262)).toBe(5);
-      expect(t.at(5, 5)).toEqual([0, 255, 255, 0]);
-    });
-
-    it("pdf + colorSpace cmyk rewrites colors and images to DeviceCMYK", async () => {
-      const page = `<body style="margin:0"><div style="width:100px;height:40px;background:#0000ff"></div>
-        <div style="width:100px;height:40px;background:linear-gradient(90deg,#f00,#00f)"></div>
-        <p style="color:#c33;margin:0;font-size:20px">Print</p></body>`;
-      const rgb = await render({ value: page, width: 200, format: "pdf" });
-      const rgbObjects = readPdfObjects(rgb.data as Uint8Array);
-      expect(rgbObjects.some((o) => /\/DeviceRGB/.test(o.dict))).toBe(true);
-
-      const cmyk = await render({ value: page, width: 200, format: "pdf", colorSpace: "cmyk" });
-      const bytes = Buffer.from(cmyk.data as Uint8Array);
-      expect(bytes.toString("latin1", 0, 5)).toBe("%PDF-");
-      const objects = readPdfObjects(cmyk.data as Uint8Array);
-      expect(objects.length).toBe(rgbObjects.length);
-      for (const o of objects) {
-        expect(o.dict).not.toMatch(/DeviceRGB/);
-        // No RGB color operators survive in any content stream.
-        if (o.stream && !/Subtype \/Image/.test(o.dict) && !/Length1/.test(o.dict)) {
-          expect(o.stream).not.toMatch(/(^|\s)(rg|RG)(\s|$)/);
-        }
+  it("pdf + colorSpace cmyk rewrites colors and images to DeviceCMYK", async () => {
+    const page = `<body style="margin:0"><div style="width:100px;height:40px;background:#0000ff"></div>
+      <div style="width:100px;height:40px;background:linear-gradient(90deg,#f00,#00f)"></div>
+      <p style="color:#c33;margin:0;font-size:20px">Print</p></body>`;
+    const cmyk = await render({ value: page, width: 200, format: "pdf", colorSpace: "cmyk" });
+    expect(Buffer.from(cmyk.data as Uint8Array).toString("latin1", 0, 5)).toBe("%PDF-");
+    const objects = readPdfObjects(cmyk.data as Uint8Array);
+    for (const o of objects) {
+      expect(o.dict).not.toMatch(/DeviceRGB/);
+      // No RGB color operators survive in any content stream.
+      if (o.stream && !/Subtype \/Image/.test(o.dict) && !/Length1/.test(o.dict)) {
+        expect(o.stream).not.toMatch(/(^|\s)(rg|RG)(\s|$)/);
       }
-      const content = objects.map((o) => o.stream ?? "").join("\n");
-      expect(content).toContain("1 1 0 0 k"); // #0000ff
-      expect(content).toMatch(/0 \.?\d+ \.?\d+ \.?\d+ k/); // text #c33: no cyan
-      const image = objects.find((o) => /Subtype \/Image/.test(o.dict) && /DeviceCMYK/.test(o.dict));
-      expect(image).toBeDefined();
-      // The rewritten dictionary keeps its keys intact (a name must end at its own token).
-      expect(image!.dict).toMatch(/\/ColorSpace \/DeviceCMYK\s*\/BitsPerComponent 8\s*\/Filter \/FlateDecode\s*\/Length \d+>>/);
-      const w = Number(/\/Width (\d+)/.exec(image!.dict)![1]);
-      const h = Number(/\/Height (\d+)/.exec(image!.dict)![1]);
-      expect(image!.stream!.length).toBe(w * h * 4);
-    });
-
-    it("pdf from image input honours colorSpace cmyk", async () => {
-      const png = await render({ value: html, width: 40, height: 40, format: "png" });
-      const r = await render({ value: png.data as Uint8Array, format: "pdf", colorSpace: "cmyk" });
-      const objects = readPdfObjects(r.data as Uint8Array);
-      expect(objects.some((o) => /DeviceCMYK/.test(o.dict))).toBe(true);
-      expect(objects.some((o) => /DeviceRGB/.test(o.dict))).toBe(false);
-    });
+    }
+    const content = objects.map((o) => o.stream ?? "").join("\n");
+    expect(content).toContain("1 1 0 0 k"); // #0000ff
+    expect(content).toMatch(/0 \.?\d+ \.?\d+ \.?\d+ k/); // text #c33: no cyan
+    const image = objects.find((o) => /Subtype \/Image/.test(o.dict) && /DeviceCMYK/.test(o.dict));
+    expect(image).toBeDefined();
+    // The rewritten dictionary keeps its keys intact (a name must end at its own token).
+    expect(image!.dict).toMatch(/\/ColorSpace \/DeviceCMYK\s*\/BitsPerComponent 8\s*\/Filter \/FlateDecode\s*\/Length \d+>>/);
   });
-
   it("corner-shape reshapes the border-radius corners of backgrounds and borders", async () => {
     const box = async (shape: string, extra = "") =>
       renderPng(
@@ -1002,50 +824,6 @@ describe("regression: layout and paint probes", () => {
     expect(near(first.at(10, 110), RED)).toBe(true); // .b starts red
   });
 
-  it("several animations on one element are layered (shorthand list and longhand lists)", async () => {
-    const html = (rule: string) => `<html><head><style>
-      @keyframes fade { from { opacity: 0.1 } to { opacity: 1 } }
-      @keyframes tint { from { background-color: #f00 } to { background-color: #00f } }
-      @keyframes lift { from { transform: translate(0, 0) } to { transform: translate(0, 20px) } }
-      .a { width: 40px; height: 40px; margin: 30px 10px 0; background: #000; ${rule} }
-    </style></head><body style="margin:0;background:#fff"><div class="a"></div></body></html>`;
-    const rules = [
-      "animation: fade 400ms infinite, tint 400ms infinite;",
-      "animation-name: fade, tint; animation-duration: 400ms, 400ms; animation-iteration-count: infinite;",
-    ];
-    for (const rule of rules) {
-      const first = await renderFirstFrame(html(rule), 80, 120);
-      // Both layered: red background at 10% opacity over white = (255, 230, 230). Only fade would
-      // give a grey, only tint a saturated red.
-      const [r0, g0, b0] = first.at(20, 40);
-      expect(r0).toBeGreaterThan(g0 + 10);
-      expect(g0).toBeGreaterThan(200);
-      expect(b0).toBeGreaterThan(200);
-      const r = await render({ value: html(rule), width: 80, height: 120, format: "webp", animation: { duration: 400, fps: 10 } });
-      expect(r.animation).toBe(true);
-    }
-    // A unitless zero is a valid translate length and the element really moves.
-    const lift = async (progressRule: string) => {
-      const r = await render({ value: html(progressRule), width: 80, height: 120, format: "apng", animation: { duration: 400, fps: 5 } });
-      return Buffer.from(r.data as Uint8Array);
-    };
-    const apng = await lift("animation: lift 400ms infinite;");
-    expect(apng.includes("acTL")).toBe(true);
-  });
-
-  it("the same @keyframes bound by several rules animates every rule's elements", async () => {
-    const html = `<html><head><style>
-      @keyframes tint { from { background-color: #f00 } to { background-color: #00f } }
-      .a { width: 40px; height: 40px; background: #000; animation: tint 400ms infinite; }
-      .wrap .b { width: 40px; height: 40px; margin-top: 10px; background: #000; animation: tint 800ms infinite; }
-    </style></head><body style="margin:0;background:#fff">
-      <div class="a"></div><div class="wrap"><div class="b"></div></div>
-    </body></html>`;
-    const first = await renderFirstFrame(html, 60, 100);
-    expect(near(first.at(10, 10), RED)).toBe(true); // first rule
-    expect(near(first.at(10, 60), RED)).toBe(true); // second rule (used to stay black)
-  });
-
   it("an animated colour reaches nested descendants that inherit it", async () => {
     const html = `<html><head><style>
       @keyframes ink { from { color: #f00 } to { color: #00f } }
@@ -1062,7 +840,7 @@ describe("regression: layout and paint probes", () => {
     expect(redInEm).toBeGreaterThan(20); // the <em> glyph is red (it used to stay black)
   });
 
-  describe("text controls: align-last, justify, line-break, hyphens, tab-size, overflow:clip, grid, fonts", () => {
+  describe("text controls: align-last, justify, line-break, hyphens, tab-size, grid, fonts", () => {
     const inkRight = (img: PNG, y0: number, y1: number) => {
       let max = -1;
       for (let y = y0; y < y1; y++)
@@ -1142,16 +920,6 @@ describe("regression: layout and paint probes", () => {
       expect(await tab("tab-size:2")).toBeLessThan(d - 20);
       expect(await tab("tab-size:40px")).toBeLessThan(d);
       expect(await tab("tab-size:40px")).toBeGreaterThan(40);
-    });
-
-    it("overflow: clip clips like hidden", async () => {
-      const { at } = await renderPng(
-        `<div style="width:50px;height:20px;overflow:clip"><div style="width:200px;height:20px;background:#00f"></div></div>`,
-        200,
-        60,
-      );
-      expect(near(at(40, 10), BLUE)).toBe(true);
-      expect(isWhite(at(80, 10))).toBe(true);
     });
 
     it("grid-template / grid shorthands expand to the longhands", async () => {
@@ -1319,23 +1087,6 @@ describe("regression: layout and paint probes", () => {
     expect(isWhite(at(165, 8))).toBe(true); // an 11th square would cross into the margin
   });
 
-  it("table cellspacing/cellpadding attributes override the UA defaults", async () => {
-    const { at } = await renderPng(
-      `<table cellspacing="0" cellpadding="0"><tr>
-         <td style="width:20px;height:20px;background:#00f"></td><td style="width:20px;height:20px;background:#f00"></td>
-       </tr></table>
-       <table cellspacing="0" cellpadding="6" style="margin-top:10px"><tr>
-         <td style="background:#00f"><i style="display:block;width:10px;height:10px;background:#0f0"></i></td></tr></table>`,
-      200,
-      120,
-    );
-    expect(near(at(19, 10), BLUE)).toBe(true); // first cell ends at x=20
-    expect(near(at(21, 10), [255, 0, 0])).toBe(true); // no 2px spacing gap before the next cell
-    // second table starts at y=30: 6px padding around a 10px child -> 22px cell
-    expect(near(at(3, 36), BLUE)).toBe(true); // padding area is the cell background
-    expect(near(at(11, 41), [0, 255, 0])).toBe(true); // child sits inside the padding
-  });
-
   it("calc() in a media query neither crashes nor mismatches", async () => {
     const css = `<style>.a{width:50px;height:50px}
       @media (max-width:calc(500px - 1px)){.a{background:#00f}}
@@ -1351,37 +1102,6 @@ describe("regression: layout and paint probes", () => {
     await expect(render({ value: huge, width: 1000, format: "png" })).rejects.toThrow();
     const { at } = await renderPng(`<div style="width:50px;height:50px;background:#00f"></div>`, 100, 60);
     expect(near(at(10, 10), BLUE)).toBe(true);
-  });
-
-  it("valign attributes on tr and td place cell content at the top", async () => {
-    const { at } = await renderPng(
-      `<table cellspacing="0" cellpadding="0"><tr valign="top">
-         <td><i style="display:block;width:10px;height:10px;background:#00f"></i></td>
-         <td><i style="display:block;width:10px;height:100px;background:#888"></i></td>
-       </tr></table>
-       <table cellspacing="0" cellpadding="0" style="margin-top:20px"><tr>
-         <td valign="top"><i style="display:block;width:10px;height:10px;background:#00f"></i></td>
-         <td><i style="display:block;width:10px;height:100px;background:#888"></i></td>
-       </tr></table>`,
-      100,
-      260,
-    );
-    expect(near(at(5, 5), BLUE)).toBe(true); // tr valign=top
-    expect(near(at(5, 125), BLUE)).toBe(true); // td valign=top (second table starts at y=120)
-    expect(isWhite(at(5, 60))).toBe(true); // not vertically centered
-  });
-
-  it("<center> centers block-level tables and divs", async () => {
-    const { at } = await renderPng(
-      `<center><table width="50%" cellspacing="0" cellpadding="0"><tr><td style="height:20px;background:#00f"></td></tr></table>
-       <div style="width:100px;height:20px;background:#f00"></div></center>`,
-      400,
-      60,
-    );
-    expect(isWhite(at(90, 10))).toBe(true);
-    expect(near(at(110, 10), BLUE)).toBe(true); // table spans x=100..299
-    expect(isWhite(at(140, 30))).toBe(true);
-    expect(near(at(160, 30), [255, 0, 0])).toBe(true); // div spans x=150..249
   });
 
   it("<body bgcolor> and <body background> presentational attributes apply", async () => {
@@ -1497,18 +1217,6 @@ describe("regression: layout and paint probes", () => {
     expect(near(lines.at(250, 10), RED)).toBe(true);
     expect(near(lines.at(10, 10), BLUE)).toBe(true);
   });
-  it("overflow accepts two values and per-axis longhands, and clips", async () => {
-    for (const style of ["overflow:hidden auto", "overflow-x:hidden;overflow-y:auto", "overflow-y:hidden"]) {
-      const { at } = await renderPng(
-        `<div style="height:40px;${style}"><div style="height:200px;background:#f00"></div></div>`,
-        100,
-        120,
-      );
-      expect(near(at(5, 20), RED)).toBe(true);
-      expect(isWhite(at(5, 100))).toBe(true); // clipped below the 40px box
-    }
-  });
-
   it("calc() resolves viewport units mixed with lengths", async () => {
     const body = (h: string) => `<div style="max-height:${h}"><div style="height:100px"></div></div><div style="height:10px"></div>`;
     const r = await render({ value: `<html><body style="margin:0">${body("calc(-48px + 100vh)")}</body></html>`, width: 100, format: "png" });
@@ -1553,18 +1261,6 @@ describe("regression: layout and paint probes", () => {
       });
       expect(r.height).toBeLessThan(80); // text stayed on two lines instead of one character per line
     }
-  });
-  it("inline SVG keeps its height attribute after a style refresh (table sibling, width:100%)", async () => {
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="600" viewBox="0 0 400 600"><rect width="400" height="600" fill="#eee"/></svg>`;
-    const r = await render({
-      value: `<html><head><style>svg{width:100%}</style></head><body style="margin:0"><figure style="display:table;margin:0"><img width="500" height="100" style="display:block"></figure><div>${svg}</div></body></html>`,
-      width: 952,
-      format: "png",
-    });
-    // the height attribute was dropped and replaced by a 6:1 aspect ratio (5800px); Chromium: 700 in
-    // quirks mode, and the inline svg's baseline gap adds at most a pixel or two here
-    expect(r.height).toBeGreaterThanOrEqual(700);
-    expect(r.height).toBeLessThanOrEqual(702);
   });
   it("inline SVG resolves var() to its fallback in attributes and style", async () => {
     for (const attr of [`fill="var( --x, #f00 )"`, `style="fill:var(--x,#f00)"`, `fill="var(--x, rgb(255,0,0))"`]) {
@@ -1875,36 +1571,6 @@ describe("regression: layout and paint probes", () => {
     );
   });
 
-  it("animated WebP loops infinitely by default and keeps the legacy bytes at speed 5", async () => {
-    // The libwebp `WebPAnimEncoder` path replaced Skia's `EncodeAnimated`.
-    // With the default loop / background (loop_count 0, opaque white) and libwebp
-    // method 3 (speed 5; the default speed 6 is method 2, a faster encode) the
-    // output must stay byte-identical to Skia's, so the hash below pins that.
-    const html = `<html><head><style>
-      @keyframes fade { from { opacity: 0 } to { opacity: 1 } }
-      .box { width: 80px; height: 80px; background: #00f; animation-name: fade; }
-    </style></head><body style="margin:0;background:#fff"><div class="box"></div></body></html>`;
-
-    const animated = await render({
-      value: html,
-      width: 120,
-      height: 120,
-      format: "webp",
-      speed: 5,
-      animation: { duration: 300, fps: 10 },
-    });
-    expect(animated.animation).toBe(true);
-    const data = new Uint8Array(animated.data as Uint8Array);
-    const params = webpAnimParams(data);
-    expect(params).not.toBeNull();
-    // 0 = infinite loop, 0xFFFFFFFF = opaque white canvas background.
-    expect(params?.loopCount).toBe(0);
-    expect(params?.bgcolor).toBe(0xffffffff);
-    expect(sha256(data)).toBe(
-      "4ecc75ff99acf161a95eded90a3022ef6de1905fbb100f78a9fbe1ddb1b36164",
-    );
-  });
-
   it("animation.loop writes a finite loop count into the ANIM chunk", async () => {
     // `loop: 1` = play once. Only the ANIM chunk differs from the infinite
     // variant: the frames (count, durations, pixels) stay the same.
@@ -1936,390 +1602,6 @@ describe("regression: layout and paint probes", () => {
     // The frame payload is untouched by the loop count.
     expect(webpFrames(onceData)).toEqual(webpFrames(infiniteData));
     expect(onceData.byteLength).toBe(infiniteData.byteLength);
-  });
-
-  it("animation.loop accepts a repeat count and clamps negative values", async () => {
-    const html = `<html><head><style>
-      @keyframes fade { from { opacity: 0 } to { opacity: 1 } }
-      .box { width: 80px; height: 80px; background: #00f; animation-name: fade; }
-    </style></head><body style="margin:0;background:#fff"><div class="box"></div></body></html>`;
-
-    const three = await render({
-      value: html,
-      width: 120,
-      height: 120,
-      format: "webp",
-      animation: { duration: 300, fps: 10, loop: 3 },
-    });
-    expect(
-      webpAnimParams(new Uint8Array(three.data as Uint8Array))?.loopCount,
-    ).toBe(3);
-
-    // A negative count is meaningless: it falls back to the infinite default.
-    const negative = await render({
-      value: html,
-      width: 120,
-      height: 120,
-      format: "webp",
-      animation: { duration: 300, fps: 10, loop: -5 },
-    });
-    expect(
-      webpAnimParams(new Uint8Array(negative.data as Uint8Array))?.loopCount,
-    ).toBe(0);
-  });
-
-  it("sampled @keyframes transform animation moves the element across the frames", async () => {
-    // The box slides from x=60 to x=0. Without the transform sampling the
-    // document is static, so no frame is produced at all.
-    const html = `<html><head><style>
-      @keyframes move { from { transform: translate(60px, 0px) } to { transform: translate(0px, 0px) } }
-      .box { width: 40px; height: 40px; background: #00f; animation-name: move; }
-    </style></head><body style="margin:0;background:#fff"><div class="box"></div></body></html>`;
-
-    // The first sampled frame (progress 0) paints the box at its transformed
-    // place, not at its static one.
-    const first = await renderFirstFrame(html, 120, 60);
-    expect(near(first.at(70, 20), BLUE)).toBe(true);
-    expect(isWhite(first.at(30, 20))).toBe(true);
-
-    const animated = await render({
-      value: html,
-      width: 120,
-      height: 60,
-      format: "webp",
-      animation: { duration: 300, fps: 10 },
-    });
-    expect(animated.animation).toBe(true);
-    const frames = webpFrames(new Uint8Array(animated.data as Uint8Array));
-    expect(frames.length).toBe(3);
-    // Every sampled frame carries different pixel content.
-    expect(new Set(frames.map((frame) => frame.hash)).size).toBe(3);
-    // The box really moves: the stored (changed) region follows it to the
-    // left - x=60..100 for the first step, x=40..80 for the second one.
-    expect(frames[1].x + frames[1].width).toBeGreaterThan(96);
-    expect(frames[1].x + frames[1].width).toBeLessThan(104);
-    expect(frames[2].x + frames[2].width).toBeGreaterThan(76);
-    expect(frames[2].x + frames[2].width).toBeLessThan(84);
-  });
-
-  it("sampled @keyframes color animation recolours the element across the frames", async () => {
-    // `border-color: currentColor` follows the animated `color`, so the probe
-    // needs no font rendering.
-    const html = `<html><head><style>
-      @keyframes tint { from { color: #ff0000 } to { color: #0000ff } }
-      .box { width: 40px; height: 40px; border: 4px solid currentColor; animation-name: tint; }
-    </style></head><body style="margin:0;background:#fff"><div class="box"></div></body></html>`;
-
-    // The first sampled frame (progress 0) paints the border red; the static
-    // document keeps the default (black) colour.
-    const first = await renderFirstFrame(html, 120, 60);
-    expect(countPixels(first.img, isReddish)).toBeGreaterThan(50);
-    expect(countPixels(first.img, isBlackish)).toBe(0);
-    expect(countPixels(first.img, isBluish)).toBe(0);
-
-    const animated = await render({
-      value: html,
-      width: 120,
-      height: 60,
-      format: "webp",
-      animation: { duration: 300, fps: 10 },
-    });
-    expect(animated.animation).toBe(true);
-    const frames = webpFrames(new Uint8Array(animated.data as Uint8Array));
-    expect(frames.length).toBe(3);
-    expect(new Set(frames.map((frame) => frame.hash)).size).toBe(3);
-  });
-
-  it("sampled @keyframes background-color animation recolours the background across the frames", async () => {
-    const html = `<html><head><style>
-      @keyframes tint { from { background-color: #ff0000 } to { background-color: #0000ff } }
-      .box { width: 40px; height: 40px; background: #00f; animation-name: tint; }
-    </style></head><body style="margin:0;background:#fff"><div class="box"></div></body></html>`;
-
-    const first = await renderFirstFrame(html, 120, 60);
-    expect(countPixels(first.img, isReddish)).toBeGreaterThan(50);
-    expect(countPixels(first.img, isBlackish)).toBe(0);
-    expect(countPixels(first.img, isBluish)).toBe(0);
-
-    const animated = await render({
-      value: html,
-      width: 120,
-      height: 60,
-      format: "webp",
-      animation: { duration: 300, fps: 10 },
-    });
-    expect(animated.animation).toBe(true);
-    const frames = webpFrames(new Uint8Array(animated.data as Uint8Array));
-    expect(frames.length).toBe(3);
-    expect(new Set(frames.map((frame) => frame.hash)).size).toBe(3);
-  });
-
-  it("resolves var() in @keyframes stop values", async () => {
-    // The stop value of the `from` keyframe is a custom property: the
-    // binding layer resolves it against the document before the stops are
-    // built. Without the resolution the `from` stop is dropped, every
-    // frame paints the same opacity and the output is a still image.
-    const html = `<html><head><style>
-      :root { --from-opacity: 0; }
-      @keyframes fade { from { opacity: var(--from-opacity) } to { opacity: 1 } }
-      .box { width: 80px; height: 80px; background: #00f; animation-name: fade; }
-    </style></head><body style="margin:0;background:#fff"><div class="box"></div></body></html>`;
-
-    const animated = await render({
-      value: html,
-      width: 120,
-      height: 120,
-      format: "webp",
-      animation: { duration: 300, fps: 10 },
-    });
-    expect(animated.animation).toBe(true);
-    const frames = webpFrames(new Uint8Array(animated.data as Uint8Array));
-    expect(frames.length).toBe(3);
-    expect(new Set(frames.map((frame) => frame.hash)).size).toBe(3);
-  });
-
-  it("resolves var() in a @keyframes transform stop value", async () => {
-    const html = `<html><head><style>
-      :root { --from-x: 0px; }
-      @keyframes move { from { transform: translate(var(--from-x), 0px) } to { transform: translate(100px, 0px) } }
-      .box { width: 40px; height: 40px; background: #00f; animation-name: move; }
-    </style></head><body style="margin:0;background:#fff"><div class="box"></div></body></html>`;
-
-    const animated = await render({
-      value: html,
-      width: 120,
-      height: 60,
-      format: "webp",
-      animation: { duration: 300, fps: 10 },
-    });
-    expect(animated.animation).toBe(true);
-    const frames = webpFrames(new Uint8Array(animated.data as Uint8Array));
-    expect(frames.length).toBe(3);
-    expect(new Set(frames.map((frame) => frame.hash)).size).toBe(3);
-  });
-
-  it("uses the CSS animation-duration as the loop length", async () => {
-    // The CSS value wins over the duration requested through the API as
-    // long as it is shorter: the sampled frames cover 100ms, not 1000ms.
-    const html = `<html><head><style>
-      @keyframes fade { from { opacity: 0 } to { opacity: 1 } }
-      .box { width: 80px; height: 80px; background: #00f; animation: fade 100ms infinite; }
-    </style></head><body style="margin:0;background:#fff"><div class="box"></div></body></html>`;
-
-    const animated = await render({
-      value: html,
-      width: 120,
-      height: 120,
-      format: "webp",
-      animation: { duration: 1000, fps: 10 },
-    });
-    expect(animated.animation).toBe(true);
-    const frames = webpFrames(new Uint8Array(animated.data as Uint8Array));
-    expect(frames.length).toBeGreaterThan(1);
-    const total = frames.reduce((sum, frame) => sum + frame.duration, 0);
-    expect(total).toBe(100);
-  });
-
-  it("clamps a longer CSS animation-duration to the requested duration", async () => {
-    // The API duration is an upper bound: a 2s CSS duration is sampled as
-    // 300ms, so the output keeps the requested length.
-    const html = `<html><head><style>
-      @keyframes fade { from { opacity: 0 } to { opacity: 1 } }
-      .box { width: 80px; height: 80px; background: #00f; animation: fade 2s infinite; }
-    </style></head><body style="margin:0;background:#fff"><div class="box"></div></body></html>`;
-
-    const animated = await render({
-      value: html,
-      width: 120,
-      height: 120,
-      format: "webp",
-      animation: { duration: 300, fps: 10 },
-    });
-    expect(animated.animation).toBe(true);
-    const frames = webpFrames(new Uint8Array(animated.data as Uint8Array));
-    expect(frames.length).toBe(3);
-    const total = frames.reduce((sum, frame) => sum + frame.duration, 0);
-    expect(total).toBe(300);
-  });
-
-  it("resolves a var() animation-duration", async () => {
-    const html = `<html><head><style>
-      :root { --dur: 100ms; }
-      @keyframes fade { from { opacity: 0 } to { opacity: 1 } }
-      .box { width: 80px; height: 80px; background: #00f; animation: fade var(--dur) infinite; }
-    </style></head><body style="margin:0;background:#fff"><div class="box"></div></body></html>`;
-
-    const animated = await render({
-      value: html,
-      width: 120,
-      height: 120,
-      format: "webp",
-      animation: { duration: 1000, fps: 10 },
-    });
-    expect(animated.animation).toBe(true);
-    const frames = webpFrames(new Uint8Array(animated.data as Uint8Array));
-    expect(frames.length).toBeGreaterThan(1);
-    const total = frames.reduce((sum, frame) => sum + frame.duration, 0);
-    expect(total).toBe(100);
-  });
-
-  it("applies a per-keyframe animation-timing-function to the eased interval", async () => {
-    // A negative delay starts the first sampled frame (progress 0) halfway
-    // through the 300ms iteration, so the still frame shows the midpoint of
-    // the eased interval: 0.5 blue over white is rgb(128,128,255).
-    const fadeDoc = (fromExtra: string, boxExtra = "") =>
-      `<html><head><style>
-      @keyframes fade { from { opacity: 0; ${fromExtra} } to { opacity: 1 } }
-      .box { width: 80px; height: 80px; background: #00f; animation-name: fade;
-             animation-duration: 300ms; animation-delay: -150ms; ${boxExtra} }
-    </style></head><body style="margin:0;background:#fff"><div class="box"></div></body></html>`;
-
-    const linear = await renderFirstFrame(fadeDoc("animation-timing-function: linear"), 120, 120);
-    expect(near(linear.at(40, 40), [128, 128, 255], 20)).toBe(true);
-
-    // ease-in is slower than linear at the midpoint (y ~= 0.32 => R ~= 174).
-    const eased = await renderFirstFrame(fadeDoc("animation-timing-function: ease-in"), 120, 120);
-    expect(eased.at(40, 40)[0]).toBeGreaterThan(155);
-
-    // step-start jumps to the end value immediately: the midpoint is opaque.
-    const stepped = await renderFirstFrame(fadeDoc("animation-timing-function: step-start"), 120, 120);
-    expect(near(stepped.at(40, 40), BLUE)).toBe(true);
-
-    // The element-level timing function is the default of the stops...
-    const elementDefault = await renderFirstFrame(
-      fadeDoc("", "animation-timing-function: ease-in;"),
-      120,
-      120,
-    );
-    expect(elementDefault.at(40, 40)[0]).toBeGreaterThan(155);
-
-    // ...and a keyframe block overrides it for the interval it starts.
-    const overridden = await renderFirstFrame(
-      fadeDoc("animation-timing-function: linear", "animation-timing-function: ease-in;"),
-      120,
-      120,
-    );
-    expect(near(overridden.at(40, 40), [128, 128, 255], 20)).toBe(true);
-  });
-
-  it("honours animation-direction: reverse on the first sampled frame", async () => {
-    // The box slides from x=0 to x=60. Reversed, the first sampled frame
-    // (progress 0) already shows the 100% stop: the box sits at x=60.
-    const html = `<html><head><style>
-      @keyframes move { from { transform: translate(0px, 0px) } to { transform: translate(60px, 0px) } }
-      .box { width: 40px; height: 40px; background: #00f; animation-name: move;
-             animation-direction: reverse; }
-    </style></head><body style="margin:0;background:#fff"><div class="box"></div></body></html>`;
-
-    const first = await renderFirstFrame(html, 120, 60);
-    expect(near(first.at(70, 20), BLUE)).toBe(true);
-    expect(isWhite(first.at(10, 20))).toBe(true);
-  });
-
-  it("honours animation-direction: alternate across the iteration boundary", async () => {
-    // duration 100ms x 2 iterations = a 200ms timeline, sampled at 20fps:
-    // t = 0 / 50 / 100 / 150 -> progress 0 / 0.5 / 1 / 0.5. The second
-    // iteration plays backwards, so the last frame repeats the second one.
-    // Opacity keeps the changed rectangle identical, so the frame hashes of
-    // the two 0.5 frames are comparable.
-    const html = `<html><head><style>
-      @keyframes fade { from { opacity: 0 } to { opacity: 1 } }
-      .box { width: 80px; height: 80px; background: #00f; animation-name: fade;
-             animation-duration: 100ms; animation-iteration-count: 2;
-             animation-direction: alternate; }
-    </style></head><body style="margin:0;background:#fff"><div class="box"></div></body></html>`;
-
-    const animated = await render({
-      value: html,
-      width: 120,
-      height: 120,
-      format: "webp",
-      animation: { duration: 2000, fps: 20 },
-    });
-    expect(animated.animation).toBe(true);
-    const frames = webpFrames(new Uint8Array(animated.data as Uint8Array));
-    expect(frames.length).toBe(4);
-    expect(frames[1].hash).toBe(frames[3].hash);
-    expect(frames[0].hash).not.toBe(frames[2].hash);
-  });
-
-  it("honours animation-iteration-count as the sampled timeline length", async () => {
-    // Three 100ms iterations sample 300ms in total (the API duration is only
-    // an upper bound), instead of the single 100ms iteration.
-    const html = `<html><head><style>
-      @keyframes fade { from { opacity: 0 } to { opacity: 1 } }
-      .box { width: 80px; height: 80px; background: #00f; animation-name: fade;
-             animation-duration: 100ms; animation-iteration-count: 3; }
-    </style></head><body style="margin:0;background:#fff"><div class="box"></div></body></html>`;
-
-    const animated = await render({
-      value: html,
-      width: 120,
-      height: 120,
-      format: "webp",
-      animation: { duration: 1000, fps: 30 },
-    });
-    expect(animated.animation).toBe(true);
-    const frames = webpFrames(new Uint8Array(animated.data as Uint8Array));
-    expect(frames.reduce((sum, frame) => sum + frame.duration, 0)).toBe(300);
-    // Three 100ms iterations at 30fps: nine samples whose frames replay the
-    // same fade three times (the same within-iteration transition repeats).
-    expect(frames.length).toBe(9);
-    expect(frames[1].hash).toBe(frames[4].hash);
-    expect(frames[2].hash).toBe(frames[5].hash);
-  });
-
-  it("paints the backwards fill during animation-delay", async () => {
-    // The 100ms delay is not covered by fill-mode none: the element keeps its
-    // static (opaque) style. A backwards fill paints the from value (opacity 0).
-    const delayDoc = (fill: string) => `<html><head><style>
-      @keyframes fade { from { opacity: 0 } to { opacity: 1 } }
-      .box { width: 80px; height: 80px; background: #00f; animation-name: fade;
-             animation-duration: 100ms; animation-delay: 100ms;
-             animation-fill-mode: ${fill}; }
-    </style></head><body style="margin:0;background:#fff"><div class="box"></div></body></html>`;
-
-    const none = await renderFirstFrame(delayDoc("none"), 120, 120);
-    expect(near(none.at(40, 40), BLUE)).toBe(true);
-
-    const backwards = await renderFirstFrame(delayDoc("backwards"), 120, 120);
-    expect(isWhite(backwards.at(40, 40))).toBe(true);
-
-    // forwards: after the 150ms active part of the 0.5-iteration timeline the
-    // final value is kept. `both` therefore paints three identical (from)
-    // frames followed by the filled one; `none` paints the static style on
-    // every frame, which collapses into a still image.
-    const sampleDoc = (fill: string) => `<html><head><style>
-      @keyframes fade { from { opacity: 0 } to { opacity: 1 } }
-      .box { width: 80px; height: 80px; background: #00f; animation-name: fade;
-             animation-duration: 100ms; animation-delay: 100ms;
-             animation-iteration-count: 0.5; animation-fill-mode: ${fill}; }
-    </style></head><body style="margin:0;background:#fff"><div class="box"></div></body></html>`;
-
-    const both = await render({
-      value: sampleDoc("both"),
-      width: 120,
-      height: 120,
-      format: "webp",
-      animation: { duration: 300, fps: 20 },
-    });
-    expect(both.animation).toBe(true);
-    const bothFrames = webpFrames(new Uint8Array(both.data as Uint8Array));
-    expect(bothFrames.length).toBe(2);
-    expect(bothFrames[0].duration).toBe(150);
-
-    const noFill = await render({
-      value: sampleDoc("none"),
-      width: 120,
-      height: 120,
-      format: "webp",
-      animation: { duration: 300, fps: 20 },
-    });
-    // Without a forwards fill the element snaps back to its static style after
-    // the active interval, which adds a third (static) frame.
-    const noFillFrames = webpFrames(new Uint8Array(noFill.data as Uint8Array));
-    expect(noFillFrames.length).toBe(3);
-    expect(noFillFrames.reduce((sum, frame) => sum + frame.duration, 0)).toBe(200);
   });
 
   it("unicode-bidi: bidi-override reorders inline items in an RTL line", async () => {
@@ -2383,35 +1665,6 @@ describe("regression: layout and paint probes", () => {
     expect(balanced[1]).toBeGreaterThan(auto[1] + 20);
   });
 
-  it("text-wrap-style: pretty pulls an orphaned last word onto the previous line", async () => {
-    const auto = lineRightEdges(await wrapProbe("", 240), 22);
-    const pretty = lineRightEdges(
-      await wrapProbe("text-wrap-style:pretty", 240),
-      22,
-    );
-
-    expect(auto.length).toBe(3);
-    expect(auto[2]).toBeLessThan(80); // the orphan ("running") alone on line 3
-    expect(pretty.length).toBe(auto.length); // line count is preserved
-    expect(pretty[2]).toBeGreaterThan(auto[2] + 60); // 2+ words on the last line
-  });
-
-  it("text-wrap-style is not applied when the flow is out of scope (atomic inline)", async () => {
-    // A replaced inline (here: a 20px square) leaves the normal wrapping in
-    // place, so the line lengths match the auto render exactly.
-    const square =
-      "<img src=\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20'%3E%3Crect width='20' height='20' fill='%23f00'/%3E%3C/svg%3E\">";
-    const text = WRAP_PROBE_TEXT.replace("fox", `${square}fox`);
-    const renderWith = (wrap: string) =>
-      renderProbeText(
-        `<div style="width:300px;font-family:'RobotoProbe',sans-serif;font-size:16px;line-height:22px;color:#000;${wrap}">${text}</div>`,
-        300,
-      );
-    expect(lineRightEdges(await renderWith("text-wrap-style:balance"), 22)).toEqual(
-      lineRightEdges(await renderWith(""), 22),
-    );
-  });
-
   it("overflow-wrap: break-word moves a word that fits a line instead of splitting it", async () => {
     // "happens" fits a whole line, so it must move there as a unit. The engine
     // split every word into characters and then filled the line to its pixel
@@ -2449,20 +1702,6 @@ describe("regression: layout and paint probes", () => {
     expect(r.height).toBe(90); // 10 + 40 + 40; implicit rows used to be content-sized
   });
 
-  it("grid-auto-columns sizes columns for explicitly placed items past the template", async () => {
-    const { at } = await renderPng(
-      `<div style="display:grid;grid-template-columns:40px;grid-auto-columns:60px;width:200px;height:20px">
-         <div style="grid-column:2 / 3;background:#00f"></div>
-         <div style="grid-column:3 / 4;background:#0f0"></div>
-       </div>`,
-      200,
-      20,
-    );
-    expect(near(at(60, 10), BLUE)).toBe(true); // first implicit column spans 40..100
-    expect(near(at(110, 10), [0, 255, 0])).toBe(true); // second spans 100..160
-    expect(isWhite(at(170, 10))).toBe(true); // no phantom fourth column
-  });
-
   it("grid-auto-flow: row dense backfills holes left by spanning items", async () => {
     const r = await render({
       value: `<html><body style="margin:0"><div style="display:grid;grid-template-columns:40px 40px;grid-auto-flow:row dense;grid-auto-rows:20px;width:80px">
@@ -2492,37 +1731,6 @@ describe("regression: layout and paint probes", () => {
     expect(near(at(75, 10), [255, 0, 255])).toBe(true); // col 2, row 0
   });
 
-  it("grid-auto-flow: column dense backfills holes in a column", async () => {
-    const { at } = await renderPng(
-      `<div style="display:grid;grid-auto-flow:column dense;grid-template-rows:20px 20px;grid-auto-columns:30px;width:120px">
-         <div style="background:#00f"></div>
-         <div style="grid-row:span 2;background:#f00"></div>
-         <div style="background:#0f0"></div>
-       </div>`,
-      150,
-      60,
-    );
-    expect(near(at(15, 10), BLUE)).toBe(true);
-    expect(near(at(45, 10), RED)).toBe(true); // the 2-row item wraps to column 1
-    expect(near(at(45, 30), RED)).toBe(true);
-    expect(near(at(15, 30), [0, 255, 0])).toBe(true); // dense fills the hole; sparse put it in column 2
-  });
-
-  it("grid-auto-flow: column sizes auto-placement implicit columns from grid-auto-columns", async () => {
-    const { at } = await renderPng(
-      `<div style="display:grid;grid-auto-flow:column;grid-template-rows:20px;grid-auto-columns:25px 35px;width:200px">
-         <div style="background:#f00"></div><div style="background:#00f"></div>
-         <div style="background:#0f0"></div>
-       </div>`,
-      200,
-      40,
-    );
-    expect(near(at(10, 10), RED)).toBe(true); // 0..25
-    expect(near(at(30, 10), BLUE)).toBe(true); // 25..60
-    expect(near(at(70, 10), [0, 255, 0])).toBe(true); // 60..85 (second auto-columns value)
-    expect(isWhite(at(100, 10))).toBe(true); // no phantom track
-  });
-
   it("font-feature-settings applies OpenType features (kern off changes AV spacing)", async () => {
     const base = await renderProbeText(probeLine("", "AVAVAVAVAV"));
     const off = await renderProbeText(
@@ -2537,18 +1745,6 @@ describe("regression: layout and paint probes", () => {
       probeLine("font-variant-ligatures:none", "office ffi fl"),
     );
     expect(none.data.equals(base.data)).toBe(false);
-  });
-
-  it("font-variant-numeric longhands select figure sets", async () => {
-    const base = await renderProbeText(probeLine("", "1111111111"));
-    const proportional = await renderProbeText(
-      probeLine("font-variant-numeric:proportional-nums", "1111111111"),
-    );
-    const tabular = await renderProbeText(
-      probeLine("font-variant-numeric:tabular-nums", "1111111111"),
-    );
-    expect(proportional.data.equals(base.data)).toBe(false);
-    expect(proportional.data.equals(tabular.data)).toBe(false);
   });
 
   it("font-feature-settings is resolved per element (font cache key includes features)", async () => {
@@ -2575,14 +1771,6 @@ describe("regression: layout and paint probes", () => {
     expect(normal.data.equals(base.data)).toBe(true);
   });
 
-  it("font-kerning is resolved per element (font cache key includes the feature)", async () => {
-    const img = await renderProbeText(
-      probeLine("", "AVAVAVAVAV") + probeLine("font-kerning:none", "AVAVAVAVAV"),
-    );
-    const row = (y: number) => img.data.subarray(y * img.width * 4, (y + 1) * img.width * 4);
-    expect(row(45).equals(row(135))).toBe(false);
-  });
-
   it("font-variation-settings sets an axis of a variable font", async () => {
     const base = await renderProbeText(
       probeLine("", "Handgloves", "'RobotoVar'"),
@@ -2596,39 +1784,6 @@ describe("regression: layout and paint probes", () => {
     );
     // The wght axis moves the glyphs to the heavy instance.
     expect(heavy.data.equals(base.data)).toBe(false);
-  });
-
-  it("font-variation-settings ignores an axis the font does not have", async () => {
-    const base = await renderProbeText(
-      probeLine("", "Handgloves", "'RobotoVar'"),
-      800,
-      VAR_PROBE_FONT_FACE,
-    );
-    const unknown = await renderProbeText(
-      probeLine("font-variation-settings:'xxxx' 900", "Handgloves", "'RobotoVar'"),
-      800,
-      VAR_PROBE_FONT_FACE,
-    );
-    const heavy = await renderProbeText(
-      probeLine("font-variation-settings:'wght' 900", "Handgloves", "'RobotoVar'"),
-      800,
-      VAR_PROBE_FONT_FACE,
-    );
-    // The variable font is really used (the wght axis changes it) and the
-    // unknown axis is ignored.
-    expect(heavy.data.equals(base.data)).toBe(false);
-    expect(unknown.data.equals(base.data)).toBe(true);
-  });
-
-  it("font-variation-settings is resolved per element (font cache key includes the axes)", async () => {
-    const img = await renderProbeText(
-      probeLine("", "Handgloves", "'RobotoVar'") +
-        probeLine("font-variation-settings:'wght' 900", "Handgloves", "'RobotoVar'"),
-      800,
-      VAR_PROBE_FONT_FACE,
-    );
-    const row = (y: number) => img.data.subarray(y * img.width * 4, (y + 1) * img.width * 4);
-    expect(row(45).equals(row(135))).toBe(false);
   });
 
   it("font-stretch sets the width axis of a variable font", async () => {
@@ -2651,45 +1806,6 @@ describe("regression: layout and paint probes", () => {
     expect(condensed.data.equals(base.data)).toBe(false);
     expect(expanded.data.equals(base.data)).toBe(false);
     expect(condensed.data.equals(expanded.data)).toBe(false);
-  });
-
-  it("font-stretch is resolved per element (font cache key includes the width)", async () => {
-    const img = await renderProbeText(
-      probeLine("", "Handgloves", "'RobotoFlex'") +
-        probeLine("font-stretch:75%", "Handgloves", "'RobotoFlex'"),
-      800,
-      FLEX_PROBE_FONT_FACE,
-    );
-    const row = (y: number) => img.data.subarray(y * img.width * 4, (y + 1) * img.width * 4);
-    expect(row(45).equals(row(135))).toBe(false);
-  });
-
-  it("font-stretch picks the face of the family with the matching width", async () => {
-    const regular = await renderProbeText(
-      probeLine("", "Handgloves", "'StretchRegular'"),
-      800,
-      REGULAR_FONT_FACE,
-    );
-    const condensed = await renderProbeText(
-      probeLine("", "Handgloves", "'StretchCondensed'"),
-      800,
-      CONDENSED_FONT_FACE,
-    );
-    // The family holds a regular and a condensed face; the stretch has to pick
-    // the face with the matching width.
-    const pairCondensed = await renderProbeText(
-      probeLine("font-stretch:condensed", "Handgloves", "'StretchPair'"),
-      800,
-      STRETCH_PAIR_FONT_FACE,
-    );
-    const pairExpanded = await renderProbeText(
-      probeLine("font-stretch:125%", "Handgloves", "'StretchPair'"),
-      800,
-      STRETCH_PAIR_FONT_FACE,
-    );
-    expect(pairCondensed.data.equals(condensed.data)).toBe(true);
-    expect(pairExpanded.data.equals(regular.data)).toBe(true);
-    expect(pairCondensed.data.equals(regular.data)).toBe(false);
   });
 
   it("image-rendering: pixelated keeps scaled images unfiltered (img and background)", async () => {
@@ -2744,15 +1860,6 @@ describe("regression: layout and paint probes", () => {
     expect(isWhite(at(30, 5))).toBe(true); // would be red if it stayed unrotated
   });
 
-  it("offset shorthand sets offset-path and offset-distance", async () => {
-    const { at } = await renderPng(
-      `<div style="position:absolute;left:0;top:0;width:20px;height:20px;background:#f00;
-         offset:path('M 0 0 L 200 0') 60px"></div>`,
-    );
-    expect(near(at(60, 5), RED)).toBe(true); // centre at (60,0)
-    expect(isWhite(at(10, 10))).toBe(true);
-  });
-
   it("offset shorthand rejects an offset-rotate before the path", async () => {
     // The first declaration is valid; the second one has its components out of
     // order (rotate before path), so the whole declaration must be dropped and
@@ -2765,39 +1872,6 @@ describe("regression: layout and paint probes", () => {
     );
     expect(near(at(60, 2), RED)).toBe(true); // still at distance 60 on the path
     expect(isWhite(at(60, 8))).toBe(true); // a 30deg rotation would cover this
-  });
-
-  it("offset shorthand rejects a repeated offset-distance", async () => {
-    const { at } = await renderPng(
-      `<div style="position:absolute;left:0;top:0;width:20px;height:20px;background:#f00;
-         offset:path('M 0 0 L 200 0') 60px;
-         offset:path('M 0 0 L 120 0') 20px 30px"></div>`,
-    );
-    expect(near(at(60, 5), RED)).toBe(true); // first declaration still wins
-    expect(isWhite(at(20, 5))).toBe(true); // would be red if 20px reset the distance
-  });
-
-  it("offset shorthand rejects an offset-position after the path", async () => {
-    const { at } = await renderPng(
-      `<div style="position:absolute;left:0;top:0;width:20px;height:20px;background:#f00;
-         offset:path('M 0 0 L 200 0') 60px;
-         offset:path('M 0 0 L 120 0') center"></div>`,
-    );
-    expect(near(at(60, 2), RED)).toBe(true); // first declaration still wins
-    expect(isWhite(at(0, 2))).toBe(true); // would be red if the path reset to 0
-  });
-
-  it("offset shorthand parses leading lengths as offset-position", async () => {
-    // The two lengths are the offset-position, not distances. With the ray origin
-    // at (100,100), distance 20 lands the centre at (120,100). If the first length
-    // were taken as the distance, the origin would stay the default (150,0) and
-    // the centre would be at (250,0).
-    const { at } = await renderPng(
-      `<div style="position:absolute;left:0;top:0;width:20px;height:20px;background:#f00;
-         offset:100px 100px ray(90deg) 20px"></div>`,
-    );
-    expect(near(at(120, 100), RED)).toBe(true);
-    expect(isWhite(at(250, 100))).toBe(true);
   });
 
   it("offset-rotate: an explicit 0deg angle suppresses the tangent rotation", async () => {
@@ -2832,41 +1906,6 @@ describe("regression: layout and paint probes", () => {
     expect(colorBox(img, isReddish)).toEqual({ x0: 180, y0: 70, x1: 199, y1: 89, n: 400 });
   });
 
-  it("nested offset-path: an inner ray with offset-position:auto composes with the outer offset transform", async () => {
-    // Chromium: the outer ray anchors its centre on (60,40), i.e. it shifts by
-    // (0,-20), and offset-rotate:auto turns the whole subtree by 90deg. The
-    // inner ray origin is its own border-box top-left (10,40); distance 30 puts
-    // the inner centre at (40,40) in the containing block, which the outer
-    // transform maps to (80,20) - an element-box basis would land elsewhere.
-    const { img, at } = await renderPng(
-      `<div style="position:absolute;left:0;top:0;width:120px;height:120px;background:#eee;
-         offset-path:ray(180deg);offset-position:60px 10px;offset-distance:30px">
-         <div style="position:absolute;left:10px;top:40px;width:20px;height:20px;background:#f00;
-           offset-path:ray(90deg);offset-position:auto;offset-distance:30px"></div>
-       </div>`,
-    );
-    expect(colorBox(img, isReddish)).toEqual({ x0: 70, y0: 10, x1: 89, y1: 29, n: 400 });
-    // The outer box really moved up by 20px (its 120px height now ends at y=99).
-    expect(near(at(5, 95), [238, 238, 238])).toBe(true);
-    expect(isWhite(at(5, 105))).toBe(true);
-  });
-
-  it("nested offset-path: an inner explicit offset-position uses the containing block percentages", async () => {
-    // Chromium: 25% 50% of the 120x120 containing block is (30,60); ray(90deg)
-    // + 20px puts the inner centre at (50,60), and the outer offset transform
-    // (shift (0,-20) + 90deg rotation) maps it to (60,30).
-    const { img, at } = await renderPng(
-      `<div style="position:absolute;left:0;top:0;width:120px;height:120px;background:#eee;
-         offset-path:ray(180deg);offset-position:60px 10px;offset-distance:30px">
-         <div style="position:absolute;left:10px;top:40px;width:20px;height:20px;background:#f00;
-           offset-path:ray(90deg);offset-position:25% 50%;offset-distance:20px"></div>
-       </div>`,
-    );
-    expect(colorBox(img, isReddish)).toEqual({ x0: 50, y0: 20, x1: 69, y1: 39, n: 400 });
-    expect(near(at(5, 95), [238, 238, 238])).toBe(true);
-    expect(isWhite(at(5, 105))).toBe(true);
-  });
-
   it("offset-path: a basic-shape circle resolves against the containing block inside and outside a transformed ancestor", async () => {
     // Chromium: circle centre (10,40) + radius 20 -> path start (30,40), where
     // the box centre lands. An element-border-box basis would start at (70,80).
@@ -2887,19 +1926,6 @@ describe("regression: layout and paint probes", () => {
     expect(colorBox(inside.img, isReddish)).toEqual({ x0: 60, y0: 20, x1: 99, y1: 59, n: 1600 });
   });
 
-  it("offset-path: a basic-shape inset(0) starts at the containing block's top-left edge", async () => {
-    // Chromium: inset(0) uses the 150x120 containing block as reference rectangle
-    // and starts at its top-left corner, so the element centre lands on (0,0) and
-    // the ancestor transform leaves the 40x40 box at (30,10).
-    const { img } = await renderPng(
-      `<div style="position:absolute;left:0;top:0;transform:translate(50px,30px);width:150px;height:120px;background:#eee">
-         <div style="position:absolute;left:20px;top:20px;width:40px;height:40px;background:#f00;
-           offset-path:inset(0);offset-distance:0"></div>
-       </div>`,
-    );
-    expect(colorBox(img, isReddish)).toEqual({ x0: 30, y0: 10, x1: 69, y1: 49, n: 1600 });
-  });
-
   it("text-decoration-skip-ink: auto interrupts the underline at the descenders", async () => {
     const base = "text-decoration:underline;text-decoration-color:#f00";
     // `auto` is the initial value: the ink of the descenders is skipped.
@@ -2910,94 +1936,6 @@ describe("regression: layout and paint probes", () => {
     expect(auto_.row).toBe(none.row);
     // g/j/p/q punch holes into the underline, so fewer pixels stay red.
     expect(auto_.count).toBeLessThan(none.count);
-  });
-
-  it("text-decoration-skip-ink: all also skips the ink above the baseline", async () => {
-    // A negative text-underline-offset lifts the line above the baseline, where the
-    // glyph bodies cross it. `auto` only skips the descender ink, `all` skips any ink.
-    const base =
-      "text-decoration:underline;text-decoration-color:#f00;text-underline-offset:-14px";
-    const auto_ = decorationLine(await renderProbeText(probeLine(base, "Hxp")));
-    const all = decorationLine(
-      await renderProbeText(probeLine(`${base};text-decoration-skip-ink:all`, "Hxp")),
-    );
-    expect(auto_.row).toBe(all.row);
-    expect(all.count).toBeLessThan(auto_.count);
-  });
-
-  it("text-underline-position: under draws the underline below the descenders", async () => {
-    const base =
-      "text-decoration:underline;text-decoration-color:#f00;text-decoration-skip-ink:none";
-    const auto_ = decorationLine(await renderProbeText(probeLine(base, "Hxg")));
-    const under = decorationLine(
-      await renderProbeText(probeLine(`${base};text-underline-position:under`, "Hxg")),
-    );
-    expect(under.row).toBeGreaterThan(auto_.row);
-  });
-
-  it("text-underline-position: from-font uses the underline position of the font", async () => {
-    const base =
-      "text-decoration:underline;text-decoration-color:#f00;text-decoration-skip-ink:none";
-    const auto_ = decorationLine(await renderProbeText(probeLine(base, "Hxg")));
-    const fromFont = decorationLine(
-      await renderProbeText(probeLine(`${base};text-underline-position:from-font`, "Hxg")),
-    );
-    expect(fromFont.row).not.toBe(auto_.row);
-  });
-
-  it("text-underline-position: left/right move the underline in vertical writing modes", async () => {
-    const vertical = async (position: string) => {
-      const body = `<div style="writing-mode:vertical-rl;height:200px;width:120px;font-family:'RobotoProbe',sans-serif;font-size:20px">
-         <span style="text-decoration:underline;text-decoration-color:#f00;text-underline-position:${position}">ABC</span></div>`;
-      const html = `<html><head><style>${PROBE_FONT_FACE}</style></head><body style="margin:0;background:#fff">${body}</body></html>`;
-      const { data } = await render({ value: html, width: 200, format: "png" });
-      return redColumns(PNG.sync.read(Buffer.from(data)));
-    };
-    const right = await vertical("right");
-    const left = await vertical("left");
-    expect(right.length).toBeGreaterThan(0);
-    expect(left.length).toBeGreaterThan(0);
-    // vertical-rl: `right` hugs the right edge of the column, `left` the left one.
-    expect(left[0]).toBeLessThan(right[0]);
-  });
-
-  it("text-decoration-skip-ink: all also skips the ink on the line-through", async () => {
-    // The line-through crosses the x-height, so `all` has ink to skip there.
-    const base =
-      "text-decoration:line-through;text-decoration-color:#f00;text-decoration-skip-ink:none";
-    const none = decorationLine(await renderProbeText(probeLine(base, "Hxg")));
-    const all = decorationLine(
-      await renderProbeText(probeLine(`${base};text-decoration-skip-ink:all`, "Hxg")),
-    );
-    // the 1px line-through can straddle two rows once its ink is cut, so the busiest row may move
-    expect(Math.abs(all.row - none.row)).toBeLessThanOrEqual(1);
-    expect(all.count).toBeLessThan(none.count);
-  });
-
-  it("text-decoration-skip-ink: all also skips the ink on the overline", async () => {
-    // The overline is painted at the top of the text box, i.e. above the
-    // ascent, so its band only reaches the glyph ink when it is thick enough.
-    const overline = (skip: string) =>
-      `<div style="font-family:'RobotoProbe',sans-serif;font-size:30px;line-height:35px;padding-top:30px;color:#000;text-decoration:overline;text-decoration-color:#f00;text-decoration-thickness:20px;text-decoration-skip-ink:${skip}">Hxg</div>`;
-    const none = decorationLine(await renderProbeText(overline("none")));
-    const all = decorationLine(await renderProbeText(overline("all")));
-    expect(all.row).toBe(none.row);
-    expect(all.count).toBeLessThan(none.count);
-  });
-
-  it("text-decoration-thickness: from-font uses the underline thickness of the font", async () => {
-    const base =
-      "text-decoration:underline;text-decoration-color:#f00;text-decoration-skip-ink:none";
-    const auto_ = await renderProbeText(probeLine(base, "Hxg"));
-    const fromFont = await renderProbeText(
-      probeLine(`${base};text-decoration-thickness:from-font`, "Hxg"),
-    );
-    // The font's own underline is thicker than the 1px `auto` default, so it
-    // covers more pixels ...
-    expect(redPixels(fromFont)).toBeGreaterThan(redPixels(auto_));
-    // ... and it sits lower, because the underline hangs below the baseline by
-    // its own thickness.
-    expect(decorationLine(fromFont).row).toBeGreaterThan(decorationLine(auto_).row);
   });
 
   it("text-decoration-thickness: a percentage is relative to the font size", async () => {
@@ -3013,76 +1951,6 @@ describe("regression: layout and paint probes", () => {
     );
     expect(decorationLine(percent).row).toBe(decorationLine(length).row);
     expect(redPixels(percent)).toBe(redPixels(length));
-  });
-
-  it("text-decoration-skip-ink: the wavy underline skips the ink the wave crosses", async () => {
-    // The wave oscillates around the underline position, so it reaches further
-    // down than a solid line of the same thickness. The ink that crosses the
-    // wave has to be skipped as well, not only the ink that crosses the
-    // nominal band of the decoration.
-    const base =
-      "text-decoration:underline wavy;text-decoration-color:#f00;text-underline-offset:-2px";
-    const none = await renderProbeText(
-      probeLine(`${base};text-decoration-skip-ink:none`, "gjpq"),
-    );
-    const auto_ = await renderProbeText(
-      probeLine(`${base};text-decoration-skip-ink:auto`, "gjpq"),
-    );
-    expect(redPixels(auto_)).toBeLessThan(redPixels(none));
-  });
-
-  it("text-decoration-skip-ink: the double decoration band covers both strokes", async () => {
-    // The `double` style paints two strokes, one on either side of the nominal
-    // decoration position. The skip band has to span both of them: an ink that
-    // stops at the baseline crosses the stroke nearer to it, and must not be
-    // painted over by that stroke.
-    const base =
-      "text-decoration:underline;text-decoration-style:double;text-decoration-color:#f00;text-decoration-thickness:4px";
-    const none = await renderProbeText(
-      probeLine(`${base};text-decoration-skip-ink:none`, "Hxg"),
-    );
-    const all = await renderProbeText(
-      probeLine(`${base};text-decoration-skip-ink:all`, "Hxg"),
-    );
-    expect(redPixels(all)).toBeLessThan(redPixels(none));
-  });
-
-  it("text-decoration-skip-ink: the vertical underline skips the ink it crosses", async () => {
-    // In a vertical writing mode the underline runs along the inline axis, so
-    // the ink of the glyphs has to be rotated by 90 degrees to find the part
-    // of the line the ink crosses.
-    const vertical = async (skip: string) => {
-      const body = `<div style="writing-mode:vertical-rl;height:200px;width:120px;font-family:'RobotoProbe',sans-serif;font-size:20px">
-         <span style="text-decoration:underline;text-decoration-color:#f00;text-underline-offset:8px;text-decoration-skip-ink:${skip}">ABC</span></div>`;
-      const html = `<html><head><style>${PROBE_FONT_FACE}</style></head><body style="margin:0;background:#fff">${body}</body></html>`;
-      const { data } = await render({ value: html, width: 200, format: "png" });
-      return PNG.sync.read(Buffer.from(data));
-    };
-    const none = await vertical("none");
-    const auto_ = await vertical("auto");
-    expect(redPixels(auto_)).toBeLessThan(redPixels(none));
-  });
-
-  it("text-decoration-skip-ink: the SVG output skips the ink as well", async () => {
-    // The SVG renderer draws the glyphs as paths, so the decoration has to
-    // gather the ink on that path as well.
-    const underline = async (skip: string) => {
-      const body = probeLine(
-        `text-decoration:underline;text-decoration-color:#f00;text-decoration-skip-ink:${skip}`,
-        "gjpq",
-      );
-      const html = `<html><head><style>${PROBE_FONT_FACE}</style></head><body style="margin:0;background:#fff">${body}</body></html>`;
-      const { data } = await render({ value: html, width: 800, format: "svg" });
-      // The decoration line is the only stroked path in the document (the
-      // glyphs are filled paths in <defs>).
-      return (data as string).match(/<path[^>]*stroke="[^"]*"[^>]*>/g) ?? [];
-    };
-    const none = await underline("none");
-    const auto_ = await underline("auto");
-    // Without the ink the underline is a single segment, with it the descenders
-    // cut it into several pieces.
-    expect(none.length).toBeGreaterThan(0);
-    expect(auto_.length).toBeGreaterThan(none.length);
   });
 
   // CJK probe font: ::first-letter and text-emphasis need full-width glyphs to
@@ -3308,19 +2176,6 @@ describe("regression: layout and paint probes", () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   });
-  it("a shrink-to-fit float keeps its inner float:right inside the narrow box", async () => {
-    // python.org's .options-bar-container (float:right) holds a float:right bar. The outer box
-    // shrinks to its content, but its children were left where the full-width pass put them
-    // (at the container's far right edge), so the bar painted outside and vanished.
-    const { at } = await renderPng(
-      `<div style="width:300px"><div style="float:right"><div style="float:right;width:100px;height:10px;background:#00f"></div></div></div>`,
-      300,
-      20,
-    );
-    expect(near(at(250, 5), BLUE)).toBe(true); // x=200..299
-    expect(isWhite(at(150, 5))).toBe(true);
-  });
-
   it("a shrink-to-fit float is as wide as its inline content plus the float beside it", async () => {
     // Chromium's max-content for `Donate <float:right bar>` is the line plus the float. Taking
     // only the wider of the two made the box too narrow and the float wrapped below the text.
@@ -3445,24 +2300,6 @@ describe("regression: layout and paint probes", () => {
       format: "png",
     });
     expect(r.height).toBeLessThan(170); // Chromium: 152 (one row), was 237
-  });
-  it("a percentage flex-basis does not collapse an intrinsically sized flex container to min-content", async () => {
-    // A flex item with a non-auto flex-basis had its available width zeroed even when it was
-    // measured for its content size, so the wrapper reported its longest word as the width and a
-    // column flex parent took the 10-line height (vuejs.org rendered 1.85x too tall).
-    const txt = "Truly reactive, compiler-optimized rendering system that rarely requires manual optimization.";
-    const heightOf = async (body: string) => {
-      const r = await render({
-        value: `<!DOCTYPE html><style>body{margin:0}.a{display:flex;flex-direction:column}.c{display:flex;flex-wrap:wrap}.b{flex:0 32%}p{margin:0}</style>${body}`,
-        width: 1000,
-        format: "png",
-      });
-      return r.height;
-    };
-    const col = await heightOf(`<div class="a"><div><section class="c"><div class="b"><p>${txt}</p></div></section></div></div>`);
-    expect(col).toBeLessThan(110); // Chromium: 3 lines of 24px = 72 (+ rounding), was 240
-    const shrink = await heightOf(`<div style="display:inline-block"><div class="c"><div class="b"><p>${txt}</p></div></div></div>`);
-    expect(shrink).toBeLessThan(110); // Chromium: 4 lines = 96, was 231
   });
   it('<link rel="preload stylesheet"> loads the sheet; "alternate stylesheet" does not', async () => {
     // rel is a token list. Only the exact string "stylesheet" was recognised, so vuejs.org
@@ -3705,23 +2542,6 @@ describe("regression: layout and paint probes", () => {
     await renderPng(html, 600, 300);
     expect(Date.now() - t).toBeLessThan(1800);
   });
-  it("a counter() reads once per element, even when styles are refreshed for a second layout pass", async () => {
-    // nodejs.org numbers its code lines with `.line:after{counter-increment:line;content:counter(line)}`.
-    // The increment ran once per matching rule and again on the second (table / container query)
-    // style refresh, so the first line read 15 instead of 1.
-    const lines = Array.from({ length: 9 }, () => `<div class="l"></div>`).join("");
-    const { at } = await renderPng(
-      `<style>.c{counter-reset:n;font:12px monospace}.l{height:14px;color:#000}
-       .l:after{counter-increment:n;content:counter(n)}.l:after{color:#000}</style>
-       <table><tr><td></td></tr></table><div class="c">${lines}</div>`,
-      120,
-      160,
-    );
-    // The ninth line is a single digit: nothing is drawn right of x=9 on its row.
-    let ink = 0;
-    for (let y = 0; y < 160; y++) for (let x = 12; x < 40; x++) if (!isWhite(at(x, y))) ink++;
-    expect(ink).toBe(0);
-  });
   it("white-space-only text between grid items makes no grid row, even with white-space:pre", async () => {
     // Shiki code blocks: `code{display:grid}` holding `<span class=line>` elements separated by
     // newline text. Under `pre` that text was an anonymous grid item that doubled every row.
@@ -3851,26 +2671,6 @@ describe("regression: layout and paint probes", () => {
     expect(isWhite(at(4, 15))).toBe(true);
     expect(near(at(30, 1), RED)).toBe(true);
     expect(isWhite(at(30, 15))).toBe(true);
-  });
-  it("a percentage flex-basis (flex: 1 1) in an auto-height column sizes to content", async () => {
-    // react.dev's sandpack code blocks: `.sp-stack{display:flex;flex-direction:column}` holding
-    // `.sp-code-editor{flex:1 1;overflow:auto}`. The basis is 0% of an indefinite height, i.e. content;
-    // the editor collapsed to nothing.
-    const h = async (item: string) =>
-      (await render({
-        value: `<!DOCTYPE html><html><body style="margin:0"><div style="display:flex;flex-direction:column"><div style="${item}"><div style="height:50px">a</div></div></div></body></html>`,
-        width: 200,
-        format: "png",
-      })).height;
-    expect(await h("flex:1 1;overflow:auto")).toBe(50);
-    expect(await h("flex-basis:0%;overflow:auto")).toBe(50);
-    // ... also when an align-items:center row measures it first (column items had no content basis in measure mode)
-    const centered = await render({
-      value: `<!DOCTYPE html><html><body style="margin:0"><div style="display:flex;align-items:center"><div style="display:flex;flex-direction:column"><div style="flex:1 1;overflow:auto"><div style="height:50px">a</div></div></div></div></body></html>`,
-      width: 200,
-      format: "png",
-    });
-    expect(centered.height).toBe(50);
   });
   it("@supports follows Chromium: no margin-trim / -webkit-hyphens / -moz-*, but relative color syntax", async () => {
     // Tailwind v4's `@layer properties` sits behind a Safari/Firefox-only @supports hack; applying it

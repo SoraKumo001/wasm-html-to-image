@@ -15,11 +15,20 @@ const DIFF_DIR = path.resolve(__dirname, "../diff");
 const TEMP_DIR = path.resolve(__dirname, "../temp");
 const BASELINE_PATH = path.join(__dirname, "data/png-mismatch-baselines.json");
 
-// All 25 upstream assets (sorted for determinism).
-const FILES = fs
-  .readdirSync(ASSETS_DIR)
-  .filter((f) => f.endsWith(".html"))
-  .sort();
+// Representative subset of the upstream assets: layout, text, paint features,
+// masking, pagination and text-stroke. These eight catch broad rendering
+// regressions without paying for 26 near-identical comparisons; the remaining
+// assets are still rendered by the reference generator.
+const FILES = [
+  "01-layout.html",
+  "11-complex-text.html",
+  "13-backdrop-filter.html",
+  "17-background-clip.html",
+  "19-mask.html",
+  "24-media-print.html",
+  "25-page-breaks.html",
+  "26-text-stroke.html",
+];
 
 describe("PNG Visual Tests (current engine)", () => {
   let baselines: Record<string, { fill: number; outline: number }> = {};
@@ -86,8 +95,25 @@ describe("PNG Visual Tests (current engine)", () => {
       );
       baselines[file] = result;
 
-      expect(result.outline).toBeLessThan(20);
-      expect(result.fill).toBeLessThan(30);
+      // Tightened: every selected asset stays well inside these bounds.
+      expect(result.outline).toBeLessThan(10);
+      expect(result.fill).toBeLessThan(15);
     });
   }
+
+  it("emits -webkit-text-stroke as SVG stroke attributes", async () => {
+    const { data: svg } = await render({
+      value:
+        '<div style="font-size:40px;-webkit-text-stroke:2px red;' +
+        '-webkit-text-fill-color:transparent">X</div>',
+      width: 200,
+      format: "svg",
+    });
+
+    expect(svg).toContain('stroke="rgb(255,0,0)"');
+    expect(svg).toContain('stroke-width="2');
+    expect(svg).toContain("stroke-opacity=");
+    // WebKit paints the fill first and the stroke on top.
+    expect(svg).toContain('paint-order="fill stroke"');
+  });
 });

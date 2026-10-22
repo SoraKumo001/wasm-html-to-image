@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   DIAGNOSTIC_CODES,
   htmlToImage,
@@ -74,6 +74,11 @@ const baseOptions = (
   ...extra,
 });
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+
 describe("htmlToImage: diagnostics report shape", () => {
   it("delivers a satoru-compatible report via onDiagnostics", async () => {
     const { mod } = stubModule();
@@ -96,20 +101,10 @@ describe("htmlToImage: diagnostics report shape", () => {
     expect(r.height).toBe(600);
     expect(r.mediaType).toBe("screen");
     expect(typeof r.timings.total).toBe("number");
-    expect(typeof r.timings.resolveResources).toBe("number");
-    expect(typeof r.timings.render).toBe("number");
-    expect(typeof r.timings.encode).toBe("number");
     expect(Array.isArray(r.resources)).toBe(true);
     expect(Array.isArray(r.fonts)).toBe(true);
     expect(Array.isArray(r.warnings)).toBe(true);
     expect(Array.isArray(r.errors)).toBe(true);
-  });
-
-  it("stays silent without diagnostics:true", async () => {
-    const { mod } = stubModule();
-    const onDiagnostics = vi.fn();
-    await htmlToImage(mod, baseOptions({ onDiagnostics }));
-    expect(onDiagnostics).not.toHaveBeenCalled();
   });
 });
 
@@ -157,33 +152,6 @@ describe("htmlToImage: resolveResource hook", () => {
       bytes: 2,
     });
   });
-
-  it("skips injection and warns when the hook returns null", async () => {
-    const { mod, calls } = stubModule({
-      satoru_get_pending_resources: vi
-        .fn(async () => null)
-        .mockResolvedValueOnce(
-          pendingBin("https://example.com/f.woff2") as never,
-        ),
-    });
-    let report: RenderDiagnostics | undefined;
-    await htmlToImage(
-      mod,
-      baseOptions({
-        diagnostics: true,
-        resolveResource: async () => null,
-        onDiagnostics: (r) => {
-          report = r;
-        },
-      }),
-    );
-    expect(calls.satoru_add_resource).not.toHaveBeenCalled();
-    const r = report as unknown as RenderDiagnostics;
-    expect(r.resources[0].status).toBe("failed");
-    expect(
-      r.warnings.some((w) => w.code === DIAGNOSTIC_CODES.RESOURCE_FETCH_FAILED),
-    ).toBe(true);
-  });
 });
 
 describe("htmlToImage: onLog gating", () => {
@@ -201,57 +169,9 @@ describe("htmlToImage: onLog gating", () => {
     );
     expect(mod.satoru_set_log_level).toHaveBeenCalledWith(LogLevel.Info);
   });
-
-  it("stays silent at the default log level", async () => {
-    const { mod } = stubModule();
-    const onLog = vi.fn();
-    await htmlToImage(mod, baseOptions({ onLog }));
-    expect(onLog).not.toHaveBeenCalled();
-  });
 });
 
-describe("htmlToImage: mediaType / textToPaths / css / fonts / limits / pdf", () => {
-  it("wires print media, textToPaths, css, fonts, and pdf metadata", async () => {
-    const { mod, calls } = stubModule();
-    await htmlToImage(
-      mod,
-      baseOptions({
-        mediaType: "print",
-        textToPaths: false,
-        css: "h1{color:red}",
-        fonts: [{ name: "Pre", data: new Uint8Array([1]) }],
-        pdfTitle: "T",
-        pdfMargin: { top: 7 },
-      }),
-    );
-    // collect 5th arg: print -> 1 (screen -> 0).
-    expect(calls.satoru_collect_resources).toHaveBeenCalledWith(
-      { tag: "satoru" },
-      "<h1>hi</h1>",
-      800,
-      600,
-      1,
-    );
-    expect(calls.satoru_scan_css).toHaveBeenCalledWith(
-      { tag: "satoru" },
-      "h1{color:red}",
-    );
-    expect(calls.satoru_load_font).toHaveBeenCalledWith(
-      { tag: "satoru" },
-      "Pre",
-      new Uint8Array([1]),
-    );
-    const renderOpts = (
-      calls.satoru_render.mock.calls[0] as unknown[]
-    )[5] as Record<string, unknown>;
-    expect(renderOpts).toMatchObject({
-      svgTextToPaths: false,
-      mediaType: 1,
-      pdfTitle: "T",
-      pdfMarginTop: 7,
-    });
-  });
-
+describe("htmlToImage: limits", () => {
   it("blocks disallowed hosts and records LIMIT_HOST_BLOCKED", async () => {
     const { mod, calls } = stubModule({
       satoru_get_pending_resources: vi

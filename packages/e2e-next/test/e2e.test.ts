@@ -3,7 +3,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { cdpEvaluate, ephemeralPort, launchChrome, type ChromeHandle } from "./helpers.js";
+import { ephemeralPort } from "../../e2e-vite/test/helpers.js";
 
 const require = createRequire(import.meta.url);
 
@@ -39,7 +39,7 @@ async function startBuiltApp(): Promise<StartedApp> {
     stdio: "pipe",
     env: childEnv(),
   });
-  const buildCode: number = await new Promise((resolve, reject) => {
+  await new Promise<void>((resolve, reject) => {
     let out = "";
     build.stdout?.on("data", (d) => {
       out += String(d);
@@ -49,11 +49,10 @@ async function startBuiltApp(): Promise<StartedApp> {
     });
     build.on("error", reject);
     build.on("close", (code) => {
-      if (code === 0) resolve(0);
+      if (code === 0) resolve();
       else reject(new Error(`next build failed (${code}):\n${out.slice(-3000)}`));
     });
   });
-  void buildCode;
   const port = await ephemeralPort();
   const proc: ChildProcess = spawn(process.execPath, [NEXT_BIN, "start", ROOT, "-p", String(port)], {
     stdio: ["ignore", "pipe", "pipe"],
@@ -92,7 +91,6 @@ async function startBuiltApp(): Promise<StartedApp> {
   };
 }
 
-// One built app shared by all cells (single `next build`).
 let app: StartedApp | undefined;
 
 beforeAll(async () => {
@@ -103,86 +101,8 @@ afterAll(async () => {
   await app?.close();
 });
 
-describe("next backend (Route Handler, Node runtime)", () => {
-  it(
-    "renders PNG through the route handler",
-    async () => {
-      const res = await fetch(`${app!.baseUrl}/api/render`);
-      if (!res.ok) {
-        console.log(`backend body: ${JSON.stringify(await res.text()).slice(0, 300)}`);
-      }
-      expect(res.ok).toBe(true);
-      const len = await assertPng(await res.arrayBuffer());
-      console.log(`backend: PNG ${len}B via /api/render`);
-    },
-    120000,
-  );
-});
-
-describe("next web (Client Component in Chromium)", () => {
-  let chrome: ChromeHandle | undefined;
-
-  beforeAll(async () => {
-    chrome = await launchChrome();
-  }, 120000);
-
-  afterAll(async () => {
-    await chrome?.close();
-  });
-
-  it(
-    "renders PNG inside Chromium via page.evaluate",
-    async () => {
-      const value = (await cdpEvaluate(
-        chrome!.port,
-        `${app!.baseUrl}/`,
-        "window.__e2e",
-        120000,
-      )) as { ok: boolean; len?: number; head?: number[]; error?: string };
-      if (value?.ok !== true) {
-        console.log(`web error: ${JSON.stringify(value).slice(0, 500)}`);
-      }
-      expect(value?.ok).toBe(true);
-      expect(value?.head?.map((n) => n.toString(16).padStart(2, "0")).join("")).toBe(PNG_MAGIC);
-      expect(value?.len ?? 0).toBeGreaterThan(100);
-      console.log(`web: PNG ${value?.len}B rendered in Chromium`);
-    },
-    180000,
-  );
-});
-
-describe("next workers (worker pool in Chromium)", () => {
-  let chrome: ChromeHandle | undefined;
-
-  beforeAll(async () => {
-    chrome = await launchChrome();
-  }, 120000);
-
-  afterAll(async () => {
-    await chrome?.close();
-  });
-
-  it(
-    "renders PNG inside a worker via page.evaluate",
-    async () => {
-      const value = (await cdpEvaluate(
-        chrome!.port,
-        `${app!.baseUrl}/workers`,
-        "window.__e2e",
-        120000,
-      )) as { ok: boolean; len?: number; head?: number[]; error?: string };
-      if (value?.ok !== true) {
-        console.log(`workers error: ${JSON.stringify(value).slice(0, 500)}`);
-      }
-      expect(value?.ok).toBe(true);
-      expect(value?.head?.map((n) => n.toString(16).padStart(2, "0")).join("")).toBe(PNG_MAGIC);
-      expect(value?.len ?? 0).toBeGreaterThan(100);
-      console.log(`workers: PNG ${value?.len}B rendered in a worker`);
-    },
-    180000,
-  );
-});
-
+// Only the edge route is checked here: the Node route handler and the
+// in-browser cells are covered by the other e2e packages.
 describe("next edge (Route Handler, edge runtime + workerd entry)", () => {
   it(
     "renders PNG through the edge route",

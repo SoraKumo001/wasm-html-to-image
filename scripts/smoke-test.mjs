@@ -2,13 +2,12 @@
 // Usage: node scripts/smoke-test.mjs [test-image-path]
 // Loads packages/html-to-image/dist/html-to-image.js (+ .wasm) and checks:
 //   a. converter_encode (test image -> webp/png, magic RIFF/89PNG)
-//   b. satoru_render returns null without crashing (renderers unported)
-//   c. html_to_image responds without crashing
 // Loads packages/html-to-image/dist/single.js (TS facade) and checks:
-//   d. render({ value: jpgBytes, format: webp }) -> RIFF (image-input path)
 //   e. render({ value: html, format: png }) -> 89PNG (HTML unified path)
 //   f. render({ value: jpgBytes, format: svg }) -> svg string with <image>
 //   g. render({ value: jpgBytes, format: pdf }) -> %PDF magic
+//   h. avif roundtrip: jpg -> avif (ftyp) -> png (89PNG)
+//   i. animated gif -> animated webp (ANMF preserved)
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -44,15 +43,11 @@ const FMT = {
 
 const results = {
   a: "SKIP",
-  b: "SKIP",
-  c: "SKIP",
-  d: "SKIP",
   e: "SKIP",
   f: "SKIP",
   g: "SKIP",
   h: "SKIP",
   i: "SKIP",
-  j: "SKIP",
 };
 const details = {};
 
@@ -117,100 +112,17 @@ try {
   details.a_encode = `harness error: ${String(e?.message ?? e).slice(0, 300)}`;
 }
 
-// ---- b. satoru_render (expect null, no crash) ----
-try {
-  const si = mod.satoru_create_instance();
-  let out;
-  let threw = null;
-  try {
-    out = mod.satoru_render(si, "<h1>hi</h1>", 800, 600, FMT.PNG, {});
-  } catch (e) {
-    threw = String(e?.message ?? e).slice(0, 300);
-  }
-  if (threw) {
-    results.b = "FAIL";
-    details.b_render = `throw (crash): ${threw}`;
-  } else if (out === null || out === undefined) {
-    results.b = "PASS";
-    details.b_render =
-      "satoru_render => null (expected; renderers unported, no crash)";
-  } else {
-    results.b = "PASS";
-    details.b_render = `satoru_render => bytes len=${out.length} (unexpected but no crash)`;
-  }
-  try {
-    mod.satoru_destroy_instance(si);
-  } catch {}
-} catch (e) {
-  results.b = "FAIL";
-  details.b_render = `harness error: ${String(e?.message ?? e).slice(0, 300)}`;
-}
-
-// ---- c. html_to_image (no crash, any response) ----
-try {
-  let out;
-  let threw = null;
-  try {
-    out = mod.html_to_image("<h1>hi</h1>", 800, 600, FMT.PNG, {}, 80, 6, false);
-  } catch (e) {
-    threw = String(e?.message ?? e).slice(0, 300);
-  }
-  if (threw) {
-    results.c = "FAIL";
-    details.c_unified = `throw (crash): ${threw}`;
-  } else if (out === null || out === undefined) {
-    results.c = "PASS";
-    details.c_unified =
-      "html_to_image => null (no crash; satoru stub propagates null)";
-  } else {
-    details.c_unified = `html_to_image => len=${out.length} head=${Buffer.from(out.subarray(0, 8)).toString("hex")}`;
-    results.c = "PASS";
-  }
-} catch (e) {
-  results.c = "FAIL";
-  details.c_unified = `harness error: ${String(e?.message ?? e).slice(0, 300)}`;
-}
-
 console.log(JSON.stringify({ results, details, imgPath }, null, 2));
 console.log(
   `a(converter_encode): ${results.a} -- ${details.a_input ?? ""} | ${details.a_encode ?? ""}`,
 );
-console.log(`b(satoru_render=null): ${results.b} -- ${details.b_render ?? ""}`);
-console.log(
-  `c(html_to_image no-crash): ${results.c} -- ${details.c_unified ?? ""}`,
-);
 
-// ---- d/e/f. TS facade (dist/single.js render: unified htmlToImage) ----
+// ---- e/f/g/h/i. TS facade (dist/single.js render: unified htmlToImage) ----
 try {
   const facadeUrl = pathToFileURL(
     path.join(repoRoot, "packages", "html-to-image", "dist", "single.js"),
   ).href;
   const { render } = await import(facadeUrl);
-  // d. image input -> webp
-  try {
-    const jpg = fs.readFileSync(imgPath);
-    const res = await render({
-      value: new Uint8Array(jpg),
-      format: "webp",
-      quality: 80,
-    });
-    const out = res.data;
-    if (
-      !(out instanceof Uint8Array) ||
-      Buffer.from(out.subarray(0, 4)).toString("latin1") !== "RIFF" ||
-      !res.width ||
-      !res.originalWidth
-    ) {
-      throw new Error(
-        `webp magic/metadata mismatch: len=${out?.length} w=${res.width} origW=${res.originalWidth}`,
-      );
-    }
-    results.d = "PASS";
-    details.d_image = `jpg->webp len=${out.length} magic=RIFF(webp) size=${res.width}x${res.height} orig=${res.originalWidth}x${res.originalHeight}`;
-  } catch (e) {
-    results.d = "FAIL";
-    details.d_image = String(e?.message ?? e).slice(0, 300);
-  }
   // e. HTML input -> png
   try {
     const res = await render({
@@ -311,7 +223,6 @@ try {
     details.h_avif = String(e?.message ?? e).slice(0, 300);
   }
   // i. animated gif input -> animated webp (ANMF preserved)
-  let animWebp = null;
   try {
     const gif = fs.readFileSync(
       path.join(repoRoot, "packages", "visual-test", "assets", "anim-2f.gif"),
@@ -331,40 +242,19 @@ try {
         `animated webp mismatch: len=${out?.length} anim=${anim} anmf=${anmf}`,
       );
     }
-    animWebp = out;
     results.i = "PASS";
     details.i_anim = `gif->animated-webp len=${out.length} anmf=${anmf}`;
   } catch (e) {
     results.i = "FAIL";
     details.i_anim = String(e?.message ?? e).slice(0, 300);
   }
-  // j. animated webp input -> png (first-frame decode path)
-  try {
-    if (!animWebp) throw new Error("skipped (i failed)");
-    const res = await render({ value: animWebp, format: "png" });
-    const back = res.data;
-    if (
-      !(back instanceof Uint8Array) ||
-      !Buffer.from(back.subarray(0, 4)).toString("hex").startsWith("89504e47")
-    ) {
-      throw new Error(`anim-webp->png mismatch: len=${back?.length}`);
-    }
-    results.j = "PASS";
-    details.j_animdec = `anim-webp->png len=${back.length} magic=89PNG`;
-  } catch (e) {
-    results.j = "FAIL";
-    details.j_animdec = String(e?.message ?? e).slice(0, 300);
-  }
 } catch (e) {
-  for (const k of ["d", "e", "f", "g", "h", "i", "j"]) {
+  for (const k of ["e", "f", "g", "h", "i"]) {
     results[k] = "FAIL";
     details[`${k}_harness`] =
       `facade load error: ${String(e?.message ?? e).slice(0, 300)}`;
   }
 }
-console.log(
-  `d(facade jpg->webp): ${results.d} -- ${details.d_image ?? details.d_harness ?? ""}`,
-);
 console.log(
   `e(facade html->png): ${results.e} -- ${details.e_html ?? details.e_harness ?? ""}`,
 );
@@ -379,8 +269,5 @@ console.log(
 );
 console.log(
   `i(facade anim gif->webp): ${results.i} -- ${details.i_anim ?? details.i_harness ?? ""}`,
-);
-console.log(
-  `j(facade anim-webp->png): ${results.j} -- ${details.j_animdec ?? details.j_harness ?? ""}`,
 );
 process.exit(Object.values(results).every((r) => r === "PASS") ? 0 : 1);

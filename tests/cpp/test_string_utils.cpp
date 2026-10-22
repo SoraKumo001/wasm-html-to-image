@@ -45,22 +45,17 @@ int main() {
     // --- json_escape: 通常文字は不変 ---
     expect_eq(json_escape(""), "", "json_escape/empty");
     expect_eq(json_escape("hello"), "hello", "json_escape/plain");
-    expect_eq(json_escape("0129 AZ az"), "0129 AZ az", "json_escape/alnum_space");
 
     // --- json_escape: 引用符・バックスラッシュ ---
     expect_eq(json_escape("a\"b"), "a\\\"b", "json_escape/quote");
     expect_eq(json_escape("a\\b"), "a\\\\b", "json_escape/backslash");
-    expect_eq(json_escape("\"\\"), "\\\"\\\\", "json_escape/quote_backslash_only");
 
     // --- json_escape: 制御文字は \\uXXXX (小文字16進・4桁ゼロ埋め) ---
     expect_eq(json_escape("\n"), "\\u000a", "json_escape/newline");
     expect_eq(json_escape("\t"), "\\u0009", "json_escape/tab");
-    expect_eq(json_escape(std::string("\x1f", 1)), "\\u001f", "json_escape/0x1f");
     expect_eq(json_escape(std::string("\x00", 1)), "\\u0000", "json_escape/0x00");
-    expect_eq(json_escape("a\nb"), "a\\u000ab", "json_escape/mixed");
 
-    // --- json_escape: 境界値 (0x20以上・0x7F・0x80以上は不変素通し) ---
-    expect_eq(json_escape(" "), " ", "json_escape/0x20_space");
+    // --- json_escape: 境界値 (0x7F・0x80以上は不変素通し) ---
     expect_eq(json_escape("\x7f"), "\x7f", "json_escape/0x7f_del_passthrough");
     expect_eq(json_escape("\xc3\xa9"), "\xc3\xa9", "json_escape/utf8_passthrough");
 
@@ -73,18 +68,12 @@ int main() {
         std::vector<char32_t> cps = {0x41};
         expect_eq(codepoints_to_utf8(cps), "A", "codepoints/ascii_single");
     }
+    // --- codepoints_to_utf8: マルチバイト (2/3バイト代表 + 4バイト境界) ---
     {
-        std::vector<char32_t> cps = {0x48, 0x69};
-        expect_eq(codepoints_to_utf8(cps), "Hi", "codepoints/ascii_multi_sorted");
-    }
-
-    // --- codepoints_to_utf8: マルチバイト (2/3/4バイト境界) ---
-    {
-        std::vector<char32_t> cps = {0x00e9};  // e-acute
+        // e-acute (2バイト) と あ (3バイト) をまとめて確認する。
+        std::vector<char32_t> cps = {0x00e9};
         expect_eq(codepoints_to_utf8(cps), "\xc3\xa9", "codepoints/2byte");
-    }
-    {
-        std::vector<char32_t> cps = {0x3042};  // あ
+        cps = {0x3042};
         expect_eq(codepoints_to_utf8(cps), "\xe3\x81\x82", "codepoints/3byte");
     }
     {

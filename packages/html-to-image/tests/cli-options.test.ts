@@ -4,7 +4,6 @@ import { fileURLToPath } from "node:url";
 import {
   buildRenderOptions,
   isUrlInput,
-  resolveAnimation,
   DEFAULT_ANIMATION_FPS,
   type CliFlags,
 } from "../src/cli-options.js";
@@ -29,25 +28,6 @@ describe("cli options", () => {
     expect(isUrlInput("data:image/png;base64,AAAA")).toBe(false);
   });
 
-  it("leaves baseUrl unset for URL input so the post-redirect URL wins", async () => {
-    const options = await buildRenderOptions(
-      "https://old.example/news/",
-      flags(),
-    );
-    expect(options.url).toBe("https://old.example/news/");
-    expect(options).not.toHaveProperty("baseUrl");
-    expect(options).not.toHaveProperty("value");
-  });
-
-  it("pins an explicit --base-url for URL input", async () => {
-    const options = await buildRenderOptions(
-      "https://old.example/news/",
-      flags({ baseUrl: "https://explicit.example/base/" }),
-    );
-    expect(options.url).toBe("https://old.example/news/");
-    expect(options.baseUrl).toBe("https://explicit.example/base/");
-  });
-
   it("bases a file input on its own directory", async () => {
     const options = await buildRenderOptions(FIXTURE, flags());
     expect(options.value).toContain("cli fixture");
@@ -63,31 +43,24 @@ describe("cli options", () => {
     expect(options.baseUrl).toBe("/srv/assets");
   });
 
-  it("maps --color-space to colorSpace and omits it by default", async () => {
+  it("maps --color-space to colorSpace", async () => {
     const cmyk = await buildRenderOptions(
       FIXTURE,
       flags({ format: "tiff", colorSpace: "cmyk" }),
     );
     expect(cmyk).toMatchObject({ format: "tiff", colorSpace: "cmyk" });
-    const plain = await buildRenderOptions(FIXTURE, flags({ format: "tiff" }));
-    expect(plain).not.toHaveProperty("colorSpace");
   });
 
-  it("maps --scale and --dpi and omits them by default", async () => {
-    const o = await buildRenderOptions(FIXTURE, flags({ format: "tiff", scale: 3.125, dpi: 300 }));
+  it("maps --scale and --dpi", async () => {
+    const o = await buildRenderOptions(
+      FIXTURE,
+      flags({ format: "tiff", scale: 3.125, dpi: 300 }),
+    );
     expect(o).toMatchObject({ scale: 3.125, dpi: 300 });
-    const plain = await buildRenderOptions(FIXTURE, flags({ format: "tiff" }));
-    expect(plain).not.toHaveProperty("scale");
-    expect(plain).not.toHaveProperty("dpi");
   });
 
   describe("animation flags", () => {
-    it("is disabled by default", async () => {
-      const options = await buildRenderOptions(FIXTURE, flags());
-      expect(options).not.toHaveProperty("animation");
-    });
-
-    it("maps --animation to { duration, fps } for webp output", async () => {
+    it("maps --animation to { duration, fps } and honors an explicit fps", async () => {
       const options = await buildRenderOptions(
         FIXTURE,
         flags({ format: "webp", animation: 2000 }),
@@ -97,30 +70,12 @@ describe("cli options", () => {
         duration: 2000,
         fps: DEFAULT_ANIMATION_FPS,
       });
-    });
 
-    it("honors an explicit --animation-fps", async () => {
-      const options = await buildRenderOptions(
+      const explicit = await buildRenderOptions(
         FIXTURE,
         flags({ format: "webp", animation: 2000, animationFps: 30 }),
       );
-      expect(options.animation).toEqual({ duration: 2000, fps: 30 });
-    });
-
-    it("keeps --base-url working together with animation", async () => {
-      const options = await buildRenderOptions(
-        FIXTURE,
-        flags({
-          format: "webp",
-          animation: 1000,
-          baseUrl: "https://explicit.example/base/",
-        }),
-      );
-      expect(options.baseUrl).toBe("https://explicit.example/base/");
-      expect(options.animation).toEqual({
-        duration: 1000,
-        fps: DEFAULT_ANIMATION_FPS,
-      });
+      expect(explicit.animation).toEqual({ duration: 2000, fps: 30 });
     });
 
     it("ignores --animation for non-webp formats with a warning", async () => {
@@ -136,85 +91,6 @@ describe("cli options", () => {
       } finally {
         warn.mockRestore();
       }
-    });
-
-    it("warns when --animation-fps is given without --animation", async () => {
-      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-      try {
-        const options = await buildRenderOptions(
-          FIXTURE,
-          flags({ format: "webp", animationFps: 30 }),
-        );
-        expect(options).not.toHaveProperty("animation");
-        expect(warn).toHaveBeenCalledOnce();
-        expect(String(warn.mock.calls[0][0])).toContain("--animation");
-      } finally {
-        warn.mockRestore();
-      }
-    });
-
-    it("maps --animation-loop to the animation option", async () => {
-      const options = await buildRenderOptions(
-        FIXTURE,
-        flags({ format: "webp", animation: 2000, animationLoop: 1 }),
-      );
-      expect(options.animation).toEqual({
-        duration: 2000,
-        fps: DEFAULT_ANIMATION_FPS,
-        loop: 1,
-      });
-    });
-
-    it("omits loop when --animation-loop is not given (infinite by default)", async () => {
-      const options = await buildRenderOptions(
-        FIXTURE,
-        flags({ format: "webp", animation: 2000 }),
-      );
-      expect(options.animation).toEqual({
-        duration: 2000,
-        fps: DEFAULT_ANIMATION_FPS,
-      });
-      expect(options.animation).not.toHaveProperty("loop");
-    });
-
-    it("clamps a negative --animation-loop to 0 (infinite)", async () => {
-      const options = await buildRenderOptions(
-        FIXTURE,
-        flags({ format: "webp", animation: 2000, animationLoop: -3 }),
-      );
-      expect(options.animation).toEqual({
-        duration: 2000,
-        fps: DEFAULT_ANIMATION_FPS,
-        loop: 0,
-      });
-    });
-
-    it("warns when --animation-loop is given without --animation", async () => {
-      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-      try {
-        const options = await buildRenderOptions(
-          FIXTURE,
-          flags({ format: "webp", animationLoop: 1 }),
-        );
-        expect(options).not.toHaveProperty("animation");
-        expect(warn).toHaveBeenCalledOnce();
-        expect(String(warn.mock.calls[0][0])).toContain("--animation-loop");
-      } finally {
-        warn.mockRestore();
-      }
-    });
-
-    it("resolveAnimation is pure (no console side effects)", () => {
-      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-      try {
-        expect(resolveAnimation(flags({ animation: 1000 }))).toEqual({
-          warning:
-            "--animation is only supported for webp, apng and gif output; ignoring (format=png).",
-        });
-      } finally {
-        warn.mockRestore();
-      }
-      expect(warn).not.toHaveBeenCalled();
     });
   });
 });

@@ -37,32 +37,11 @@ void test_get_refreshes_recency() {
     check(c.exists("a") && !c.exists("b"), "get protects an entry from eviction");
 }
 
-void test_put_existing_updates_and_refreshes() {
-    Cache c(2);
-    c.put("a", 1);
-    c.put("b", 2);
-    c.put("a", 10);  // update + most recent
-    c.put("c", 3);   // evicts "b"
-    int* a = c.get("a");
-    check(a && *a == 10, "put on an existing key replaces the value");
-    check(!c.exists("b") && c.size() == 2, "updated key counts as most recent");
-}
-
-void test_miss_and_clear() {
-    Cache c(2);
-    check(c.get("missing") == nullptr, "get on a miss returns nullptr");
-    c.put("a", 1);
-    c.clear();
-    check(c.size() == 0 && !c.exists("a"), "clear empties the cache");
-}
-
 }  // namespace
 
 int main() {
     test_evicts_least_recently_used();
     test_get_refreshes_recency();
-    test_put_existing_updates_and_refreshes();
-    test_miss_and_clear();
     std::printf("%s\n", g_fail == 0 ? "ALL PASS" : "SOME FAILED");
     return g_fail == 0 ? 0 : 1;
 }

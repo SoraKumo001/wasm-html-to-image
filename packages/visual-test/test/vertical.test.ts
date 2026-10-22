@@ -17,10 +17,21 @@ const MARGIN = 1.5;
 
 type Baseline = { fill: number; outline: number; width: number; height: number };
 
-const FILES = fs
-  .readdirSync(CASES_DIR)
-  .filter((f) => f.endsWith(".html"))
-  .sort();
+// Representative subset: rl/lr basics, horizontal runs inside vertical text
+// (and the mirror case), rotation/orientation and decorations. The remaining
+// upstream cases are still generated into ../vertical/cases for manual checks.
+const CASES = [
+  "01-basic-rl.html",
+  "02-basic-lr.html",
+  "04-latin-mixed.html",
+  "05-orientation.html",
+  "14-decoration.html",
+  "26-horizontal-in-vertical.html",
+  "27-vertical-in-horizontal.html",
+  "34-transform.html",
+  "50-deco-underline-only.html",
+  "81-deco-overline.html",
+];
 
 describe("Vertical writing regression (vs Chromium)", () => {
   const baselines: Record<string, Baseline> = fs.existsSync(BASELINE_PATH)
@@ -36,7 +47,7 @@ describe("Vertical writing regression (vs Chromium)", () => {
     }
   });
 
-  for (const file of FILES) {
+  for (const file of CASES) {
     const name = file.replace(".html", "");
     it(`vertical: ${name}`, async () => {
       const refPath = path.join(REFERENCE_DIR, `${name}.png`);

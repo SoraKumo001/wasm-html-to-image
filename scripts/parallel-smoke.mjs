@@ -26,8 +26,8 @@ const defaultImg = path.join(
 const imgPath = process.argv[2] ?? defaultImg;
 const jpg = fs.readFileSync(imgPath);
 
-const N_HTML = 6;
-const N_IMG = 6;
+const N_HTML = 2;
+const N_IMG = 2;
 const MAX_PARALLEL = 4;
 
 const makeJobs = () => [

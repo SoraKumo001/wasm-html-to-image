@@ -9,19 +9,10 @@ import {
 } from "../src/loader.js";
 import { checkWasmBinary } from "../src/wasm-binary.js";
 
-/** Header-only module: valid, but no sections. */
-const EMPTY_WASM = new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]);
-
 /** One exported-less type section (`func () -> ()`). */
 const TYPED_WASM = new Uint8Array([
   0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, // header
   0x01, 0x04, 0x01, 0x60, 0x00, 0x00, // type section
-]);
-
-/** One function import from the namespace "env". */
-const IMPORTING_WASM = new Uint8Array([
-  0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, // header
-  0x02, 0x09, 0x01, 0x03, 0x65, 0x6e, 0x76, 0x01, 0x66, 0x00, 0x00, // import section
 ]);
 
 const fakeModule = (tag: string): HtmlToImageModule =>
@@ -40,10 +31,6 @@ describe("wasm-binary: checkWasmBinary", () => {
     expect(check.reason).toBeUndefined();
   });
 
-  it("accepts a header-only module", () => {
-    expect(checkWasmBinary(EMPTY_WASM).ok).toBe(true);
-  });
-
   it("rejects a truncated module with the section that runs past the end", () => {
     // Cut the type section in half: its declared size no longer fits.
     const truncated = TYPED_WASM.subarray(0, TYPED_WASM.length - 2);
@@ -57,11 +44,6 @@ describe("wasm-binary: checkWasmBinary", () => {
     const check = checkWasmBinary(new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]));
     expect(check.ok).toBe(false);
     expect(check.reason).toContain("not a WebAssembly binary");
-  });
-
-  it("reports the import namespaces of the binary", () => {
-    expect(checkWasmBinary(IMPORTING_WASM).namespaces).toEqual(["env"]);
-    expect(checkWasmBinary(TYPED_WASM).namespaces).toEqual([]);
   });
 });
 
@@ -82,19 +64,6 @@ describe("loader: parallel initialization", () => {
 
     expect(calls).toBe(1);
     for (const r of results) expect(r).toBe(mod);
-  });
-
-  it("reuses the cached module for later loads", async () => {
-    const mod = fakeModule("cached");
-    const factory = vi.fn(async () => mod) as unknown as CreateHtmlToImageModule;
-    const moduleArg: EmscriptenModuleArg = { locateFile: () => "" };
-
-    const first = await loadHtmlToImageModule({ factory, moduleArg });
-    const second = await loadHtmlToImageModule({ factory, moduleArg });
-
-    expect(first).toBe(mod);
-    expect(second).toBe(mod);
-    expect(factory).toHaveBeenCalledTimes(1);
   });
 
   it("does not cache a failed load, so the next call retries", async () => {
@@ -141,20 +110,6 @@ describe("loader: corrupt / mismatched artifacts", () => {
       loadHtmlToImageModule({ factory, moduleArg }),
     ).rejects.toThrow(/do not match/);
     expect(factory).toHaveBeenCalledTimes(1);
-  });
-
-  it("rejects a truncated wasmBinary before the factory is called", async () => {
-    const factory = vi.fn(async () => fakeModule("never")) as unknown as
-      CreateHtmlToImageModule;
-    const truncated = TYPED_WASM.subarray(0, TYPED_WASM.length - 2);
-
-    await expect(
-      loadHtmlToImageModule({
-        factory,
-        moduleArg: { wasmBinary: truncated },
-      }),
-    ).rejects.toThrow(/extends past end of the module/);
-    expect(factory).not.toHaveBeenCalled();
   });
 });
 

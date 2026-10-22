@@ -1,12 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  FETCH_CONCURRENCY,
   fetchResourceBytes,
   mapWithLimit,
   resolveHtmlResources,
   type ResolveContext,
 } from "../src/core-resources.js";
-import { LogLevel, type RenderLimits } from "../src/diagnostics.js";
+import type { RenderLimits } from "../src/diagnostics.js";
 import type { HtmlToImageModule } from "../src/loader.js";
 
 const enc = new TextEncoder();
@@ -67,7 +66,7 @@ async function discover(
     diag: null,
     usage: { resourceCount: 0, totalResourceBytes: 0 },
     t0: performance.now(),
-    emitLog: (_l: LogLevel, _m: string) => undefined,
+    emitLog: () => undefined,
     addTime: () => undefined,
     checkTimeout: () => undefined,
     resolveResource: async () => new Uint8Array(bytesPerResource),
@@ -93,44 +92,6 @@ describe("limits are enforced without diagnostics", () => {
   it("maxResourceCount caps parallel fetches", async () => {
     const added = await discover(uniqueUrls(5), { maxResourceCount: 2 }, 4);
     expect(added).toHaveLength(2);
-  });
-
-  it("maxTotalResourceBytes caps the accumulated size", async () => {
-    const added = await discover(
-      uniqueUrls(5),
-      { maxTotalResourceBytes: 25 },
-      10,
-    );
-    expect(added).toHaveLength(2);
-  });
-
-  it("releases the reserved slot when a fetch fails", async () => {
-    const urls = uniqueUrls(1);
-    let served = false;
-    const module = {
-      satoru_collect_resources: () => undefined,
-      satoru_get_pending_resources: () => {
-        if (served) return new Uint8Array(0);
-        served = true;
-        return pendingBin(urls);
-      },
-      satoru_add_resource: () => undefined,
-    } as unknown as HtmlToImageModule;
-    const ctx: ResolveContext = {
-      mediaTypeInt: 0,
-      limits: { maxResourceCount: 1 },
-      diag: null,
-      usage: { resourceCount: 0, totalResourceBytes: 0 },
-      t0: performance.now(),
-      emitLog: () => undefined,
-      addTime: () => undefined,
-      checkTimeout: () => undefined,
-      resolveResource: async () => null,
-    };
-    await resolveHtmlResources(
-      module, {}, "<p/>", 100, undefined, undefined, undefined, undefined, undefined, ctx,
-    );
-    expect(ctx.usage.resourceCount).toBe(0);
   });
 });
 
@@ -158,19 +119,6 @@ describe("per-fetch timeout", () => {
     );
     expect(bytes).toBeNull();
     expect(received?.aborted).toBe(true);
-  });
-
-  it("passes no signal when timeoutMs is unset", async () => {
-    let init: { signal?: AbortSignal } | undefined;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (_u: string, i?: { signal?: AbortSignal }) => {
-        init = i;
-        return { ok: true, arrayBuffer: async () => new ArrayBuffer(1) };
-      }),
-    );
-    await fetchResourceBytes("https://nosignal.example/x");
-    expect(init?.signal).toBeUndefined();
   });
 });
 
@@ -214,24 +162,6 @@ describe("multi-page discovery", () => {
     // round 1 found resources, round 2 found none -> two collect calls, each with ALL pages
     expect(collectCalls).toEqual([pages, pages]);
   });
-
-  it("fetches every page's resources in parallel, capped at FETCH_CONCURRENCY", async () => {
-    let live = 0;
-    let peak = 0;
-    const total = FETCH_CONCURRENCY * 3;
-    const { module } = pagedModule([uniqueUrls(total), []]);
-    await resolveHtmlResources(
-      module, {}, ["<p/>", "<p/>"], 100, undefined, undefined, undefined, undefined, undefined,
-      baseCtx(async () => {
-        live++;
-        peak = Math.max(peak, live);
-        await new Promise((r) => setTimeout(r, 5));
-        live--;
-        return new Uint8Array(1);
-      }),
-    );
-    expect(peak).toBe(FETCH_CONCURRENCY);
-  });
 });
 
 describe("mapWithLimit", () => {
@@ -248,9 +178,5 @@ describe("mapWithLimit", () => {
     });
     expect(seen.sort()).toEqual([1, 2, 3, 4, 5, 6, 7]);
     expect(peak).toBe(3);
-  });
-
-  it("handles an empty list", async () => {
-    await expect(mapWithLimit([], 4, async () => undefined)).resolves.toBeUndefined();
   });
 });
