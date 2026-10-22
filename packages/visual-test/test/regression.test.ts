@@ -3089,3 +3089,16 @@ describe("declarative shadow DOM", () => {
     expect(isWhite(at(10, 10))).toBe(true);
   });
 });
+
+describe("svg size attributes", () => {
+  it("keeps the unit of a width/height attribute such as 1.33em", async () => {
+    // font-size 20px -> 1.33em is 26.6px; read as 1.33px the icon would be a speck.
+    const { at } = await renderPng(
+      `<div style="font-size:20px"><svg width="1.33em" height="1.33em" viewBox="0 0 24 24" style="display:block"><rect width="24" height="24" fill="#00f"/></svg></div>`,
+      60,
+      40,
+    );
+    expect(near(at(20, 20), [0, 0, 255])).toBe(true);
+    expect(isWhite(at(30, 20))).toBe(true);
+  });
+});

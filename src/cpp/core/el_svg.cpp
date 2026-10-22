@@ -148,8 +148,22 @@ void el_svg::parse_attributes() {
 void el_svg::parse_presentational_hints() {
     const char* str_w = get_attr("width");
     const char* str_h = get_attr("height");
-    if (str_w) map_to_dimension_property(_width_, str_w);
-    if (str_h) map_to_dimension_property(_height_, str_h);
+    // SVG width/height are CSS lengths, so "1.33em" keeps its unit; the HTML dimension mapping
+    // would read it as 1.33px. Plain numbers and percentages still take the HTML path.
+    auto map_length = [this](string_id prop, const char* value) {
+        char* end = nullptr;
+        double v = strtod(value, &end);
+        while (*end == ' ') end++;
+        size_t n = strlen(end);
+        while (n && end[n - 1] == ' ') n--;
+        if (end == value || n == 0 || (n == 1 && *end == '%') || (n == 2 && !strncmp(end, "px", 2))) {
+            map_to_dimension_property(prop, value);
+        } else {
+            m_style.add_property(prop, {css_token{DIMENSION, (float)v, css_number_number, string(end, n)}});
+        }
+    };
+    if (str_w) map_length(_width_, str_w);
+    if (str_h) map_length(_height_, str_h);
     html_tag::parse_presentational_hints();
 }
 
