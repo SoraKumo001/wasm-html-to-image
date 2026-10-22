@@ -1,0 +1,1 @@
+var e=new URL(`animation-sample-Bk3QS-oq.html`,import.meta.url).href;export{e as default};
