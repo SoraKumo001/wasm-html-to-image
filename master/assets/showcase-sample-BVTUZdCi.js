@@ -1,1 +1,0 @@
-var e=new URL(`showcase-sample-Dj4X8w1Q.html`,import.meta.url).href;export{e as default};
