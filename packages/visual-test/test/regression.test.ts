@@ -3760,6 +3760,27 @@ describe("regression: layout and paint probes", () => {
     ]);
     expect(Math.abs(flexItem[0] - flexItem[1])).toBeLessThanOrEqual(1);
   });
+  it("grid: text placed directly in the container is drawn, with its spaces", async () => {
+    // A grid whose only children are text got no parent on the anonymous item wrapping them, so
+    // nothing was drawn; and the space between two words was dropped as an empty grid item.
+    const inkWidth = async (html: string) => {
+      const { img, at } = await renderPng(html, 300, 60);
+      let x0 = 1e9, x1 = -1;
+      for (let y = 0; y < img.height; y++)
+        for (let x = 0; x < img.width; x++) if (at(x, y)[0] < 100) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); }
+      return x1 < 0 ? 0 : x1 - x0 + 1;
+    };
+    const block = await inkWidth(`<div style="font:24px sans-serif">Hello world</div>`);
+    expect(block).toBeGreaterThan(80);
+    for (const grid of [
+      `<div style="display:grid;width:300px;font:24px sans-serif">Hello world</div>`,
+      `<div style="display:grid;grid-template-columns:minmax(0,1fr);width:300px;font:24px sans-serif">Hello world</div>`,
+      `<div style="display:inline-grid;font:24px sans-serif">Hello world</div>`,
+      `<div style="display:grid;width:300px;font:24px sans-serif">Hello world<i></i></div>`,
+    ]) {
+      expect(Math.abs((await inkWidth(grid)) - block)).toBeLessThanOrEqual(2);
+    }
+  });
   it("form controls centre their text vertically in a box taller than the line", async () => {
     // Chromium centres the text of an <input>, <button> or <select> in the content box.
     const inkCentre = async (control: string) => {

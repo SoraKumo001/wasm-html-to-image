@@ -121,7 +121,9 @@ std::shared_ptr<render_item> render_item_grid::init()
             string run;
             el->src_el()->get_text(run);
             const bool blank = !run.empty() && run.find_first_not_of(" \t\r\n\f") == string::npos;
-            if (!el->src_el()->is_white_space() && !blank)
+            // White space between the words of a run is part of it ("Hello world" is split into
+            // word, space, word); only white space that would start a run is dropped.
+            if ((!el->src_el()->is_white_space() && !blank) || !current_inlines.empty())
             {
                 current_inlines.push_back(el);
             }
@@ -168,6 +170,9 @@ std::shared_ptr<render_item> render_item_grid::init()
         children().clear();
         for (const auto& item : items)
         {
+            // The anonymous block wrapping a run of text has no parent yet (element items got one in
+            // the loop above); without it the text of a grid that holds nothing else is never drawn.
+            item->parent(shared_from_this());
             children().push_back(item);
         }
     }
