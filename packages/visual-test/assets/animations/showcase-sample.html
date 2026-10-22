@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <style>
-  /* 各 @keyframes がそれぞれの要素 (セレクタ一致の全要素) を動かす */
+  /* Each @keyframes drives its target elements */
   @keyframes page-bg {
     0%   { background-color: #e0e7ff; }
     50%  { background-color: #fce7f3; }
@@ -66,7 +66,7 @@
   }
   .card.a { animation: float-a 3s infinite ease-in-out; }
   .card.b { animation: float-b 3s infinite ease-in-out; }
-  /* 1 つの要素に複数アニメーション: 拡大縮小 + 点滅 */
+  /* Multiple animations on one element: scale + blink */
   .shape { animation: pop 2s infinite ease-in-out, blink 3s infinite ease-in-out; }
   .star { animation: turn 4s infinite linear; }
   .join { animation: amber 3s infinite ease-in-out; }
@@ -160,7 +160,7 @@
     margin-bottom: 8px;
   }
   .clamp.two { max-lines: 2; }
-  .clamp.marker { max-lines: 2; block-ellipsis: " …続きを読む"; }
+  .clamp.marker { max-lines: 2; block-ellipsis: " …read more"; }
 
   /* flow-root */
   .floated { float: left; width: 60px; height: 60px; margin-right: 10px; background: #f97316; border-radius: 10px; }
@@ -208,12 +208,12 @@
 <div class="page">
   <div class="hero">
     <h1>wasm-html-to-image Showcase</h1>
-    <p>最近追加した CSS 機能・縦書き・アニメーションをまとめて確認できるページです。Format を WebP / APNG / GIF にして Animation をオンにすると動きます。</p>
+    <p>Showcase page to inspect recently added CSS features, vertical writing, and animations. Set format to WebP / APNG / GIF and turn on Animation to see it move.</p>
   </div>
 
   <div class="grid">
     <div class="card a wide">
-      <h2>縦書き (writing-mode: vertical-rl)</h2>
+      <h2>Vertical Writing (writing-mode: vertical-rl)</h2>
       <span class="tag">text-emphasis / text-combine-upright</span>
       <div class="row">
         <div class="vertical">
@@ -244,15 +244,15 @@
     <div class="card a">
       <h2>max-lines + block-ellipsis</h2>
       <span class="tag">max-lines: 2 / block-ellipsis: "…"</span>
-      <div class="clamp">Plain paragraph without clamping. 長い文章は通常どおり折り返して、すべての行が表示されます。max-lines を指定すると行数が制限されます。</div>
-      <div class="clamp two">max-lines: 2. 長い文章は 2 行で打ち切られ、末尾に省略記号が付きます。ここは行数制限を超える長いテキストです。ここは行数制限を超える長いテキストです。</div>
-      <div class="clamp marker">block-ellipsis で省略記号を差し替えられます。ここは行数制限を超える長いテキストです。ここは行数制限を超える長いテキストです。</div>
+      <div class="clamp">Plain paragraph without clamping. Long text wraps normally and all lines are displayed. Specifying max-lines restricts the number of lines.</div>
+      <div class="clamp two">max-lines: 2. Long text is clamped at 2 lines with an ellipsis at the end. Here is long text exceeding the limit. Here is long text exceeding the limit.</div>
+      <div class="clamp marker">Custom ellipsis string can be specified via block-ellipsis. Here is long text exceeding the limit. Here is long text exceeding the limit.</div>
     </div>
 
     <div class="card b">
       <h2>display: flow-root</h2>
-      <span class="tag">float を内包 (clearfix 不要)</span>
-      <div class="fr root"><div class="floated"></div>flow-root あり: 親が float を内包する</div>
+      <span class="tag">contains floats (no clearfix needed)</span>
+      <div class="fr root"><div class="floated"></div>with flow-root: the parent contains its floated child</div>
     </div>
 
     <div class="card a">
@@ -275,24 +275,24 @@
     </div>
 
     <div class="card a wide">
-      <h2>テーブル (table-header-group / footer-group / caption)</h2>
-      <span class="tag">header は tfoot の後ろに書いても先頭に出ます</span>
+      <h2>Table (table-header-group / footer-group / caption)</h2>
+      <span class="tag">thead appears at the top even if written after tfoot</span>
       <table>
-        <caption>2026 年 売上</caption>
+        <caption>2026 Sales</caption>
         <colgroup><col style="background:#eef2ff;width:120px"><col style="background:#fdf2f8"><col></colgroup>
-        <tfoot><tr><td>合計</td><td>¥3,300</td><td>-</td></tr></tfoot>
+        <tfoot><tr><td>Total</td><td>$3,300</td><td>-</td></tr></tfoot>
         <tbody>
-          <tr><td>東京</td><td>¥1,800</td><td>+12%</td></tr>
-          <tr><td>大阪</td><td>¥1,500</td><td>+8%</td></tr>
+          <tr><td>Tokyo</td><td>$1,800</td><td>+12%</td></tr>
+          <tr><td>Osaka</td><td>$1,500</td><td>+8%</td></tr>
         </tbody>
-        <thead class="thead"><tr><th>地域</th><th>売上</th><th>前年比</th></tr></thead>
+        <thead class="thead"><tr><th>Region</th><th>Sales</th><th>YoY</th></tr></thead>
       </table>
     </div>
 
     <div class="card b wide">
-      <h2>アニメーション (@keyframes → animated WebP / APNG / GIF)</h2>
+      <h2>Animation (@keyframes → animated WebP / APNG / GIF)</h2>
       <span class="tag">transform / opacity / color / background-color</span>
-      <p style="margin:0;font-size:13px">ページ内の各要素が別々の <code>@keyframes</code> で動いています(図形とヒーロー文は 1 要素に複数アニメーション): カードの浮き沈み(透明度 + 移動)、図形の拡大縮小、星の回転、文字色・背景色の変化、float の移動、ページ背景色。</p>
+      <p style="margin:0;font-size:13px">Each element on the page is animated with distinct <code>@keyframes</code> (shapes and hero text use multiple animations on a single element): card floating (opacity + translation), shape scaling, star rotation, text &amp; background color changes, float translation, and page background color.</p>
     </div>
   </div>
 </div>
