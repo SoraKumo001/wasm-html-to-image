@@ -1938,6 +1938,54 @@ describe("regression: layout and paint probes", () => {
     expect(auto_.count).toBeLessThan(none.count);
   });
 
+  it("decoration lines: auto thickness is a tenth of the font size, on whole rows, overline above the text", async () => {
+    const rows = async (line: string, size: number, lineHeight: string) => {
+      const { img } = await renderPng(
+        `<div style="font-size:${size}px;line-height:${lineHeight};text-decoration:${line};text-decoration-color:#f00;text-decoration-skip-ink:none">Hxg</div>`,
+        200,
+        size * 3,
+      );
+      const hit: number[] = [];
+      for (let y = 0; y < img.height; y++) {
+        let n = 0;
+        for (let x = 0; x < img.width; x++) if (isRedPixel(img, x, y)) n++;
+        if (n > 5) hit.push(y);
+      }
+      return hit;
+    };
+    // 60px text: a 6px line, whatever the line kind (the old fixed default was 1px).
+    const under = await rows("underline", 60, "120px");
+    const over = await rows("overline", 60, "120px");
+    const through = await rows("line-through", 60, "120px");
+    for (const r of [under, over, through]) {
+      expect(r.length).toBe(6);
+      expect(r[5] - r[0]).toBe(5); // contiguous
+    }
+    // The strike runs through the x-height, the underline hangs below the baseline.
+    expect(over[5]).toBeLessThan(through[0]);
+    expect(through[5]).toBeLessThan(under[0]);
+    // 12px text: a single crisp row, not a blur over two.
+    expect((await rows("underline", 12, "24px")).length).toBe(1);
+    expect((await rows("line-through", 12, "24px")).length).toBe(1);
+    // The overline sits on top of the text box, outside the content area.
+    const probe = await rows("overline", 30, "90px");
+    const plain = await renderPng(
+      `<div style="font-size:30px;line-height:90px">Hxg</div>`,
+      200,
+      90,
+    );
+    let inkTop = -1;
+    for (let y = 0; y < plain.img.height && inkTop < 0; y++) {
+      for (let x = 0; x < plain.img.width; x++) {
+        if (plain.at(x, y)[0] < 128) {
+          inkTop = y;
+          break;
+        }
+      }
+    }
+    expect(probe[probe.length - 1]).toBeLessThan(inkTop);
+  });
+
   it("text-decoration-thickness: a percentage is relative to the font size", async () => {
     const base =
       "text-decoration:underline;text-decoration-color:#f00;text-decoration-skip-ink:none";

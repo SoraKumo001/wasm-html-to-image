@@ -42,13 +42,16 @@ void TextDecorationRenderer::drawDecoration(SkCanvas* canvas, font_info* fi,
     // text-decoration-thickness:
     //   from-font: the underline thickness the font itself reports.
     //   <length>:  the resolved length.
-    //   auto:      1px (the user agent default).
+    //   auto:      a tenth of the font size, at least 1px (Blink's default; a 60px
+    //              text gets a 6px line, not the 1px a fixed default would give).
     float thickness = (float)fi->desc.decoration_thickness.val();
     if (fi->desc.decoration_thickness.is_predefined() &&
         fi->desc.decoration_thickness.predef() ==
             litehtml::text_decoration_thickness_from_font &&
         fi->fm_underline_thickness > 0) {
         thickness = fi->fm_underline_thickness;
+    } else if (fi->desc.decoration_thickness.is_predefined()) {
+        thickness = std::max(1.0f, std::floor((float)fi->desc.size / 10.0f));
     }
     if (thickness == 0) thickness = 1.0f;
 
@@ -63,6 +66,14 @@ void TextDecorationRenderer::drawDecoration(SkCanvas* canvas, font_info* fi,
     dec_paint.setStyle(SkPaint::kStroke_Style);
 
     WritingModeContext wm_ctx(mode, pos.width, pos.height);
+    // A solid line is laid on whole device rows: its outer edge is rounded, so it is
+    // painted crisply instead of being spread over two half-covered rows. Only the
+    // horizontal-writing block axis (y) is snapped.
+    const bool is_wavy_style = fi->desc.decoration_style == litehtml::text_decoration_style_wavy;
+    auto snap_block = [&](float center) {
+        if (wm_ctx.is_vertical() || is_wavy_style) return center;
+        return std::floor(center - thickness * 0.5f + 0.5f) + thickness * 0.5f;
+    };
     LogicalCanvas l_canvas(canvas, wm_ctx, (float)pos.x, (float)pos.y);
 
     // The parameters of the wavy decoration. The wave oscillates around
@@ -253,8 +264,11 @@ void TextDecorationRenderer::drawDecoration(SkCanvas* canvas, font_info* fi,
                                thickness * 0.5f + user_offset;
         } else {
             // auto (left/right do not apply to horizontal writing modes).
-            underline_offset = (float)fi->fm_ascent + user_offset + thickness;
+            // Blink: the stroke starts `max(1, ceil(thickness / 2))` below the baseline.
+            underline_offset = (float)fi->fm_ascent + user_offset +
+                               std::max(1.0f, std::ceil(thickness * 0.5f)) + thickness * 0.5f;
         }
+        underline_offset = snap_block(underline_offset);
 
         // The underline hangs below the baseline in a horizontal writing mode
         // and hugs the block-start edge in a vertical one, so the side of the
@@ -264,7 +278,9 @@ void TextDecorationRenderer::drawDecoration(SkCanvas* canvas, font_info* fi,
         draw_with_gaps(underline_offset, collect_skip_gaps(underline_offset, side));
     }
     if (fi->desc.decoration_line & litehtml::text_decoration_line_overline) {
-        float overline_offset = 0;
+        // Horizontal: the stroke sits on top of the text box (its lower edge at the
+        // block-start edge), so it reaches above it by its own thickness.
+        float overline_offset = snap_block(-thickness * 0.5f);
         if (wm_ctx.is_vertical()) {
             // Mirror of underline: just inside the block-end edge.
             overline_offset = (float)wm_ctx.container_width() - thickness;
@@ -276,7 +292,7 @@ void TextDecorationRenderer::drawDecoration(SkCanvas* canvas, font_info* fi,
         draw_with_gaps(overline_offset, collect_skip_gaps(overline_offset, side));
     }
     if (fi->desc.decoration_line & litehtml::text_decoration_line_line_through) {
-        float strike_offset = (float)fi->fm_ascent * 0.65f;
+        float strike_offset = snap_block((float)fi->fm_ascent * (2.0f / 3.0f));
         draw_with_gaps(strike_offset,
                        collect_skip_gaps(strike_offset, SkipInkSide::BlockEnd));
     }
