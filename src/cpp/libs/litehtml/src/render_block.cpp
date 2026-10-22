@@ -266,8 +266,10 @@ litehtml::pixel_t litehtml::render_item_block::_measure(const containing_block_c
 	{
 		if (self_size.render_inline_size() > self_size.max_inline_size())
 		{
-			self_size.render_inline_size() = self_size.max_inline_size();
-			self_size.inline_size() = self_size.render_inline_size();
+			// Only the value: copying the typed_pixel would turn an auto inline size into an absolute
+			// one, and a shrink-to-fit block would then take max-width as its width.
+			self_size.render_inline_size() = (pixel_t)self_size.max_inline_size();
+			self_size.inline_size() = (pixel_t)self_size.render_inline_size();
 		}
 	}
 
@@ -450,8 +452,10 @@ void litehtml::render_item_block::_place(pixel_t inline_pos, pixel_t block_pos, 
 	{
 		if (self_size.render_inline_size() > self_size.max_inline_size())
 		{
-			self_size.render_inline_size() = self_size.max_inline_size();
-			self_size.inline_size() = self_size.render_inline_size();
+			// Only the value: copying the typed_pixel would turn an auto inline size into an absolute
+			// one, and a shrink-to-fit block would then take max-width as its width.
+			self_size.render_inline_size() = (pixel_t)self_size.max_inline_size();
+			self_size.inline_size() = (pixel_t)self_size.render_inline_size();
 		}
 	}
 

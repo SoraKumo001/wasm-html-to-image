@@ -1032,10 +1032,10 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             containing_block_context cb = self_size;
             cb.size_mode |= containing_block_context::size_mode_content;
             pixel_t measured = item.el->measure(cb, fmt_ctx);
-            // inline_size() is the margin box; for text-only content the measured content
-            // width can be larger than an empty box, so take both into account.
+            // measure() already returns the margin-box inline size; inline_size() can still be the
+            // larger of the two when the box was measured earlier, so take both into account.
             pixel_t w = std::max((pixel_t)item.el->inline_size(),
-                                 measured + item.el->content_offset_width());
+                                 measured);
 
             const int span = item.pos.col_end - item.pos.col_start;
             pixel_t factors = 0;
@@ -1115,7 +1115,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
     {
         // The implicit single column is sized after items are known (see below).
         // Block grids fill the available inline size; inline grids shrink-to-fit.
-        if (src_el()->css().get_display() != display_inline_grid)
+        if (src_el()->css().get_display() != display_inline_grid && !content_inline)
         {
             m_grid_layout.column_widths[0] = render_inline;
         }
@@ -1162,10 +1162,10 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                 containing_block_context cb = self_size;
                 cb.size_mode |= containing_block_context::size_mode_content;
                 pixel_t measured = item.el->measure(cb, fmt_ctx);
-                // inline_size() is the margin box of the measured box; for text content that box can
-                // still be empty (only padding/border), so also use the measured content width.
+                // measure() returns the margin-box inline size (padding and border included), so
+                // adding the offsets again would count them twice.
                 pixel_t w = std::max((pixel_t)item.el->inline_size(),
-                                     measured + item.el->content_offset_width());
+                                     measured);
                 // Round up: a track a fraction of a pixel too narrow makes the item's text wrap.
                 contrib[c] = std::max(contrib[c], (pixel_t)std::ceil(w));
             }
@@ -1233,7 +1233,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                         containing_block_context cb = self_size;
                         cb.size_mode |= containing_block_context::size_mode_min_content;
                         pixel_t measured = item.el->measure(cb, fmt_ctx);
-                        pixel_t w = std::max((pixel_t)item.el->inline_size(), measured + item.el->content_offset_width());
+                        pixel_t w = std::max((pixel_t)item.el->inline_size(), measured);
                         minc[c] = std::max(minc[c], std::min((pixel_t)std::ceil(w), m_grid_layout.column_widths[c]));
                     }
                     const pixel_t budget = render_inline - (fixed2 - auto_total);
@@ -1296,7 +1296,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         }
     }
 
-    if (columns_template.empty() && src_el()->css().get_display() == display_inline_grid)
+    if (columns_template.empty() && (src_el()->css().get_display() == display_inline_grid || content_inline))
     {
         // Inline grids shrink-to-fit: size the single implicit column to the
         // widest item's content, capped by the available inline size.

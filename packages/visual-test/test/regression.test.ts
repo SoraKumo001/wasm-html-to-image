@@ -3760,6 +3760,32 @@ describe("regression: layout and paint probes", () => {
     ]);
     expect(Math.abs(flexItem[0] - flexItem[1])).toBeLessThanOrEqual(1);
   });
+  it("a shrink-to-fit block with max-width takes its content width, not max-width", async () => {
+    // A column flex item with align-items:center and `max-width:500px` is fit-content: the max-width
+    // only clamps. Copying the max-width typed value over the auto inline size made it exactly 500px.
+    const redWidth = async (html: string) => {
+      const { img, at } = await renderPng(html, 600, 60);
+      let x0 = 1e9, x1 = -1;
+      for (let x = 0; x < img.width; x++) if (near(at(x, 5), RED, 40)) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); }
+      return x1 - x0 + 1;
+    };
+    const item = (extra: string) =>
+      `<div style="display:flex;flex-direction:column;align-items:center;width:600px"><div style="${extra}background:#f00"><div style="width:120px;height:20px"></div></div></div>`;
+    expect(await redWidth(item("max-width:500px;"))).toBe(120);
+    expect(await redWidth(item(""))).toBe(120);
+    expect(await redWidth(item("max-width:80px;"))).toBe(80);
+  });
+  it("grid: a padded item is counted once when the grid is sized from its content", async () => {
+    // fr/auto tracks of a shrink-to-fit grid took the item's margin-box size plus its padding again.
+    const { img, at } = await renderPng(
+      `<div style="display:inline-block;background:#f00"><div style="display:grid;grid-template-columns:minmax(0,1fr)"><div style="width:100px;padding:0 10px 0 32px;border-right:3px solid #f00;height:10px"></div></div></div>`,
+      400,
+      40,
+    );
+    let x1 = -1;
+    for (let x = 0; x < img.width; x++) if (near(at(x, 5), RED, 40)) x1 = x;
+    expect(x1 + 1).toBe(100 + 32 + 10 + 3);
+  });
   it("absolute: inset:0 with margin:auto centres the box, and an aspect-ratio fixes its height", async () => {
     // nodejs.org's glow is `position:absolute; inset:0; margin:auto; width:300px; aspect-ratio:1`.
     // The auto margins solved for the over-constrained box were reset by the re-measure, and the
