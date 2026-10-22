@@ -52,8 +52,8 @@ describe("Vertical writing regression (vs Chromium)", () => {
       if (process.env.UPDATE_SNAPSHOTS) return;
       const base = baselines[file];
       if (!base) throw new Error(`No baseline for ${file}; run test:update.`);
-      expect(m.fill).toBeLessThanOrEqual(base.fill + MARGIN);
-      expect(m.outline).toBeLessThanOrEqual(base.outline + MARGIN);
+      expect(m.fill, `${file} fill (outline ${m.outline}, height ${cur.height})`).toBeLessThanOrEqual(base.fill + MARGIN);
+      expect(m.outline, `${file} outline (fill ${m.fill}, height ${cur.height})`).toBeLessThanOrEqual(base.outline + MARGIN);
       // The page size must not drift away from the recorded one by more than a few pixels.
       expect(Math.abs(cur.height - base.height)).toBeLessThanOrEqual(2);
     });
