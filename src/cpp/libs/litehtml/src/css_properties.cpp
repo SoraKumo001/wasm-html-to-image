@@ -1176,12 +1176,19 @@ void litehtml::css_properties::compute_font(const element* el, const document::p
     }
     const bool size_is_default = declared_size ? (sz.is_predefined() && sz.predef() == font_size_medium)
                                                : m_font_size_keyword;
-    if (size_is_default && parent_sz == doc_font_size) {
+    // The keyword size is also re-derived when it was inherited from a monospace parent (13px): a
+    // child with a non-monospace family goes back to the default size (`<pre><span style="font-family:
+    // sans-serif">` is 16px), as long as nothing set the size explicitly in between.
+    const pixel_t mono_size = doc_font_size * 13 / 16;
+    if (size_is_default && (parent_sz == doc_font_size || parent_sz == mono_size)) {
         string fam = m_font_family;
         trim(fam);
         lcase(fam);
         if (fam == "monospace") {
-            font_size = doc_font_size * 13 / 16;
+            font_size = mono_size;
+            m_font_size = (float)font_size;
+        } else if (parent_sz == mono_size && !declared_size && el->text_fit_scale() == 1) {
+            font_size = doc_font_size;
             m_font_size = (float)font_size;
         }
     }

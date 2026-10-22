@@ -3781,6 +3781,30 @@ describe("regression: layout and paint probes", () => {
     const { img } = await renderPng(`<input value="Hxg" style="font:16px sans-serif;margin:0">`, 300, 60);
     expect(img.height).toBeGreaterThan(0);
   });
+  it("a font-family change inside <pre> goes back to the default 16px size", async () => {
+    // `pre` is 13px only because its family is exactly `monospace`; a child with another family
+    // re-derives the default size (an explicit size anywhere in between would keep it).
+    const h = async (html: string) => (await render({ value: `<!DOCTYPE html><body style="margin:0">${html}</body>`, width: 300, format: "png" })).height;
+    const sans16 = await h(`<div style="font:16px sans-serif">x</div>`);
+    expect(await h(`<pre style="margin:0"><span style="font-family:sans-serif">x</span></pre>`)).toBe(sans16);
+    expect(await h(`<pre style="margin:0"><code><span style="font-family:sans-serif">x</span></code></pre>`)).toBe(sans16);
+    const mono13 = await h(`<pre style="margin:0">x</pre>`);
+    expect(mono13).toBeLessThan(sans16);
+    expect(await h(`<pre style="margin:0"><span>x</span></pre>`)).toBe(mono13);
+    // an explicit size in between is kept: the same text is as wide as 13px sans-serif, not 16px
+    const inkWidth = async (html: string) => {
+      const { img, at } = await renderPng(html, 300, 40);
+      let x0 = 1e9, x1 = -1;
+      for (let y = 0; y < img.height; y++)
+        for (let x = 0; x < img.width; x++) if (at(x, y)[0] < 100) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); }
+      return x1 - x0 + 1;
+    };
+    const w13 = await inkWidth(`<div style="font:13px sans-serif">HHHHHHHH</div>`);
+    const w16 = await inkWidth(`<div style="font:16px sans-serif">HHHHHHHH</div>`);
+    expect(w16).toBeGreaterThan(w13 + 8);
+    expect(Math.abs((await inkWidth(`<pre style="margin:0;font-size:13px"><span style="font-family:sans-serif">HHHHHHHH</span></pre>`)) - w13)).toBeLessThanOrEqual(2);
+    expect(Math.abs((await inkWidth(`<pre style="margin:0"><span style="font-family:sans-serif">HHHHHHHH</span></pre>`)) - w16)).toBeLessThanOrEqual(2);
+  });
   it("text-align:center applies inside a shrink-to-fit item (flex item, inline-block, grid item)", async () => {
     // The final placement of a shrink-to-fit box kept the shrink-to-fit flag, and the lines of a
     // box only align inside an exact width: a short title sat at the left of a wider card.
