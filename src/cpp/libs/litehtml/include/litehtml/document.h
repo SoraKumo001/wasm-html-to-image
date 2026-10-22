@@ -170,6 +170,17 @@ namespace litehtml
 		uint_ptr	add_font(const font_description& descr, font_metrics* fm);
 
 		GumboOutput* parse_html(estring str);
+
+		// Declarative shadow DOM (<template shadowrootmode>) is flattened into the host: see create_shadow_children.
+		struct shadow_ctx
+		{
+			int id;
+			std::vector<std::pair<string, elements_list>>* lights; // light-DOM children by slot name
+		};
+		std::vector<shadow_ctx>	m_shadow_stack;
+		int						m_shadow_counter = 0;
+		bool create_shadow_children(void* ghost, void* gshadow, const std::shared_ptr<element>& host, bool parseTextNode);
+		void create_slot(void* gslot, elements_list& elements, bool parseTextNode);
 		void create_node(void* gnode, elements_list& elements, bool parseTextNode, bool process_root);
 		bool update_media_lists(const media_features& features);
 		void fix_tables_layout();

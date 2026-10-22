@@ -1,6 +1,8 @@
 #include "el_style.h"
 #include "document.h"
 #include <cstring>
+#include <cstdlib>
+#include "shadow_css.h"
 
 
 litehtml::el_style::el_style(const std::shared_ptr<document>& doc) : element(doc)
@@ -14,6 +16,10 @@ void litehtml::el_style::set_attr(const char* name, const char* val)
 	{
 		m_media = val ? val : "";
 	}
+	else if(name && !strcmp(name, "data-satoru-scope"))
+	{
+		m_shadow_scope = val ? atoi(val) : 0;
+	}
 }
 
 void litehtml::el_style::parse_attributes()
@@ -23,6 +29,10 @@ void litehtml::el_style::parse_attributes()
 	for(auto& el : m_children)
 	{
 		el->get_text(text);
+	}
+	if(m_shadow_scope)
+	{
+		text = scope_shadow_css(text, m_shadow_scope);
 	}
 	get_document()->add_stylesheet( text.c_str(), nullptr, m_media.c_str() );
 }

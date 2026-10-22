@@ -71,6 +71,6 @@ const char* satoru_master_css =
     "svg { display: inline-block; vertical-align: middle; overflow: hidden; }\n"
     "*[dir=\"rtl\"] { direction: rtl; }\n"
     "*[dir=\"ltr\"] { direction: ltr; }\n"
-    "head, title, meta, link, style, script, noscript { display: none; }\n";
+    "head, title, meta, link, style, script, noscript, template { display: none; }\n";
 
 #endif  // SATORU_MASTER_CSS_H

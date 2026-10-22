@@ -3056,3 +3056,36 @@ describe("regression: layout and paint probes", () => {
     expect(await h("", ["span 12 / span 12", "1 / -1", "span 18 / span 18"])).toBe(76);
   });
 });
+
+describe("declarative shadow DOM", () => {
+  it("renders a shadow root in place of the host's children, with scoped styles and slots", async () => {
+    // The shadow root draws a 50x20 blue bar (.b) and a slot; the slotted <i> is styled by ::slotted.
+    // The same `.b` outside the host must not pick up the shadow root's style.
+    const { at } = await renderPng(
+      `<my-box><template shadowrootmode="open"><style>:host{display:block}.b{height:20px;background:#00f}::slotted(i){display:block;height:20px;background:#0f0}</style><div class="b"></div><slot></slot></template><i></i><u>dropped</u></my-box><div class="b" style="width:50px"></div>`,
+      50,
+      80,
+    );
+    expect(near(at(10, 10), [0, 0, 255])).toBe(true);
+    expect(near(at(10, 30), [0, 255, 0])).toBe(true);
+    // A light child with no matching slot is not rendered, and the unstyled outside .b is empty.
+    expect(isWhite(at(10, 50))).toBe(true);
+    expect(isWhite(at(10, 70))).toBe(true);
+  });
+  it("shows the fallback content of a slot that has nothing assigned", async () => {
+    const { at } = await renderPng(
+      `<my-box><template shadowrootmode="open"><style>:host{display:block}.f{height:20px;background:#f00}</style><slot><div class="f"></div></slot></template></my-box>`,
+      50,
+      40,
+    );
+    expect(near(at(10, 10), [255, 0, 0])).toBe(true);
+  });
+  it("does not render an ordinary <template>", async () => {
+    const { at } = await renderPng(
+      `<template><div style="height:20px;background:#f00"></div></template>`,
+      50,
+      40,
+    );
+    expect(isWhite(at(10, 10))).toBe(true);
+  });
+});

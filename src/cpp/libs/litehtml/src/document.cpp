@@ -279,6 +279,20 @@ void document::create_node(void* gnode, elements_list& elements, bool parseTextN
 		{
 			element::ptr ret;
 			const char* tag = gumbo_normalized_tagname(node->v.element.tag);
+			bool is_slot = false;
+			if (!m_shadow_stack.empty() && !tag[0] && node->v.element.original_tag.data)
+			{
+				// gumbo has no tag constant for <slot>: it arrives as a custom element with an empty name.
+				// Trim a copy, gumbo_tag_from_original_text edits the piece in place.
+				GumboStringPiece piece = node->v.element.original_tag;
+				gumbo_tag_from_original_text(&piece);
+				is_slot = piece.length == 4 && !strncmp(piece.data, "slot", 4);
+			}
+			if (is_slot)
+			{
+				create_slot(node, elements, parseTextNode);
+				break;
+			}
 			if (tag[0])
 			{
 				ret = create_element(tag, node->v.element.tag);
@@ -306,7 +320,29 @@ void document::create_node(void* gnode, elements_list& elements, bool parseTextN
 					ret->set_attr(attr->name, attr->value);
 				}
 
+				if (!m_shadow_stack.empty())
+				{
+					ret->set_attr("data-satoru-scope", std::to_string(m_shadow_stack.back().id).c_str());
+				}
+
 				elements_list child;
+				GumboNode* shadow_root = nullptr;
+				for (unsigned int i = 0; i < node->v.element.children.length && !shadow_root; i++)
+				{
+					auto* c = static_cast<GumboNode*>(node->v.element.children.data[i]);
+					// gumbo hands <template> over as its own node type; its content hangs off v.element
+					if (c->type == GUMBO_NODE_TEMPLATE &&
+						(gumbo_get_attribute(&c->v.element.attributes, "shadowrootmode") ||
+						 gumbo_get_attribute(&c->v.element.attributes, "shadowroot")))
+					{
+						shadow_root = c;
+					}
+				}
+				if (shadow_root)
+				{
+					create_shadow_children(node, shadow_root, ret, parseTextNode);
+				}
+				else
 				for (unsigned int i = 0; i < node->v.element.children.length; i++)
 				{
 					child.clear();
@@ -480,6 +516,72 @@ void document::create_node(void* gnode, elements_list& elements, bool parseTextN
 	break;
 	default:
 		break;
+	}
+}
+
+// A declarative shadow root is rendered as the host's children: the root's content replaces them, each
+// <slot> is replaced by the light-DOM children assigned to it (its own children when none are), and the
+// root's <style> text is scoped to the elements it produces (see shadow_css.h).
+bool document::create_shadow_children(void* ghost, void* gshadow, const std::shared_ptr<element>& host, bool parseTextNode)
+{
+	auto* hostNode = static_cast<GumboNode*>(ghost);
+	auto* shadow = static_cast<GumboNode*>(gshadow);
+	const int id = ++m_shadow_counter;
+	const string id_str = std::to_string(id);
+	host->set_attr("data-satoru-host", id_str.c_str());
+
+	std::vector<std::pair<string, elements_list>> lights;
+	for (unsigned int i = 0; i < hostNode->v.element.children.length; i++)
+	{
+		auto* c = static_cast<GumboNode*>(hostNode->v.element.children.data[i]);
+		if (c == shadow) continue;
+		string slot_name;
+		if (c->type == GUMBO_NODE_ELEMENT)
+		{
+			auto* a = gumbo_get_attribute(&c->v.element.attributes, "slot");
+			if (a) slot_name = a->value;
+		}
+		elements_list made;
+		create_node(c, made, parseTextNode, true);
+		if (c->type == GUMBO_NODE_ELEMENT)
+		{
+			for (auto& e : made) e->set_attr("data-satoru-slotted", id_str.c_str());
+		}
+		lights.emplace_back(slot_name, std::move(made));
+	}
+
+	m_shadow_stack.push_back({ id, &lights });
+	elements_list child;
+	for (unsigned int i = 0; i < shadow->v.element.children.length; i++)
+	{
+		child.clear();
+		create_node(static_cast<GumboNode*>(shadow->v.element.children.data[i]), child, parseTextNode, true);
+		for (auto& el : child) host->appendChild(el);
+	}
+	m_shadow_stack.pop_back();
+	return true;
+}
+
+void document::create_slot(void* gslot, elements_list& elements, bool parseTextNode)
+{
+	auto* node = static_cast<GumboNode*>(gslot);
+	string name;
+	if (auto* a = gumbo_get_attribute(&node->v.element.attributes, "name")) name = a->value;
+	bool assigned = false;
+	for (auto& l : *m_shadow_stack.back().lights)
+	{
+		if (l.first != name) continue;
+		for (auto& e : l.second)
+		{
+			elements.push_back(e);
+			assigned = true;
+		}
+		l.second.clear();
+	}
+	if (assigned) return;
+	for (unsigned int i = 0; i < node->v.element.children.length; i++)
+	{
+		create_node(static_cast<GumboNode*>(node->v.element.children.data[i]), elements, parseTextNode, true);
 	}
 }
 

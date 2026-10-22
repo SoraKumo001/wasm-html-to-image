@@ -9,6 +9,7 @@ namespace litehtml
 	{
 		elements_list		m_children;
 		string				m_media; // media attribute: `element` keeps no attributes of its own
+		int					m_shadow_scope = 0; // data-satoru-scope: set for a <style> inside a flattened shadow root
 	public:
 		explicit el_style(const std::shared_ptr<document>& doc);
 
