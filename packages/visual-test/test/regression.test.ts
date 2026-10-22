@@ -3130,3 +3130,24 @@ describe("scale: webp", () => {
     expect(canvas(moving.data as Uint8Array)).toEqual([80, 60]);
   });
 });
+
+describe("grid: baseline alignment sizes the row", () => {
+  it("grows the row to the largest ascent plus the largest descent of the baseline-aligned items", async () => {
+    // A has a large ascent, B a small ascent and a large descent. Lined up on one baseline, B hangs
+    // below A's box, so a row only as tall as the tallest item (B) would let B overflow it.
+    for (const placement of ["align-items:baseline", ""]) {
+      const self = placement ? "" : "align-self:baseline;";
+      const { img, at } = await renderPng(
+        `<div style="display:grid;grid-template-columns:100px 100px;${placement};background:#ddd"><div style="${self}font-size:40px;line-height:1;background:#f88">A</div><div style="${self}font-size:10px;line-height:1;padding-bottom:40px;background:#8f8">B</div></div><div style="height:5px;background:#00f"></div>`,
+        300,
+        140,
+      );
+      let blue = -1;
+      for (let y = 0; y < img.height && blue < 0; y++) if (near(at(102, y), [0, 0, 255])) blue = y;
+      expect(blue).toBeGreaterThan(0);
+      // Nothing of B (green) is drawn below the blue bar that ends the grid.
+      expect(near(at(102, blue + 8), [136, 255, 136], 20)).toBe(false);
+      expect(near(at(102, blue - 1), [136, 255, 136], 20)).toBe(true);
+    }
+  });
+});

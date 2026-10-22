@@ -1419,9 +1419,15 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         }
     }
 
+    // `align-items/self: baseline`: the items of a row that share a baseline occupy the row's largest
+    // ascent plus its largest descent, which can exceed every item's own height.
+    std::map<int, pixel_t> row_ascent, row_descent;
+    std::vector<char> baseline_item(m_grid_layout.items.size(), 0);
+
     // Measure pass
-    for (auto& item : m_grid_layout.items)
+    for (size_t item_idx = 0; item_idx < m_grid_layout.items.size(); item_idx++)
     {
+        auto& item = m_grid_layout.items[item_idx];
         pixel_t cell_width = 0;
         for (int i = item.pos.col_start; i < item.pos.col_end && i < num_columns; i++)
         {
@@ -1449,17 +1455,40 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         cb.size_mode &= ~(containing_block_context::size_mode_exact_width | containing_block_context::size_mode_exact_height);
 
         item.el->measure(cb, fmt_ctx);
+
+        if (!vert && item.pos.row_span() == 1)
+        {
+            flex_align_items aln = item.el->src_el()->css().get_align_self();
+            if (aln == flex_align_items_auto) aln = css().get_flex_align_items();
+            if ((aln & 0xFF) == flex_align_items_baseline)
+            {
+                // The baseline needs laid out lines, which a measure-only pass does not build.
+                containing_block_context place_cb = cb;
+                place_cb.size_mode &= ~containing_block_context::size_mode_measure;
+                item.el->measure(place_cb, fmt_ctx);
+                item.el->place(0, 0, place_cb, fmt_ctx);
+                const pixel_t ascent = item.el->get_first_baseline();
+                const pixel_t descent = std::max<pixel_t>(0, item.el->height() - ascent);
+                baseline_item[item_idx] = 1;
+                auto& ra = row_ascent[item.pos.row_start];
+                auto& rd = row_descent[item.pos.row_start];
+                ra = std::max(ra, ascent);
+                rd = std::max(rd, descent);
+            }
+        }
     }
 
     // Distribute heights
     for (int span = 1; span <= num_rows; span++)
     {
-        for (auto& item : m_grid_layout.items)
+        for (size_t item_idx = 0; item_idx < m_grid_layout.items.size(); item_idx++)
         {
+            auto& item = m_grid_layout.items[item_idx];
             if (item.pos.row_span() != span) continue;
 
             // height() returns margin box height (m_pos.height + margins + padding + borders)
             pixel_t total_h = vert ? item.el->width() : item.el->height();
+            if (baseline_item[item_idx]) total_h = std::max(total_h, row_ascent[item.pos.row_start] + row_descent[item.pos.row_start]);
             pixel_t min_content_h = item.el->src_el()->css().get_font_size() * 1.2f;
             // content_offset_height() already includes margins, padding, and borders
             pixel_t content_h = total_h - (vert ? item.el->content_offset_width() : item.el->content_offset_height());
