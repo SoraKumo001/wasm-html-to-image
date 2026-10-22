@@ -1717,7 +1717,19 @@ void litehtml::render_item_grid::place_grid_items(pixel_t x, pixel_t y, const co
                 else if (a8 == flex_align_items_end || a8 == flex_align_items_flex_end || a8 == flex_align_items_self_end) shift_y = free_h;
             }
         }
-        item.el->place(x + place_x + shift_x, y + place_y + shift_y, cb, fmt_ctx);
+        containing_block_context place_cb = cb;
+        if (!vert && !j_stretch && item.el->css().get_writing_mode() == writing_mode_horizontal_tb &&
+            item.el->src_el()->css().get_width().is_predefined())
+        {
+            // The item was sized to its content; place it with that width as an exact one so the
+            // text-align of its lines applies (it is skipped in the shrink-to-fit mode).
+            place_cb.width = item.el->inline_size() - item.el->content_offset_width() + item.el->box_sizing_width();
+            place_cb.width.type = containing_block_context::cbc_value_type_absolute;
+            place_cb.render_width = place_cb.width;
+            place_cb.size_mode |= containing_block_context::size_mode_exact_width;
+            place_cb.size_mode &= ~containing_block_context::size_mode_content;
+        }
+        item.el->place(x + place_x + shift_x, y + place_y + shift_y, place_cb, fmt_ctx);
     }
 }
 

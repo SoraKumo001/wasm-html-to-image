@@ -3760,6 +3760,34 @@ describe("regression: layout and paint probes", () => {
     ]);
     expect(Math.abs(flexItem[0] - flexItem[1])).toBeLessThanOrEqual(1);
   });
+  it("text-align:center applies inside a shrink-to-fit item (flex item, inline-block, grid item)", async () => {
+    // The final placement of a shrink-to-fit box kept the shrink-to-fit flag, and the lines of a
+    // box only align inside an exact width: a short title sat at the left of a wider card.
+    const titleCentre = async (outer: string) => {
+      const { img, at } = await renderPng(
+        `<div style="${outer};width:600px;height:120px"><div style="background:#eee;padding:10px 40px;text-align:center;font:16px sans-serif"><div style="font-weight:bold">Hi</div><div style="font-size:14px">A considerably longer second line</div></div></div>`,
+        600,
+        120,
+      );
+      let c0 = 1e9, c1 = -1, t0 = 1e9, t1 = -1, top = 1e9;
+      for (let y = 0; y < img.height; y++)
+        for (let x = 0; x < img.width; x++) {
+          const a = at(x, y);
+          if (near(a, [238, 238, 238], 4)) { c0 = Math.min(c0, x); c1 = Math.max(c1, x); top = Math.min(top, y); }
+        }
+      for (let y = top + 6; y < top + 30; y++)
+        for (let x = c0; x <= c1; x++) if (at(x, y)[0] < 100) { t0 = Math.min(t0, x); t1 = Math.max(t1, x); }
+      return (t0 + t1) / 2 - (c0 + c1) / 2;
+    };
+    for (const outer of [
+      "display:flex;align-items:center;justify-content:center",
+      "display:flex;flex-direction:column;align-items:center;justify-content:center",
+      "text-align:center",
+      "display:grid;justify-items:center",
+    ]) {
+      expect(Math.abs(await titleCentre(outer))).toBeLessThanOrEqual(2);
+    }
+  });
   it("a shrink-to-fit block with max-width takes its content width, not max-width", async () => {
     // A column flex item with align-items:center and `max-width:500px` is fit-content: the max-width
     // only clamps. Copying the max-width typed value over the auto inline size made it exactly 500px.

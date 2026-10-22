@@ -596,6 +596,14 @@ void litehtml::render_item_inline_context::place_inline(std::unique_ptr<line_box
     auto place_cb = ruby_atomic
         ? self_size.new_inline_size(min_rendered_width + 0.5f, cb_size_mode)
         : cb;
+    // A shrink-to-fit box has its width by now; placing it in the shrink-to-fit mode would skip the
+    // text-align of its lines, which only apply inside an exact width.
+    if (!ruby_atomic && cb_size_mode && self_size.mode == writing_mode_horizontal_tb &&
+        item->get_el()->css().get_writing_mode() == writing_mode_horizontal_tb)
+    {
+        place_cb = self_size.new_inline_size(item->get_el()->inline_size() - item->get_el()->content_offset_width() + item->get_el()->box_sizing_width(),
+                                             containing_block_context::size_mode_exact_width);
+    }
     item->get_el()->place(line_ctx.left, line_ctx.top, place_cb, fmt_ctx);
     }
 
@@ -609,7 +617,14 @@ void litehtml::render_item_inline_context::place_inline(std::unique_ptr<line_box
     item->get_el()->measure(cb2, fmt_ctx);
     if (!(self_size.size_mode & containing_block_context::size_mode_measure))
     {
-        item->get_el()->place(line_ctx.left, line_ctx.top, cb2, fmt_ctx);
+        auto place_cb2 = cb2;
+        if (self_size.mode == writing_mode_horizontal_tb &&
+            item->get_el()->css().get_writing_mode() == writing_mode_horizontal_tb)
+        {
+            place_cb2 = self_size.new_inline_size(item->get_el()->inline_size() - item->get_el()->content_offset_width() + item->get_el()->box_sizing_width(),
+                                                  containing_block_context::size_mode_exact_width);
+        }
+        item->get_el()->place(line_ctx.left, line_ctx.top, place_cb2, fmt_ctx);
     }
     }
     item->set_rendered_min_width(min_rendered_width);

@@ -357,7 +357,12 @@ void litehtml::flex_item_row_direction::layout_item(litehtml::flex_line &ln,
 	el->measure(child_cb, fmt_ctx);
 	if (!(self_size.size_mode & containing_block_context::size_mode_measure))
 	{
-		el->place(0, 0, child_cb, fmt_ctx);
+		// The inline size is the flex main size by now. Placing with the shrink-to-fit flag still set
+		// would skip the text-align of the item's lines (they only align inside an exact width).
+		containing_block_context place_cb = child_cb;
+		if (!m_container_wm.is_vertical() && el->css().get_writing_mode() == writing_mode_horizontal_tb)
+			place_cb.size_mode &= ~containing_block_context::size_mode_content;
+		el->place(0, 0, place_cb, fmt_ctx);
 	}
 }
 
@@ -682,7 +687,18 @@ void litehtml::flex_item_column_direction::layout_item(litehtml::flex_line &ln,
 	el->measure(child_cb, fmt_ctx);
 	if (!(self_size.size_mode & containing_block_context::size_mode_measure))
 	{
-		el->place(0, 0, child_cb, fmt_ctx);
+		// A shrink-to-fit item has its width by now: place it with that width as an exact one, or the
+		// text-align of its lines would be skipped (see the row direction).
+		containing_block_context place_cb = child_cb;
+		if (!m_container_wm.is_vertical() && el->css().get_writing_mode() == writing_mode_horizontal_tb && !stretch && cross_prop.is_predefined())
+		{
+			place_cb.width = el->inline_size(m_container_wm) - el->content_offset_inline(m_container_wm) + el->box_sizing_inline(m_container_wm);
+			place_cb.width.type = containing_block_context::cbc_value_type_absolute;
+			place_cb.render_width = place_cb.width;
+			place_cb.size_mode |= containing_block_context::size_mode_exact_width;
+			place_cb.size_mode &= ~containing_block_context::size_mode_content;
+		}
+		el->place(0, 0, place_cb, fmt_ctx);
 	}
 }
 
