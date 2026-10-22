@@ -86,6 +86,8 @@ target_sources(html_to_image_core PRIVATE
     src/cpp/common/webp_anim_encoder.cpp
     src/cpp/common/apng_encoder.cpp
     src/cpp/common/gif_encoder.cpp
+    src/cpp/common/tiff_encoder.cpp
+    src/cpp/common/pdf_cmyk.cpp
     src/cpp/core/satoru_context.cpp
     src/cpp/core/image_converter_context.cpp
     src/cpp/api/satoru_api.cpp

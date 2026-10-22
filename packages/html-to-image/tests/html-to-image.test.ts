@@ -687,6 +687,49 @@ describe("htmlToImage: image input goes straight to converter_*", () => {
     });
   });
 
+  it("routes colorSpace: cmyk to the CMYK encoders", async () => {
+    // tiff carries the color space in the format int (11 = RGB, 12 = CMYK).
+    const tiff = stubModule();
+    await htmlToImage(tiff.mod, baseOptions({ value: PNG_BYTES, format: "tiff" }));
+    await htmlToImage(
+      tiff.mod,
+      baseOptions({ value: PNG_BYTES, format: "tiff", colorSpace: "cmyk" }),
+    );
+    const formats = (tiff.calls.converter_encode as ReturnType<typeof vi.fn>).mock.calls.map(
+      (c) => c[1],
+    );
+    expect(formats).toEqual([11, 12]);
+
+    // image-input PDF uses its own binding.
+    const pdf = stubModule({
+      converter_encode_pdf_cmyk: vi.fn(async () => new Uint8Array([0x25, 0x50])),
+    });
+    const out = await htmlToImage(
+      pdf.mod,
+      baseOptions({ value: PNG_BYTES, format: "pdf", colorSpace: "cmyk" }),
+    );
+    expect(out.data).toEqual(new Uint8Array([0x25, 0x50]));
+    expect(pdf.calls.converter_encode_pdf).not.toHaveBeenCalled();
+    const noCmyk = stubModule({ converter_encode_pdf_cmyk: undefined as never });
+    await expect(
+      htmlToImage(
+        noCmyk.mod,
+        baseOptions({ value: PNG_BYTES, format: "pdf", colorSpace: "cmyk" }),
+      ),
+    ).rejects.toThrow(/binding "converter_encode_pdf_cmyk" is required/);
+
+    // HTML PDF: the color space rides in the satoru options.
+    const html = stubModule();
+    await htmlToImage(html.mod, baseOptions({ format: "pdf", colorSpace: "cmyk" }));
+    const renderCall = (html.calls.satoru_render as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(renderCall[5]).toMatchObject({ colorSpace: 1 });
+    const plain = stubModule();
+    await htmlToImage(plain.mod, baseOptions({ format: "pdf" }));
+    expect(
+      (plain.calls.satoru_render as ReturnType<typeof vi.fn>).mock.calls[0][5],
+    ).not.toHaveProperty("colorSpace");
+  });
+
   it("throws when converter bindings are unregistered", async () => {
     const noLoad = stubModule({ converter_load_image: undefined as never });
     await expect(

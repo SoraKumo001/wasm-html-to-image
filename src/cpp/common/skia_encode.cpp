@@ -11,6 +11,7 @@
 #include "thumbhash.h"
 #include "apng_encoder.h"
 #include "gif_encoder.h"
+#include "tiff_encoder.h"
 #include "webp_anim_encoder.h"
 #include "avif/avif.h"
 #include "include/core/SkStream.h"
@@ -542,6 +543,15 @@ EncodeResult encode_frames(const EncodeFrameView* frames, size_t count,
             out.data = encode_gif(gif_frames.data(), gif_frames.size(), options.animation_loop,
                                   options.animation_bgcolor);
             out.is_animation = out.data != nullptr && n > 1;
+            return out;
+        }
+        case RenderFormat::TIFF:
+        case RenderFormat::TIFFCmyk: {
+            out.format_name = "tiff";
+            out.data = encode_tiff(first.pixmap(),
+                                   options.format == RenderFormat::TIFFCmyk ? ColorSpace::CMYK
+                                                                            : ColorSpace::SRGB,
+                                   options.animation_bgcolor);
             return out;
         }
         case RenderFormat::JPEG: {

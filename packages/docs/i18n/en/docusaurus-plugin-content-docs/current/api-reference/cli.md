@@ -20,7 +20,8 @@ npx wasm-html-to-image <input> [options]
 | `--output <path>`    | `-o` | Input based | Target output path                                                       |
 | `--width <number>`   | `-w` |    `800`    | Viewport width                                                           |
 | `--height <number>`  | `-h` |   `auto`    | Viewport height                                                          |
-| `--format <format>`  | `-f` |    `png`    | Format (`svg`, `png`, `pdf`, `jpeg`, `webp`, `apng`, `gif`, `avif`, `jxl`, `raw`, `thumbhash`) |
+| `--format <format>`  | `-f` |    `png`    | Format (`svg`, `png`, `pdf`, `jpeg`, `webp`, `apng`, `gif`, `tiff`, `avif`, `jxl`, `raw`, `thumbhash`) |
+| `--color-space <srgb\|cmyk>` | - | `srgb` | Output color space of `tiff` / `pdf`. `cmyk` is for print (device conversion, no ICC profile) |
 | `--quality <number>` | `-q` |    `85`     | Encode quality 0–100                                                     |
 | `--base-url <url>`   |  -   |  From input | Base URL for relative resources; defaults to the post-redirect URL (URL input) or the file's directory, explicit wins |
 | `--animation <duration-ms>` | - | Disabled | Sample the document's **opacity / transform / color / background-color** `@keyframes` into an animated WebP / APNG / GIF (one loop length in ms; `webp`, `apng` and `gif` output only; clamped to 5000 ms) |

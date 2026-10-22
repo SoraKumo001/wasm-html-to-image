@@ -23,7 +23,7 @@ export function htmlToImage(
 ```
 
 :::note Return Type
-Returns a `string` for `svg` format, and `Uint8Array` for all other formats (`png`, `jpeg`, `webp`, `apng`, `gif`, `avif`, `jxl`, `pdf`, `raw`, `thumbhash`).
+Returns a `string` for `svg` format, and `Uint8Array` for all other formats (`png`, `jpeg`, `webp`, `apng`, `gif`, `tiff`, `avif`, `jxl`, `pdf`, `raw`, `thumbhash`).
 :::
 
 ---
@@ -39,7 +39,8 @@ Returns a `string` for `svg` format, and `Uint8Array` for all other formats (`pn
 | `baseUrl` | `string`                                          |      -       | Base URL for resolving relative assets                                   |
 | `width`   | `number`                                          | **Required** | Viewport width (HTML) or target output width (image)                     |
 | `height`  | `number`                                          |    `auto`    | Viewport height (HTML) or target output height (image)                   |
-| `format`  | `OutputFormat`                                    |   `"png"`    | Target output format (`png`, `jpeg`, `webp`, `apng`, `gif`, `avif`, `jxl`, `raw`, `thumbhash`, `svg`, `pdf`) |
+| `format`  | `OutputFormat`                                    |   `"png"`    | Target output format (`png`, `jpeg`, `webp`, `apng`, `gif`, `tiff`, `avif`, `jxl`, `raw`, `thumbhash`, `svg`, `pdf`) |
+| `colorSpace` | `"srgb" \| "cmyk"` | `"srgb"` | Output color space of `tiff` and `pdf`. `"cmyk"` is for print: TIFF becomes a separated CMYK image with transparency flattened onto white, and PDF has every fill, stroke and image rewritten to DeviceCMYK. The conversion is the plain device formula (K = 1 − max(R,G,B), black stays K only) with no ICC profile, so saturated screen colors are not gamut-mapped. Ignored for other formats. |
 
 ### Encoding & Resizing
 

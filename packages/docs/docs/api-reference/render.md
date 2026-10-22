@@ -69,7 +69,8 @@ export interface RenderResult<T = Uint8Array | string> {
 | `baseUrl`  | `string`                                          |    -     | 相対パスのリソース解決に使用するベース URL                                 |
 | `width`    | `number`                                          | **必須** | ビューポート幅（HTML 時）、または出力幅（画像リサイズ時）                  |
 | `height`   | `number`                                          |  `auto`  | ビューポート高さ（HTML 時）、または出力高さ（画像リサイズ時）              |
-| `format`   | `OutputFormat`                                    | `"png"`  | 出力形式 (`png`, `jpeg`, `webp`, `apng`, `gif`, `avif`, `jxl`, `raw`, `thumbhash`, `svg`, `pdf`) |
+| `format`   | `OutputFormat`                                    | `"png"`  | 出力形式 (`png`, `jpeg`, `webp`, `apng`, `gif`, `tiff`, `avif`, `jxl`, `raw`, `thumbhash`, `svg`, `pdf`) |
+| `colorSpace` | `"srgb" \| "cmyk"` | `"srgb"` | `tiff` と `pdf` の出力色空間。`"cmyk"` は印刷用で、TIFF は透明部分を白に合成した CMYK（Separated）画像、PDF はすべての塗り・線・画像を DeviceCMYK に書き換えます。変換は単純なデバイス式（K = 1 − max(R,G,B)、黒は K のみ）で ICC プロファイルは適用しないため、鮮やかな画面色は色域マッピングされません。他の形式では無視されます |
 
 ### エンコード & リサイズ
 

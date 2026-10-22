@@ -29,6 +29,14 @@ val converter_encode_pdf_val(ImageConverterInstance* inst) {
     return val(typed_memory_view(size, data));
 }
 
+val converter_encode_pdf_cmyk_val(ImageConverterInstance* inst) {
+    if (!inst) return val::null();
+    int size = 0;
+    const uint8_t* data = inst->encode_pdf(size, true);
+    if (!data || size == 0) return val::null();
+    return val(typed_memory_view(size, data));
+}
+
 // converter_load_image: C APIは (inst, const uint8_t*, size_t)->success-indicator のため
 // JS直結不可。Uint8Array/ArrayBuffer受けのvalラッパ経由で登録し、成否をboolで返す。
 // (converter_api_load_image実体はapi/converter_api.cppに存在・実働。MakeWithCopyで同期コピー

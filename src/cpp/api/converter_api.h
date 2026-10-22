@@ -51,7 +51,8 @@ class ImageConverterInstance {
     // (空文字=失敗)。encode_pdf: frames[0] を等倍1ページに収めたPDFバイト列
     // (encode() と同じ set_last_output 保持。nullptr=失敗)。
     std::string encode_svg();
-    const uint8_t* encode_pdf(int& out_size);
+    // `cmyk`: rewrite the PDF to DeviceCMYK (common/pdf_cmyk.h).
+    const uint8_t* encode_pdf(int& out_size, bool cmyk = false);
 
     int get_original_width() const;
     int get_original_height() const;

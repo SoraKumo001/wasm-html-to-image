@@ -22,7 +22,9 @@ enum class RenderFormat {
     ThumbHash = 7,
     JXL = 8,
     APNG = 9,
-    GIF = 10
+    GIF = 10,
+    TIFF = 11,      // sRGB + alpha
+    TIFFCmyk = 12   // CMYK (alpha composited over the background colour)
 };
 
 // image-opt版 FitMode を共通化 (satoru側 RenderOptions::fitType 0/1/2 と同義)

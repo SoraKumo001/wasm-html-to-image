@@ -63,6 +63,16 @@ describe("cli options", () => {
     expect(options.baseUrl).toBe("/srv/assets");
   });
 
+  it("maps --color-space to colorSpace and omits it by default", async () => {
+    const cmyk = await buildRenderOptions(
+      FIXTURE,
+      flags({ format: "tiff", colorSpace: "cmyk" }),
+    );
+    expect(cmyk).toMatchObject({ format: "tiff", colorSpace: "cmyk" });
+    const plain = await buildRenderOptions(FIXTURE, flags({ format: "tiff" }));
+    expect(plain).not.toHaveProperty("colorSpace");
+  });
+
   describe("animation flags", () => {
     it("is disabled by default", async () => {
       const options = await buildRenderOptions(FIXTURE, flags());

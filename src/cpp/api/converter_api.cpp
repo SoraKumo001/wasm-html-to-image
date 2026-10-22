@@ -7,6 +7,7 @@
 // thumbhash=common/thumbhash (skia_encode経由)。正本の SkCodec 直書き・
 // AVIF直書き・thumbhash直呼びはすべて dispatcher 配下に移譲した。
 #include "../common/image_decoder.h"
+#include "../common/pdf_cmyk.h"
 #include "../common/skia_encode.h"
 #include "api/js_logger.h"
 #include "satoru_api.h"
@@ -184,12 +185,13 @@ std::string ImageConverterInstance::encode_svg() {
     return html_to_image::encode_image_to_svg(frames[0].bitmap);
 }
 
-const uint8_t* ImageConverterInstance::encode_pdf(int& out_size) {
+const uint8_t* ImageConverterInstance::encode_pdf(int& out_size, bool cmyk) {
     if (frames.empty()) {
         out_size = 0;
         return nullptr;
     }
     sk_sp<SkData> data = html_to_image::encode_image_to_pdf(frames[0].bitmap);
+    if (data && cmyk) data = html_to_image::pdf_to_cmyk(*data);
     if (!data || data->size() == 0) {
         out_size = 0;
         return nullptr;

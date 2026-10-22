@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createHash } from "node:crypto";
 import http from "node:http";
+import { inflateSync } from "node:zlib";
 import { render } from "wasm-html-to-image/single";
 import { PNG } from "pngjs";
 
@@ -336,6 +337,84 @@ function lzwDecode(data: number[], minCode: number): number[] {
   return out;
 }
 
+// Minimal TIFF reader for the shape the encoder writes (little endian, chunky, Deflate +
+// horizontal predictor): returns the tags and the unpredicted samples.
+function readTiff(data: Uint8Array) {
+  const b = Buffer.from(data);
+  expect(b.toString("latin1", 0, 2)).toBe("II");
+  expect(b.readUInt16LE(2)).toBe(42);
+  const ifd = b.readUInt32LE(4);
+  const n = b.readUInt16LE(ifd);
+  const tags = new Map<number, number[]>();
+  for (let i = 0; i < n; i++) {
+    const e = ifd + 2 + i * 12;
+    const tag = b.readUInt16LE(e);
+    const type = b.readUInt16LE(e + 2);
+    const count = b.readUInt32LE(e + 4);
+    const size = type === 3 ? 2 : 4;
+    const at = count * size <= 4 ? e + 8 : b.readUInt32LE(e + 8);
+    const values: number[] = [];
+    for (let k = 0; k < count; k++) {
+      values.push(type === 3 ? b.readUInt16LE(at + 2 * k) : b.readUInt32LE(at + 4 * k));
+    }
+    tags.set(tag, values);
+  }
+  const one = (tag: number) => tags.get(tag)![0];
+  const width = one(256);
+  const height = one(257);
+  const spp = one(277);
+  expect(one(259)).toBe(8);
+  expect(one(317)).toBe(2);
+  const offsets = tags.get(273)!;
+  const sizes = tags.get(279)!;
+  const rowsPerStrip = one(278);
+  const pixels = Buffer.alloc(width * height * spp);
+  for (let s = 0; s < offsets.length; s++) {
+    const strip = inflateSync(b.subarray(offsets[s], offsets[s] + sizes[s]));
+    const rows = strip.length / (width * spp);
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < width; x++) {
+        for (let c = 0; c < spp; c++) {
+          const i = y * width * spp + x * spp + c;
+          if (x > 0) strip[i] = (strip[i] + strip[i - spp]) & 0xff;
+        }
+      }
+    }
+    strip.copy(pixels, s * rowsPerStrip * width * spp);
+  }
+  const at = (x: number, y: number) => Array.from(pixels.subarray((y * width + x) * spp, (y * width + x) * spp + spp));
+  return { tags, one, width, height, spp, at };
+}
+
+// Splits a PDF into its objects (dictionary text + decoded stream) and checks the xref table.
+function readPdfObjects(data: Uint8Array) {
+  const b = Buffer.from(data);
+  const text = b.toString("latin1");
+  const startxref = Number(/startxref\s+(\d+)/.exec(text)![1]);
+  expect(text.startsWith("xref", startxref)).toBe(true);
+  const objects: { number: number; dict: string; stream?: string }[] = [];
+  const re = /(\d+) 0 obj\n/g;
+  const xref = /^(\d{10}) \d{5} ([nf]) $/gm;
+  const entries: [number, string][] = [];
+  for (let m; (m = xref.exec(text.slice(startxref))); ) entries.push([Number(m[1]), m[2]]);
+  for (let m; (m = re.exec(text)); ) {
+    const start = m.index + m[0].length;
+    const end = text.indexOf("endobj", start);
+    const body = text.slice(start, end);
+    const si = body.indexOf("\nstream\n");
+    const dict = si >= 0 ? body.slice(0, si) : body;
+    let stream: string | undefined;
+    if (si >= 0) {
+      const len = Number(/\/Length (\d+)/.exec(dict)![1]);
+      const raw = b.subarray(start + si + 8, start + si + 8 + len);
+      stream = /FlateDecode/.test(dict) ? inflateSync(raw).toString("latin1") : raw.toString("latin1");
+    }
+    objects.push({ number: Number(m[1]), dict, stream });
+    expect(entries[Number(m[1])]).toEqual([m.index, "n"]);
+  }
+  return objects;
+}
+
 describe("regression: layout and paint probes", () => {
   it("column flex container with auto height honours min-height (flex-grow fills it)", async () => {
     const { at } = await renderPng(
@@ -603,6 +682,83 @@ describe("regression: layout and paint probes", () => {
     const stillGif = await render({ value: html, width: 120, height: 120, format: "gif" });
     expect(stillGif.animation).toBeFalsy();
     expect(Buffer.from(stillGif.data as Uint8Array).includes("NETSCAPE")).toBe(false);
+  });
+
+  describe("print color: tiff and cmyk", () => {
+    const html = `<body style="margin:0"><div style="width:20px;height:20px;background:#ff0000"></div>
+      <div style="width:20px;height:20px;background:#000"></div></body>`;
+
+    it("tiff keeps RGB and the alpha channel", async () => {
+      const r = await render({ value: html, width: 40, height: 40, format: "tiff" });
+      expect(r.format).toBe("tiff");
+      const t = readTiff(r.data as Uint8Array);
+      expect([t.width, t.height, t.spp]).toEqual([40, 40, 4]);
+      expect(t.one(262)).toBe(2); // RGB
+      expect(t.one(338)).toBe(2); // unassociated alpha
+      expect(t.at(5, 5)).toEqual([255, 0, 0, 255]);
+      expect(t.at(5, 25)).toEqual([0, 0, 0, 255]);
+      expect(t.at(30, 5)[3]).toBe(0); // nothing painted here
+    });
+
+    it("tiff + colorSpace cmyk is a separated image flattened onto white", async () => {
+      const r = await render({ value: html, width: 40, height: 40, format: "tiff", colorSpace: "cmyk" });
+      const t = readTiff(r.data as Uint8Array);
+      expect([t.width, t.height, t.spp]).toEqual([40, 40, 4]);
+      expect(t.one(262)).toBe(5); // separated
+      expect(t.one(332)).toBe(1); // InkSet CMYK
+      expect(t.tags.has(338)).toBe(false); // no alpha plane
+      expect(t.at(5, 5)).toEqual([0, 255, 255, 0]); // red: M + Y
+      expect(t.at(5, 25)).toEqual([0, 0, 0, 255]); // black: K only
+      expect(t.at(30, 5)).toEqual([0, 0, 0, 0]); // transparent -> white paper
+    });
+
+    it("tiff from image input honours colorSpace too", async () => {
+      const png = await render({ value: html, width: 40, height: 40, format: "png" });
+      const r = await render({ value: png.data as Uint8Array, format: "tiff", colorSpace: "cmyk" });
+      const t = readTiff(r.data as Uint8Array);
+      expect(t.one(262)).toBe(5);
+      expect(t.at(5, 5)).toEqual([0, 255, 255, 0]);
+    });
+
+    it("pdf + colorSpace cmyk rewrites colors and images to DeviceCMYK", async () => {
+      const page = `<body style="margin:0"><div style="width:100px;height:40px;background:#0000ff"></div>
+        <div style="width:100px;height:40px;background:linear-gradient(90deg,#f00,#00f)"></div>
+        <p style="color:#c33;margin:0;font-size:20px">Print</p></body>`;
+      const rgb = await render({ value: page, width: 200, format: "pdf" });
+      const rgbObjects = readPdfObjects(rgb.data as Uint8Array);
+      expect(rgbObjects.some((o) => /\/DeviceRGB/.test(o.dict))).toBe(true);
+
+      const cmyk = await render({ value: page, width: 200, format: "pdf", colorSpace: "cmyk" });
+      const bytes = Buffer.from(cmyk.data as Uint8Array);
+      expect(bytes.toString("latin1", 0, 5)).toBe("%PDF-");
+      const objects = readPdfObjects(cmyk.data as Uint8Array);
+      expect(objects.length).toBe(rgbObjects.length);
+      for (const o of objects) {
+        expect(o.dict).not.toMatch(/DeviceRGB/);
+        // No RGB color operators survive in any content stream.
+        if (o.stream && !/Subtype \/Image/.test(o.dict) && !/Length1/.test(o.dict)) {
+          expect(o.stream).not.toMatch(/(^|\s)(rg|RG)(\s|$)/);
+        }
+      }
+      const content = objects.map((o) => o.stream ?? "").join("\n");
+      expect(content).toContain("1 1 0 0 k"); // #0000ff
+      expect(content).toMatch(/0 \.?\d+ \.?\d+ \.?\d+ k/); // text #c33: no cyan
+      const image = objects.find((o) => /Subtype \/Image/.test(o.dict) && /DeviceCMYK/.test(o.dict));
+      expect(image).toBeDefined();
+      // The rewritten dictionary keeps its keys intact (a name must end at its own token).
+      expect(image!.dict).toMatch(/\/ColorSpace \/DeviceCMYK\s*\/BitsPerComponent 8\s*\/Filter \/FlateDecode\s*\/Length \d+>>/);
+      const w = Number(/\/Width (\d+)/.exec(image!.dict)![1]);
+      const h = Number(/\/Height (\d+)/.exec(image!.dict)![1]);
+      expect(image!.stream!.length).toBe(w * h * 4);
+    });
+
+    it("pdf from image input honours colorSpace cmyk", async () => {
+      const png = await render({ value: html, width: 40, height: 40, format: "png" });
+      const r = await render({ value: png.data as Uint8Array, format: "pdf", colorSpace: "cmyk" });
+      const objects = readPdfObjects(r.data as Uint8Array);
+      expect(objects.some((o) => /DeviceCMYK/.test(o.dict))).toBe(true);
+      expect(objects.some((o) => /DeviceRGB/.test(o.dict))).toBe(false);
+    });
   });
 
   it("corner-shape reshapes the border-radius corners of backgrounds and borders", async () => {

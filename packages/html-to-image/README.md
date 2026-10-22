@@ -121,7 +121,9 @@ npx wasm-html-to-image loader.html -o loader.gif -f gif --animation 2000
 - **Image Buffer / Data URL**: `PNG`, `JPEG`, `WebP`, `GIF`, `AVIF`, `JXL`, `BMP`.
 
 ### Outputs (`format`)
-`png`, `jpeg`, `webp`, `avif`, `jxl`, `apng`, `gif`, `svg`, `pdf`, `thumbhash`, `raw` (uncompressed RGBA).
+`png`, `jpeg`, `webp`, `avif`, `jxl`, `apng`, `gif`, `tiff`, `svg`, `pdf`, `thumbhash`, `raw` (uncompressed RGBA).
+
+**Print colors:** `format: "tiff"` keeps RGBA; add `colorSpace: "cmyk"` (CLI: `--color-space cmyk`) to get a CMYK TIFF, or a PDF whose colors and images are DeviceCMYK. The conversion is the plain device formula (no ICC profile), so convert with your print shop's profile if you need exact press colors.
 
 Every call returns a `RenderResult` object:
 ```typescript

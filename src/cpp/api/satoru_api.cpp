@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "api/js_logger.h"
+#include "common/pdf_cmyk.h"
 #include "common/string_utils.h"
 #include "core/container_skia.h"
 #include "core/master_css.h"
@@ -69,6 +70,13 @@ int script_fallback_group(char32_t cp) {
     return -1;
 }
 typedef sk_sp<SkData> SkDataPtr;
+
+// PDF colour space: Skia writes DeviceRGB, `colorSpace: 1` rewrites the finished file to CMYK.
+// A file that cannot be converted is an error (null), never a silent RGB result.
+sk_sp<SkData> to_requested_color_space(sk_sp<SkData> pdf, const SatoruRenderOptions& options) {
+    if (!pdf || options.colorSpace != 1) return pdf;
+    return html_to_image::pdf_to_cmyk(*pdf);
+}
 
 template <typename F>
 const uint8_t* render_and_store(SatoruInstance* inst, F render_func,
@@ -645,9 +653,11 @@ const uint8_t* satoru_api_html_to_pdf(SatoruInstance* inst, const char* html, in
         [&]() {
             // P1: single HTML -> Layout-once + Slice multi-page path (independent of the array
             // renderHtmlsToPdf).
-            return renderHtmlToPdf(html, width, height, inst->context,
-                                   inst->get_full_master_css().c_str(),
-                                   inst->context.getExtraCss().c_str(), options);
+            return to_requested_color_space(
+                renderHtmlToPdf(html, width, height, inst->context,
+                                inst->get_full_master_css().c_str(),
+                                inst->context.getExtraCss().c_str(), options),
+                options);
         },
         &SatoruContext::set_last_pdf, out_size);
 }
@@ -658,9 +668,11 @@ const uint8_t* satoru_api_htmls_to_pdf(SatoruInstance* inst, const std::vector<s
     return render_and_store(
         inst,
         [&]() {
-            return renderHtmlsToPdf(htmls, width, height, inst->context,
-                                    inst->get_full_master_css().c_str(),
-                                    inst->context.getExtraCss().c_str(), options);
+            return to_requested_color_space(
+                renderHtmlsToPdf(htmls, width, height, inst->context,
+                                 inst->get_full_master_css().c_str(),
+                                 inst->context.getExtraCss().c_str(), options),
+                options);
         },
         &SatoruContext::set_last_pdf, out_size);
 }

@@ -15,10 +15,14 @@ export const FORMAT_INT: Record<OutputFormat, number> = {
   jxl: 8,
   apng: 9,
   gif: 10,
+  tiff: 11,
   raw: 6,
   thumbhash: 7,
   none: -1,
 };
+
+/** `RenderFormat::TIFFCmyk`: the CMYK variant of `tiff` (the color space rides in the format int). */
+export const TIFF_CMYK_INT = 12;
 
 export const FIT_INT: Record<NonNullable<HtmlToImageOptions["fit"]>, number> = {
   contain: 0,
@@ -48,6 +52,7 @@ export interface FullSatoruOptionsInput {
   fit: HtmlToImageOptions["fit"];
   textToPaths?: boolean;
   mediaTypeInt: number;
+  colorSpace?: "srgb" | "cmyk";
   pdfTitle?: string;
   pdfAuthor?: string;
   pdfSubject?: string;
@@ -83,6 +88,7 @@ export function buildFullSatoruOptions(
     ...buildSatoruOptions(input.crop, input.fit),
     svgTextToPaths: textToPaths ?? true,
     mediaType: mediaTypeInt,
+    ...(input.colorSpace === "cmyk" ? { colorSpace: 1 } : {}),
     pdfTitle: pdfTitle ?? "",
     pdfAuthor: pdfAuthor ?? "",
     pdfSubject: pdfSubject ?? "",

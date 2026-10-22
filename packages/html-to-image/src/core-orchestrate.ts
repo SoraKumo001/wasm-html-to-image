@@ -12,7 +12,7 @@
  */
 import { pdfFirstPageSize, svgRootHeight } from "./output-size.js";
 import type { HtmlToImageModule } from "./loader.js";
-import { FIT_INT, FORMAT_INT } from "./encode-args.js";
+import { FIT_INT, FORMAT_INT, TIFF_CMYK_INT } from "./encode-args.js";
 import {
   imageBytesFromUnknown,
   toBytes,
@@ -48,6 +48,7 @@ export type WasmBindingName =
   | "converter_encode"
   | "converter_encode_svg"
   | "converter_encode_pdf"
+  | "converter_encode_pdf_cmyk"
   | "converter_load_image"
   | "html_to_image";
 
@@ -105,6 +106,8 @@ export interface Orchestration {
   pdfHeader: string | undefined;
   pdfFooter: string | undefined;
   fmtInt: number;
+  /** Output color space of `tiff` / `pdf`. */
+  colorSpace: "srgb" | "cmyk";
   mediaTypeInt: number;
   t0: number;
   diag: DiagState | null;
@@ -183,7 +186,11 @@ export function createOrchestration(
   // Loop count of the produced animated WebP (0 = infinite = legacy default).
   const animationLoop = Math.max(0, Math.trunc(animationFrames?.loop ?? 0));
   const speed = speedOption ?? defaultSpeed(format);
-  const fmtInt = FORMAT_INT[format];
+  const colorSpace = options.colorSpace === "cmyk" ? "cmyk" : "srgb";
+  const fmtInt =
+    format === "tiff" && colorSpace === "cmyk"
+      ? TIFF_CMYK_INT
+      : FORMAT_INT[format];
   const mediaTypeInt = mediaType === "print" ? 1 : 0;
 
   /** JS-side log hook, gated by `logLevel` (satoru parity). */
@@ -306,6 +313,7 @@ export function createOrchestration(
     pdfHeader,
     pdfFooter,
     fmtInt,
+    colorSpace,
     mediaTypeInt,
     t0,
     diag,
@@ -401,6 +409,7 @@ export async function runImageInput(
     crop,
     fit,
     fmtInt,
+    colorSpace,
     t0,
     emitLog,
     logged,
@@ -488,9 +497,10 @@ export async function runImageInput(
       };
     }
     if (format === "pdf") {
-      const pdfBinding = module.converter_encode_pdf;
-      if (typeof pdfBinding !== "function")
-        throw loggedBinding("converter_encode_pdf");
+      const pdfBindingName =
+        colorSpace === "cmyk" ? "converter_encode_pdf_cmyk" : "converter_encode_pdf";
+      const pdfBinding = module[pdfBindingName];
+      if (typeof pdfBinding !== "function") throw loggedBinding(pdfBindingName);
       const encodeStart = now();
       const out = (await pdfBinding(inst)) as Uint8Array | null | undefined;
       addTime("encode", now() - encodeStart);

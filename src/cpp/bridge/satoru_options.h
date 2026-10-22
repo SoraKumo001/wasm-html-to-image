@@ -21,6 +21,9 @@ struct SatoruRenderOptions {
     float fitPositionY = 0.5f;
     int mediaType = 0;  // 0=screen, 1=print
 
+    // Output colour space of PDF: 0 = sRGB (DeviceRGB), 1 = CMYK (DeviceCMYK, see common/pdf_cmyk.h)
+    int colorSpace = 0;
+
     // PDF Metadata
     std::string pdfTitle;
     std::string pdfAuthor;

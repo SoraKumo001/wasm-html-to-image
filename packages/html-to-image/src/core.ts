@@ -58,6 +58,7 @@ export type OutputFormat =
   | "webp"
   | "apng"
   | "gif"
+  | "tiff"
   | "avif"
   | "jxl"
   | "raw"
@@ -183,6 +184,17 @@ export interface HtmlToImageOptions extends RenderOptions {
   fonts?: { name: string; data: Uint8Array }[];
   /** Safety/performance limits, enforced in JS around resource resolution. */
   limits?: RenderLimits;
+  /**
+   * Output color space of `tiff` and `pdf` (default `"srgb"`).
+   *
+   * - `"srgb"`: RGB (TIFF keeps the alpha channel).
+   * - `"cmyk"`: CMYK for print. TIFF is written as a separated image with transparency
+   *   flattened onto white; PDF has every fill / stroke color and image rewritten to
+   *   DeviceCMYK. The conversion is the plain device formula (K = 1 - max(R, G, B), pure
+   *   black stays K only); it applies no ICC profile, so saturated screen colors are not
+   *   gamut-mapped. Other formats ignore it.
+   */
+  colorSpace?: "srgb" | "cmyk";
   /** PDF Title metadata. */
   pdfTitle?: string;
   /** PDF Author metadata. */
@@ -272,6 +284,7 @@ export async function htmlToImage(
     fit: orch.fit,
     textToPaths: orch.textToPaths,
     mediaTypeInt: orch.mediaTypeInt,
+    colorSpace: orch.colorSpace,
     pdfTitle: orch.pdfTitle,
     pdfAuthor: orch.pdfAuthor,
     pdfSubject: orch.pdfSubject,

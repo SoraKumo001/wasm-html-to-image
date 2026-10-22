@@ -13,6 +13,7 @@ const OUTPUT_FORMATS = [
   "webp",
   "apng",
   "gif",
+  "tiff",
   "avif",
   "jxl",
   "raw",
@@ -52,6 +53,11 @@ program
     "base URL for relative resources (URL input: defaults to the post-redirect document URL; file input: defaults to the file's directory)",
   )
   .option(
+    "--color-space <srgb|cmyk>",
+    "output color space of tiff and pdf (default srgb; cmyk rewrites colors for print, with no ICC profile)",
+    (v) => v.toLowerCase(),
+  )
+  .option(
     "--animation <duration-ms>",
     "sample the document's @keyframes opacity / transform / color animation into an animated WebP / APNG / GIF; one loop duration in ms (webp, apng and gif output only; the CSS animation-duration wins and this value is an upper bound)",
     (v) => parseInt(v, 10),
@@ -72,6 +78,17 @@ program
       if (!isOutputFormat(format)) {
         console.error(
           `Error: unsupported format "${options.format}". Choose from: ${OUTPUT_FORMATS.join(", ")}`,
+        );
+        process.exit(1);
+      }
+
+      if (
+        options.colorSpace !== undefined &&
+        options.colorSpace !== "srgb" &&
+        options.colorSpace !== "cmyk"
+      ) {
+        console.error(
+          `Error: unsupported color space "${options.colorSpace}". Choose from: srgb, cmyk`,
         );
         process.exit(1);
       }
@@ -97,6 +114,7 @@ program
         format,
         quality: options.quality,
         baseUrl: options.baseUrl,
+        colorSpace: options.colorSpace,
         animation: options.animation,
         animationFps: options.animationFps,
         animationLoop: options.animationLoop,

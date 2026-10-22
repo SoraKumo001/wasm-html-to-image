@@ -18,6 +18,8 @@ export interface CliFlags {
   quality: number;
   /** Explicit `--base-url`; absent means "let the source decide". */
   baseUrl?: string;
+  /** `--color-space <srgb|cmyk>`; absent means the default (srgb). */
+  colorSpace?: "srgb" | "cmyk";
   /** `--animation <duration-ms>`; absent means "no keyframe animation". */
   animation?: number;
   /** `--animation-fps <n>`; defaults to 15 when `--animation` is set. */
@@ -132,6 +134,7 @@ export async function buildRenderOptions(
     quality: flags.quality,
     ...source,
     ...(flags.baseUrl !== undefined ? { baseUrl: flags.baseUrl } : {}),
+    ...(flags.colorSpace !== undefined ? { colorSpace: flags.colorSpace } : {}),
     ...(animation ? { animation } : {}),
   };
 }
