@@ -283,9 +283,11 @@ litehtml::uint_ptr container_skia::create_font(const litehtml::font_description&
 
     SkFontMetrics skfm;
     fi->fonts[0]->getMetrics(&skfm);
-    float ascent = -skfm.fAscent;
-    float descent = skfm.fDescent;
-    float leading = skfm.fLeading;
+    // Blink rounds the ascent and the descent to whole pixels separately (and the line gap too), which
+    // is what places the baseline of every line of text.
+    float ascent = std::round(-skfm.fAscent);
+    float descent = std::round(skfm.fDescent);
+    float leading = std::round(skfm.fLeading);
 
     if (fm) {
         float css_line_height = ascent + descent + leading;

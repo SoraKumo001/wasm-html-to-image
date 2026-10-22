@@ -868,7 +868,9 @@ std::list< std::unique_ptr<litehtml::line_box_item> > litehtml::line_box::finish
 		{
 			// We have inline items
 			top_shift = std::abs(line_max_height.top);
-			const pixel_t top_shift_correction = (line_height.value() - line_max_height.height()) / 2;
+			// The half-leading above the text is floored (Blink: the ascent gets floor(half), the descent
+			// the rest), so a fractional leading never moves the baseline down.
+			const pixel_t top_shift_correction = std::floor((line_height.value() - line_max_height.height()) / 2);
 			// We have to calculate the baseline from the top of the line box due to possible round errors.
 			// The top_shift_correction is actually text offset from the top of the line box.
 			// The (top_shift_correction + line_max_height.height()): is the bottom of the text with shift (text_bottom).
