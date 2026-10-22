@@ -1,51 +1,65 @@
 ---
 name: real-page-fix
-description: Find and fix layout/render bugs in the wasm-html-to-image C++ engine (litehtml + Skia) by rendering real web pages and comparing them with Chromium. Use when asked to test real sites, when a page renders too tall/short/blank/slow, or when a CSS feature is suspected to be unsupported.
+description: Find and fix layout/render bugs in the wasm-html-to-image C++ engine (litehtml + Skia) by comparing real web pages with Chromium. Use when asked to test real sites, when a page renders too tall/short/blank/slow, or when a CSS feature is suspected to be unsupported.
 ---
 
 # Real-page bug hunting and fixing
 
-Chromium is the reference. Render a real URL with the wasm engine and with Chromium, find where they diverge, shrink the divergence to a minimal HTML/CSS case, fix the engine, lock it in with a regression test.
+Chromium is the reference. The loop is: **score** the sites, **diff** one page to find where the layouts part ways, **reduce** that to a minimal HTML/CSS case, fix the engine, lock it in with a regression test, **score** again to see nothing else got worse.
 
-Run scripts from `packages/visual-test`; keep scratch scripts in `packages/visual-test/temp/` (git-ignored). The engine has no JS, so **always load the Chromium side with `javaScriptEnabled: false`**.
+Everything runs from `packages/visual-test` and works offline against a page snapshot (`.real-cache/`, git-ignored): both sides render the same captured bytes, so a result is reproducible and neither side can see a different page. Chromium always runs with JavaScript off, because the engine has none.
 
-## 1. Measure
+## The tools (`packages/visual-test/tools/real/`)
 
-- Our render: `render({ url, width: 1000, format: "png" })` from `wasm-html-to-image/single` (use `value:` for raw HTML; `css:` injects extra CSS). Do not pass `baseUrl: url` for URL inputs: it pins resource resolution to the request host and defeats post-redirect base following (only pass `baseUrl` to intentionally pin). Compare heights first: a page 2x+ taller than Chromium has a layout bug, shorter/blank has a paint or fetch bug.
-- Chromium height: `page.evaluate("document.documentElement.scrollHeight")` (nojs context, viewport 1000 wide).
-- Look at pictures, not only numbers: crop our PNG at several y offsets (composite alpha over white). Downscaled contact sheets (6000px slices, 1/4 scale) show where a tall page goes wrong.
-- Run each URL in its own process with a timeout (`timeout 150 node ...`); a hang must not kill the batch.
+| Command | Use it to |
+|---|---|
+| `pnpm real:diff <url>` | Compare one page: height ratio, pixel difference per 200px band, and the **boxes where layouts diverge**: *entry points* (off while the parent is fine) and *height culprits* (own height differs, no child explains it). Writes `focus.png` (Chromium left, engine right) at the worst spot. Options: `--width`, `--top N`, `--refresh` (re-capture), `--out`. |
+| `pnpm real:reduce <url> --select "<css>" --prop h\|w\|x\|y` | Delta-debug a divergence down to a minimal case: extracts the element plus the stylesheet rules that can touch it, then removes rules and markup while the element's `--prop` still differs from Chromium (same sign, at least half the original, at least `--min`). Writes `reduce/reduced.html`. Take the selector from a `real:diff` line (a path `0.1.2.1` is `body > :nth-child(3) > :nth-child(2)`, indexes are 0-based over element children). Options: `--ancestors N` (default 2; raise it when the case does not reproduce), `--max-trials`. |
+| `pnpm real:score` | Scoreboard over `tools/real/sites.json`: per site height ratio, share of differing pixels, share of boxes off by more than 1.5px. Compares with the baseline and lists the sites that got **worse** (exit code 1). `--only a,b`, `--refresh`, `--update` (record this run as the baseline), `--timeout`. |
 
-## 2. Sanity-check the environment before blaming the engine
+How it works: the engine can report every element's border box (`onLayout` option of `render()`, binding `satoru_layout_json`); the tools walk Chromium's flat tree the same way. Boxes are joined by their path among element children (`0.1.2.1`), with `::before`/`::after` pseudo nodes, `br`, and unboxed elements left out on both sides. A new site goes into `sites.json`; its snapshot is captured on first use.
 
-- Fetch the page's `<link rel=stylesheet>` URLs yourself. If they return 404/HTML (stale deploy, bot block), the page is simply unstyled; this is not an engine bug (NHK did this).
-- Chromium full-page screenshots repeat content beyond ~16384px. Do not compare pixels past that; compare DOM geometry (`getBoundingClientRect`) instead.
-- Different fonts change line heights a little (sans-serif maps to Noto Sans JP here). Ignore differences under ~10%.
+`onLayout` is also the fastest way to answer "where does this element land?" for your own probes: `render({ value, width, format: "png", onLayout: (boxes) => ... })`.
 
-## 3. Shrink to a minimal case
+## 1. Find the divergence
 
-Extract the offending subtree from Chromium: the element's `outerHTML` plus every stylesheet rule that matches it or a descendant (walk `document.styleSheets`, keep `@media` wrappers, test with `el.matches`). Render that alone with `value:`. Then:
+1. `pnpm real:score --only <site>` (or `real:diff <url>`). Read the height ratio first: 2x+ taller than Chromium is a layout bug, shorter or blank a paint/fetch bug.
+2. In `real:diff`, start from the **height culprits** and the first **entry points** by page position. A culprit with no bad child is the element to look at; entries further down are usually consequences.
+3. Open `focus.png`. Look at pictures, not only numbers.
 
-- Height differs? Delta-debug: remove top-level CSS rules / HTML children while the symptom persists (each trial in a child process with a timeout). Rules inside a single `@layer` must be split from the inside.
-- Still fine in isolation? The cause is context: widen the extraction (more ancestors), add the `<html class>` Chromium had (e.g. `vector-feature-limited-width-clientpref-1`), or compare with all rules vs matched rules.
-- Probe one property at a time with tiny HTML and compare to Chromium numbers (`getBoundingClientRect`) rather than guessing.
+## 2. Sanity-check before blaming the engine
+
+- Is the page unstyled in Chromium too? (Stale deploy, bot block: NHK did this.) Then it is not an engine bug.
+- Different fonts change widths and line heights a little (sans-serif maps to Noto Sans JP here, monospace differs). Widths of text-bearing boxes and 1px shifts are font noise; chase height culprits and box structure.
+- Chromium full-page screenshots repeat content beyond ~16384px; the tools cap comparison at 16000 rows.
+- **Compare like with like.** `scrollHeight` is floored at the viewport height and includes the text-box overflow of a `line-height` smaller than the font; an element's `getBoundingClientRect().height` is neither. Mixing them produced a false bug report once. The tools use the same definition on both sides; follow them in ad-hoc probes.
+
+## 3. Reduce
+
+`pnpm real:reduce <url> --select "..." --prop h`. If it says the case does not reproduce, the cause is context: raise `--ancestors`, or pick the parent that actually diverges. The result is a self-contained `reduced.html` (`<base>` points at the page; resources come from the snapshot). Check it by hand with `render({ value, baseUrl })` and a `getBoundingClientRect` in Chromium, then probe one property at a time with tiny HTML to name the cause rather than guess.
 
 ## 4. Fix
 
 - Engine code: `src/cpp/libs/litehtml/src/*` (layout/CSS), `src/cpp/core/*` (Satoru layer: fonts, SVG, UA CSS in `core/master_css.h`).
-- Rebuild: `pnpm wasm:build` (minutes; run in background if a reconfigure is needed) then `pnpm --filter wasm-html-to-image build`. Debug with `emscripten_log(EM_LOG_CONSOLE, ...)` from `<emscripten.h>`; remove it before committing.
+- Rebuild: `pnpm wasm:build` (minutes; run in background if a reconfigure is needed) then `pnpm --filter wasm-html-to-image build`. Debug with `emscripten_log(EM_LOG_CONSOLE, ...)` or `fprintf(stderr, ...)`; remove it before committing.
 - Specificity/cascade bugs are common: UA rules should use `:where()`, presentational hints specificity `(0,0,0,1)`.
 - Percent heights against auto-height containers behave as auto; `float`/`absolute` blockify `inline-flex`/`inline-grid`; `overflow` takes 1-2 values.
 - Pathological nesting: layout work is bounded by a per-pass measure budget (`document::k_measure_budget`); deep flex/table trees are otherwise exponential.
+- A measure-only pass (`size_mode_measure`) builds no line boxes: anything read from lines (baselines) must be kept across it, as `render_item_inline_context` now does.
+- Gumbo hands `<template>` over as its own node type (`GUMBO_NODE_TEMPLATE`) and has no `slot` tag constant.
 
-## 5. Lock in and commit
+## 5. Lock in, then check the rest
 
 - Add a probe test to `packages/visual-test/test/regression.test.ts` (helper `renderPng(body, w, h)` returns `{img, at(x,y)}`; or assert `render(...).height`). Make it fail without the fix.
-- Run `pnpm test` (unit) and `pnpm test:visual` (all must pass), delete stray `packages/visual-test/[object Object]-*.png`, commit one fix per commit, Conventional-Commit style, with the repo's co-author trailer.
+- Run `pnpm test` (unit) and `pnpm test:visual` (all must pass), delete stray `packages/visual-test/[object Object]-*.png`.
+- **`pnpm real:score`** before committing a layout or UA-CSS change: it lists every site that got worse, which the unit and visual suites cannot see. `--update` after you accept a result.
+- Commit one fix per commit, Conventional-Commit style, with the repo's co-author trailer.
 
 ## Pitfalls seen
 
-- Writing C++ with Python: open with `encoding='utf-8'`, keep CRLF files CRLF (`newline=''`), and write `\n` inside C string literals as `r'...\n'`.
+- Writing C++ with Python: open with `encoding='utf-8'`, keep CRLF files CRLF (`newline=''`), and write `\n` inside C string literals as `r'...\n'`; prefer the Edit tool for small C++ edits.
 - `pnpm test:visual` imports the built package; rebuild before running it after C++ changes.
-- `render({ value: url })` renders the URL string as HTML; use `url`/`baseUrl`.
+- `render({ value: url })` renders the URL string as HTML; use `url`/`baseUrl`. Do not pass `baseUrl: url` for a URL input: it pins resolution to the request host and defeats post-redirect base following.
+- Ad-hoc scripts: write them as plain `.mjs` (tsx wraps functions in `__name`, which breaks `page.evaluate` with a function); keep `\n` out of template literals passed to `evaluate`; `page.addStyleTag` can crash Chromium on a big page, inject through `setContent` instead; run each URL in its own process with a timeout.
+- Declarative shadow DOM is flattened into the host (`document.cpp`, `shadow_css.h`); a document-level tag selector (`button {}`) still reaches into it.
 - SVG text needs the font manager from `container->get_context().fontManager`; CJK glyphs in SVG `<text>` are still partial.

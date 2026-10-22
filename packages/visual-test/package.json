@@ -6,7 +6,10 @@
   "scripts": {
     "test": "vitest run",
     "test:update": "cross-env UPDATE_SNAPSHOTS=1 vitest run",
-    "generate-reference": "tsx tools/generate-reference.ts && tsx vertical/gen-reference.ts"
+    "generate-reference": "tsx tools/generate-reference.ts && tsx vertical/gen-reference.ts",
+    "real:diff": "tsx tools/real/diff.mts",
+    "real:reduce": "tsx tools/real/reduce.mts",
+    "real:score": "tsx tools/real/score.mts"
   },
   "devDependencies": {
     "@types/node": "26.6.5",

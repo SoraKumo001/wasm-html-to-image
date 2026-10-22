@@ -3180,3 +3180,26 @@ describe("inline-block inside flex and grid items", () => {
     );
   });
 });
+
+describe("onLayout", () => {
+  it("reports each laid-out element's border box, keyed by its path in the flattened tree", async () => {
+    let boxes: { p: string; t: string; i: string; x: number; y: number; w: number; h: number }[] = [];
+    await render({
+      value: `<!DOCTYPE html><html><head><style>#a::before{content:"";display:block;height:1px}</style></head><body style="margin:8px"><div id="a" style="width:100px;height:40px;padding:5px;border:2px solid red"></div><span>inline</span><br><my-x><template shadowrootmode="open"><div id="s" style="height:10px"></div></template></my-x><div id="none" style="display:none"></div></body></html>`,
+      width: 300,
+      format: "png",
+      onLayout: (b) => {
+        boxes = b;
+      },
+    });
+    const byId = (id: string) => boxes.find((b) => b.i === id);
+    // border box: content 100x40 + padding 5 + border 2 on each side
+    expect(byId("a")).toMatchObject({ p: "0.1.0", t: "div", x: 8, y: 8, w: 114, h: 54 });
+    // the shadow root's content is a child of its host (my-x = body child 3), and the ::before pseudo
+    // node, the inline <span>, the <br>, and the display:none element do not take part
+    expect(byId("s")?.p).toBe("0.1.3.0");
+    expect(boxes.some((b) => b.t === "span" || b.t === "br" || b.i === "none" || b.t.startsWith("-"))).toBe(false);
+    // body children are counted as in the DOM: div, span, br, my-x, div#none
+    expect(boxes.find((b) => b.t === "body")?.p).toBe("0.1");
+  });
+});

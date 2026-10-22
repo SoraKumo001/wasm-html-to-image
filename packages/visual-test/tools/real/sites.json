@@ -1,0 +1,13 @@
+[
+  { "name": "nodejs", "url": "https://nodejs.org/en", "width": 1000 },
+  { "name": "mdn", "url": "https://developer.mozilla.org/en-US/docs/Web/HTML", "width": 1000 },
+  { "name": "react", "url": "https://react.dev", "width": 1000 },
+  { "name": "python", "url": "https://www.python.org/", "width": 1000 },
+  { "name": "hackernews", "url": "https://news.ycombinator.com/", "width": 1000 },
+  { "name": "nhk", "url": "https://www3.nhk.or.jp/news/", "width": 1000 },
+  { "name": "wikipedia", "url": "https://en.wikipedia.org/wiki/HTML", "width": 1000 },
+  { "name": "tailwind", "url": "https://tailwindcss.com/", "width": 1000 },
+  { "name": "rust", "url": "https://www.rust-lang.org/", "width": 1000 },
+  { "name": "go", "url": "https://go.dev/", "width": 1000 },
+  { "name": "example", "url": "https://example.com/", "width": 1000 }
+]
