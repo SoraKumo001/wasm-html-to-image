@@ -19,6 +19,7 @@
 #include "core/animation_sampler.h"
 #include "core/container_skia.h"
 #include "renderers/png_renderer.h"
+#include "renderers/render_utils.h"
 #include "converter_api.h"
 #include "satoru_api.h"
 #include "satoru_bindings.h"
@@ -409,8 +410,14 @@ int satoru_render_animation_to_converter_val(SatoruInstance* satoru, ImageConver
     const std::vector<html_to_image::FrameSample> schedule =
         html_to_image::build_frame_schedule(span_ms, fps);
 
-    const uint64_t per_frame_bytes =
-        (uint64_t)std::max(width, 1) * (uint64_t)std::max(height, 1) * 4;
+    // Bitmap each frame allocates: the crop (or whole document) at the requested output size / scale.
+    int frame_src_w = render_options.cropWidth > 0 ? render_options.cropWidth : width;
+    int frame_src_h = render_options.cropHeight > 0
+                          ? render_options.cropHeight
+                          : (height > 0 ? height : (int)satoru->doc->height());
+    int frame_w, frame_h;
+    resolve_output_size(render_options, frame_src_w, frame_src_h, frame_w, frame_h);
+    const uint64_t per_frame_bytes = (uint64_t)std::max(frame_w, 1) * (uint64_t)std::max(frame_h, 1) * 4;
     uint64_t total_bytes = 0;
     std::string last_key;
     int appended = 0;

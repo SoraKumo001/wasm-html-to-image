@@ -3102,3 +3102,31 @@ describe("svg size attributes", () => {
     expect(isWhite(at(30, 20))).toBe(true);
   });
 });
+
+describe("scale: webp", () => {
+  it("draws a still and an animated WebP at scale times the layout size", async () => {
+    // VP8X canvas size: 24-bit little-endian width-1 at byte 24, height-1 at byte 27.
+    const canvas = (data: Uint8Array) => {
+      const b = Buffer.from(data);
+      return [b.readUIntLE(24, 3) + 1, b.readUIntLE(27, 3) + 1];
+    };
+    const still = await render({
+      value: `<body style="margin:0"><div style="width:40px;height:30px;background:#00f"></div></body>`,
+      width: 40,
+      height: 30,
+      format: "webp",
+      scale: 2,
+    });
+    expect(canvas(still.data as Uint8Array)).toEqual([80, 60]);
+    const moving = await render({
+      value: `<html><head><style>@keyframes f{from{opacity:0}to{opacity:1}}.a{width:40px;height:30px;background:#00f;animation:f 400ms infinite}</style></head><body style="margin:0"><div class="a"></div></body></html>`,
+      width: 40,
+      height: 30,
+      format: "webp",
+      scale: 2,
+      animation: { duration: 400, fps: 10 },
+    });
+    expect(moving.animation).toBe(true);
+    expect(canvas(moving.data as Uint8Array)).toEqual([80, 60]);
+  });
+});
