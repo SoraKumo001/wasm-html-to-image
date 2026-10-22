@@ -295,6 +295,12 @@ litehtml::pixel_t litehtml::render_item_inline_context::_render_content(pixel_t 
 	if (self_size.size_mode & containing_block_context::size_mode_measure)
 	{
 		pixel_t ret = m_max_line_width;
+		m_has_measured_baseline = !m_line_boxes.empty() && !get_wm_context().is_vertical();
+		if (m_has_measured_baseline)
+		{
+			m_measured_first_baseline = get_first_baseline();
+			m_measured_last_baseline = get_last_baseline();
+		}
 		m_line_boxes.clear();
 		return ret;
 	}
@@ -870,7 +876,7 @@ litehtml::pixel_t litehtml::render_item_inline_context::get_first_baseline()
         }
 	} else
 	{
-		bl = default_baseline();
+		bl = m_has_measured_baseline ? m_measured_first_baseline : default_baseline();
 	}
 	return bl;
 }
@@ -898,7 +904,7 @@ litehtml::pixel_t litehtml::render_item_inline_context::get_last_baseline()
         }
 	} else
 	{
-		bl = get_wm_context().is_vertical() ? default_baseline() : height();
+		bl = get_wm_context().is_vertical() ? default_baseline() : (m_has_measured_baseline ? m_measured_last_baseline : height());
 	}
 	return bl;
 }

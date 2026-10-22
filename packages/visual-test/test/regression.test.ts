@@ -3151,3 +3151,19 @@ describe("grid: baseline alignment sizes the row", () => {
     }
   });
 });
+
+describe("inline-block inside flex and grid items", () => {
+  it("sits on the line's baseline, so the item is as tall as in a block container", async () => {
+    // A flex/grid item is measured before it is placed; the inline-block's baseline must survive that
+    // measure pass, or it falls back to the bottom edge and the line grows by the descent.
+    const height = async (display: string) =>
+      (await render({
+        value: `<!DOCTYPE html><html><head><style>*{margin:0;padding:0}</style></head><body><div style="display:${display};font-size:14px;line-height:19.25px"><div>x<span style="display:inline-block">y</span></div></div></body></html>`,
+        width: 200,
+        format: "png",
+      })).height;
+    const block = await height("block");
+    expect(await height("grid")).toBe(block);
+    expect(await height("flex")).toBe(block);
+  });
+});

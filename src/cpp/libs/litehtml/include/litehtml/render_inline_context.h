@@ -30,6 +30,12 @@ namespace litehtml
 	protected:
 		std::vector<std::unique_ptr<litehtml::line_box> > m_line_boxes;
 		pixel_t m_max_line_width;
+		// A measure pass drops its line boxes, yet an inline-block measured inside a parent's measure
+		// pass is never placed, so its baseline would fall back to its bottom edge. The baselines of the
+		// last measured layout are kept for that case (horizontal writing only).
+		bool m_has_measured_baseline = false;
+		pixel_t m_measured_first_baseline = 0;
+		pixel_t m_measured_last_baseline = 0;
 		// Measure pass only: width of the floats met since the last finished line. Floats are not
 		// placed while measuring, so they cannot narrow a line; the line they sit beside needs their
 		// width on top of its own for the box to be as wide as its content (max-content).
