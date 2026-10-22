@@ -181,6 +181,26 @@ void litehtml::render_item::place(pixel_t x, pixel_t y,
         _place(x, y, containing_block_size, fmt_ctx);
         fmt_ctx->pop_position(push_x, y + content_top);
     }
+
+    // A single-line form control (input, button, select) centres its text in the box: with a height
+    // taller than the line the content sits in the middle, not at the top.
+    const char* tag = src_el()->get_tagName();
+    if ((tag[0] == 'i' || tag[0] == 'b' || tag[0] == 's') && css().get_writing_mode() == writing_mode_horizontal_tb &&
+        (!strcmp(tag, "input") || !strcmp(tag, "button") || !strcmp(tag, "select")) && !m_children.empty()) {
+        satoru::WritingModeContext wm = get_wm_context();
+        pixel_t content_end = 0;
+        for (const auto& el : m_children) {
+            if (el->src_el()->css().get_display() != display_none) {
+                content_end = std::max(content_end, el->block_end_pos(wm));
+            }
+        }
+        const pixel_t shift = (m_pos.height - content_end) / 2;
+        if (shift > 0.5f) {
+            for (auto& el : m_children) {
+                el->block_shift(shift);
+            }
+        }
+    }
 }
 
 litehtml::pixel_t litehtml::render_item::render(

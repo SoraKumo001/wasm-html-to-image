@@ -3760,6 +3760,27 @@ describe("regression: layout and paint probes", () => {
     ]);
     expect(Math.abs(flexItem[0] - flexItem[1])).toBeLessThanOrEqual(1);
   });
+  it("form controls centre their text vertically in a box taller than the line", async () => {
+    // Chromium centres the text of an <input>, <button> or <select> in the content box.
+    const inkCentre = async (control: string) => {
+      const { img, at } = await renderPng(`<div style="padding:10px">${control}</div>`, 300, 100);
+      let y0 = 1e9, y1 = -1;
+      for (let y = 14; y < 66; y++)
+        for (let x = 14; x < 220; x++) if (at(x, y)[0] < 100) { y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+      return (y0 + y1) / 2 - 40; // the control spans y 10..70
+    };
+    const box = "width:210px;height:60px;box-sizing:border-box;font:16px sans-serif;margin:0";
+    for (const control of [
+      `<input value="Hxg" style="${box}">`,
+      `<button style="${box}">Hxg</button>`,
+      `<select style="${box}"><option>Hxg</option></select>`,
+    ]) {
+      expect(Math.abs(await inkCentre(control))).toBeLessThanOrEqual(5);
+    }
+    // a control with no extra height keeps its text where it was
+    const { img } = await renderPng(`<input value="Hxg" style="font:16px sans-serif;margin:0">`, 300, 60);
+    expect(img.height).toBeGreaterThan(0);
+  });
   it("text-align:center applies inside a shrink-to-fit item (flex item, inline-block, grid item)", async () => {
     // The final placement of a shrink-to-fit box kept the shrink-to-fit flag, and the lines of a
     // box only align inside an exact width: a short title sat at the left of a wider card.
