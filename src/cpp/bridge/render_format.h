@@ -43,6 +43,8 @@ struct ConverterEncodeOptions {
     // animated WebP の canvas背景色 (GIF では透過部分の合成色) (libwebp の anim_params.bgcolor, 0xAARRGGBB)。
     // 既定は libwebp と同じ不透明白 (0xFFFFFFFF)。
     uint32_t animation_bgcolor = 0xFFFFFFFFu;
+    // TIFF resolution tag (pixels per inch).
+    int dpi = 96;
 };
 
 void html_to_image_log(LogLevel level, const char* message);

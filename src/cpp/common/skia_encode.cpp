@@ -551,7 +551,7 @@ EncodeResult encode_frames(const EncodeFrameView* frames, size_t count,
             out.data = encode_tiff(first.pixmap(),
                                    options.format == RenderFormat::TIFFCmyk ? ColorSpace::CMYK
                                                                             : ColorSpace::SRGB,
-                                   options.animation_bgcolor);
+                                   options.animation_bgcolor, options.dpi);
             return out;
         }
         case RenderFormat::JPEG: {

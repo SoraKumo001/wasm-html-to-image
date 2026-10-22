@@ -30,8 +30,8 @@ bool renderDocumentToBitmap(SatoruInstance* inst, int width, int height,
     int src_w = options.cropWidth > 0 ? options.cropWidth : content_width;
     int src_h = options.cropHeight > 0 ? options.cropHeight : content_height;
 
-    int out_width = options.outputWidth > 0 ? options.outputWidth : src_w;
-    int out_height = options.outputHeight > 0 ? options.outputHeight : src_h;
+    int out_width, out_height;
+    resolve_output_size(options, src_w, src_h, out_width, out_height);
 
     SkImageInfo info = SkImageInfo::MakeN32Premul(out_width, out_height, SkColorSpace::MakeSRGB());
     SkBitmap bitmap;
@@ -45,9 +45,7 @@ bool renderDocumentToBitmap(SatoruInstance* inst, int width, int height,
 
     SkCanvas canvas(bitmap);
 
-    if (options.outputWidth > 0 || options.outputHeight > 0) {
-        apply_resize_transform(&canvas, src_w, src_h, options);
-    }
+    apply_output_transform(&canvas, src_w, src_h, options);
 
     inst->render_container->reset();
     inst->render_container->set_canvas(&canvas);
@@ -103,8 +101,8 @@ bool renderHtmlToBitmap(const char* html, int width, int height, SatoruContext& 
     int src_w = options.cropWidth > 0 ? options.cropWidth : width;
     int src_h = options.cropHeight > 0 ? options.cropHeight : content_height;
 
-    int out_width = options.outputWidth > 0 ? options.outputWidth : src_w;
-    int out_height = options.outputHeight > 0 ? options.outputHeight : src_h;
+    int out_width, out_height;
+    resolve_output_size(options, src_w, src_h, out_width, out_height);
 
     SkImageInfo info = SkImageInfo::MakeN32Premul(out_width, out_height, SkColorSpace::MakeSRGB());
     SkBitmap bitmap;
@@ -118,9 +116,7 @@ bool renderHtmlToBitmap(const char* html, int width, int height, SatoruContext& 
 
     SkCanvas canvas(bitmap);
 
-    if (options.outputWidth > 0 || options.outputHeight > 0) {
-        apply_resize_transform(&canvas, src_w, src_h, options);
-    }
+    apply_output_transform(&canvas, src_w, src_h, options);
 
     container.set_canvas(&canvas);
     container.set_height(content_height);

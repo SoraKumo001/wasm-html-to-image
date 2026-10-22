@@ -101,6 +101,7 @@ EMSCRIPTEN_BINDINGS(html_to_image) {
     function("converter_encode_svg", &converter_encode_svg_val, allow_raw_pointers());
     function("converter_encode_pdf", &converter_encode_pdf_val, allow_raw_pointers());
     function("converter_encode_pdf_cmyk", &converter_encode_pdf_cmyk_val, allow_raw_pointers());
+    function("converter_set_dpi", &converter_set_dpi_val, allow_raw_pointers());
     function("converter_crop", &converter_api_crop, allow_raw_pointers());
     // converter_resize の fit は必須引数として渡す (C++側既定値fit=0=Contain)。
     function("converter_resize", &converter_api_resize, allow_raw_pointers());

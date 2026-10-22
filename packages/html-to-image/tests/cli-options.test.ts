@@ -73,6 +73,14 @@ describe("cli options", () => {
     expect(plain).not.toHaveProperty("colorSpace");
   });
 
+  it("maps --scale and --dpi and omits them by default", async () => {
+    const o = await buildRenderOptions(FIXTURE, flags({ format: "tiff", scale: 3.125, dpi: 300 }));
+    expect(o).toMatchObject({ scale: 3.125, dpi: 300 });
+    const plain = await buildRenderOptions(FIXTURE, flags({ format: "tiff" }));
+    expect(plain).not.toHaveProperty("scale");
+    expect(plain).not.toHaveProperty("dpi");
+  });
+
   describe("animation flags", () => {
     it("is disabled by default", async () => {
       const options = await buildRenderOptions(FIXTURE, flags());

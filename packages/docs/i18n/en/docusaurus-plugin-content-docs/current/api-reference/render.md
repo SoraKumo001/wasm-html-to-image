@@ -40,6 +40,8 @@ Returns a `string` for `svg` format, and `Uint8Array` for all other formats (`pn
 | `width`   | `number`                                          | **Required** | Viewport width (HTML) or target output width (image)                     |
 | `height`  | `number`                                          |    `auto`    | Viewport height (HTML) or target output height (image)                   |
 | `format`  | `OutputFormat`                                    |   `"png"`    | Target output format (`png`, `jpeg`, `webp`, `apng`, `gif`, `tiff`, `avif`, `jxl`, `raw`, `thumbhash`, `svg`, `pdf`) |
+| `scale` | `number` | `1` | Pixel density of raster output from HTML input (0-16). `width` stays in CSS px and the page is drawn `scale` times larger (`scale: 3.125` turns an 800px layout into a 2500px image, with text and shapes re-rasterized rather than stretched). Ignored for `svg` / `pdf` and for image input. |
+| `dpi` | `number` | `96 × scale` | Resolution written to `tiff`, in pixels per inch. A print shop reads the physical size from it. |
 | `colorSpace` | `"srgb" \| "cmyk"` | `"srgb"` | Output color space of `tiff` and `pdf`. `"cmyk"` is for print: TIFF becomes a separated CMYK image with transparency flattened onto white, and PDF has every fill, stroke and image rewritten to DeviceCMYK. The conversion is the plain device formula (K = 1 − max(R,G,B), black stays K only) with no ICC profile, so saturated screen colors are not gamut-mapped. Ignored for other formats. |
 
 ### Encoding & Resizing

@@ -27,6 +27,8 @@ npx wasm-html-to-image <input> [options]
 | `--width <number>`   |  `-w`  |     `800`     | ビューポート幅（px）                                                       |
 | `--height <number>`  |  `-h`  | 自動 (`auto`) | ビューポート高さ（px）                                                     |
 | `--format <format>`  |  `-f`  |     `png`     | 出力形式 (`svg`, `png`, `pdf`, `jpeg`, `webp`, `apng`, `gif`, `tiff`, `avif`, `jxl`, `raw`, `thumbhash`) |
+| `--scale <n>` | - | `1` | HTML 入力のラスタ出力の画素密度（例: `3.125` で 800px のレイアウトを 2500px に） |
+| `--dpi <n>` | - | `96 × scale` | `tiff` に書き込む解像度（ppi） |
 | `--color-space <srgb\|cmyk>` | - | `srgb` | `tiff` / `pdf` の出力色空間。`cmyk` は印刷用（ICC プロファイルなしのデバイス変換） |
 | `--quality <number>` |  `-q`  |     `85`      | 圧縮品質 (0〜100、エンコード形式のみ有効)                                  |
 | `--base-url <url>`   |   -    | 入力から自動  | 相対リソース解決のベース URL。URL 入力ではリダイレクト後の URL、ファイル入力ではそのディレクトリが既定。明示指定時はそれを優先 |

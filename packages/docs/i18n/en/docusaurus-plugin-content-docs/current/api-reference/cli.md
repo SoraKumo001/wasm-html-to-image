@@ -21,6 +21,8 @@ npx wasm-html-to-image <input> [options]
 | `--width <number>`   | `-w` |    `800`    | Viewport width                                                           |
 | `--height <number>`  | `-h` |   `auto`    | Viewport height                                                          |
 | `--format <format>`  | `-f` |    `png`    | Format (`svg`, `png`, `pdf`, `jpeg`, `webp`, `apng`, `gif`, `tiff`, `avif`, `jxl`, `raw`, `thumbhash`) |
+| `--scale <n>` | - | `1` | Pixel density of raster output from HTML (e.g. `3.125` draws an 800px layout as 2500px) |
+| `--dpi <n>` | - | `96 × scale` | Resolution written to `tiff`, in pixels per inch |
 | `--color-space <srgb\|cmyk>` | - | `srgb` | Output color space of `tiff` / `pdf`. `cmyk` is for print (device conversion, no ICC profile) |
 | `--quality <number>` | `-q` |    `85`     | Encode quality 0–100                                                     |
 | `--base-url <url>`   |  -   |  From input | Base URL for relative resources; defaults to the post-redirect URL (URL input) or the file's directory, explicit wins |

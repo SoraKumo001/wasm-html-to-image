@@ -66,6 +66,9 @@ void parse_satoru_options(SatoruRenderOptions& options, val options_val) {
     if (options_val.hasOwnProperty("mediaType")) {
         options.mediaType = options_val["mediaType"].as<int>();
     }
+    if (options_val.hasOwnProperty("scale")) {
+        options.scale = options_val["scale"].as<float>();
+    }
     if (options_val.hasOwnProperty("colorSpace")) {
         options.colorSpace = options_val["colorSpace"].as<int>();
     }

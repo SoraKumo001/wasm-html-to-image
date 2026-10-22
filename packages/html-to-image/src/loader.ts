@@ -63,6 +63,8 @@ export interface HtmlToImageModule {
   /** Image-input svg/pdf wrappers (registered; probed at runtime). */
   converter_encode_svg?(inst: WasmInstancePtr): string | Promise<string>;
   converter_encode_pdf?(inst: WasmInstancePtr): unknown;
+  /** TIFF resolution tag for the next `converter_encode` (pixels per inch). */
+  converter_set_dpi?(inst: WasmInstancePtr, dpi: number): void;
   /** Same as `converter_encode_pdf`, rewritten to DeviceCMYK. */
   converter_encode_pdf_cmyk?(inst: WasmInstancePtr): unknown;
   /** Converter metadata getters */

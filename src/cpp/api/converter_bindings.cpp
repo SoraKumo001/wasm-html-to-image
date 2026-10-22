@@ -29,6 +29,10 @@ val converter_encode_pdf_val(ImageConverterInstance* inst) {
     return val(typed_memory_view(size, data));
 }
 
+void converter_set_dpi_val(ImageConverterInstance* inst, int dpi) {
+    if (inst && dpi > 0) inst->dpi = dpi;
+}
+
 val converter_encode_pdf_cmyk_val(ImageConverterInstance* inst) {
     if (!inst) return val::null();
     int size = 0;

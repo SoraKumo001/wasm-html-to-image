@@ -185,6 +185,19 @@ export interface HtmlToImageOptions extends RenderOptions {
   /** Safety/performance limits, enforced in JS around resource resolution. */
   limits?: RenderLimits;
   /**
+   * Pixel density of raster output from HTML input (default `1`). The page is laid out at
+   * `width` CSS px and drawn `scale` times larger, so `scale: 3.125` turns an 800px layout
+   * into a 2500px bitmap (300 dpi for an 8.33in page) with text and shapes re-rasterized
+   * sharply. `width` / `height` / `crop` stay in CSS px; the result's `width` / `height` are
+   * the bitmap size. Range 0-16; ignored for `svg` / `pdf` and for image input.
+   */
+  scale?: number;
+  /**
+   * Resolution written to the `tiff` file, in pixels per inch (default `96 * scale`, rounded:
+   * one CSS px is 1/96 in). A print shop reads the physical size from it.
+   */
+  dpi?: number;
+  /**
    * Output color space of `tiff` and `pdf` (default `"srgb"`).
    *
    * - `"srgb"`: RGB (TIFF keeps the alpha channel).
@@ -285,6 +298,7 @@ export async function htmlToImage(
     textToPaths: orch.textToPaths,
     mediaTypeInt: orch.mediaTypeInt,
     colorSpace: orch.colorSpace,
+    scale: orch.scale,
     pdfTitle: orch.pdfTitle,
     pdfAuthor: orch.pdfAuthor,
     pdfSubject: orch.pdfSubject,

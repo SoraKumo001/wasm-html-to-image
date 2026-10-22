@@ -20,6 +20,7 @@ emscripten::val converter_encode_val(ImageConverterInstance* inst, int format, f
 std::string converter_encode_svg_val(ImageConverterInstance* inst);
 emscripten::val converter_encode_pdf_val(ImageConverterInstance* inst);
 emscripten::val converter_encode_pdf_cmyk_val(ImageConverterInstance* inst);
+void converter_set_dpi_val(ImageConverterInstance* inst, int dpi);
 bool converter_load_image_val(ImageConverterInstance* inst, emscripten::val data);
 
 #endif  // HTML_TO_IMAGE_CONVERTER_BINDINGS_H

@@ -20,6 +20,10 @@ export interface CliFlags {
   baseUrl?: string;
   /** `--color-space <srgb|cmyk>`; absent means the default (srgb). */
   colorSpace?: "srgb" | "cmyk";
+  /** `--scale <n>`; absent means 1. */
+  scale?: number;
+  /** `--dpi <n>`; absent means 96 x scale. */
+  dpi?: number;
   /** `--animation <duration-ms>`; absent means "no keyframe animation". */
   animation?: number;
   /** `--animation-fps <n>`; defaults to 15 when `--animation` is set. */
@@ -135,6 +139,8 @@ export async function buildRenderOptions(
     ...source,
     ...(flags.baseUrl !== undefined ? { baseUrl: flags.baseUrl } : {}),
     ...(flags.colorSpace !== undefined ? { colorSpace: flags.colorSpace } : {}),
+    ...(flags.scale !== undefined ? { scale: flags.scale } : {}),
+    ...(flags.dpi !== undefined ? { dpi: flags.dpi } : {}),
     ...(animation ? { animation } : {}),
   };
 }

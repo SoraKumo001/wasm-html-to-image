@@ -53,6 +53,7 @@ export interface FullSatoruOptionsInput {
   textToPaths?: boolean;
   mediaTypeInt: number;
   colorSpace?: "srgb" | "cmyk";
+  scale?: number;
   pdfTitle?: string;
   pdfAuthor?: string;
   pdfSubject?: string;
@@ -89,6 +90,7 @@ export function buildFullSatoruOptions(
     svgTextToPaths: textToPaths ?? true,
     mediaType: mediaTypeInt,
     ...(input.colorSpace === "cmyk" ? { colorSpace: 1 } : {}),
+    ...(input.scale !== undefined && input.scale !== 1 ? { scale: input.scale } : {}),
     pdfTitle: pdfTitle ?? "",
     pdfAuthor: pdfAuthor ?? "",
     pdfSubject: pdfSubject ?? "",

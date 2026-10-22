@@ -70,6 +70,8 @@ export interface RenderResult<T = Uint8Array | string> {
 | `width`    | `number`                                          | **必須** | ビューポート幅（HTML 時）、または出力幅（画像リサイズ時）                  |
 | `height`   | `number`                                          |  `auto`  | ビューポート高さ（HTML 時）、または出力高さ（画像リサイズ時）              |
 | `format`   | `OutputFormat`                                    | `"png"`  | 出力形式 (`png`, `jpeg`, `webp`, `apng`, `gif`, `tiff`, `avif`, `jxl`, `raw`, `thumbhash`, `svg`, `pdf`) |
+| `scale` | `number` | `1` | HTML 入力のラスタ出力の画素密度（0〜16）。`width` は CSS px のまま、ページを `scale` 倍で描画します（例: `scale: 3.125` で 800px のレイアウトが 2500px の画像になり、文字や図形は拡大ではなく再ラスタライズされます）。`svg` / `pdf` と画像入力では無視されます |
+| `dpi` | `number` | `96 × scale` | `tiff` に書き込む解像度（ppi）。印刷所が物理サイズをここから読みます |
 | `colorSpace` | `"srgb" \| "cmyk"` | `"srgb"` | `tiff` と `pdf` の出力色空間。`"cmyk"` は印刷用で、TIFF は透明部分を白に合成した CMYK（Separated）画像、PDF はすべての塗り・線・画像を DeviceCMYK に書き換えます。変換は単純なデバイス式（K = 1 − max(R,G,B)、黒は K のみ）で ICC プロファイルは適用しないため、鮮やかな画面色は色域マッピングされません。他の形式では無視されます |
 
 ### エンコード & リサイズ

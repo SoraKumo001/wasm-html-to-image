@@ -108,6 +108,12 @@ export interface Orchestration {
   fmtInt: number;
   /** Output color space of `tiff` / `pdf`. */
   colorSpace: "srgb" | "cmyk";
+  /** Raster pixel density of HTML input (1 = CSS px). */
+  scale: number;
+  /** TIFF resolution tag in pixels per inch (image input: 96 unless set). */
+  dpi: number;
+  /** The caller's explicit `dpi` (image input has no `scale`, so it falls back to 96). */
+  dpiOption: number | undefined;
   mediaTypeInt: number;
   t0: number;
   diag: DiagState | null;
@@ -187,6 +193,22 @@ export function createOrchestration(
   const animationLoop = Math.max(0, Math.trunc(animationFrames?.loop ?? 0));
   const speed = speedOption ?? defaultSpeed(format);
   const colorSpace = options.colorSpace === "cmyk" ? "cmyk" : "srgb";
+  const scale = options.scale ?? 1;
+  if (!Number.isFinite(scale) || scale <= 0 || scale > 16) {
+    throw new Error(
+      `wasm-html-to-image: scale must be a number in (0, 16], got ${String(options.scale)}`,
+    );
+  }
+  if (
+    options.dpi !== undefined &&
+    (!Number.isFinite(options.dpi) || options.dpi < 1 || options.dpi > 65535)
+  ) {
+    throw new Error(
+      `wasm-html-to-image: dpi must be a number in [1, 65535], got ${String(options.dpi)}`,
+    );
+  }
+  // One CSS px is 1/96 in, so a scaled HTML render carries 96 * scale ppi by default.
+  const dpi = Math.round(options.dpi ?? 96 * scale);
   const fmtInt =
     format === "tiff" && colorSpace === "cmyk"
       ? TIFF_CMYK_INT
@@ -314,6 +336,9 @@ export function createOrchestration(
     pdfFooter,
     fmtInt,
     colorSpace,
+    scale,
+    dpi,
+    dpiOption: options.dpi,
     mediaTypeInt,
     t0,
     diag,
@@ -410,6 +435,7 @@ export async function runImageInput(
     fit,
     fmtInt,
     colorSpace,
+    dpiOption,
     t0,
     emitLog,
     logged,
@@ -527,6 +553,7 @@ export async function runImageInput(
     const encodeBinding = module.converter_encode;
     if (typeof encodeBinding !== "function")
       throw loggedBinding("converter_encode");
+    if (format === "tiff") module.converter_set_dpi?.(inst, Math.round(dpiOption ?? 96));
     const encodeStart = now();
     const out = (await encodeBinding(
       inst,
@@ -589,6 +616,7 @@ export async function tryRunHtmlInstance(
     userAgent,
     fallbackFonts,
     fmtInt,
+    dpi,
     t0,
     emitLog,
     logged,
@@ -728,6 +756,7 @@ export async function tryRunHtmlInstance(
       const outWidth = module.converter_get_width?.(cInst) ?? width;
       const outHeight = module.converter_get_height?.(cInst) ?? height ?? 0;
 
+      if (format === "tiff") module.converter_set_dpi?.(cInst, dpi);
       const encodeStart = now();
       const out = (await encodeBinding(
         cInst,

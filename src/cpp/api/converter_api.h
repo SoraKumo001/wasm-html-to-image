@@ -34,6 +34,8 @@ class ImageConverterInstance {
     std::string original_format;
     bool output_animation = false;
     std::string output_format;
+    // TIFF resolution tag (pixels per inch); set by converter_set_dpi.
+    int dpi = 96;
 
     ImageConverterInstance();
     ~ImageConverterInstance();

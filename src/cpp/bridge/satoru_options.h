@@ -20,6 +20,9 @@ struct SatoruRenderOptions {
     float fitPositionX = 0.5f;
     float fitPositionY = 0.5f;
     int mediaType = 0;  // 0=screen, 1=print
+    // Raster pixel density: the bitmap is `scale` times the layout size and the page is drawn
+    // scaled (vector text and shapes stay sharp). Ignored when outputWidth/outputHeight is set.
+    float scale = 1.0f;
 
     // Output colour space of PDF: 0 = sRGB (DeviceRGB), 1 = CMYK (DeviceCMYK, see common/pdf_cmyk.h)
     int colorSpace = 0;

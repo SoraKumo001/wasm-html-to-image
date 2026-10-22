@@ -129,7 +129,7 @@ npx wasm-html-to-image photo.jpg -o photo.avif -w 800 -f avif -q 80
 ### Outputs (`format`)
 `png`, `jpeg`, `webp`, `avif`, `jxl`, `apng`, `gif`, `tiff`, `svg`, `pdf`, `thumbhash`, `raw` (uncompressed RGBA).
 
-**Print colors:** `format: "tiff"` keeps RGBA; add `colorSpace: "cmyk"` (CLI: `--color-space cmyk`) to get a CMYK TIFF, or a PDF whose colors and images are DeviceCMYK. The conversion is the plain device formula (no ICC profile), so convert with your print shop's profile if you need exact press colors.
+**Print colors:** `format: "tiff"` keeps RGBA; add `colorSpace: "cmyk"` (CLI: `--color-space cmyk`) to get a CMYK TIFF, or a PDF whose colors and images are DeviceCMYK. The conversion is the plain device formula (no ICC profile), so convert with your print shop's profile if you need exact press colors. For print resolution, add `scale` (CLI: `--scale`): an 8.33in-wide page at 300 dpi is `width: 800, scale: 3.125`, and the TIFF records `96 × scale` ppi (override with `dpi`).
 
 Every call returns a `RenderResult` object:
 ```typescript

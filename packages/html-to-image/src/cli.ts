@@ -58,6 +58,16 @@ program
     (v) => v.toLowerCase(),
   )
   .option(
+    "--scale <n>",
+    "pixel density of raster output from HTML (default 1; 3.125 draws an 800px layout as 2500px)",
+    (v) => parseFloat(v),
+  )
+  .option(
+    "--dpi <n>",
+    "resolution written to tiff output, in pixels per inch (default 96 x scale)",
+    (v) => parseInt(v, 10),
+  )
+  .option(
     "--animation <duration-ms>",
     "sample the document's @keyframes opacity / transform / color animation into an animated WebP / APNG / GIF; one loop duration in ms (webp, apng and gif output only; the CSS animation-duration wins and this value is an upper bound)",
     (v) => parseInt(v, 10),
@@ -115,6 +125,8 @@ program
         quality: options.quality,
         baseUrl: options.baseUrl,
         colorSpace: options.colorSpace,
+        scale: options.scale,
+        dpi: options.dpi,
         animation: options.animation,
         animationFps: options.animationFps,
         animationLoop: options.animationLoop,

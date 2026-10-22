@@ -351,11 +351,11 @@ function readTiff(data: Uint8Array) {
     const tag = b.readUInt16LE(e);
     const type = b.readUInt16LE(e + 2);
     const count = b.readUInt32LE(e + 4);
-    const size = type === 3 ? 2 : 4;
+    const size = type === 3 ? 2 : type === 5 ? 8 : 4;
     const at = count * size <= 4 ? e + 8 : b.readUInt32LE(e + 8);
     const values: number[] = [];
     for (let k = 0; k < count; k++) {
-      values.push(type === 3 ? b.readUInt16LE(at + 2 * k) : b.readUInt32LE(at + 4 * k));
+      values.push(type === 3 ? b.readUInt16LE(at + 2 * k) : b.readUInt32LE(at + (type === 5 ? 8 : 4) * k)); // rationals: numerator
     }
     tags.set(tag, values);
   }
@@ -710,6 +710,37 @@ describe("regression: layout and paint probes", () => {
       expect(t.at(5, 5)).toEqual([0, 255, 255, 0]); // red: M + Y
       expect(t.at(5, 25)).toEqual([0, 0, 0, 255]); // black: K only
       expect(t.at(30, 5)).toEqual([0, 0, 0, 0]); // transparent -> white paper
+    });
+
+    it("scale draws the layout at a higher pixel density and tiff carries 96 x scale dpi", async () => {
+      const r = await render({ value: html, width: 40, height: 40, format: "tiff", scale: 2.5 });
+      const t = readTiff(r.data as Uint8Array);
+      expect([t.width, t.height]).toEqual([100, 100]);
+      expect(t.tags.get(282)).toEqual([240]);
+      expect(t.tags.get(283)).toEqual([240]);
+      expect(t.at(10, 10)).toEqual([255, 0, 0, 255]); // red box covers 0..50px
+      expect(t.at(10, 60)).toEqual([0, 0, 0, 255]); // black box covers 50..100px
+      expect(t.at(70, 10)[3]).toBe(0);
+
+      // An explicit dpi wins; the default stays 96 without scale.
+      const explicit = await render({ value: html, width: 40, height: 40, format: "tiff", scale: 2.5, dpi: 300 });
+      expect(readTiff(explicit.data as Uint8Array).tags.get(282)).toEqual([300]);
+      const plain = await render({ value: html, width: 40, height: 40, format: "tiff" });
+      expect(readTiff(plain.data as Uint8Array).tags.get(282)).toEqual([96]);
+
+      // Text is re-rasterized at the larger size, not stretched: the glyph edge is sharp.
+      const png = await render({ value: `<body style="margin:0"><div style="width:30px;height:30px;background:#00f;border-radius:15px"></div></body>`, width: 30, height: 30, format: "png", scale: 4 });
+      expect([png.width, png.height]).toEqual([120, 120]);
+      const img = PNG.sync.read(Buffer.from(png.data as Uint8Array));
+      const px = (x: number, y: number) => Array.from(img.data.subarray((y * 120 + x) * 4, (y * 120 + x) * 4 + 4));
+      expect(px(60, 60)).toEqual([0, 0, 255, 255]);
+      expect(px(2, 2)[3]).toBe(0); // outside the circle's corner
+    });
+
+    it("rejects an invalid scale or dpi", async () => {
+      await expect(render({ value: html, width: 40, format: "png", scale: 0 })).rejects.toThrow(/scale/);
+      await expect(render({ value: html, width: 40, format: "png", scale: 17 })).rejects.toThrow(/scale/);
+      await expect(render({ value: html, width: 40, format: "tiff", dpi: 0 })).rejects.toThrow(/dpi/);
     });
 
     it("tiff from image input honours colorSpace too", async () => {

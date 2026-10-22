@@ -59,6 +59,7 @@ const uint8_t* ImageConverterInstance::encode(RenderFormat format, float quality
     options.speed = speed;
     options.animation = animation;
     options.animation_loop = animation_loop;
+    options.dpi = dpi;
     return encode(options, out_size);
 }
 
