@@ -1776,16 +1776,17 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         }
 
         containing_block_context cb = self_size;
-        // content_offset_width() already includes margins, padding and borders
+        // Not an exact-size pass: the width is the containing block's (the grid area), and the item
+        // subtracts its own margins, padding and borders from it.
         if (vert)
         {
-            cb.render_height = cell_width - item.el->content_offset_height();
+            cb.render_height = cell_width;
             cb.height = cb.render_height;
             cb.width = containing_block_context::cbc_value_type_auto;
         }
         else
         {
-            cb.render_width = cell_width - item.el->content_offset_width();
+            cb.render_width = cell_width;
             cb.width = cb.render_width;
             cb.height = containing_block_context::cbc_value_type_auto;
         }

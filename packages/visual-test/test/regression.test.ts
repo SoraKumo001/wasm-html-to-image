@@ -3806,3 +3806,16 @@ describe("auto track beside an fr track holding a fixed-width item", () => {
     expect(at(10, 3)).toEqual([0, 0, 255]);
   });
 });
+
+describe("padded grid item row height", () => {
+  it("measures the item once, not with its padding subtracted twice", async () => {
+    // two 100px boxes fit side by side in 230px minus 2x10px padding; subtracting the padding twice would wrap them
+    const box = '<span style="display:inline-block;width:100px;height:10px"></span>';
+    const { height } = await render({
+      value: `<html><body style="margin:0;font-size:0"><div style="display:grid;grid-template-columns:230px"><div style="padding:10px">${box}${box}</div></div></body></html>`,
+      width: 600,
+      format: "png",
+    });
+    expect(height).toBe(30);
+  });
+});
