@@ -1242,7 +1242,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             // A nested grid sizes itself from tracks and definite sizes, which measure() gets right.
             const auto idisp = item.el->src_el()->css().get_display();
             const bool nested_grid = idisp == display_grid || idisp == display_inline_grid;
-            if (!definite(iw) && !nested_grid) continue;
+            if (iw.units() == css_units_percentage) continue;
             containing_block_context cb = self_size;
             cb.size_mode &= ~(containing_block_context::size_mode_exact_width | containing_block_context::size_mode_exact_height);
             cb.size_mode |= containing_block_context::size_mode_content | containing_block_context::size_mode_min_content;

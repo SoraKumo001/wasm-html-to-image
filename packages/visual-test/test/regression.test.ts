@@ -3758,3 +3758,14 @@ describe("min-content size of flex content in a grid track", () => {
     expect(await widthOf('<div style="display:flex"><div style="width:90px;flex:1;height:5px"></div></div>')).toBe(90);
   });
 });
+
+describe("fr track with text in a narrow grid", () => {
+  it("keeps the track at the min-content width of its text instead of the container width", async () => {
+    // 1fr is minmax(auto, 1fr): the unbreakable word makes the track wider than the 40px grid
+    const { at } = await renderPng(
+      '<div style="display:grid;grid-template-columns:1fr;width:40px"><div style="background:#f00;font:16px sans-serif">Supercalifragilisticexpialidocious</div></div>',
+      300, 60,
+    );
+    expect(at(120, 5)).toEqual([255, 0, 0]);
+  });
+});
