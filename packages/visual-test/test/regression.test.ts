@@ -3830,3 +3830,15 @@ describe("fit-content() track in a grid that is too narrow", () => {
     expect(at(10, 3)).toEqual([0, 0, 255]);
   });
 });
+
+describe("fit-content grid with a spanning item before single-column ones", () => {
+  it("sizes the fr track from the spanning item minus the auto track, not the whole item", async () => {
+    const { at } = await renderPng(
+      '<div style="display:grid;grid-template-columns:auto 1fr;width:fit-content"><div style="grid-column:span 2;width:200px;height:5px"></div><div style="width:50px;height:5px;background:#f00"></div><div style="width:10px;height:5px;background:#00f"></div></div>',
+      400, 30,
+    );
+    // columns are 50 + 150: the 200px item sets the grid width
+    expect(at(55, 7)).toEqual([0, 0, 255]);
+    expect(at(205, 7)).toEqual([255, 255, 255]);
+  });
+});

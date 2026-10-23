@@ -1186,8 +1186,10 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                 }
                 if (factor > 0)
                 {
-                    fr_contrib[c] = std::max(fr_contrib[c], (pixel_t)(inner * factor / factors));
-                    if (span == 1) fr_single[c] = fr_contrib[c];
+                    const pixel_t share = (pixel_t)(inner * factor / factors);
+                    fr_contrib[c] = std::max(fr_contrib[c], share);
+                    // (only single-column items: a spanning item seen earlier must not leak into this)
+                    if (span == 1) fr_single[c] = std::max(fr_single[c], share);
                 }
             }
         }
