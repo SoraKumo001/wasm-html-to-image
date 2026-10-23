@@ -1,7 +1,7 @@
 /**
  * Differential layout fuzzing: random flex / grid / block trees, engine vs Chromium.
  *
- *   pnpm real:fuzz [--n 200] [--seed 1] [--width 600] [--tol 1.5] [--keep]
+ *   pnpm real:fuzz [--mode all|each|<name>] [--n 200] [--seed 1] [--width 600] [--tol 1.5] [--jobs N] [--verbose]
  *
  * Every case is generated from its seed (reproducible), rendered by both sides with no external
  * resources, and compared box by box with `compareBoxes`. The match rate says how much of the
@@ -9,9 +9,13 @@
  * replay and for reduction. Text is left out on purpose: font differences would swamp the layout
  * differences this is looking for; sizes come from fixed boxes, images and content-sized shells.
  */
+import { spawn } from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
-import { CACHE_DIR, Store, compareBoxes, ensureDir, launchChromium, measureChrome, measureOurs } from "./lib.mts";
+import type { Browser } from "playwright";
+import { CACHE_DIR, Store, compareBoxes, ensureDir, launchChromium, measureChrome, measureOurs, type LayoutBox } from "./lib.mts";
 
 // ---------------------------------------------------------------------------------------------
 // Generator
@@ -175,10 +179,90 @@ function arg(name: string, def: number): number {
   const i = process.argv.indexOf(`--${name}`);
   return i >= 0 ? Number(process.argv[i + 1]) : def;
 }
-
 function strArg(name: string, def: string): string {
   const i = process.argv.indexOf(`--${name}`);
   return i >= 0 ? process.argv[i + 1] : def;
+}
+
+interface CaseResult {
+  mode: string;
+  seed: number;
+  verdict: "ok" | "bad" | "error";
+  info: string;
+  bad: number;
+}
+
+const outDir = path.join(CACHE_DIR, "fuzz");
+
+/**
+ * Chromium's boxes for a page only depend on the HTML and the width, so they are cached by hash:
+ * re-running after an engine change only renders the engine side again.
+ */
+async function chromeBoxes(browser: Browser, store: Store, html: string, width: number): Promise<LayoutBox[]> {
+  const key = crypto.createHash("sha1").update(`${width}\n${html}`).digest("hex");
+  const file = path.join(outDir, "chrome", `${key}.json`);
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8")) as LayoutBox[];
+  } catch {}
+  const boxes = (await measureChrome(browser, store, { html }, width, { screenshot: false })).boxes;
+  ensureDir(path.dirname(file));
+  fs.writeFileSync(file, JSON.stringify(boxes));
+  return boxes;
+}
+
+/** Run one mode over a seed range in this process. */
+async function runCases(mode: string, seed0: number, n: number, width: number, tol: number, verbose: boolean, workerId: string): Promise<CaseResult[]> {
+  const dir = path.join(outDir, `store-${workerId}`);
+  ensureDir(dir);
+  const store = new Store(dir, { url: "http://fuzz.test/", finalUrl: "http://fuzz.test/", capturedAt: "", entries: {} });
+  const browser = await launchChromium();
+  const results: CaseResult[] = [];
+  try {
+    for (let s = seed0; s < seed0 + n; s++) {
+      const html = generate(s, mode);
+      const r: CaseResult = { mode, seed: s, verdict: "ok", info: "", bad: 0 };
+      try {
+        const ours = await measureOurs(store, { html }, width);
+        const chrome = await chromeBoxes(browser, store, html, width);
+        const cmp = compareBoxes(ours.boxes, chrome, tol);
+        if (cmp.bad.length || cmp.oursOnly || cmp.chromeOnly) {
+          r.verdict = "bad";
+          r.bad = cmp.bad.length;
+          const e = cmp.entries.find((x) => x.p.split(".").length > 2) ?? cmp.entries[0];
+          r.info = e ? `${e.p} <${e.t}> dx=${e.dx} dy=${e.dy} dw=${e.dw} dh=${e.dh}` : `structure ours+${cmp.oursOnly} chrome+${cmp.chromeOnly}`;
+        }
+      } catch (err) {
+        r.verdict = "error";
+        r.bad = -1;
+        r.info = String((err as Error).message).slice(0, 120);
+      }
+      if (r.verdict !== "ok") fs.writeFileSync(path.join(outDir, `case-${mode}-${s}.html`), html);
+      if (verbose) console.error(`[${mode}] seed ${s}: ${r.verdict} ${r.info}`);
+      results.push(r);
+    }
+  } finally {
+    await browser.close();
+  }
+  return results;
+}
+
+/** Run a unit of work in a child process; resolves with the results it prints as JSON. */
+function runChild(mode: string, seed0: number, n: number, width: number, tol: number, verbose: boolean, id: string): Promise<CaseResult[]> {
+  return new Promise((resolve, reject) => {
+    const args = [process.argv[1], "--worker", id, "--mode", mode, "--seed", String(seed0), "--n", String(n), "--width", String(width), "--tol", String(tol)];
+    if (verbose) args.push("--verbose");
+    const child = spawn(process.execPath, [...process.execArgv, ...args], { stdio: ["ignore", "pipe", "inherit"] });
+    let out = "";
+    child.stdout.on("data", (d) => (out += d));
+    child.on("error", reject);
+    child.on("close", (code) => {
+      try {
+        resolve(JSON.parse(out.trim().split("\n").pop() ?? "[]"));
+      } catch {
+        reject(new Error(`worker ${id} exited ${code} without results`));
+      }
+    });
+  });
 }
 
 async function main() {
@@ -186,50 +270,46 @@ async function main() {
   const seed0 = arg("seed", 1);
   const width = arg("width", 600);
   const tol = arg("tol", 1.5);
+  const verbose = process.argv.includes("--verbose");
   const modeArg = strArg("mode", "all");
-  const modes = modeArg === "each" ? Object.keys(MODES) : [modeArg];
-  const outDir = path.join(CACHE_DIR, "fuzz");
-  ensureDir(outDir);
-  const dir = path.join(outDir, "store");
-  ensureDir(dir);
-  const store = new Store(dir, { url: "http://fuzz.test/", finalUrl: "http://fuzz.test/", capturedAt: "", entries: {} });
+  const worker = strArg("worker", "");
 
-  const browser = await launchChromium();
-  const summary: Record<string, { ok: number; n: number }> = {};
-  const failing: { mode: string; seed: number; bad: number; entry: string }[] = [];
-  try {
-    for (const mode of modes) {
-      let ok = 0;
-      for (let s = seed0; s < seed0 + n; s++) {
-        const html = generate(s, mode);
-        let verdict: "ok" | "bad" | "error" = "ok";
-        let info = "";
-        try {
-          const ours = await measureOurs(store, { html }, width);
-          const chrome = await measureChrome(browser, store, { html }, width, { screenshot: false });
-          const cmp = compareBoxes(ours.boxes, chrome.boxes, tol);
-          if (cmp.bad.length || cmp.oursOnly || cmp.chromeOnly) {
-            verdict = "bad";
-            const e = cmp.entries.find((x) => x.p.split(".").length > 2) ?? cmp.entries[0];
-            info = e ? `${e.p} <${e.t}> dx=${e.dx} dy=${e.dy} dw=${e.dw} dh=${e.dh}` : `structure ours+${cmp.oursOnly} chrome+${cmp.chromeOnly}`;
-            failing.push({ mode, seed: s, bad: cmp.bad.length, entry: info });
-          }
-        } catch (err) {
-          verdict = "error";
-          info = String((err as Error).message).slice(0, 120);
-          failing.push({ mode, seed: s, bad: -1, entry: `error: ${info}` });
-        }
-        if (verdict === "ok") ok++;
-        else fs.writeFileSync(path.join(outDir, `case-${mode}-${s}.html`), html);
-        if (process.argv.includes("--verbose")) console.log(`[${mode}] seed ${s}: ${verdict} ${info}`);
-      }
-      summary[mode] = { ok, n };
-    }
-  } finally {
-    await browser.close();
+  if (worker) {
+    // Child: results go to stdout as one JSON line, logs to stderr.
+    process.stdout.write(JSON.stringify(await runCases(modeArg, seed0, n, width, tol, verbose, worker)) + "\n");
+    return;
   }
-  console.log(`
-fuzz (width ${width}, tol ${tol}px, seeds ${seed0}..${seed0 + n - 1})`);
+
+  const modes = modeArg === "each" ? Object.keys(MODES) : [modeArg];
+  const jobs = Math.max(1, arg("jobs", Math.min(8, Math.floor(os.cpus().length / 2))));
+  ensureDir(outDir);
+
+  // Work units: each mode split into chunks, spread over `jobs` processes.
+  const chunk = Math.max(5, Math.ceil((n * modes.length) / (jobs * 2)));
+  const units: { mode: string; seed: number; n: number }[] = [];
+  for (const mode of modes) for (let o = 0; o < n; o += chunk) units.push({ mode, seed: seed0 + o, n: Math.min(chunk, n - o) });
+
+  const t0 = Date.now();
+  const all: CaseResult[] = [];
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(jobs, units.length) }, async (_, w) => {
+      while (next < units.length) {
+        const u = units[next++];
+        all.push(...(await runChild(u.mode, u.seed, u.n, width, tol, verbose, `${w}`)));
+      }
+    }),
+  );
+
+  const summary: Record<string, { ok: number; n: number }> = {};
+  for (const m of modes) summary[m] = { ok: 0, n: 0 };
+  for (const r of all) {
+    summary[r.mode].n++;
+    if (r.verdict === "ok") summary[r.mode].ok++;
+  }
+  const failing = all.filter((r) => r.verdict !== "ok").sort((a, b) => a.mode.localeCompare(b.mode) || a.seed - b.seed);
+  if (verbose) for (const f of failing) console.log(`[${f.mode}] seed ${f.seed}: ${f.verdict} ${f.info}`);
+  console.log(`\nfuzz (width ${width}, tol ${tol}px, seeds ${seed0}..${seed0 + n - 1}, ${jobs} jobs, ${((Date.now() - t0) / 1000).toFixed(1)}s)`);
   for (const [m, v] of Object.entries(summary)) console.log(`  ${m.padEnd(12)} ${String(v.ok).padStart(3)}/${v.n}  ${((v.ok / v.n) * 100).toFixed(1)}%`);
   if (failing.length) console.log(`failing cases saved to ${outDir} (replay: pnpm real:fuzz --mode <m> --seed <n> --n 1 --verbose)`);
   fs.writeFileSync(path.join(outDir, "last.json"), JSON.stringify({ n, seed0, width, tol, summary, failing }, null, 1));
