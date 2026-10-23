@@ -3794,3 +3794,15 @@ describe("floated grid with fr tracks", () => {
     expect(at(250, 5)).toEqual([0, 0, 255]);
   });
 });
+
+describe("auto track beside an fr track holding a fixed-width item", () => {
+  it("gives way to the fr track's minimum when the grid is too narrow", async () => {
+    const { at } = await renderPng(
+      '<div style="display:grid;grid-template-columns:auto 1fr;width:150px;font:16px sans-serif"><div style="background:#00f">a b c d e f g h i j k l</div><div style="background:#f00;width:100px;height:10px"></div></div>',
+      300, 120,
+    );
+    // the red item keeps its 100px, so it starts at x=50 and the blue text track is squeezed to 50px
+    expect(at(60, 3)).toEqual([255, 0, 0]);
+    expect(at(10, 3)).toEqual([0, 0, 255]);
+  });
+});

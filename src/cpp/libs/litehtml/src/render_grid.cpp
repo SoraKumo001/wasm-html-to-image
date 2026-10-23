@@ -1200,6 +1200,34 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         if (free_width < 0) free_width = 0;
         maximize_definite_minmax(free_width);
     }
+    // Automatic minimum of each plain fr track: the largest min-content size (or explicit min-width) among
+    // the single-column items in it; 0 for everything else.
+    auto fr_track_floors = [&]() -> std::vector<pixel_t>
+    {
+        std::vector<pixel_t> floors(num_columns, 0);
+        for (auto& item : m_grid_layout.items)
+        {
+            if (item.pos.col_end - item.pos.col_start != 1) continue;
+            const int c = item.pos.col_start;
+            if (c >= num_columns || columns_template[c].units() != css_units_fr) continue;
+            if (item.el->src_el()->css().get_overflow() != overflow_visible) continue;
+            const css_length& iw = item.el->src_el()->css().get_width();
+            const css_length& imw = item.el->src_el()->css().get_min_width();
+            auto definite = [](const css_length& l) { return !l.is_predefined() && !l.is_calc() && l.units() != css_units_percentage; };
+            // An explicit min-width switches the automatic minimum off: it is the floor itself.
+            if (!imw.is_predefined())
+            {
+                if (definite(imw)) floors[c] = std::max(floors[c], imw.calc_percent(render_inline) + item.el->content_offset_width());
+                continue;
+            }
+            if (iw.units() == css_units_percentage) continue;
+            containing_block_context cb = self_size;
+            cb.size_mode &= ~(containing_block_context::size_mode_exact_width | containing_block_context::size_mode_exact_height);
+            cb.size_mode |= containing_block_context::size_mode_content | containing_block_context::size_mode_min_content;
+            floors[c] = std::max(floors[c], (pixel_t)ceil_layout_unit(item.el->measure(cb, fmt_ctx)));
+        }
+        return floors;
+    };
     auto resolve_flex_tracks = [&](pixel_t remaining_width, const std::vector<int>* skip)
     {
         // Flexible tracks (CSS Grid 12.7.1): the leftover space excludes what the flexible tracks
@@ -1226,32 +1254,9 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             }
         }
         // A plain fr track is minmax(auto, Nfr): it never gets narrower than its items' min-content size.
-        for (auto& item : m_grid_layout.items)
-        {
-            if (item.pos.col_end - item.pos.col_start != 1) continue;
-            const int c = item.pos.col_start;
-            if (c >= num_columns || !active[c] || columns_template[c].units() != css_units_fr) continue;
-            if (item.el->src_el()->css().get_overflow() != overflow_visible) continue;
-            // Only an item whose size is set by CSS (a definite width or min-width, not a percentage)
-            // gives a reliable floor; a text item's min-content size is left to the share.
-            const css_length& iw = item.el->src_el()->css().get_width();
-            const css_length& imw = item.el->src_el()->css().get_min_width();
-            auto definite = [](const css_length& l) { return !l.is_predefined() && !l.is_calc() && l.units() != css_units_percentage; };
-            // An explicit min-width switches the automatic minimum off: it is the floor itself.
-            if (!imw.is_predefined())
-            {
-                if (definite(imw)) base[c] = std::max(base[c], imw.calc_percent(render_inline) + item.el->content_offset_width());
-                continue;
-            }
-            // A nested grid sizes itself from tracks and definite sizes, which measure() gets right.
-            const auto idisp = item.el->src_el()->css().get_display();
-            const bool nested_grid = idisp == display_grid || idisp == display_inline_grid;
-            if (iw.units() == css_units_percentage) continue;
-            containing_block_context cb = self_size;
-            cb.size_mode &= ~(containing_block_context::size_mode_exact_width | containing_block_context::size_mode_exact_height);
-            cb.size_mode |= containing_block_context::size_mode_content | containing_block_context::size_mode_min_content;
-            base[c] = std::max(base[c], (pixel_t)ceil_layout_unit(item.el->measure(cb, fmt_ctx)));
-        }
+        const std::vector<pixel_t> floor_w = fr_track_floors();
+        for (int c = 0; c < num_columns; c++)
+            if (active[c] && columns_template[c].units() == css_units_fr) base[c] = std::max(base[c], floor_w[c]);
         for (int guard = 0; guard < num_columns + 1; guard++)
         {
             pixel_t sum = 0;
@@ -1485,11 +1490,13 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             }
 
             pixel_t fixed2 = gaps + content_total;
+            const std::vector<pixel_t> fr_floor = fr_track_floors();
+            pixel_t fr_floor_total = 0;  // what plain fr tracks hold at least: auto tracks may have to give way to it
             for (int i = 0; i < num_columns; i++)
             {
                 if (kinds[i]) continue;
                 const auto& l = columns_template[i];
-                if (l.units() == css_units_fr) continue;
+                if (l.units() == css_units_fr) { fr_floor_total += fr_floor[i]; continue; }
                 if (l.is_calc() && l.get_op() == css_length::op_minmax)
                     fixed2 += l.get_operands()[0].calc_percent(render_inline);
                 else if (!l.is_predefined())
@@ -1499,7 +1506,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             // When the tracks overflow a definite grid width, the auto tracks give back what they can:
             // down to each track's minimum contribution, which is 0 for an item that is a scroll
             // container (overflow other than visible) and its min-content size otherwise.
-            if (render_inline.value > 0 && fixed2 > render_inline)
+            if (render_inline.value > 0 && fixed2 + fr_floor_total > render_inline)
             {
                 std::vector<int> autos;
                 pixel_t auto_total = 0;
@@ -1532,7 +1539,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                         pixel_t w = std::max((pixel_t)item.el->inline_size(), measured);
                         minc[c] = std::max(minc[c], std::min((pixel_t)ceil_layout_unit(w), m_grid_layout.column_widths[c]));
                     }
-                    const pixel_t budget = render_inline - (fixed2 - auto_total);
+                    const pixel_t budget = render_inline - (fixed2 + fr_floor_total - auto_total);
                     pixel_t min_total = 0;
                     for (int i : autos) min_total += minc[i];
                     // equal growth from the minimums, each track capped at its max-content size
