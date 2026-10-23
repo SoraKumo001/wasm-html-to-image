@@ -3352,3 +3352,24 @@ describe("flex item with a definite width: nested percentage widths", () => {
     }
   });
 });
+
+describe("grid inside a flex item: intrinsic track sizing", () => {
+  it("does not stretch an auto column with the grid's own exact width", async () => {
+    // `auto 1fr auto` with an icon and a text: the icon column is 16px and the text gets the rest,
+    // so the grid is one 24px line. Measuring the icon with the grid's own exact width (a flex item
+    // gets one) made the auto column 592px wide, the 1fr column 0, and the text wrapped to two lines.
+    const svg = `<svg viewBox="0 0 16 16" style="width:16px;height:16px"><rect width="16" height="16"/></svg>`;
+    const grid = "display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:4px;font-size:14px;line-height:24px;width:100%";
+    let boxes: { i: string; t: string; x: number; w: number; h: number }[] = [];
+    await render({
+      value: `<!DOCTYPE html><html><head><style>*{margin:0;padding:0;box-sizing:border-box}</style></head><body><div style="display:flex;width:600px"><div id="g" style="${grid}">${svg}Quick search</div></div></body></html>`,
+      width: 800,
+      format: "png",
+      onLayout: (b) => {
+        boxes = b;
+      },
+    });
+    expect(boxes.find((b) => b.i === "g")).toMatchObject({ w: 600, h: 24 });
+    expect(boxes.find((b) => b.t === "svg")).toMatchObject({ x: 0, w: 16 });
+  });
+});

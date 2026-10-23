@@ -1114,6 +1114,8 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         for (auto& item : m_grid_layout.items)
         {
             containing_block_context cb = self_size;
+            // The grid's own exact size describes its box, not the intrinsic size of an item.
+            cb.size_mode &= ~(containing_block_context::size_mode_exact_width | containing_block_context::size_mode_exact_height);
             cb.size_mode |= containing_block_context::size_mode_content;
             pixel_t measured = item.el->measure(cb, fmt_ctx);
             // measure() already returns the margin-box inline size; inline_size() can still be the
@@ -1244,6 +1246,8 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                 int c = item.pos.col_start;
                 if (c >= num_columns || !kinds[c]) continue;
                 containing_block_context cb = self_size;
+                // The grid's own exact size describes its box, not the intrinsic size of an item.
+                cb.size_mode &= ~(containing_block_context::size_mode_exact_width | containing_block_context::size_mode_exact_height);
                 cb.size_mode |= containing_block_context::size_mode_content;
                 pixel_t measured = item.el->measure(cb, fmt_ctx);
                 // measure() returns the margin-box inline size (padding and border included), so
@@ -1315,6 +1319,8 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                         if (c >= num_columns || kinds[c] != 1) continue;
                         if (item.el->src_el()->css().get_overflow() != overflow_visible) continue;
                         containing_block_context cb = self_size;
+                        // The grid's own exact size describes its box, not the intrinsic size of an item.
+                        cb.size_mode &= ~(containing_block_context::size_mode_exact_width | containing_block_context::size_mode_exact_height);
                         cb.size_mode |= containing_block_context::size_mode_min_content;
                         pixel_t measured = item.el->measure(cb, fmt_ctx);
                         pixel_t w = std::max((pixel_t)item.el->inline_size(), measured);
@@ -1389,6 +1395,8 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         for (auto& item : m_grid_layout.items)
         {
             containing_block_context cb = self_size;
+            // The grid's own exact size describes its box, not the intrinsic size of an item.
+            cb.size_mode &= ~(containing_block_context::size_mode_exact_width | containing_block_context::size_mode_exact_height);
             cb.size_mode |= containing_block_context::size_mode_content;
             item.el->measure(cb, fmt_ctx);
             // NB: measure() returns min(content, explicit); the track needs

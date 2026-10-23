@@ -161,7 +161,7 @@ if (d0 === undefined || Math.abs(d0) < minDelta) {
   process.exit(1);
 }
 const need = Math.max(minDelta, Math.abs(d0) / 2);
-console.log(`target ${selector} -> ${targetPath}; ${ex.cssUnits.length} CSS rules, ${ex.target.length} bytes of markup; delta(${prop}) = ${d0}; keep while same sign and |delta| >= ${need}`);
+console.log(`target ${selector} -> ${targetPath}; ${ex.cssUnits.length} CSS rules, ${ex.target.length} bytes of markup; delta(${prop}) = ${d0}; keep while same sign and ${need} <= |delta| <= ${Math.abs(d0) * 2}`);
 
 let trials = 0;
 async function stillBroken(css: string[], target: string): Promise<boolean> {
@@ -169,7 +169,8 @@ async function stillBroken(css: string[], target: string): Promise<boolean> {
   budget.left--;
   trials++;
   const d = await delta(build(css, target));
-  return d !== undefined && Math.sign(d) === Math.sign(d0!) && Math.abs(d) >= need;
+  // Same direction, and of the same order: a delta that balloons has become a different bug.
+  return d !== undefined && Math.sign(d) === Math.sign(d0!) && Math.abs(d) >= need && Math.abs(d) <= Math.abs(d0!) * 2;
 }
 
 /** Remove complements of chunks while `test` holds; ends 1-minimal (or out of budget). */
