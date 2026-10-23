@@ -3703,3 +3703,30 @@ describe("viewBox-only svg in a shrink-to-fit context", () => {
     expect(await widthOfSvg(`<div style="display:grid;grid-template-columns:min-content 2fr">${svg}</div>`)).toBe(0);
   });
 });
+
+describe("grid rows sharing free space", () => {
+  const rows = async (body: string) => {
+    let boxes: { p: string; h: number }[] = [];
+    await render({
+      value: `<!DOCTYPE html><html><head><style>*{margin:0;padding:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        boxes = b;
+      },
+    });
+    return boxes;
+  };
+
+  it("does not grow a row to the content of a scroll-container item when the grid height is definite", async () => {
+    const b = await rows('<div style="display:grid;height:20px"><div style="overflow:hidden"><div style="height:80px"></div></div></div>');
+    expect(b.find((x) => x.p === "0.1.0.0")?.h).toBe(20);
+  });
+
+  it("gives free space to rows that can still grow before stretching the others", async () => {
+    const b = await rows(
+      '<div style="display:grid;height:100px"><div style="overflow:hidden"><div style="height:80px"></div></div><div style="height:30px"></div></div>',
+    );
+    expect(b.find((x) => x.p === "0.1.0.0")?.h).toBe(70);
+  });
+});

@@ -1779,6 +1779,10 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         }
     }
 
+    // The tallest content each row could use (its growth limit): rows grow towards it first when the
+    // container leaves free space; what is left after that stretches the auto rows equally.
+    std::vector<pixel_t> row_limit(num_rows, 0);
+
     // Distribute heights
     for (int span = 1; span <= num_rows; span++)
     {
@@ -1799,6 +1803,8 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             // An item with a definite block size is exactly that tall, however small its line is.
             const css_length& item_block_size = vert ? item.el->src_el()->css().get_width() : item.el->src_el()->css().get_height();
             if (content_h > 0 && total_h < min_h && item_block_size.is_predefined()) total_h = min_h;
+            if (item.pos.row_span() == 1 && item.pos.row_start < num_rows)
+                row_limit[item.pos.row_start] = std::max(row_limit[item.pos.row_start], total_h);
 
             pixel_t current_total = 0;
             for (int i = item.pos.row_start; i < item.pos.row_end && i < num_rows; i++)
@@ -1807,7 +1813,11 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                 if (i > item.pos.row_start) current_total += m_grid_layout.row_gap;
             }
 
-            if (total_h > current_total)
+            // A scroll container (overflow other than visible) has an automatic minimum size of 0: in a grid
+            // of definite height its row is shared out from the free space, not grown to the item's content.
+            const bool scroll_item = definite_block && item.pos.row_span() == 1 &&
+                item.el->src_el()->css().get_overflow() != overflow_visible && item_block_size.is_predefined();
+            if (total_h > current_total && !scroll_item)
             {
                 // Grow only the content-sized tracks in the item's span. A fixedly sized
                 // track keeps its specified size and the item overflows it (CSS Grid §11.5).
@@ -1837,11 +1847,30 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         int autos = (int)std::count(row_auto.begin(), row_auto.end(), 1);
         pixel_t used = num_rows > 0 ? m_grid_layout.row_gap * (num_rows - 1) : 0;
         for (int i = 0; i < num_rows; i++) used += m_grid_layout.row_heights[i];
-        const pixel_t leftover = render_block - used;
+        pixel_t leftover = render_block - used;
         if (autos > 0 && leftover > 0)
         {
-            for (int i = 0; i < num_rows; i++)
-                if (row_auto[i]) m_grid_layout.row_heights[i] += leftover / autos;
+            // 1. maximize: share the free space equally, a row stopping at its growth limit
+            for (int round = 0; round < num_rows && leftover > 0.01f; round++)
+            {
+                std::vector<int> open;
+                for (int i = 0; i < num_rows; i++)
+                    if (row_auto[i] && m_grid_layout.row_heights[i] < row_limit[i] - 0.01f) open.push_back(i);
+                if (open.empty()) break;
+                const pixel_t share = leftover / open.size();
+                for (int i : open)
+                {
+                    const pixel_t add = std::min(share, row_limit[i] - m_grid_layout.row_heights[i]);
+                    m_grid_layout.row_heights[i] += add;
+                    leftover -= add;
+                }
+            }
+            // 2. stretch: what is left goes to the auto rows equally
+            if (leftover > 0.01f)
+            {
+                for (int i = 0; i < num_rows; i++)
+                    if (row_auto[i]) m_grid_layout.row_heights[i] += leftover / autos;
+            }
         }
     }
 
