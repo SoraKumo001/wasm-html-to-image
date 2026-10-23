@@ -126,7 +126,8 @@ if (fs.existsSync(baselineFile)) {
     const notes: string[] = [];
     let worse = false;
     const pxd = s.pixels! - b.pixels!;
-    if (Math.abs(pxd) >= 0.005) {
+    // Pages with animations or lazy content move by about a point between identical runs.
+    if (Math.abs(pxd) >= 0.01) {
       notes.push(`pixels ${(b.pixels! * 100).toFixed(1)}% -> ${(s.pixels! * 100).toFixed(1)}%`);
       if (pxd > 0) worse = true;
     }

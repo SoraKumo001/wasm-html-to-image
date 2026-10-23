@@ -297,6 +297,9 @@ export async function measureChrome(
     } else {
       await page.goto(input.url ?? store.finalUrl, { waitUntil: "load", timeout: 60000 });
     }
+    // Web fonts load after "load"; measuring before they apply makes the numbers vary run to run.
+    await page.waitForLoadState("networkidle").catch(() => {});
+    await page.evaluate("document.fonts.ready.then(() => true)");
     const boxes = (await page.evaluate(GEOMETRY_SOURCE)) as LayoutBox[];
     // scrollHeight is floored at the viewport height, so a short page would look taller than it is:
     // beyond the viewport it is the content height, below it the root element's own height.
