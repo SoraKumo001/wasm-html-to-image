@@ -144,7 +144,8 @@ async function fetchResourceBytesInner(
   // Abort hung connections so one stalled server cannot outlive `timeoutMs`.
   const signal =
     timeoutMs !== undefined
-      ? AbortSignal.timeout(Math.max(1, timeoutMs))
+      ? // Node >= 24 requires an integer delay; the remaining budget is fractional.
+        AbortSignal.timeout(Math.max(1, Math.ceil(timeoutMs)))
       : undefined;
   const fetchBytes = async (target: string): Promise<Uint8Array | null> => {
     // Servers may vary the body by User-Agent (e.g. woff2 vs ttf CSS).
@@ -562,7 +563,17 @@ export async function resolveHtmlResources(
     // later sheet must not land before (and so lose to) a large earlier one. They are
     // buffered here and injected in discovery order once the whole round has settled.
     const loadedCss: { index: number; url: string; bytes: Uint8Array }[] = [];
-    await mapWithLimit(pending, FETCH_CONCURRENCY, async (r) => {
+    // When maxResourceCount cuts a round short, what is dropped should be the least harmful: a missing
+    // image leaves a hole, a missing font turns the whole text into tofu. Stylesheets go first (they
+    // cascade by document order and may reveal more), then fonts, then images; discovery order is
+    // kept within each kind.
+    const rank = (t: string): number => (t === "css" ? 0 : t === "font" ? 1 : 2);
+    const ordered = pending
+      .map((r, i) => ({ r, i }))
+      .sort((a, b) => rank(a.r.type) - rank(b.r.type) || a.i - b.i)
+      .map((e) => e.r);
+    let fontsSkippedByCount = 0;
+    await mapWithLimit(ordered, FETCH_CONCURRENCY, async (r) => {
       const diag = ctx.diag;
       const entry: ResourceDiagnostic | undefined = diag
         ? {
@@ -606,6 +617,7 @@ export async function resolveHtmlResources(
           ctx.usage.resourceCount >= ctx.limits.maxResourceCount
         ) {
           const message = `Maximum resource count (${ctx.limits.maxResourceCount}) exceeded`;
+          if (r.type === "font") fontsSkippedByCount++;
           skipWithError(DIAGNOSTIC_CODES.LIMIT_RESOURCE_COUNT, message);
           return;
         }
@@ -682,6 +694,18 @@ export async function resolveHtmlResources(
         diag?.warnings.push(d);
       }
     });
+    if (fontsSkippedByCount > 0) {
+      // Text in those fonts renders as tofu: say what to change instead of leaving a silent bad image.
+      const message =
+        `${fontsSkippedByCount} font file(s) were not loaded because maxResourceCount ` +
+        `(${ctx.limits.maxResourceCount}) was reached; text using them may render as missing glyphs. ` +
+        "Raise limits.maxResourceCount (a Google Fonts stylesheet alone can reference over a hundred files).";
+      ctx.diag?.warnings.push({
+        code: DIAGNOSTIC_CODES.LIMIT_RESOURCE_COUNT,
+        message,
+      });
+      ctx.emitLog(LogLevel.Warning, message);
+    }
     loadedCss.sort((a, b) => a.index - b.index);
     for (const css of loadedCss) {
       const text = new TextDecoder().decode(css.bytes);

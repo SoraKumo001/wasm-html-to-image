@@ -12,13 +12,13 @@ const enc = new TextEncoder();
 const u32 = (n: number): Uint8Array =>
   new Uint8Array([n & 255, (n >> 8) & 255, (n >> 16) & 255, (n >> 24) & 255]);
 
-/** Pending-resources binary: all fonts, name "n". */
-function pendingBin(urls: string[]): Uint8Array {
+/** Pending-resources binary, name "n"; fonts unless `types` says otherwise (1 font, 2 image, 3 css). */
+function pendingBin(urls: string[], types?: number[]): Uint8Array {
   const parts: Uint8Array[] = [u32(urls.length)];
-  for (const url of urls) {
+  for (const [i, url] of urls.entries()) {
     const ub = enc.encode(url);
     parts.push(
-      new Uint8Array([1, 0]),
+      new Uint8Array([types?.[i] ?? 1, 0]),
       u32(ub.length),
       ub,
       u32(1),
@@ -46,6 +46,7 @@ async function discover(
   urls: string[],
   limits: RenderLimits,
   bytesPerResource: number,
+  types?: number[],
 ): Promise<string[]> {
   const added: string[] = [];
   let served = false;
@@ -54,7 +55,7 @@ async function discover(
     satoru_get_pending_resources: () => {
       if (served) return new Uint8Array(0);
       served = true;
-      return pendingBin(urls);
+      return pendingBin(urls, types);
     },
     satoru_add_resource: (_i: unknown, url: string) => {
       added.push(url);
@@ -95,7 +96,28 @@ describe("limits are enforced without diagnostics", () => {
   });
 });
 
+describe("what maxResourceCount drops", () => {
+  it("keeps fonts over images when the count cuts a round short", async () => {
+    const [i1, i2, f1, f2] = uniqueUrls(4);
+    // images are discovered first, fonts last
+    const added = await discover([i1, i2, f1, f2], { maxResourceCount: 2 }, 4, [2, 2, 1, 1]);
+    expect(added.sort()).toEqual([f1, f2].sort());
+  });
+});
+
 describe("per-fetch timeout", () => {
+  it("accepts a fractional remaining budget (Node >= 24 requires an integer delay)", async () => {
+    let delay: number | undefined;
+    const real = AbortSignal.timeout;
+    vi.spyOn(AbortSignal, "timeout").mockImplementation((ms: number) => {
+      delay = ms;
+      return real.call(AbortSignal, Math.ceil(ms));
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(new Uint8Array(1))));
+    await fetchResourceBytes("https://frac.example/x", undefined, undefined, undefined, 59948.93);
+    expect(Number.isInteger(delay)).toBe(true);
+  });
+
   it("aborts a hung fetch once timeoutMs elapses", async () => {
     let received: AbortSignal | undefined;
     vi.stubGlobal(
