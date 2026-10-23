@@ -9,7 +9,8 @@
     "generate-reference": "tsx tools/generate-reference.ts && tsx vertical/gen-reference.ts",
     "real:diff": "tsx tools/real/diff.mts",
     "real:reduce": "tsx tools/real/reduce.mts",
-    "real:score": "tsx tools/real/score.mts"
+    "real:score": "tsx tools/real/score.mts",
+    "real:fuzz": "tsx tools/real/fuzz.mts"
   },
   "devDependencies": {
     "@types/node": "26.6.5",
