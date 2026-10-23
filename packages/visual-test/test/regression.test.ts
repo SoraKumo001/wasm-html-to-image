@@ -3853,3 +3853,14 @@ describe("floated grid with an auto and an fr track", () => {
     expect(at(255, 2)).toEqual([255, 0, 0]);
   });
 });
+
+describe("max-content track in a narrow grid", () => {
+  it("is as wide as the item with no line broken, and the grid overflows", async () => {
+    const { at } = await renderPng(
+      '<div style="display:grid;grid-template-columns:max-content 1fr;width:100px"><div style="white-space:normal;font:16px sans-serif;width:max-content;height:5px;background:#00f">aaaa bbbb cccc dddd eeee ffff gggg hhhh</div><div style="height:5px;background:#f00"></div></div>',
+      600, 30,
+    );
+    // the first track is the whole sentence (well over 100px), so the fr track starts beyond it
+    expect(at(150, 2)).toEqual([0, 0, 255]);
+  });
+});

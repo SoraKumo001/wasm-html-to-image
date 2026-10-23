@@ -1384,6 +1384,12 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                 cb.size_mode |= containing_block_context::size_mode_content;
                 // a min-content track takes its items' min-content contribution
                 if (kinds[c] == 2) cb.size_mode |= containing_block_context::size_mode_min_content;
+                // a max-content track is the item's width with no line broken, however narrow the grid is
+                if (kinds[c] == 3 && !vert)
+                {
+                    cb.render_width = containing_block_context::typed_pixel(100000, containing_block_context::cbc_value_type_absolute);
+                    cb.width = cb.render_width;
+                }
                 pixel_t measured = item.el->measure(cb, fmt_ctx);
                 // measure() returns the margin-box inline size (padding and border included), so
                 // adding the offsets again would count them twice.
