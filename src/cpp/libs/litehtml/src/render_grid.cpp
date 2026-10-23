@@ -15,6 +15,10 @@
 
 namespace litehtml
 {
+	// Round up to the layout unit (1/64 px) rather than a whole pixel: a track a hair too narrow wraps its text,
+	// but a whole pixel per track makes shrink-to-fit grids visibly wider than the reference.
+	static inline pixel_t ceil_layout_unit(pixel_t v) { return (pixel_t)(std::ceil(v * 64.0f) / 64.0f); }
+
 
 std::shared_ptr<render_item> render_item_grid::init()
 {
@@ -1246,7 +1250,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             containing_block_context cb = self_size;
             cb.size_mode &= ~(containing_block_context::size_mode_exact_width | containing_block_context::size_mode_exact_height);
             cb.size_mode |= containing_block_context::size_mode_content | containing_block_context::size_mode_min_content;
-            base[c] = std::max(base[c], (pixel_t)std::ceil(item.el->measure(cb, fmt_ctx)));
+            base[c] = std::max(base[c], (pixel_t)ceil_layout_unit(item.el->measure(cb, fmt_ctx)));
         }
         for (int guard = 0; guard < num_columns + 1; guard++)
         {
@@ -1365,7 +1369,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                     containing_block_context mcb = self_size;
                     mcb.size_mode &= ~(containing_block_context::size_mode_exact_width | containing_block_context::size_mode_exact_height);
                     mcb.size_mode |= containing_block_context::size_mode_content | containing_block_context::size_mode_min_content;
-                    fit_floor[c] = std::max(fit_floor[c], (pixel_t)std::ceil(item.el->measure(mcb, fmt_ctx)));
+                    fit_floor[c] = std::max(fit_floor[c], (pixel_t)ceil_layout_unit(item.el->measure(mcb, fmt_ctx)));
                 }
                 containing_block_context cb = self_size;
                 // The grid's own exact size describes its box, not the intrinsic size of an item.
@@ -1379,7 +1383,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                 pixel_t w = std::max((pixel_t)item.el->inline_size(),
                                      measured);
                 // Round up: a track a fraction of a pixel too narrow makes the item's text wrap.
-                contrib[c] = std::max(contrib[c], (pixel_t)std::ceil(w));
+                contrib[c] = std::max(contrib[c], (pixel_t)ceil_layout_unit(w));
             }
             pixel_t content_total = 0;
             pixel_t gaps = m_grid_layout.column_gap * (num_columns - 1);
@@ -1441,7 +1445,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                     if (all_min) cb.size_mode |= containing_block_context::size_mode_min_content;
                     else targets.erase(std::remove_if(targets.begin(), targets.end(), [&](int c) { return kinds[c] == 2; }), targets.end());
                     if (targets.empty()) continue;
-                    pixel_t extra = (pixel_t)std::ceil(item->el->measure(cb, fmt_ctx)) - spanned;
+                    pixel_t extra = (pixel_t)ceil_layout_unit(item->el->measure(cb, fmt_ctx)) - spanned;
                     // fit-content() / minmax() tracks stop at their limit; the rest takes what they cannot
                     auto cap = [&](int c) -> pixel_t {
                         if (kinds[c] == 4) return std::max(fit_floor[c], columns_template[c].get_operands()[0].calc_percent(render_inline));
@@ -1526,7 +1530,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                         cb.size_mode |= containing_block_context::size_mode_content | containing_block_context::size_mode_min_content;
                         pixel_t measured = item.el->measure(cb, fmt_ctx);
                         pixel_t w = std::max((pixel_t)item.el->inline_size(), measured);
-                        minc[c] = std::max(minc[c], std::min((pixel_t)std::ceil(w), m_grid_layout.column_widths[c]));
+                        minc[c] = std::max(minc[c], std::min((pixel_t)ceil_layout_unit(w), m_grid_layout.column_widths[c]));
                     }
                     const pixel_t budget = render_inline - (fixed2 - auto_total);
                     pixel_t min_total = 0;
