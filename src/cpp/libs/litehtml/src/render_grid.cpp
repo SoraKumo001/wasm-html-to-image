@@ -1104,10 +1104,14 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
     // items' max-content contributions instead of sharing the available width. Without this
     // a width:auto grid never shrinks below the space it is measured in, so an outer
     // shrink-to-fit flex item is forced to the available width by any 1fr track.
+    // A floated grid with `width: auto` shrinks to fit whatever mode it was measured in.
+    const bool self_shrink = !vert && src_el()->css().get_float() != float_none &&
+                             src_el()->css().get_width().is_predefined();
     const bool content_inline =
-        (self_size.size_mode & (containing_block_context::size_mode_content |
-                                containing_block_context::size_mode_min_content)) != 0 &&
-        render_inline.type == containing_block_context::cbc_value_type_auto;
+        ((self_size.size_mode & (containing_block_context::size_mode_content |
+                                 containing_block_context::size_mode_min_content)) != 0 &&
+         render_inline.type == containing_block_context::cbc_value_type_auto) ||
+        self_shrink;
     std::vector<pixel_t> fr_contrib(num_columns, 0);
     if (content_inline && total_fr > 0)
     {
@@ -1209,9 +1213,25 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
 
     if (content_inline && total_fr > 0)
     {
+        // The flex fraction of an intrinsic size is the largest contribution per unit of factor, so
+        // `1fr 1fr` over items of 50px and 80px gives two 80px tracks, not 50 and 80.
+        auto fr_factor = [&](int i) -> pixel_t {
+            const auto& len = columns_template[i];
+            if (len.units() == css_units_fr) return len.val();
+            if (len.is_calc() && len.get_op() == css_length::op_minmax && len.get_operands()[1].units() == css_units_fr)
+                return len.get_operands()[1].val();
+            return 0;
+        };
+        pixel_t fraction = 0;
         for (int i = 0; i < num_columns && i < (int)m_grid_layout.column_widths.size(); i++)
         {
-            m_grid_layout.column_widths[i] = std::max(m_grid_layout.column_widths[i], fr_contrib[i]);
+            const pixel_t f = fr_factor(i);
+            if (f > 0) fraction = std::max(fraction, fr_contrib[i] / f);
+        }
+        for (int i = 0; i < num_columns && i < (int)m_grid_layout.column_widths.size(); i++)
+        {
+            const pixel_t f = fr_factor(i);
+            m_grid_layout.column_widths[i] = std::max(m_grid_layout.column_widths[i], f > 0 ? fraction * f : fr_contrib[i]);
         }
     }
 
@@ -1354,7 +1374,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             pixel_t remaining = render_inline - fixed2;
             if (remaining < 0) remaining = 0;
             remaining = maximize_definite_minmax(remaining);
-            if (fr_sum > 0)
+            if (fr_sum > 0 && !content_inline)
             {
                 for (int i = 0; i < num_columns; i++)
                 {
@@ -1373,9 +1393,10 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                     }
                 }
             }
-            else if (remaining > 0)
+            else if (remaining > 0 && !content_inline)
             {
-                // No fr tracks: auto tracks stretch to fill the free space (justify-content: normal).
+                // No fr tracks: auto tracks stretch to fill the free space (justify-content: normal), unless
+                // the grid is being sized from its content: it then is as wide as its tracks.
                 int autos = (int)std::count(kinds.begin(), kinds.end(), 1);
                 if (autos > 0)
                 {
@@ -1878,7 +1899,20 @@ pixel_t litehtml::render_item_grid::_render_content(pixel_t x, pixel_t y, bool /
     }
     else
     {
+        // A grid sized from its content (a flex item, float, inline-grid, abs) is as wide as its
+        // tracks, no wider than the space it was offered when that is known.
+        const bool shrink_to_fit =
+            ((self_size.size_mode & (containing_block_context::size_mode_content |
+                                     containing_block_context::size_mode_min_content)) != 0 &&
+             self_size.render_width.type == containing_block_context::cbc_value_type_auto) ||
+            (src_el()->css().get_float() != float_none && src_el()->css().get_width().is_predefined());
         m_pos.width = self_size.render_width;
+        if (shrink_to_fit)
+        {
+            m_pos.width = m_grid_layout.total_grid_width;
+            if (self_size.render_width.value > 0 && m_pos.width > self_size.render_width.value)
+                m_pos.width = self_size.render_width.value;
+        }
         m_pos.height = (self_size.render_height.type != containing_block_context::cbc_value_type_auto) ? (pixel_t)self_size.render_height : m_grid_layout.total_grid_height;
     }
 

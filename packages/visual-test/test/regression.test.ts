@@ -3373,3 +3373,37 @@ describe("grid inside a flex item: intrinsic track sizing", () => {
     expect(boxes.find((b) => b.t === "svg")).toMatchObject({ x: 0, w: 16 });
   });
 });
+
+describe("grid: width when sized from its content", () => {
+  it("is as wide as its tracks in a flex item, inline-grid, float, abs and a column-flex start", async () => {
+    const items = `<span style="display:block;width:50px;height:20px"></span><span style="display:block;width:80px;height:20px"></span>`;
+    const width = async (parent: string, grid: string) => {
+      let boxes: { i: string; w: number }[] = [];
+      await render({
+        value: `<!DOCTYPE html><html><head><style>*{margin:0;padding:0;box-sizing:border-box}</style></head><body><div style="${parent}"><div id="g" style="gap:10px;${grid}">${items}</div></div></body></html>`,
+        width: 800,
+        format: "png",
+        onLayout: (b) => {
+          boxes = b;
+        },
+      });
+      return boxes.find((b) => b.i === "g")!.w;
+    };
+    const flex = "display:flex;width:600px";
+    const cols = (c: string, extra = "display:grid") => `${extra};grid-template-columns:${c}`;
+    // two content-sized tracks (50 + 10 gap + 80), not the 600px the flex row offers
+    expect(await width(flex, cols("auto auto"))).toBe(140);
+    expect(await width(flex, cols("repeat(2, auto)"))).toBe(140);
+    expect(await width(flex, cols("auto 1fr"))).toBe(140);
+    expect(await width("width:600px", cols("auto auto", "display:inline-grid"))).toBe(140);
+    expect(await width("width:600px", cols("auto auto", "display:grid;float:left"))).toBe(140);
+    expect(await width("position:relative;width:600px;height:100px", cols("auto auto", "display:grid;position:absolute"))).toBe(140);
+    expect(await width("display:flex;flex-direction:column;align-items:flex-start;width:600px", cols("auto auto"))).toBe(140);
+    // 1fr tracks share the largest contribution per fraction: 80 + 10 + 80
+    expect(await width(flex, cols("1fr 1fr"))).toBe(170);
+    // one implicit column as wide as its widest item
+    expect(await width(flex, "display:grid")).toBe(80);
+    // a block-level grid in normal flow still fills its container
+    expect(await width("width:600px", cols("auto auto"))).toBe(600);
+  });
+});
