@@ -3672,3 +3672,34 @@ describe("minmax() tracks with an auto / content keyword", () => {
     expect(boxes.find((x) => x.p === "0.1.0")?.h).toBe(30);
   });
 });
+
+describe("viewBox-only svg in a shrink-to-fit context", () => {
+  const widthOfSvg = async (wrap: string): Promise<number> => {
+    let boxes: { t: string; w: number }[] = [];
+    await render({
+      value: `<!DOCTYPE html><html><head><style>*{margin:0;padding:0}</style></head><body>${wrap}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        boxes = b;
+      },
+    });
+    return boxes.find((x) => x.t === "svg")?.w ?? -1;
+  };
+  const svg = '<svg viewBox="0 0 100 20"></svg>';
+
+  it("has no width of its own inside a float, inline-block or fit-content box (Chromium: 0)", async () => {
+    expect(await widthOfSvg(`<div style="float:left">${svg}</div>`)).toBe(0);
+    expect(await widthOfSvg(`<div style="display:inline-block">${svg}</div>`)).toBe(0);
+    expect(await widthOfSvg(`<div style="width:fit-content">${svg}</div>`)).toBe(0);
+  });
+
+  it("fills a plain block and a stretched grid track", async () => {
+    expect(await widthOfSvg(`<div>${svg}</div>`)).toBe(600);
+    expect(await widthOfSvg(`<div style="display:grid;grid-template-columns:1fr">${svg}</div>`)).toBe(600);
+  });
+
+  it("is 0 in a min-content grid track", async () => {
+    expect(await widthOfSvg(`<div style="display:grid;grid-template-columns:min-content 2fr">${svg}</div>`)).toBe(0);
+  });
+});

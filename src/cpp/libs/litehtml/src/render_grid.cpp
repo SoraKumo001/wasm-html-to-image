@@ -1361,6 +1361,8 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                 // The grid's own exact size describes its box, not the intrinsic size of an item.
                 cb.size_mode &= ~(containing_block_context::size_mode_exact_width | containing_block_context::size_mode_exact_height);
                 cb.size_mode |= containing_block_context::size_mode_content;
+                // a min-content track takes its items' min-content contribution
+                if (kinds[c] == 2) cb.size_mode |= containing_block_context::size_mode_min_content;
                 pixel_t measured = item.el->measure(cb, fmt_ctx);
                 // measure() returns the margin-box inline size (padding and border included), so
                 // adding the offsets again would count them twice.

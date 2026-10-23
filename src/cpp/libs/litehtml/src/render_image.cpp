@@ -66,7 +66,25 @@ litehtml::pixel_t litehtml::render_item_image::_measure(
         // fill: the document root is measured in that mode, so it cannot tell a float from a block.
         const bool positioned = css().get_position() == element_position_absolute ||
                                 css().get_position() == element_position_fixed;
-        if (is_min_content && !positioned) {
+        // A ratio-only box inside a float / inline-block / absolutely positioned / fit-content ancestor
+        // (through auto-width blocks) has no width of its own to contribute: it is 0 wide, as in Chromium.
+        auto in_shrink_to_fit = [&]() {
+            for (auto p = parent(); p; p = p->parent()) {
+                const auto& pc = p->css();
+                const auto disp = pc.get_display();
+                if (p == parent() && (disp == display_grid || disp == display_inline_grid)) return true;  // a grid sizes its tracks from the item's contribution
+                if (pc.get_float() != float_none || disp == display_inline_block || disp == display_inline_flex ||
+                    disp == display_inline_grid || disp == display_inline_table)
+                    return true;
+                if (pc.get_position() == element_position_absolute || pc.get_position() == element_position_fixed)
+                    return pc.get_width().is_predefined();
+                if (pc.get_width().is_predefined() && pc.get_width().predef() > 0) return true;  // fit-content / max-content / min-content
+                if (!pc.get_width().is_predefined()) return false;
+                if (disp != display_block && disp != display_inline) return false;  // flex / grid / table: not handled here
+            }
+            return false;
+        };
+        if ((is_min_content && !positioned) || (is_content_size && !positioned && in_shrink_to_fit())) {
             m_pos.width = 0;
         } else {
             const pixel_t avail = containing_block_size.render_width.type == containing_block_context::cbc_value_type_auto
