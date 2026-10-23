@@ -3875,3 +3875,14 @@ describe("ratio-only svg in a max-content grid track", () => {
     expect(height).toBeLessThan(2000);
   });
 });
+
+describe("flex-basis in an intrinsic size", () => {
+  it("is ignored for an item that can shrink: the empty shrinkable item contributes nothing", async () => {
+    const { at } = await renderPng('<div style="display:inline-flex"><div style="flex:0 1 100px;height:5px;background:#f00"></div></div>', 300, 20);
+    expect(at(50, 2)).toEqual([255, 255, 255]);
+  });
+  it("counts for an item that cannot shrink", async () => {
+    const { at } = await renderPng('<div style="display:inline-flex"><div style="flex:0 0 100px;height:5px;background:#f00"></div></div>', 300, 20);
+    expect(at(50, 2)).toEqual([255, 0, 0]);
+  });
+});

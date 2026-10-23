@@ -231,7 +231,11 @@ void litehtml::flex_item_row_direction::direction_specific_init(const litehtml::
 		// Growable items and a zero basis measure as content only for an intrinsic-size query; at a
 		// definite inline size the basis is what the final layout uses, or the line breaking of a
 		// wrapping container would differ from the layout and its height would be overestimated.
-		if (indefinite && (grow > 0 || el->css().get_flex_basis().units() == css_units_percentage ||
+		// An item that can shrink contributes its content size to an intrinsic size, not its flex-basis:
+		// the container may end up narrower than the basis and the item shrinks with it (Blink and the
+		// spec's flex fraction both give a shrinkable `flex: 0 1 100px` empty item a contribution of 0).
+		const bool shrinkable_in_query = (self_size.size_mode & containing_block_context::size_mode_content) && shrink > 0;
+		if (indefinite && (grow > 0 || shrinkable_in_query || el->css().get_flex_basis().units() == css_units_percentage ||
 			el->css().get_flex_basis().val() == 0)) {
 			flex_basis_predefined = true;
 			predef = flex_basis_content;
