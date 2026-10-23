@@ -495,9 +495,11 @@ litehtml::pixel_t litehtml::flex_line::calculate_items_position(
             break;
         case flex_justify_content_space_around:
         case flex_justify_content_space_evenly:
-            // If the leftover free-space is negative or there is only a single flex item on the
-            // line, this value is identical to center
-            if (items.size() == 1 || free_main_size < 0)
+            // With a single flex item the fallback is center; with negative free space it is `safe center`
+            // (css-align-3), which does not overflow on the start side: the items start at the start edge.
+            if (free_main_size < 0)
+                justify_content = flex_justify_content_flex_start;
+            else if (items.size() == 1)
                 justify_content = flex_justify_content_center;
             break;
         default:

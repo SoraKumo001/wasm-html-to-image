@@ -3886,3 +3886,15 @@ describe("flex-basis in an intrinsic size", () => {
     expect(at(50, 2)).toEqual([255, 0, 0]);
   });
 });
+
+describe("justify-content: space-around with overflowing items", () => {
+  it("falls back to safe center: the item starts at the start edge instead of overflowing both sides", async () => {
+    const { at } = await renderPng(
+      '<div style="margin-left:100px;display:flex;justify-content:space-around;width:20px"><div style="width:90px;height:5px;background:#f00;flex:none"></div></div>',
+      300, 20,
+    );
+    // true centering would put the item at x=65 (100 + (20-90)/2); safe centering keeps it at x=100
+    expect(at(80, 2)).toEqual([255, 255, 255]);
+    expect(at(110, 2)).toEqual([255, 0, 0]);
+  });
+});
