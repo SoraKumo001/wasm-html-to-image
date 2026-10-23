@@ -3642,3 +3642,18 @@ describe("margins of an empty block", () => {
     expect(b.find((x) => x.p === "0.1.2")?.y).toBe(25);
   });
 });
+
+describe("absolute box with a preceding sibling", () => {
+  it("lays its children out at the solved shrink-to-fit width", async () => {
+    let boxes: { p: string; w: number }[] = [];
+    await render({
+      value: `<!DOCTYPE html><html><head><style>*{margin:0;padding:0}</style></head><body><div></div><div style="position:absolute"><div style="width:90px"></div><div></div></div></body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        boxes = b;
+      },
+    });
+    expect(boxes.find((x) => x.p === "0.1.1.1")?.w).toBe(90);
+  });
+});

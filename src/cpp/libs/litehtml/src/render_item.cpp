@@ -834,7 +834,8 @@ void litehtml::render_item::render_positioned(render_type rt) {
             }
             el->m_pos.x = left + el->content_offset_left();
             // (a zero-width box matches by accident when nothing was laid out inside it: measure it)
-            if (el->m_pos.width != width - el->content_offset_width() || el->m_pos.width == 0) {
+            if (el->m_pos.width != width - el->content_offset_width() || el->m_pos.width == 0 ||
+                el_width.is_predefined()) {
                 el->m_pos.width = width - el->content_offset_width();
                 need_render = true;
             }
