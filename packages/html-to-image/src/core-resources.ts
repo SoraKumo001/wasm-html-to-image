@@ -279,6 +279,8 @@ export interface DiagState {
 export interface ResourceUsage {
   resourceCount: number;
   totalResourceBytes: number;
+  /** Font files dropped because `maxResourceCount` was reached (across all rounds). */
+  fontsSkippedByCount: number;
 }
 
 /** Resolution context threaded through HTML discovery (internal). */
@@ -572,7 +574,6 @@ export async function resolveHtmlResources(
       .map((r, i) => ({ r, i }))
       .sort((a, b) => rank(a.r.type) - rank(b.r.type) || a.i - b.i)
       .map((e) => e.r);
-    let fontsSkippedByCount = 0;
     await mapWithLimit(ordered, FETCH_CONCURRENCY, async (r) => {
       const diag = ctx.diag;
       const entry: ResourceDiagnostic | undefined = diag
@@ -617,7 +618,7 @@ export async function resolveHtmlResources(
           ctx.usage.resourceCount >= ctx.limits.maxResourceCount
         ) {
           const message = `Maximum resource count (${ctx.limits.maxResourceCount}) exceeded`;
-          if (r.type === "font") fontsSkippedByCount++;
+          if (r.type === "font") ctx.usage.fontsSkippedByCount++;
           skipWithError(DIAGNOSTIC_CODES.LIMIT_RESOURCE_COUNT, message);
           return;
         }
@@ -694,24 +695,28 @@ export async function resolveHtmlResources(
         diag?.warnings.push(d);
       }
     });
-    if (fontsSkippedByCount > 0) {
-      // Text in those fonts renders as tofu: say what to change instead of leaving a silent bad image.
-      const message =
-        `${fontsSkippedByCount} font file(s) were not loaded because maxResourceCount ` +
-        `(${ctx.limits.maxResourceCount}) was reached; text using them may render as missing glyphs. ` +
-        "Raise limits.maxResourceCount (a Google Fonts stylesheet alone can reference over a hundred files).";
-      ctx.diag?.warnings.push({
-        code: DIAGNOSTIC_CODES.LIMIT_RESOURCE_COUNT,
-        message,
-      });
-      ctx.emitLog(LogLevel.Warning, message);
-    }
     loadedCss.sort((a, b) => a.index - b.index);
     for (const css of loadedCss) {
       const text = new TextDecoder().decode(css.bytes);
       const fixed = absolutizeCssUrls(text, css.url);
       const bytes = fixed === text ? css.bytes : new TextEncoder().encode(fixed);
       (await addRes(satoruInst, css.url, 3, bytes)) as unknown;
+    }
+  }
+  if (ctx.usage.fontsSkippedByCount > 0) {
+    // Text in those fonts renders as tofu: say what to change instead of leaving a silent bad image.
+    // One message for the whole render, however many discovery rounds hit the limit.
+    const message =
+      `${ctx.usage.fontsSkippedByCount} font file(s) were not loaded because maxResourceCount ` +
+      `(${ctx.limits.maxResourceCount}) was reached; text using them may render as missing glyphs. ` +
+      "Raise limits.maxResourceCount (a Google Fonts stylesheet alone can reference over a hundred files).";
+    ctx.diag?.warnings.push({
+      code: DIAGNOSTIC_CODES.LIMIT_RESOURCE_COUNT,
+      message,
+    });
+    ctx.emitLog(LogLevel.Warning, message);
+    if (ctx.limits.strictFonts) {
+      throw new Error(`[${DIAGNOSTIC_CODES.LIMIT_RESOURCE_COUNT}] ${message}`);
     }
   }
   // Merge the C++ collect-phase breakdown into the JS timings.

@@ -73,6 +73,7 @@ When rendering user-supplied HTML, always restrict where it may fetch from and h
 | ----------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `timeoutMs`             | `number`   | Timeout for the whole render. Each individual fetch is aborted by the remaining time                                                                                       |
 | `maxResourceCount`      | `number`   | Maximum number of resources to load                                                                                                                                        |
+| `strictFonts`           | `boolean`  | Throw `LIMIT_RESOURCE_COUNT` instead of rendering missing glyphs when fonts were skipped by `maxResourceCount` (default `false`) |
 | `maxResourceBytes`      | `number`   | Maximum bytes for a single resource                                                                                                                                        |
 | `maxTotalResourceBytes` | `number`   | Maximum total bytes for all resources                                                                                                                                      |
 | `allowedProtocols`      | `string[]` | Allowed URL protocols (e.g. `["https:"]`)                                                                                                                                  |

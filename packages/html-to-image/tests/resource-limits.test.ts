@@ -47,6 +47,7 @@ async function discover(
   limits: RenderLimits,
   bytesPerResource: number,
   types?: number[],
+  logs: string[] = [],
 ): Promise<string[]> {
   const added: string[] = [];
   let served = false;
@@ -65,9 +66,9 @@ async function discover(
     mediaTypeInt: 0,
     limits,
     diag: null,
-    usage: { resourceCount: 0, totalResourceBytes: 0 },
+    usage: { resourceCount: 0, totalResourceBytes: 0, fontsSkippedByCount: 0 },
     t0: performance.now(),
-    emitLog: () => undefined,
+    emitLog: (_l, m) => void logs.push(m),
     addTime: () => undefined,
     checkTimeout: () => undefined,
     resolveResource: async () => new Uint8Array(bytesPerResource),
@@ -102,6 +103,15 @@ describe("what maxResourceCount drops", () => {
     // images are discovered first, fonts last
     const added = await discover([i1, i2, f1, f2], { maxResourceCount: 2 }, 4, [2, 2, 1, 1]);
     expect(added.sort()).toEqual([f1, f2].sort());
+  });
+  it("reports skipped fonts once, and strictFonts turns that into an error", async () => {
+    const [f1, f2, f3] = uniqueUrls(3);
+    const logs: string[] = [];
+    await discover([f1, f2, f3], { maxResourceCount: 1 }, 4, [1, 1, 1], logs);
+    expect(logs.filter((m) => m.includes("font file(s) were not loaded"))).toHaveLength(1);
+    await expect(
+      discover([f1, f2, f3], { maxResourceCount: 1, strictFonts: true }, 4, [1, 1, 1]),
+    ).rejects.toThrow(/LIMIT_RESOURCE_COUNT/);
   });
 });
 
@@ -166,7 +176,7 @@ describe("multi-page discovery", () => {
     mediaTypeInt: 0,
     limits: {},
     diag: null,
-    usage: { resourceCount: 0, totalResourceBytes: 0 },
+    usage: { resourceCount: 0, totalResourceBytes: 0, fontsSkippedByCount: 0 },
     t0: performance.now(),
     emitLog: () => undefined,
     addTime: () => undefined,

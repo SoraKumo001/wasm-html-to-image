@@ -286,7 +286,7 @@ export function createOrchestration(
     limits,
     resolveResource,
     diag,
-    usage: { resourceCount: 0, totalResourceBytes: 0 },
+    usage: { resourceCount: 0, totalResourceBytes: 0, fontsSkippedByCount: 0 },
     t0,
     emitLog,
     addTime,

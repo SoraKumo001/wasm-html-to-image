@@ -115,6 +115,7 @@ export interface RenderResult<T = Uint8Array | string> {
 | ----------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------- |
 | `timeoutMs`             | `number`   | 描画全体のタイムアウト。個々の fetch も残り時間で中断されます                                                    |
 | `maxResourceCount`      | `number`   | 取得するリソース数の上限                                                                                         |
+| `strictFonts`           | `boolean`  | 上限でフォントを読み込めなかったとき、tofu で描画せず `LIMIT_RESOURCE_COUNT` で失敗させる(既定 `false`) |
 | `maxResourceBytes`      | `number`   | 1 リソースあたりの最大バイト数                                                                                   |
 | `maxTotalResourceBytes` | `number`   | 全リソースの合計バイト数の上限                                                                                   |
 | `allowedProtocols`      | `string[]` | 許可するプロトコル (例: `["https:"]`)                                                                            |

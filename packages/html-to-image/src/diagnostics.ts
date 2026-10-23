@@ -139,6 +139,11 @@ export interface RenderLimits {
   maxTotalResourceBytes?: number;
   /** Maximum number of resources to load. */
   maxResourceCount?: number;
+  /**
+   * Throw (code `LIMIT_RESOURCE_COUNT`) instead of rendering when font files had to be skipped
+   * because of `maxResourceCount`, so text is never silently drawn as missing glyphs. Default `false`.
+   */
+  strictFonts?: boolean;
   /** Allowed URL protocols (e.g. `["http:", "https:"]`). */
   allowedProtocols?: string[];
   /** Allowed hostnames. */
