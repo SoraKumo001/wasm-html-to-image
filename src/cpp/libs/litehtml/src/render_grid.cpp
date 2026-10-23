@@ -1113,6 +1113,9 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
          render_inline.type == containing_block_context::cbc_value_type_auto) ||
         self_shrink;
     std::vector<pixel_t> fr_contrib(num_columns, 0);
+    std::vector<pixel_t> fr_single(num_columns, 0);  // contributions of single-column items only
+    struct span_fr_item { int c0, c1; pixel_t w; };
+    std::vector<span_fr_item> span_fr;  // items spanning fr tracks, redone once content tracks are sized
     if (content_inline && total_fr > 0)
     {
         for (auto& item : m_grid_layout.items)
@@ -1144,9 +1147,21 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             }
             if (factors <= 0) continue;
 
-            // A spanning item's contribution covers the gaps between its tracks first;
-            // the remainder is shared by the spanned fr tracks in proportion to their factor.
+            // A spanning item's contribution covers the gaps between its tracks and the tracks that
+            // are not flexible first; the remainder is shared by the spanned fr tracks in proportion
+            // to their factor.
             pixel_t inner = w - m_grid_layout.column_gap * (span - 1);
+            if (span > 1)
+            {
+                span_fr.push_back({item.pos.col_start, std::min(item.pos.col_end, num_columns), w});
+                for (int c = item.pos.col_start; c < item.pos.col_end && c < num_columns; c++)
+                {
+                    const auto& l = columns_template[c];
+                    const bool flex = l.units() == css_units_fr ||
+                        (l.is_calc() && l.get_op() == css_length::op_minmax && l.get_operands()[1].units() == css_units_fr);
+                    if (!flex) inner -= m_grid_layout.column_widths[c];
+                }
+            }
             if (inner < 0) inner = 0;
             for (int c = item.pos.col_start; c < item.pos.col_end && c < num_columns; c++)
             {
@@ -1164,6 +1179,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                 if (factor > 0)
                 {
                     fr_contrib[c] = std::max(fr_contrib[c], (pixel_t)(inner * factor / factors));
+                    if (span == 1) fr_single[c] = fr_contrib[c];
                 }
             }
         }
@@ -1505,6 +1521,45 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                     }
                     fixed2 -= auto_total - new_total;
                     content_total -= auto_total - new_total;
+                }
+            }
+            // Intrinsic size with fr tracks next to content tracks (Blink FindFrSize, indefinite space):
+            // an item spanning fr tracks gives the fr size (its contribution minus the non-flexible
+            // tracks it spans, now that those are sized) / (sum of the spanned factors, at least 1).
+            if (content_inline && fr_sum > 0 && !span_fr.empty())
+            {
+                auto fr_of = [&](int i) -> pixel_t {
+                    const auto& l = columns_template[i];
+                    if (l.units() == css_units_fr) return l.val();
+                    if (l.is_calc() && l.get_op() == css_length::op_minmax && l.get_operands()[1].units() == css_units_fr)
+                        return l.get_operands()[1].val();
+                    return 0;
+                };
+                auto base_of = [&](int i) -> pixel_t {
+                    const auto& l = columns_template[i];
+                    return (l.is_calc() && l.get_op() == css_length::op_minmax) ? l.get_operands()[0].calc_percent(render_inline) : 0;
+                };
+                pixel_t fraction = 0;
+                for (int i = 0; i < num_columns; i++)
+                {
+                    const pixel_t f = fr_of(i);
+                    if (f > 0) fraction = std::max(fraction, std::max(fr_single[i], base_of(i)) / f);
+                }
+                for (const auto& sp : span_fr)
+                {
+                    pixel_t left = sp.w - m_grid_layout.column_gap * (sp.c1 - sp.c0 - 1);
+                    pixel_t factors = 0;
+                    for (int c = sp.c0; c < sp.c1; c++)
+                    {
+                        if (fr_of(c) > 0) factors += fr_of(c);
+                        else left -= m_grid_layout.column_widths[c];
+                    }
+                    if (left > 0 && factors > 0) fraction = std::max(fraction, left / std::max<pixel_t>(factors, 1));
+                }
+                for (int i = 0; i < num_columns; i++)
+                {
+                    const pixel_t f = fr_of(i);
+                    if (f > 0) m_grid_layout.column_widths[i] = std::max(base_of(i), fraction * f);
                 }
             }
             pixel_t remaining = render_inline - fixed2;
