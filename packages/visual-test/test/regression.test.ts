@@ -3842,3 +3842,14 @@ describe("fit-content grid with a spanning item before single-column ones", () =
     expect(at(205, 7)).toEqual([255, 255, 255]);
   });
 });
+
+describe("floated grid with an auto and an fr track", () => {
+  it("gives the fr track only what the auto track leaves of the available width", async () => {
+    const { at } = await renderPng(
+      '<div style="display:grid;grid-template-columns:auto 1fr;float:left"><div style="width:250px;height:5px;background:#00f"></div><div style="width:50px;height:5px;background:#f00"></div></div><div style="clear:both"></div>',
+      300, 30,
+    );
+    // 250px auto track, then the 1fr track starts at 250 (not pushed right by an oversized share)
+    expect(at(255, 2)).toEqual([255, 0, 0]);
+  });
+});

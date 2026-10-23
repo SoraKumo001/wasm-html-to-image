@@ -1608,7 +1608,16 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             pixel_t remaining = render_inline - fixed2;
             if (remaining < 0) remaining = 0;
             remaining = maximize_definite_minmax(remaining);
-            if (fr_sum > 0 && !content_inline)
+            // A shrink-to-fit grid is no wider than the space it is given: when its tracks add up to more,
+            // the fr tracks share what the content tracks leave.
+            bool over_available = false;
+            if (fr_sum > 0 && content_inline && !min_content_constraint && render_inline.value > 0)
+            {
+                pixel_t total = gaps;
+                for (int i = 0; i < num_columns; i++) total += m_grid_layout.column_widths[i];
+                over_available = total > render_inline.value;
+            }
+            if (fr_sum > 0 && (!content_inline || over_available))
             {
                 // The first pass left these at their share of the whole width; sharing again must start
                 // from the minimum (the base) of a minmax(min, Nfr) track, not from that share.
