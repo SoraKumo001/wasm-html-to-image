@@ -1116,6 +1116,9 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
     std::vector<pixel_t> fr_single(num_columns, 0);  // contributions of single-column items only
     struct span_fr_item { int c0, c1; pixel_t w; };
     std::vector<span_fr_item> span_fr;  // items spanning fr tracks, redone once content tracks are sized
+    // Sized under a min-content constraint, the flex fraction is zero (Blink DetermineFreeSpace): an fr
+    // track is as wide as its items' min-content contributions, not scaled up to the largest one.
+    const bool min_content_constraint = (self_size.size_mode & containing_block_context::size_mode_min_content) != 0;
     if (content_inline && total_fr > 0)
     {
         for (auto& item : m_grid_layout.items)
@@ -1124,6 +1127,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             // The grid's own exact size describes its box, not the intrinsic size of an item.
             cb.size_mode &= ~(containing_block_context::size_mode_exact_width | containing_block_context::size_mode_exact_height);
             cb.size_mode |= containing_block_context::size_mode_content;
+            if (min_content_constraint) cb.size_mode |= containing_block_context::size_mode_min_content;
             pixel_t measured = item.el->measure(cb, fmt_ctx);
             // measure() already returns the margin-box inline size; inline_size() can still be the
             // larger of the two when the box was measured earlier, so take both into account.
@@ -1235,7 +1239,10 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                 if (definite(imw)) base[c] = std::max(base[c], imw.calc_percent(render_inline) + item.el->content_offset_width());
                 continue;
             }
-            if (!definite(iw)) continue;
+            // A nested grid sizes itself from tracks and definite sizes, which measure() gets right.
+            const auto idisp = item.el->src_el()->css().get_display();
+            const bool nested_grid = idisp == display_grid || idisp == display_inline_grid;
+            if (!definite(iw) && !nested_grid) continue;
             containing_block_context cb = self_size;
             cb.size_mode &= ~(containing_block_context::size_mode_exact_width | containing_block_context::size_mode_exact_height);
             cb.size_mode |= containing_block_context::size_mode_content | containing_block_context::size_mode_min_content;
@@ -1304,10 +1311,11 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             // (a minmax(base, Nfr) track already holds its base: the fraction cannot be smaller)
             if (f > 0) fraction = std::max(fraction, std::max(fr_contrib[i], m_grid_layout.column_widths[i]) / f);
         }
+        if (min_content_constraint) fraction = 0;
         for (int i = 0; i < num_columns && i < (int)m_grid_layout.column_widths.size(); i++)
         {
             const pixel_t f = fr_factor(i);
-            m_grid_layout.column_widths[i] = std::max(m_grid_layout.column_widths[i], f > 0 ? fraction * f : fr_contrib[i]);
+            m_grid_layout.column_widths[i] = std::max(m_grid_layout.column_widths[i], std::max(f > 0 ? fraction * f : fr_contrib[i], min_content_constraint ? fr_contrib[i] : (pixel_t)0));
         }
     }
 

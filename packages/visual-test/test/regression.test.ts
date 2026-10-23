@@ -3537,4 +3537,12 @@ describe("grid flexible tracks and zero-width absolute boxes", () => {
     // the spanning item needs 150px: the 30 and 40 columns grow by 40 each (80 missing, shared equally)
     expect(b.find((x) => x.p === "0.1.0.2")?.x).toBe(70);
   });
+
+  it("sizes a nested grid item's min-content from its tracks, so an fr track does not shrink below it", async () => {
+    const b = await layout(
+      '<div style="width:80px;display:grid;grid-template-columns:1fr 1fr"><div style="display:grid;grid-template-columns:repeat(3,1fr);padding:4px"><div style="min-width:40px;min-height:30px;padding:12px"></div></div><div style="height:10px;width:30px"></div></div>',
+    );
+    // the nested grid's min-content width (72px, as in Chromium) is the floor of the first fr track
+    expect(b.find((x) => x.p === "0.1.0.0")?.w).toBe(72);
+  });
 });
