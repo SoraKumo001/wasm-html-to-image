@@ -3521,4 +3521,12 @@ describe("grid flexible tracks and zero-width absolute boxes", () => {
     );
     expect(b.find((x) => x.p === "0.1.0")?.w).toBe(80);
   });
+
+  it("treats a flex factor sum below 1 as 1", async () => {
+    const b = await layout(
+      '<div style="display:grid;grid-template-columns:0.25fr 0.25fr"><div style="height:10px"></div><div style="height:10px"></div></div>',
+    );
+    expect(b.find((x) => x.p === "0.1.0.0")?.w).toBe(150);
+    expect(b.find((x) => x.p === "0.1.0.1")?.x).toBe(150);
+  });
 });

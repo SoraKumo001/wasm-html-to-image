@@ -1230,7 +1230,8 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             pixel_t sum = 0;
             for (int i = 0; i < num_columns; i++) if (active[i]) sum += factor[i];
             if (sum <= 0) break;
-            const pixel_t fr = std::max<pixel_t>(0, leftover) / sum;
+            // (Blink/spec 12.7.1: a flex factor sum below 1 is treated as 1, so 0.25fr 0.25fr leaves space over)
+            const pixel_t fr = std::max<pixel_t>(0, leftover) / std::max<pixel_t>(sum, 1);
             bool frozen = false;
             for (int i = 0; i < num_columns; i++)
             {
