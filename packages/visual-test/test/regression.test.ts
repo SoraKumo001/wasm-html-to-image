@@ -3324,3 +3324,31 @@ describe("flex column: block-level container width", () => {
     expect(boxes.find((b) => b.c === "g")!.w).toBeCloseTo(597, 0);
   });
 });
+
+describe("flex item with a definite width: nested percentage widths", () => {
+  it("resolves a percentage-width image two blocks down against the item's final width", async () => {
+    // The item is measured at its flexed main size (600px) with an auto height. Its shrink-to-fit
+    // measuring flag must not reach the children, or the inner block's width stays indefinite, the
+    // 100% image takes its natural 3000px width and the container ends up as tall as that image.
+    const image = "data:image/svg+xml;utf8," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="3000" height="2000"><rect width="3000" height="2000" fill="#00f"/></svg>`);
+    const heights = async (inner: string) => {
+      let boxes: { i: string; w: number; h: number }[] = [];
+      await render({
+        value: `<!DOCTYPE html><html><head><style>*{margin:0;padding:0} img{display:block}</style></head><body><div id="p" style="display:flex;width:600px">${inner}</div></body></html>`,
+        width: 800,
+        format: "png",
+        onLayout: (b) => {
+          boxes = b;
+        },
+      });
+      return { img: boxes.find((b) => b.i === "s")!, box: boxes.find((b) => b.i === "p")! };
+    };
+    const img = `<img id="s" style="width:100%;height:auto;aspect-ratio:16 / 9" src="${image}">`;
+    for (const inner of [img, `<div>${img}</div>`, `<div><div>${img}</div></div>`, `<a><div>${img}</div></a>`]) {
+      const { img: i, box } = await heights(inner);
+      expect(i.w).toBeCloseTo(600, 0);
+      expect(i.h).toBeCloseTo(337.5, 0);
+      expect(box.h).toBeCloseTo(337.5, 0);
+    }
+  });
+});

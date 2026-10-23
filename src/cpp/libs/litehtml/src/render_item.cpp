@@ -1986,6 +1986,15 @@ litehtml::containing_block_context litehtml::render_item::calculate_containing_b
         ret.size_mode &= ~(containing_block_context::size_mode_content |
                            containing_block_context::size_mode_min_content);
     }
+    // The same holds for a horizontal box whose width is definite, e.g. a flex item measured at its
+    // stretched/shrunk main size: the shrink-to-fit flag it was measured with (its own height is
+    // auto) must not make its children's percentage widths indefinite.
+    if (ret.mode == writing_mode_horizontal_tb &&
+        (cb_context.size_mode & containing_block_context::size_mode_exact_width) &&
+        ret.width.type == containing_block_context::cbc_value_type_absolute) {
+        ret.size_mode &= ~(containing_block_context::size_mode_content |
+                           containing_block_context::size_mode_min_content);
+    }
 
     return ret;
 }
