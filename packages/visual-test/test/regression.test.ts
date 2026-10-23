@@ -3781,3 +3781,16 @@ describe("minmax(min, 1fr) next to an auto track", () => {
     expect(at(350, 5)).toEqual([255, 255, 255]);
   });
 });
+
+describe("floated grid with fr tracks", () => {
+  it("shares the available width instead of overflowing with the max-content sizes", async () => {
+    const long = "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt";
+    const { at } = await renderPng(
+      `<div style="display:grid;grid-template-columns:1fr 1fr;float:left;font:16px sans-serif"><div style="background:#f00">${long}</div><div style="background:#00f">${long}</div></div>`,
+      300, 200,
+    );
+    // two tracks of 150px each inside the 300px viewport
+    expect(at(100, 5)).toEqual([255, 0, 0]);
+    expect(at(250, 5)).toEqual([0, 0, 255]);
+  });
+});

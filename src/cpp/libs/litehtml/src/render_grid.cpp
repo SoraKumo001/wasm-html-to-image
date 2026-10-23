@@ -1319,6 +1319,16 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         }
     }
 
+    if (content_inline && total_fr > 0 && !min_content_constraint && render_inline.value > 0)
+    {
+        // A shrink-to-fit grid is never wider than the space it is given: when the fr tracks' max-content
+        // sizes add up to more, they share that space instead (never below their minimums).
+        pixel_t sum = m_grid_layout.column_gap * (num_columns - 1);
+        for (int i = 0; i < num_columns && i < (int)m_grid_layout.column_widths.size(); i++) sum += m_grid_layout.column_widths[i];
+        if (sum > render_inline.value)
+            resolve_flex_tracks(std::max<pixel_t>(0, render_inline.value - fixed_width), nullptr);
+    }
+
     // Content-sized columns (auto, min-content, max-content, fit-content()): size them from the
     // items that sit in a single column, then re-distribute the space left over to fr columns.
     if (!is_multicol)
