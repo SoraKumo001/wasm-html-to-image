@@ -1363,6 +1363,73 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                 content_total += w;
             }
 
+            // Items spanning several columns (CSS Grid 12.5, "increase sizes to accommodate spanning
+            // items"; Blink processes them by increasing span, after the single-column ones): what an
+            // item needs beyond the tracks it spans is shared equally by the content-sized ones.
+            // Items crossing a flexible track are handled by the fr sizing instead.
+            {
+                std::vector<grid_item*> spanning;
+                for (auto& item : m_grid_layout.items)
+                {
+                    const int span = item.pos.col_end - item.pos.col_start;
+                    if (span < 2 || item.pos.col_end > num_columns) continue;
+                    bool crosses_flex = false;
+                    for (int c = item.pos.col_start; c < item.pos.col_end; c++)
+                    {
+                        const auto& l = columns_template[c];
+                        if (l.units() == css_units_fr ||
+                            (l.is_calc() && l.get_op() == css_length::op_minmax && l.get_operands()[1].units() == css_units_fr))
+                            crosses_flex = true;
+                    }
+                    if (!crosses_flex) spanning.push_back(&item);
+                }
+                std::stable_sort(spanning.begin(), spanning.end(), [](const grid_item* x, const grid_item* y) {
+                    return (x->pos.col_end - x->pos.col_start) < (y->pos.col_end - y->pos.col_start);
+                });
+                for (grid_item* item : spanning)
+                {
+                    const int c0 = item->pos.col_start, c1 = item->pos.col_end;
+                    std::vector<int> targets;
+                    bool all_min = true;
+                    pixel_t spanned = m_grid_layout.column_gap * (c1 - c0 - 1);
+                    for (int c = c0; c < c1; c++)
+                    {
+                        spanned += m_grid_layout.column_widths[c];
+                        if (kinds[c] && kinds[c] != 2) all_min = false;
+                        if (kinds[c]) targets.push_back(c);
+                    }
+                    if (targets.empty()) continue;
+                    containing_block_context cb = self_size;
+                    cb.size_mode &= ~(containing_block_context::size_mode_exact_width | containing_block_context::size_mode_exact_height);
+                    cb.size_mode |= containing_block_context::size_mode_content;
+                    if (all_min) cb.size_mode |= containing_block_context::size_mode_min_content;
+                    else targets.erase(std::remove_if(targets.begin(), targets.end(), [&](int c) { return kinds[c] == 2; }), targets.end());
+                    if (targets.empty()) continue;
+                    pixel_t extra = (pixel_t)std::ceil(item->el->measure(cb, fmt_ctx)) - spanned;
+                    // fit-content() / minmax() tracks stop at their limit; the rest takes what they cannot
+                    auto cap = [&](int c) -> pixel_t {
+                        if (kinds[c] == 4) return std::max(fit_floor[c], columns_template[c].get_operands()[0].calc_percent(render_inline));
+                        if (kinds[c] == 5 && !columns_template[c].get_operands()[1].is_predefined())
+                            return columns_template[c].get_operands()[1].calc_percent(render_inline);
+                        return 1e9f;
+                    };
+                    for (int round = 0; round < (int)targets.size() && extra > 0.01f; round++)
+                    {
+                        std::vector<int> open;
+                        for (int c : targets) if (m_grid_layout.column_widths[c] < cap(c)) open.push_back(c);
+                        if (open.empty()) break;
+                        const pixel_t share = extra / open.size();
+                        for (int c : open)
+                        {
+                            const pixel_t add = std::min(share, cap(c) - m_grid_layout.column_widths[c]);
+                            m_grid_layout.column_widths[c] += add;
+                            content_total += add;
+                            extra -= add;
+                        }
+                    }
+                }
+            }
+
             float fr_sum = 0;
             for (int i = 0; i < num_columns; i++)
             {
