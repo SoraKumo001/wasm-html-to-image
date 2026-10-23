@@ -87,6 +87,18 @@ litehtml::pixel_t litehtml::render_item_flex::_render_content(pixel_t x, pixel_t
 				max_inline_size = std::max(max_inline_size, ln.flex_base_size);
 			}
 			ln.init(container_main_size, fit_container, is_main_inline, self_size, fmt_ctx);
+			// A block-level column container with an auto width is as wide as the space it is given,
+			// not as wide as its widest item (that is what makes it shrink-to-fit, which the content /
+			// min-content modes ask for): the one line is the container's width, so stretched items
+			// fill it and wide items overflow it.
+			if (!is_main_inline && single_line && self_size.mode == writing_mode_horizontal_tb &&
+				self_size.width.type == containing_block_context::cbc_value_type_auto &&
+				!(self_size.size_mode & (containing_block_context::size_mode_content |
+										 containing_block_context::size_mode_min_content)) &&
+				css().get_display() == display_flex && self_size.render_width.value > 0)
+			{
+				ln.cross_size = self_size.render_width.value;
+			}
 			sum_cross_size += ln.cross_size;
 
 			sum_main_size = std::max(sum_main_size, ln.main_size);

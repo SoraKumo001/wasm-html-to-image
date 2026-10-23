@@ -3298,3 +3298,29 @@ describe("grid: math in line values", () => {
     expect(await item("min(2, 3) / span 4")).toMatchObject({ x: 52, w: 184 });
   });
 });
+
+describe("flex column: block-level container width", () => {
+  it("an auto-width column container is as wide as the space it is given, not its widest item", async () => {
+    // A grid with 1fr columns holding a 380px-wide image has a max-content width of 784px; inside a
+    // column flex container that is a block-level box in a 597px grid track, the stretched item must
+    // be 597px (the container's width), as in Chromium.
+    const image = "data:image/svg+xml;utf8," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="380" height="47"><rect width="380" height="47" fill="#00f"/></svg>`);
+    let boxes: { c: string; w: number }[] = [];
+    await render({
+      value: `<!DOCTYPE html><html><head><style>
+        *{margin:0;padding:0} body{width:920px}
+        .o{display:grid;grid-template-columns:597px 200px;column-gap:24px}
+        .fl{display:flex;flex-direction:column;align-items:stretch}
+        .g{display:grid;grid-template-columns:repeat(12,1fr);column-gap:24px}
+        .gi{grid-column:span 6} img{width:100%}
+      </style></head><body><div class="o"><div><div class="fl"><div class="g"><div class="gi"><img src="${image}"></div></div></div></div></div></body></html>`,
+      width: 1000,
+      format: "png",
+      onLayout: (b) => {
+        boxes = b;
+      },
+    });
+    expect(boxes.find((b) => b.c === "fl")!.w).toBeCloseTo(597, 0);
+    expect(boxes.find((b) => b.c === "g")!.w).toBeCloseTo(597, 0);
+  });
+});
