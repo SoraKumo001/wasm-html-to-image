@@ -3607,4 +3607,9 @@ describe("flex item automatic minimum size with a percentage or overridden width
     );
     expect(b.find((x) => x.p === "0.1.0.0")?.w).toBe(120);
   });
+
+  it("clamps an item's contribution to a flex container's intrinsic width by its max-width", async () => {
+    const b = await boxesOf('<div style="display:flex;width:fit-content"><div style="width:200px;max-width:150px;height:10px"></div></div>');
+    expect(b.find((x) => x.p === "0.1.0")?.w).toBe(150);
+  });
 });

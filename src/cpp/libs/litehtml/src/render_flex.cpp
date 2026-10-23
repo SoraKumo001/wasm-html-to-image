@@ -84,7 +84,8 @@ litehtml::pixel_t litehtml::render_item_flex::_render_content(pixel_t x, pixel_t
 		{
 			if(is_main_inline)
 			{
-				max_inline_size = std::max(max_inline_size, ln.flex_base_size);
+				// (the hypothetical main size is the base size clamped by min/max-width)
+				max_inline_size = std::max(max_inline_size, ln.main_size);
 			}
 			ln.init(container_main_size, fit_container, is_main_inline, self_size, fmt_ctx);
 			// A block-level column container with an auto width is as wide as the space it is given,
