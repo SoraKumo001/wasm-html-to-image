@@ -1184,21 +1184,48 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             if (is_definite_minmax(i)) remaining_width -= m_grid_layout.column_widths[i] - columns_template[i].get_operands()[0].calc_percent(render_inline);
         if (remaining_width < 0) remaining_width = 0;
 
+        // Flexible tracks (CSS Grid 12.7.1): the leftover space excludes what the flexible tracks
+        // themselves hold as a base, so `minmax(40px, 1fr) 1fr` over 600px is 300 + 300, not 320 + 280.
+        // A track whose base exceeds its share is frozen at the base and the rest is re-shared.
+        std::vector<pixel_t> factor(num_columns, 0), base(num_columns, 0);
+        std::vector<bool> active(num_columns, false);
+        pixel_t leftover = remaining_width;
         for (int i = 0; i < num_columns; i++)
         {
             const auto& len = columns_template[i];
             if (len.units() == css_units_fr)
             {
-                m_grid_layout.column_widths[i] = (pixel_t)(remaining_width * (len.val() / total_fr));
+                factor[i] = len.val();
+                active[i] = factor[i] > 0;
             }
-            else if (len.is_calc() && len.get_op() == css_length::op_minmax)
+            else if (len.is_calc() && len.get_op() == css_length::op_minmax && len.get_operands()[1].units() == css_units_fr)
             {
-                const auto& max_len = len.get_operands()[1];
-                if (max_len.units() == css_units_fr)
+                factor[i] = len.get_operands()[1].val();
+                base[i] = m_grid_layout.column_widths[i];
+                leftover += base[i];
+                active[i] = factor[i] > 0;
+            }
+        }
+        for (int guard = 0; guard < num_columns + 1; guard++)
+        {
+            pixel_t sum = 0;
+            for (int i = 0; i < num_columns; i++) if (active[i]) sum += factor[i];
+            if (sum <= 0) break;
+            const pixel_t fr = std::max<pixel_t>(0, leftover) / sum;
+            bool frozen = false;
+            for (int i = 0; i < num_columns; i++)
+            {
+                if (active[i] && base[i] > fr * factor[i])
                 {
-                    m_grid_layout.column_widths[i] += (pixel_t)(remaining_width * (max_len.val() / total_fr));
+                    active[i] = false;
+                    leftover -= base[i];
+                    frozen = true;
                 }
             }
+            if (frozen) continue;
+            for (int i = 0; i < num_columns; i++)
+                if (active[i]) m_grid_layout.column_widths[i] = (pixel_t)(fr * factor[i]);
+            break;
         }
     }
     else if (columns_template.empty())

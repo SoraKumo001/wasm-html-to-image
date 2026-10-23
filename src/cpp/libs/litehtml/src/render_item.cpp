@@ -833,7 +833,8 @@ void litehtml::render_item::render_positioned(render_type rt) {
                 }
             }
             el->m_pos.x = left + el->content_offset_left();
-            if (el->m_pos.width != width - el->content_offset_width()) {
+            // (a zero-width box matches by accident when nothing was laid out inside it: measure it)
+            if (el->m_pos.width != width - el->content_offset_width() || el->m_pos.width == 0) {
                 el->m_pos.width = width - el->content_offset_width();
                 need_render = true;
             }
@@ -876,6 +877,7 @@ void litehtml::render_item::render_positioned(render_type rt) {
                             // width, so percentage widths inside resolve against it
                             measure_cb.width = exact_size(width, el->content_offset_width(),
                                                           el->m_margins.left + el->m_margins.right);
+                            measure_cb.render_width = measure_cb.width;
                             measure_cb.size_mode |= containing_block_context::size_mode_exact_width;
                         } else {
                             measure_cb.size_mode |= containing_block_context::size_mode_content;

@@ -3457,3 +3457,47 @@ describe("percentage width inside a shrink-to-fit absolutely positioned box", ()
     expect(boxes.find((b) => b.p === "0.1.0.0")?.w).toBe(40);
   });
 });
+
+describe("grid flexible tracks and zero-width absolute boxes", () => {
+  type B = { p: string; x: number; y: number; w: number; h: number };
+  const layout = async (body: string): Promise<B[]> => {
+    let boxes: B[] = [];
+    await render({
+      value: `<!DOCTYPE html><html><head><style>*{margin:0;padding:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        boxes = b;
+      },
+    });
+    return boxes;
+  };
+
+  it("shares the space of minmax(40px, 1fr) tracks without counting their base twice", async () => {
+    const b = await layout(
+      '<div style="display:grid;grid-template-columns:minmax(40px,1fr) 1fr"><div style="width:90px;height:25px"></div><div style="width:20px;height:10px"></div></div>',
+    );
+    expect(b.find((x) => x.p === "0.1.0.1")?.x).toBe(300);
+  });
+
+  it("freezes a track whose minimum exceeds its share", async () => {
+    const b = await layout(
+      '<div style="display:grid;grid-template-columns:minmax(500px,1fr) 1fr"><div style="height:10px"></div><div style="height:10px"></div></div>',
+    );
+    // the 500px minimum is kept, the other track takes what is left
+    expect(b.find((x) => x.p === "0.1.0.1")?.x).toBe(500);
+    expect(b.find((x) => x.p === "0.1.0.1")?.w).toBe(100);
+  });
+
+  it("lays out the children of a shrink-to-fit absolute box at its solved width", async () => {
+    const b = await layout(
+      '<div style="position:absolute;left:0;top:0"><div style="height:24px"></div><div style="width:5px"></div></div>',
+    );
+    expect(b.find((x) => x.p === "0.1.0.0")?.w).toBe(5);
+  });
+
+  it("keeps the height of an absolute box whose width is 0", async () => {
+    const b = await layout('<div style="position:absolute;left:0;top:0;width:0"><div style="height:24px"></div><div style="height:12px"></div></div>');
+    expect(b.find((x) => x.p === "0.1.0")?.h).toBe(36);
+  });
+});
