@@ -39,9 +39,26 @@ const svgUri = (w: number, h: number) =>
 
 const COLORS = ["#fdd", "#dfd", "#ddf", "#ffd", "#dff", "#fdf", "#eee", "#fed"];
 
+type Kind = "block" | "flex" | "flex-col" | "grid" | "inline-block" | "inline-flex" | "float" | "abs";
+
+/** Which containers and leaves a mode may use; each mode isolates one feature family. */
+const MODES: Record<string, { kinds: Kind[]; leaves: number[] }> = {
+  flex: { kinds: ["flex", "flex", "flex-col", "block"], leaves: [2, 3, 4] },
+  "flex-inline": { kinds: ["flex", "flex-col", "inline-flex", "block"], leaves: [2, 3, 4] },
+  grid: { kinds: ["grid", "grid", "block"], leaves: [2, 3, 4] },
+  "grid-flex": { kinds: ["grid", "flex", "flex-col", "block"], leaves: [2, 3, 4] },
+  block: { kinds: ["block", "block"], leaves: [2, 3, 4] },
+  float: { kinds: ["block", "float", "inline-block"], leaves: [2, 3, 4] },
+  abs: { kinds: ["block", "abs"], leaves: [2, 3, 4] },
+  replaced: { kinds: ["block", "flex", "grid"], leaves: [0, 1] },
+  all: { kinds: ["block", "flex", "flex", "flex-col", "grid", "grid", "inline-block", "inline-flex", "float", "abs"], leaves: [0, 1, 2, 3, 4] },
+};
+
 interface Ctx {
   r: Rng;
   budget: number;
+  kinds: Kind[];
+  leaves: number[];
 }
 
 const size = (r: Rng, allowAuto = true): string => {
@@ -58,7 +75,7 @@ const spacing = (r: Rng, name: string): string => (r.chance(0.35) ? `${name}:${r
 function leaf(c: Ctx): string {
   const r = c.r;
   const color = r.pick(COLORS);
-  switch (r.int(0, 4)) {
+  switch (r.pick(c.leaves)) {
     case 0: {
       const w = r.pick([20, 40, 80, 120, 300]);
       const h = r.pick([10, 30, 50, 90]);
@@ -81,7 +98,7 @@ function leaf(c: Ctx): string {
 
 function container(c: Ctx, depth: number): string {
   const r = c.r;
-  const kind = r.pick(["block", "flex", "flex", "flex-col", "grid", "grid", "inline-block", "inline-flex", "float", "abs"] as const);
+  const kind = r.pick(c.kinds);
   const st: string[] = [`background:${r.pick(COLORS)}`];
   switch (kind) {
     case "block":
@@ -142,9 +159,10 @@ function child(c: Ctx, depth: number): string {
   return container(c, depth);
 }
 
-export function generate(seed: number): string {
+export function generate(seed: number, mode = "all"): string {
   const r = rng(seed);
-  const c: Ctx = { r, budget: 14 };
+  const m = MODES[mode] ?? MODES.all;
+  const c: Ctx = { r, budget: 14, kinds: m.kinds, leaves: m.leaves };
   const root = container(c, 0);
   return `<!doctype html><html><head><style>*{box-sizing:${r.chance(0.5) ? "border-box" : "content-box"}}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${root}</body></html>`;
 }
@@ -158,11 +176,18 @@ function arg(name: string, def: number): number {
   return i >= 0 ? Number(process.argv[i + 1]) : def;
 }
 
+function strArg(name: string, def: string): string {
+  const i = process.argv.indexOf(`--${name}`);
+  return i >= 0 ? process.argv[i + 1] : def;
+}
+
 async function main() {
   const n = arg("n", 200);
   const seed0 = arg("seed", 1);
   const width = arg("width", 600);
   const tol = arg("tol", 1.5);
+  const modeArg = strArg("mode", "all");
+  const modes = modeArg === "each" ? Object.keys(MODES) : [modeArg];
   const outDir = path.join(CACHE_DIR, "fuzz");
   ensureDir(outDir);
   const dir = path.join(outDir, "store");
@@ -170,39 +195,44 @@ async function main() {
   const store = new Store(dir, { url: "http://fuzz.test/", finalUrl: "http://fuzz.test/", capturedAt: "", entries: {} });
 
   const browser = await launchChromium();
-  let ok = 0;
-  const failing: { seed: number; bad: number; entry: string; dh: number }[] = [];
+  const summary: Record<string, { ok: number; n: number }> = {};
+  const failing: { mode: string; seed: number; bad: number; entry: string }[] = [];
   try {
-    for (let s = seed0; s < seed0 + n; s++) {
-      const html = generate(s);
-      let verdict: "ok" | "bad" | "error" = "ok";
-      let info = "";
-      try {
-        const ours = await measureOurs(store, { html }, width);
-        const chrome = await measureChrome(browser, store, { html }, width, { screenshot: false });
-        const cmp = compareBoxes(ours.boxes, chrome.boxes, tol);
-        if (cmp.bad.length || cmp.oursOnly || cmp.chromeOnly) {
-          verdict = "bad";
-          const e = cmp.entries.find((x) => x.p.split('.').length > 2) ?? cmp.entries[0];
-          info = e ? `${e.p} <${e.t}> dx=${e.dx} dy=${e.dy} dw=${e.dw} dh=${e.dh}` : `structure ours+${cmp.oursOnly} chrome+${cmp.chromeOnly}`;
-          failing.push({ seed: s, bad: cmp.bad.length, entry: info, dh: e?.dh ?? 0 });
+    for (const mode of modes) {
+      let ok = 0;
+      for (let s = seed0; s < seed0 + n; s++) {
+        const html = generate(s, mode);
+        let verdict: "ok" | "bad" | "error" = "ok";
+        let info = "";
+        try {
+          const ours = await measureOurs(store, { html }, width);
+          const chrome = await measureChrome(browser, store, { html }, width, { screenshot: false });
+          const cmp = compareBoxes(ours.boxes, chrome.boxes, tol);
+          if (cmp.bad.length || cmp.oursOnly || cmp.chromeOnly) {
+            verdict = "bad";
+            const e = cmp.entries.find((x) => x.p.split(".").length > 2) ?? cmp.entries[0];
+            info = e ? `${e.p} <${e.t}> dx=${e.dx} dy=${e.dy} dw=${e.dw} dh=${e.dh}` : `structure ours+${cmp.oursOnly} chrome+${cmp.chromeOnly}`;
+            failing.push({ mode, seed: s, bad: cmp.bad.length, entry: info });
+          }
+        } catch (err) {
+          verdict = "error";
+          info = String((err as Error).message).slice(0, 120);
+          failing.push({ mode, seed: s, bad: -1, entry: `error: ${info}` });
         }
-      } catch (err) {
-        verdict = "error";
-        info = String((err as Error).message).slice(0, 120);
-        failing.push({ seed: s, bad: -1, entry: `error: ${info}`, dh: 0 });
+        if (verdict === "ok") ok++;
+        else fs.writeFileSync(path.join(outDir, `case-${mode}-${s}.html`), html);
+        if (process.argv.includes("--verbose")) console.log(`[${mode}] seed ${s}: ${verdict} ${info}`);
       }
-      if (verdict === "ok") ok++;
-      else fs.writeFileSync(path.join(outDir, `case-${s}.html`), html);
-      if (verdict !== "ok" || process.argv.includes("--verbose")) console.log(`seed ${s}: ${verdict} ${info}`);
+      summary[mode] = { ok, n };
     }
   } finally {
     await browser.close();
   }
-  const pct = ((ok / n) * 100).toFixed(1);
-  console.log(`\nfuzz: ${ok}/${n} cases match Chromium (${pct}%), width ${width}, tol ${tol}px`);
-  if (failing.length) console.log(`failing cases saved to ${outDir} (replay: pnpm real:fuzz --seed <n> --n 1 --verbose)`);
-  fs.writeFileSync(path.join(outDir, "last.json"), JSON.stringify({ n, seed0, width, tol, ok, failing }, null, 1));
+  console.log(`
+fuzz (width ${width}, tol ${tol}px, seeds ${seed0}..${seed0 + n - 1})`);
+  for (const [m, v] of Object.entries(summary)) console.log(`  ${m.padEnd(12)} ${String(v.ok).padStart(3)}/${v.n}  ${((v.ok / v.n) * 100).toFixed(1)}%`);
+  if (failing.length) console.log(`failing cases saved to ${outDir} (replay: pnpm real:fuzz --mode <m> --seed <n> --n 1 --verbose)`);
+  fs.writeFileSync(path.join(outDir, "last.json"), JSON.stringify({ n, seed0, width, tol, summary, failing }, null, 1));
 }
 
-if (import.meta.url === `file://${process.argv[1].replace(/\\/g, "/")}` || process.argv[1]?.endsWith("fuzz.mts")) await main();
+if (process.argv[1]?.endsWith("fuzz.mts")) await main();
