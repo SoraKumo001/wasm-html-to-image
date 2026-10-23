@@ -3613,3 +3613,32 @@ describe("flex item automatic minimum size with a percentage or overridden width
     expect(b.find((x) => x.p === "0.1.0")?.w).toBe(150);
   });
 });
+
+describe("margins of an empty block", () => {
+  const ys = async (body: string) => {
+    let boxes: { p: string; y: number; h: number }[] = [];
+    await render({
+      value: `<!DOCTYPE html><html><head><style>*{padding:0}html,body{margin:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        boxes = b;
+      },
+    });
+    return boxes;
+  };
+
+  it("collapses its own top and bottom margins into one between two blocks", async () => {
+    const b = await ys('<div style="height:5px"></div><div style="margin:8px"></div><div style="height:5px"></div>');
+    // 5 + max(8, 8) + 5, not 5 + 16 + 5
+    expect(b.find((x) => x.p === "0.1.2")?.y).toBe(13);
+  });
+
+  it("collapses it with the margins of both neighbours", async () => {
+    const b = await ys(
+      '<div style="height:5px;margin-bottom:10px"></div><div style="margin:8px"></div><div style="margin-top:20px;height:5px"></div>',
+    );
+    // the 10, 8 and 20 margins collapse to 20
+    expect(b.find((x) => x.p === "0.1.2")?.y).toBe(25);
+  });
+});

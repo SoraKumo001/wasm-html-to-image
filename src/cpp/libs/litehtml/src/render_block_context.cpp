@@ -9,6 +9,8 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
 	pixel_t max_inline_size = 0;
     pixel_t block_offset = 0;
     pixel_t last_block_margin = 0;
+    // the only in-flow child is an empty block whose margin already left this box through its top edge
+    bool margin_taken_through_top = false;
 	std::shared_ptr<render_item> last_margin_el;
     bool is_first = true;
     satoru::WritingModeContext wm = get_wm_context();
@@ -77,6 +79,29 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
 				// Re-get WM context to ensure we have latest container metrics if needed,
 				// though for margins it might not matter, but el->get_margins() must be fresh.
 				pixel_t current_margin = el->get_wm_context().block_start(el->get_margins());
+
+				// An empty block (no content, no height, no padding or border) collapses through itself:
+				// its top and bottom margins are one margin that also adjoins its neighbours' margins
+				// (CSS 2.1 8.3.1). Keep the combined margin on the top edge (where the box sits and where
+				// it collapses with the previous margin) and report it as the margin the next sibling
+				// collapses with, instead of counting top and bottom separately.
+				bool self_collapsed = false;
+				pixel_t self_collapsed_margin = 0;
+				if(el->children().empty() && el->block_size(el->get_wm_context()) == el->get_wm_context().block_start(el->get_margins()) + el->get_wm_context().block_end(el->get_margins()) &&
+				   el->src_el()->css().get_display() == display_block && !el->src_el()->is_block_formatting_context() && !el->src_el()->is_replaced() &&
+				   el->css().get_height().is_predefined() && el->css().get_min_height().is_predefined())
+				{
+					const pixel_t mt = el->get_wm_context().block_start(el->get_margins());
+					const pixel_t mb = el->get_wm_context().block_end(el->get_margins());
+					const pixel_t combined = (mt >= 0 && mb >= 0) ? std::max(mt, mb) : ((mt <= 0 && mb <= 0) ? std::min(mt, mb) : mt + mb);
+					el->margin_block_start(combined);
+					el->margin_block_end(0);
+					current_margin = combined;
+					self_collapsed = true;
+					// what actually sits in block_offset after this box is its margin collapsed with the one before it
+					self_collapsed_margin = is_first ? combined
+						: std::max<pixel_t>(0, std::max(last_block_margin, combined)) + std::min<pixel_t>(0, std::min(last_block_margin, combined));
+				}
 
 				// Collapse top margin. A negative margin overlaps the previous box (or pulls
 				// the first box above the parent's content edge) instead of adding space, so
@@ -178,8 +203,9 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
 				}
 				margin_block_start(block_start_margin);
                 block_offset += el->block_size(wm);
-                last_block_margin = wm.block_end(el->get_margins());
+                last_block_margin = self_collapsed ? self_collapsed_margin : wm.block_end(el->get_margins());
 				last_margin_el = el;
+                margin_taken_through_top = self_collapsed && is_first;
                 is_first = false;
 
                 if (el->src_el()->css().get_position() == element_position_relative)
@@ -201,7 +227,7 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
             physical_block_size = std::max(physical_block_size, block_offset);
             if(collapse_bottom_margin())
             {
-                physical_block_size -= last_block_margin;
+                if(!margin_taken_through_top) physical_block_size -= last_block_margin;
                 if(margin_block_end() < last_block_margin)
                 {
                     margin_block_end(last_block_margin);
@@ -217,7 +243,7 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
         physical_block_size = block_offset;
         if(collapse_bottom_margin())
         {
-            physical_block_size -= last_block_margin;
+            if(!margin_taken_through_top) physical_block_size -= last_block_margin;
             if(margin_block_end() < last_block_margin)
             {
                 margin_block_end(last_block_margin);
