@@ -3581,3 +3581,30 @@ describe("flex gap after a zero-size item", () => {
     expect(boxes.find((x) => x.p === "0.1.1.1")?.x).toBe(600);
   });
 });
+
+describe("flex item automatic minimum size with a percentage or overridden width", () => {
+  const boxesOf = async (body: string) => {
+    let boxes: { p: string; w: number }[] = [];
+    await render({
+      value: `<!DOCTYPE html><html><head><style>*{margin:0;padding:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        boxes = b;
+      },
+    });
+    return boxes;
+  };
+
+  it("uses a percentage width as the specified size", async () => {
+    const b = await boxesOf('<div style="display:flex;width:40px"><div style="width:30%"><div style="width:50px"></div></div></div>');
+    expect(b.find((x) => x.p === "0.1.0.0")?.w).toBeCloseTo(12, 1);
+  });
+
+  it("uses the width property as the specified size even when flex-basis replaces it", async () => {
+    const b = await boxesOf(
+      '<div style="display:flex;width:120px"><div style="width:60px;flex:1"><div style="width:120px;padding:12px"></div></div></div>',
+    );
+    expect(b.find((x) => x.p === "0.1.0.0")?.w).toBe(120);
+  });
+});

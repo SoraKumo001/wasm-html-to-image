@@ -185,7 +185,14 @@ void litehtml::flex_item_row_direction::direction_specific_init(const litehtml::
 				if(fmt_ctx) fmt_ctx_copy2 = *fmt_ctx;
 				measure_cb.size_mode |= containing_block_context::size_mode_ignore_width;
 				el->measure(measure_cb, fmt_ctx ? &fmt_ctx_copy2 : nullptr);
-				min_main_size = std::min(min_main_size, get_el_main_size());
+				// The specified size is the width property even when flex-basis overrides it for the flex base size.
+				min_main_size = std::min(get_el_main_size(), size_prop.calc_percent(parent_size) + render_offset - el->box_sizing_inline(m_container_wm));
+			}
+			else if (!m_container_wm.is_vertical() && size_prop.units() == css_units_percentage && parent_size > 0 &&
+					 !(self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content)))
+			{
+				// A percentage width against a definite container is a specified size too.
+				min_main_size = std::min(min_main_size, size_prop.calc_percent(parent_size) + render_offset - el->box_sizing_inline(m_container_wm));
 			}
 			content_size = min_main_size;
 		} else
