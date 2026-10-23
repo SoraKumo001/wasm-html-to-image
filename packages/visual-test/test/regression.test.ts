@@ -3249,3 +3249,26 @@ describe("replaced box without a natural size (viewBox-only svg)", () => {
     expect((await svgBox(svg("height:100px"))).w).toBeCloseTo(167.5, 0);
   });
 });
+
+describe("grid: replaced items", () => {
+  it("keeps an image's own size under normal alignment and fills the area only on an explicit stretch", async () => {
+    const svg = "data:image/svg+xml;utf8," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="100" height="50"><rect width="100" height="50" fill="#00f"/></svg>`);
+    const box = async (grid: string) => {
+      let boxes: { t: string; w: number; h: number }[] = [];
+      await render({
+        value: `<!DOCTYPE html><html><head><style>*{margin:0;padding:0}</style></head><body><div style="display:grid;width:600px;${grid}"><img src="${svg}"></div></body></html>`,
+        width: 800,
+        format: "png",
+        onLayout: (b) => {
+          boxes = b;
+        },
+      });
+      return boxes.find((b) => b.t === "img")!;
+    };
+    // Chromium: 100 x 50 (a replaced item is not stretched by `normal`), also in a 1fr/1fr grid
+    expect(await box("")).toMatchObject({ w: 100, h: 50 });
+    expect(await box("grid-template-columns:1fr 1fr")).toMatchObject({ w: 100, h: 50 });
+    expect(await box("grid-template-rows:200px")).toMatchObject({ w: 100, h: 50 });
+    expect((await box("justify-items:stretch")).w).toBe(600);
+  });
+});

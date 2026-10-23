@@ -1702,8 +1702,15 @@ void litehtml::render_item_grid::place_grid_items(pixel_t x, pixel_t y, const co
         if (jst == flex_justify_content_auto) jst = css().get_justify_items();
         flex_align_items aln = item.el->src_el()->css().get_align_self();
         if (aln == flex_align_items_auto) aln = css().get_flex_align_items();
-        const bool j_stretch = jst == flex_justify_content_auto || jst == flex_justify_content_normal || jst == flex_justify_content_stretch;
-        const bool a_stretch = (aln & 0xFF) == flex_align_items_auto || (aln & 0xFF) == flex_align_items_normal || (aln & 0xFF) == flex_align_items_stretch;
+        // `normal` alignment stretches a non-replaced item to its area; a replaced one (an <img>, an
+        // <svg>) keeps its own size and sits at the start, and only an explicit `stretch` fills the
+        // area. A ratio-only <svg> still takes the area's width: that is its block-level width.
+        const bool replaced_item = item.el->src_el()->is_replaced();
+        const bool replaced_start_x = replaced_item && !item.el->src_el()->is_ratio_only_replaced();
+        const bool j_normal = jst == flex_justify_content_auto || jst == flex_justify_content_normal;
+        const bool a_normal = (aln & 0xFF) == flex_align_items_auto || (aln & 0xFF) == flex_align_items_normal;
+        const bool j_stretch = (j_normal && !replaced_start_x) || jst == flex_justify_content_stretch;
+        const bool a_stretch = (a_normal && !replaced_item) || (aln & 0xFF) == flex_align_items_stretch;
         if (!vert)
         {
             if (!j_stretch && item.el->src_el()->css().get_width().is_predefined())
