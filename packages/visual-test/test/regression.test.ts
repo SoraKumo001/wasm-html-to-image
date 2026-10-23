@@ -3657,3 +3657,18 @@ describe("absolute box with a preceding sibling", () => {
     expect(boxes.find((x) => x.p === "0.1.1.1")?.w).toBe(90);
   });
 });
+
+describe("minmax() tracks with an auto / content keyword", () => {
+  it("keeps the minimum of minmax(30px, auto) rows", async () => {
+    let boxes: { p: string; h: number }[] = [];
+    await render({
+      value: `<!DOCTYPE html><html><head><style>*{margin:0;padding:0}</style></head><body><div style="display:grid;grid-auto-rows:minmax(30px,auto)"><div style="height:10px"></div></div></body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        boxes = b;
+      },
+    });
+    expect(boxes.find((x) => x.p === "0.1.0")?.h).toBe(30);
+  });
+});

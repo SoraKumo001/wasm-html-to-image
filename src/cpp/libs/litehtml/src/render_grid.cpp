@@ -1645,6 +1645,13 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         {
             total_row_fr += len.val();
         }
+        else if (len.is_calc() && len.get_op() == css_length::op_minmax && len.get_operands().size() == 2)
+        {
+            // minmax(min, max): the row is never shorter than a definite minimum
+            const auto& mn = len.get_operands()[0];
+            m_grid_layout.row_heights[i] = (!mn.is_predefined() && mn.units() != css_units_fr) ? mn.calc_percent(render_block) : 0;
+            fixed_height += m_grid_layout.row_heights[i];
+        }
         else
         {
             m_grid_layout.row_heights[i] = len.calc_percent(render_block);

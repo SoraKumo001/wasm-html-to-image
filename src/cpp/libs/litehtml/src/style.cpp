@@ -3095,7 +3095,8 @@ namespace litehtml
     length_vector tracks;
     auto add_track = [&](const css_token& tok) {
       css_length len;
-      if (len.from_token(tok, f_length_percentage | f_positive))
+      // (the keywords reach the operands of minmax(): auto = 0, min-content = 1, max-content = 2)
+      if (len.from_token(tok, f_length_percentage | f_positive, "auto;min-content;max-content"))
       {
         tracks.push_back(len);
         return true;
