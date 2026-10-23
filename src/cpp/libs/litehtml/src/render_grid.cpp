@@ -1176,14 +1176,8 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         if (free_width < 0) free_width = 0;
         maximize_definite_minmax(free_width);
     }
-    if (total_fr > 0 && !content_inline)
+    auto resolve_flex_tracks = [&](pixel_t remaining_width, const std::vector<int>* skip)
     {
-        pixel_t remaining_width = render_inline - fixed_width;
-        if (remaining_width < 0) remaining_width = 0;
-        for (int i = 0; i < num_columns; i++)
-            if (is_definite_minmax(i)) remaining_width -= m_grid_layout.column_widths[i] - columns_template[i].get_operands()[0].calc_percent(render_inline);
-        if (remaining_width < 0) remaining_width = 0;
-
         // Flexible tracks (CSS Grid 12.7.1): the leftover space excludes what the flexible tracks
         // themselves hold as a base, so `minmax(40px, 1fr) 1fr` over 600px is 300 + 300, not 320 + 280.
         // A track whose base exceeds its share is frozen at the base and the rest is re-shared.
@@ -1192,6 +1186,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         pixel_t leftover = remaining_width;
         for (int i = 0; i < num_columns; i++)
         {
+            if (skip && (*skip)[i]) continue;
             const auto& len = columns_template[i];
             if (len.units() == css_units_fr)
             {
@@ -1206,6 +1201,30 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                 active[i] = factor[i] > 0;
             }
         }
+        // A plain fr track is minmax(auto, Nfr): it never gets narrower than its items' min-content size.
+        for (auto& item : m_grid_layout.items)
+        {
+            if (item.pos.col_end - item.pos.col_start != 1) continue;
+            const int c = item.pos.col_start;
+            if (c >= num_columns || !active[c] || columns_template[c].units() != css_units_fr) continue;
+            if (item.el->src_el()->css().get_overflow() != overflow_visible) continue;
+            // Only an item whose size is set by CSS (a definite width or min-width, not a percentage)
+            // gives a reliable floor; a text item's min-content size is left to the share.
+            const css_length& iw = item.el->src_el()->css().get_width();
+            const css_length& imw = item.el->src_el()->css().get_min_width();
+            auto definite = [](const css_length& l) { return !l.is_predefined() && !l.is_calc() && l.units() != css_units_percentage; };
+            // An explicit min-width switches the automatic minimum off: it is the floor itself.
+            if (!imw.is_predefined())
+            {
+                if (definite(imw)) base[c] = std::max(base[c], imw.calc_percent(render_inline) + item.el->content_offset_width());
+                continue;
+            }
+            if (!definite(iw)) continue;
+            containing_block_context cb = self_size;
+            cb.size_mode &= ~(containing_block_context::size_mode_exact_width | containing_block_context::size_mode_exact_height);
+            cb.size_mode |= containing_block_context::size_mode_content | containing_block_context::size_mode_min_content;
+            base[c] = std::max(base[c], (pixel_t)std::ceil(item.el->measure(cb, fmt_ctx)));
+        }
         for (int guard = 0; guard < num_columns + 1; guard++)
         {
             pixel_t sum = 0;
@@ -1218,6 +1237,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                 if (active[i] && base[i] > fr * factor[i])
                 {
                     active[i] = false;
+                    m_grid_layout.column_widths[i] = base[i];
                     leftover -= base[i];
                     frozen = true;
                 }
@@ -1227,6 +1247,17 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                 if (active[i]) m_grid_layout.column_widths[i] = (pixel_t)(fr * factor[i]);
             break;
         }
+    };
+
+    if (total_fr > 0 && !content_inline)
+    {
+        pixel_t remaining_width = render_inline - fixed_width;
+        if (remaining_width < 0) remaining_width = 0;
+        for (int i = 0; i < num_columns; i++)
+            if (is_definite_minmax(i)) remaining_width -= m_grid_layout.column_widths[i] - columns_template[i].get_operands()[0].calc_percent(render_inline);
+        if (remaining_width < 0) remaining_width = 0;
+
+        resolve_flex_tracks(remaining_width, nullptr);
     }
     else if (columns_template.empty())
     {
@@ -1253,7 +1284,8 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         for (int i = 0; i < num_columns && i < (int)m_grid_layout.column_widths.size(); i++)
         {
             const pixel_t f = fr_factor(i);
-            if (f > 0) fraction = std::max(fraction, fr_contrib[i] / f);
+            // (a minmax(base, Nfr) track already holds its base: the fraction cannot be smaller)
+            if (f > 0) fraction = std::max(fraction, std::max(fr_contrib[i], m_grid_layout.column_widths[i]) / f);
         }
         for (int i = 0; i < num_columns && i < (int)m_grid_layout.column_widths.size(); i++)
         {
@@ -1287,11 +1319,19 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         if (any_content)
         {
             std::vector<pixel_t> contrib(num_columns, 0);
+            std::vector<pixel_t> fit_floor(num_columns, 0);  // fit-content(): min-content contribution
             for (auto& item : m_grid_layout.items)
             {
                 if (item.pos.col_end - item.pos.col_start != 1) continue;
                 int c = item.pos.col_start;
                 if (c >= num_columns || !kinds[c]) continue;
+                if (kinds[c] == 4)
+                {
+                    containing_block_context mcb = self_size;
+                    mcb.size_mode &= ~(containing_block_context::size_mode_exact_width | containing_block_context::size_mode_exact_height);
+                    mcb.size_mode |= containing_block_context::size_mode_content | containing_block_context::size_mode_min_content;
+                    fit_floor[c] = std::max(fit_floor[c], (pixel_t)std::ceil(item.el->measure(mcb, fmt_ctx)));
+                }
                 containing_block_context cb = self_size;
                 // The grid's own exact size describes its box, not the intrinsic size of an item.
                 cb.size_mode &= ~(containing_block_context::size_mode_exact_width | containing_block_context::size_mode_exact_height);
@@ -1310,7 +1350,8 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             {
                 if (!kinds[i]) continue;
                 pixel_t w = contrib[i];
-                if (kinds[i] == 4) w = std::min(w, columns_template[i].get_operands()[0].calc_percent(render_inline));
+                // fit-content(limit) = max(min-content, min(max-content, limit))
+                if (kinds[i] == 4) w = std::max(fit_floor[i], std::min(w, columns_template[i].get_operands()[0].calc_percent(render_inline)));
                 if (kinds[i] == 5)
                 {
                     const auto& mm = columns_template[i].get_operands();
@@ -1403,22 +1444,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             remaining = maximize_definite_minmax(remaining);
             if (fr_sum > 0 && !content_inline)
             {
-                for (int i = 0; i < num_columns; i++)
-                {
-                    if (kinds[i]) continue;
-                    const auto& l = columns_template[i];
-                    if (l.units() == css_units_fr)
-                    {
-                        m_grid_layout.column_widths[i] = (pixel_t)(remaining * (l.val() / fr_sum));
-                    }
-                    else if (is_definite_minmax(i)) continue;
-                    else if (l.is_calc() && l.get_op() == css_length::op_minmax)
-                    {
-                        m_grid_layout.column_widths[i] = l.get_operands()[0].calc_percent(render_inline);
-                        if (l.get_operands()[1].units() == css_units_fr)
-                            m_grid_layout.column_widths[i] += (pixel_t)(remaining * (l.get_operands()[1].val() / fr_sum));
-                    }
-                }
+                resolve_flex_tracks(remaining, &kinds);
             }
             else if (remaining > 0 && !content_inline)
             {

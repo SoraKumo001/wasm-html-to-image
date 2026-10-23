@@ -3500,4 +3500,25 @@ describe("grid flexible tracks and zero-width absolute boxes", () => {
     const b = await layout('<div style="position:absolute;left:0;top:0;width:0"><div style="height:24px"></div><div style="height:12px"></div></div>');
     expect(b.find((x) => x.p === "0.1.0")?.h).toBe(36);
   });
+
+  it("never shrinks an fr track below its items' min-content size", async () => {
+    const b = await layout(
+      '<div style="width:60px;display:grid;grid-template-columns:2fr 1fr"><div style="width:90px;height:25px"></div><div style="width:20px;height:10px"></div></div>',
+    );
+    expect(b.find((x) => x.p === "0.1.0.1")?.x).toBe(90);
+  });
+
+  it("sizes fit-content(limit) as max(min-content, min(max-content, limit))", async () => {
+    const b = await layout(
+      '<div style="width:fit-content;display:grid;grid-template-columns:fit-content(80px)"><div style="width:90px;height:25px"></div></div>',
+    );
+    expect(b.find((x) => x.p === "0.1.0")?.w).toBe(90);
+  });
+
+  it("gives a shrink-to-fit grid the base of its minmax(base, 1fr) tracks", async () => {
+    const b = await layout(
+      '<div style="width:fit-content;display:grid;grid-template-columns:minmax(40px,1fr) 1fr"><div style="height:24px"></div><div style="height:12px"></div></div>',
+    );
+    expect(b.find((x) => x.p === "0.1.0")?.w).toBe(80);
+  });
 });
