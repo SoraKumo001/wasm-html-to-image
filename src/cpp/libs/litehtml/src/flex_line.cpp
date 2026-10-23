@@ -400,7 +400,7 @@ void litehtml::flex_line::init(pixel_t container_main_size, bool fit_container,
             } else {
                 non_baseline_height = std::max(non_baseline_height, item->get_el_cross_size());
             }
-            if (main_size != 0) main_size += main_gap;
+            if (item != items.front()) main_size += main_gap;
             main_size += item->get_el_main_size();
         }
 
@@ -461,7 +461,7 @@ void litehtml::flex_line::init(pixel_t container_main_size, bool fit_container,
 
             item->el->measure(child_cb, fmt_ctx);
 
-            if (main_size != 0) main_size += main_gap;
+            if (item != items.front()) main_size += main_gap;
             main_size += item->get_el_main_size();
             cross_size = std::max(cross_size, item->get_el_cross_size());
         }

@@ -3563,3 +3563,21 @@ describe("flex item automatic minimum size", () => {
     expect(boxes.find((x) => x.p === "0.1.0.1")?.w).toBeCloseTo(10.91, 1);
   });
 });
+
+describe("flex gap after a zero-size item", () => {
+  it("counts the gap even when the first item has no main size", async () => {
+    let boxes: { p: string; h: number; x: number }[] = [];
+    await render({
+      value: `<!DOCTYPE html><html><head><style>*{margin:0;padding:0}</style></head><body><div style="display:flex;flex-direction:column;gap:10px"><div style="flex:1;height:25px"></div><div style="width:20px;height:10px"></div></div><div style="display:flex;gap:10px;justify-content:space-between"><div style="height:24px"></div><div style="height:12px"></div></div></body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        boxes = b;
+      },
+    });
+    // column: 0 (flex-basis 0) + gap + 10
+    expect(boxes.find((x) => x.p === "0.1.0")?.h).toBe(20);
+    // row: the zero-width items are spread over the 590px left after the gap
+    expect(boxes.find((x) => x.p === "0.1.1.1")?.x).toBe(600);
+  });
+});
