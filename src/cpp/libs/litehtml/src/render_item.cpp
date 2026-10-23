@@ -871,6 +871,12 @@ void litehtml::render_item::render_positioned(render_type rt) {
                             measure_cb.size_mode |= (measure_cb.mode == writing_mode_horizontal_tb
                                                          ? containing_block_context::size_mode_exact_width
                                                          : containing_block_context::size_mode_exact_height);
+                        } else if (measure_cb.mode == writing_mode_horizontal_tb && !el->src_el()->is_replaced()) {
+                            // shrink-to-fit width already solved above: lay the box out at exactly that
+                            // width, so percentage widths inside resolve against it
+                            measure_cb.width = exact_size(width, el->content_offset_width(),
+                                                          el->m_margins.left + el->m_margins.right);
+                            measure_cb.size_mode |= containing_block_context::size_mode_exact_width;
                         } else {
                             measure_cb.size_mode |= containing_block_context::size_mode_content;
                         }

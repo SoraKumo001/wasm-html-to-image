@@ -3441,3 +3441,19 @@ describe("intrinsic width keywords on a block", () => {
     expect(await widthOf("")).toBe(600);
   });
 });
+
+describe("percentage width inside a shrink-to-fit absolutely positioned box", () => {
+  it("resolves against the solved width, not the containing block", async () => {
+    let boxes: { p: string; w: number }[] = [];
+    await render({
+      value: `<!DOCTYPE html><html><head><style>*{margin:0;padding:0}</style></head><body><div style="position:absolute;left:0;top:0"><div id="p" style="width:50%;height:10px"></div><div style="width:80px;height:10px"></div></div></body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        boxes = b;
+      },
+    });
+    expect(boxes.find((b) => b.p === "0.1.0")?.w).toBe(80);
+    expect(boxes.find((b) => b.p === "0.1.0.0")?.w).toBe(40);
+  });
+});
