@@ -1587,6 +1587,14 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             remaining = maximize_definite_minmax(remaining);
             if (fr_sum > 0 && !content_inline)
             {
+                // The first pass left these at their share of the whole width; sharing again must start
+                // from the minimum (the base) of a minmax(min, Nfr) track, not from that share.
+                for (int i = 0; i < num_columns; i++)
+                {
+                    const auto& l = columns_template[i];
+                    if (!kinds[i] && l.is_calc() && l.get_op() == css_length::op_minmax && l.get_operands()[1].units() == css_units_fr)
+                        m_grid_layout.column_widths[i] = l.get_operands()[0].calc_percent(render_inline);
+                }
                 resolve_flex_tracks(remaining, &kinds);
             }
             else if (remaining > 0 && !content_inline)

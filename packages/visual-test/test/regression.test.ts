@@ -3769,3 +3769,15 @@ describe("fr track with text in a narrow grid", () => {
     expect(at(120, 5)).toEqual([255, 0, 0]);
   });
 });
+
+describe("minmax(min, 1fr) next to an auto track", () => {
+  it("shares only the space the auto track leaves, starting from the minimum", async () => {
+    const { at } = await renderPng(
+      '<div style="display:grid;grid-template-columns:minmax(50px,1fr) auto;width:300px"><div style="background:#f00;height:10px"></div><div style="background:#00f;width:100px;height:10px"></div></div>',
+      400, 40,
+    );
+    expect(at(150, 5)).toEqual([255, 0, 0]);
+    expect(at(250, 5)).toEqual([0, 0, 255]);
+    expect(at(350, 5)).toEqual([255, 255, 255]);
+  });
+});
