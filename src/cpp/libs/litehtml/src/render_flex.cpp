@@ -164,7 +164,8 @@ litehtml::pixel_t litehtml::render_item_flex::_render_content(pixel_t x, pixel_t
 
 	pixel_t free_cross_size = 0;
 	bool is_wrap_reverse = css().get_flex_wrap() == flex_wrap_wrap_reverse;
-	if(container_main_size == 0)
+	// (a column with an auto block size has no main size yet; a row of width 0 really is 0 wide)
+	if(container_main_size == 0 && (!is_main_inline || self_size.render_inline_size().type == containing_block_context::cbc_value_type_auto))
 	{
 		container_main_size = sum_main_size;
 	}

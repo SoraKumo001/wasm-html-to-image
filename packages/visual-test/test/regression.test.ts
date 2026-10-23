@@ -3898,3 +3898,15 @@ describe("justify-content: space-around with overflowing items", () => {
     expect(at(110, 2)).toEqual([255, 0, 0]);
   });
 });
+
+describe("flex container of width 0", () => {
+  it("is really 0 wide: a centred item overflows on both sides", async () => {
+    const { at } = await renderPng(
+      '<div style="margin-left:100px;display:flex;justify-content:center;width:0"><div style="width:10px;height:5px;background:#f00;flex:none"></div></div>',
+      300, 20,
+    );
+    // centred on x=100: the item spans 95..105 (it used to start at 100 as if the container were 10px wide)
+    expect(at(97, 2)).toEqual([255, 0, 0]);
+    expect(at(107, 2)).toEqual([255, 255, 255]);
+  });
+});
