@@ -3532,9 +3532,9 @@ describe("grid flexible tracks and zero-width absolute boxes", () => {
 
   it("grows content-sized tracks to fit an item spanning them", async () => {
     const b = await layout(
-      '<div style="display:grid;grid-template-columns:auto auto"><div style="grid-column:span 2;width:150px;height:20px"></div><div style="width:30px;height:10px"></div><div style="width:40px;height:10px"></div></div>',
+      '<div style="width:fit-content;display:grid;grid-template-columns:auto auto"><div style="grid-column:span 2;width:150px;height:20px"></div><div style="width:30px;height:10px"></div><div style="width:40px;height:10px"></div></div>',
     );
-    // the spanning item needs 150px: the 30 + 40 of the single-column items grow by 80 in equal shares
-    expect(b.find((x) => x.p === "0.1.0.2")?.x).toBe(75);
+    // the spanning item needs 150px: the 30 and 40 columns grow by 40 each (80 missing, shared equally)
+    expect(b.find((x) => x.p === "0.1.0.2")?.x).toBe(70);
   });
 });
