@@ -3819,3 +3819,14 @@ describe("padded grid item row height", () => {
     expect(height).toBe(30);
   });
 });
+
+describe("fit-content() track in a grid that is too narrow", () => {
+  it("shrinks like an auto track to make room for the fr track's minimum", async () => {
+    const { at } = await renderPng(
+      '<div style="display:grid;grid-template-columns:fit-content(200px) 1fr;width:150px;font:16px sans-serif"><div style="background:#00f">a b c d e f g h i j k l</div><div style="background:#f00;width:100px;height:10px"></div></div>',
+      300, 120,
+    );
+    expect(at(60, 3)).toEqual([255, 0, 0]);
+    expect(at(10, 3)).toEqual([0, 0, 255]);
+  });
+});

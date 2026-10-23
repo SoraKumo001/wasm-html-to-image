@@ -1511,7 +1511,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                 std::vector<int> autos;
                 pixel_t auto_total = 0;
                 for (int i = 0; i < num_columns; i++)
-                    if (kinds[i] == 1) { autos.push_back(i); auto_total += m_grid_layout.column_widths[i]; }
+                    if (kinds[i] == 1 || kinds[i] == 4) { autos.push_back(i); auto_total += m_grid_layout.column_widths[i]; }
                 if (!autos.empty())
                 {
                     std::vector<pixel_t> minc(num_columns, 0);
@@ -1519,7 +1519,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                     {
                         if (item.pos.col_end - item.pos.col_start != 1) continue;
                         int c = item.pos.col_start;
-                        if (c >= num_columns || kinds[c] != 1) continue;
+                        if (c >= num_columns || (kinds[c] != 1 && kinds[c] != 4)) continue;
                         if (item.el->src_el()->css().get_overflow() != overflow_visible) continue;
                         // An explicit min-width switches the automatic minimum off: it is the floor itself.
                         {
