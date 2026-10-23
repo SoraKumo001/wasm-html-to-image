@@ -15,7 +15,11 @@ litehtml::pixel_t litehtml::render_item_block::place_float(const std::shared_ptr
 
     pixel_t ret_inline_size = 0;
 
-	pixel_t min_rendered_inline_size = el->measure(self_size.new_inline_size(line_inline_end, self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content)), fmt_ctx);
+	// A width:auto float is as wide as its content: measure it in content mode so that a child held
+	// up only by min-width (no content of its own) still counts.
+	int float_mode = self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content);
+	if(el->src_el()->css().get_width().is_predefined()) float_mode |= containing_block_context::size_mode_content;
+	pixel_t min_rendered_inline_size = el->measure(self_size.new_inline_size(line_inline_end, float_mode), fmt_ctx);
 	if (!(self_size.size_mode & containing_block_context::size_mode_measure))
 	{
 		el->place_logical(line_inline_start, line_block_start, self_size.new_inline_size(line_inline_end, self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content)), fmt_ctx);
@@ -37,7 +41,8 @@ litehtml::pixel_t litehtml::render_item_block::place_float(const std::shared_ptr
 	const bool shrunk_to_fit = min_rendered_inline_size < el->inline_size() && el->src_el()->css().get_width().is_predefined();
 	if(shrunk_to_fit)
 	{
-		min_rendered_inline_size = el->measure(self_size.new_inline_size(min_rendered_inline_size, self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content)), fmt_ctx);
+		// (a box held up by min-width reports 0 once it is given its width exactly: keep the content size)
+		min_rendered_inline_size = std::max(min_rendered_inline_size, el->measure(self_size.new_inline_size(min_rendered_inline_size, self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content)), fmt_ctx));
 		if (!(self_size.size_mode & containing_block_context::size_mode_measure))
 		{
 			el->place_logical(line_inline_start, line_block_start, self_size.new_inline_size(min_rendered_inline_size, self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content)), fmt_ctx);
@@ -348,6 +353,11 @@ litehtml::pixel_t litehtml::render_item_block::_measure(const containing_block_c
 		if(physical_inline_size < self_size.min_inline_size())
 		{
 			physical_inline_size = self_size.min_inline_size();
+		}
+		// min-width is part of the content size this box reports to a shrink-to-fit parent
+		if(containing_block_size.size_mode & containing_block_context::size_mode_content)
+		{
+			ret_inline_size = std::max(ret_inline_size, physical_inline_size);
 		}
 	} else {
         pixel_t& physical_inline_size = (self_size.mode == writing_mode_horizontal_tb) ? m_pos.width : m_pos.height;

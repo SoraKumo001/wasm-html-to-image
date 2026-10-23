@@ -3429,6 +3429,13 @@ describe("intrinsic width keywords on a block", () => {
     expect(await widthOf("width:fit-content;margin:12px")).toBe(80);
   });
 
+  it("counts a child's min-width in the content size of a shrink-to-fit box", async () => {
+    const held = '<div style="min-width:100px;height:10px"></div>';
+    expect(await widthOf("width:fit-content", held)).toBe(100);
+    expect(await widthOf("float:left", held)).toBe(100);
+    expect(await widthOf("float:left", `<div style="padding:4px">${held}</div>`)).toBe(108);
+  });
+
   it("keeps fit-content within the available width, and plain blocks full width", async () => {
     expect(await widthOf("width:fit-content", '<div style="width:900px;height:20px"></div>')).toBe(600);
     expect(await widthOf("")).toBe(600);

@@ -116,7 +116,7 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
 					rw = el->measure(self_size.new_inline_size(inline_available_size, content_mode), fmt_ctx);
 					if(rw < inline_available_size || kw == 3)
 					{
-						rw = el->measure(self_size.new_inline_size(rw, self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content)), fmt_ctx);
+						el->measure(self_size.new_inline_size(rw, self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content)), fmt_ctx);
 						inline_available_size = rw;
 					}
 					if (!(self_size.size_mode & containing_block_context::size_mode_measure))
