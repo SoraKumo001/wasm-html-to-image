@@ -229,7 +229,17 @@ bool litehtml::render_item_inline_context::text_wrap_eligible(const containing_b
 
 litehtml::pixel_t litehtml::render_item_inline_context::_render_content(pixel_t /*x*/, pixel_t /*y*/, bool /*second_pass*/, const containing_block_context &self_size, formatting_context* fmt_ctx)
 {
-    layout_lines(self_size, fmt_ctx);
+    // min-content size of inline content: every break opportunity breaks, so the widest line is the
+    // widest unbreakable run (a word, an atomic inline). Lay it out in a 1px line to get that.
+    if ((self_size.size_mode & containing_block_context::size_mode_min_content) &&
+        (self_size.size_mode & containing_block_context::size_mode_content) &&
+        self_size.mode == writing_mode_horizontal_tb)
+    {
+        layout_lines(self_size.new_inline_size(1, self_size.size_mode), fmt_ctx);
+    } else
+    {
+        layout_lines(self_size, fmt_ctx);
+    }
     apply_text_wrap_style(self_size, fmt_ctx);
 
     if (!m_line_boxes.empty())

@@ -204,6 +204,10 @@ void litehtml::flex_item_row_direction::direction_specific_init(const litehtml::
 	{
 		min_main_size = min_size_prop.calc_percent(parent_size) + render_offset - el->box_sizing_inline(m_container_wm);
 	}
+	// min-content contribution: a definite width counts in full, otherwise the item's min-content size
+	min_content_contribution = min_main_size;
+	if (!m_container_wm.is_vertical() && !size_prop.is_predefined() && size_prop.units() != css_units_percentage)
+		min_content_contribution = std::max(min_main_size, size_prop.calc_percent(parent_size) + render_offset - el->box_sizing_inline(m_container_wm));
 	if (!max_size_prop.is_predefined())
 	{
 		max_main_size = max_size_prop.calc_percent(parent_size) + render_offset - el->box_sizing_inline(m_container_wm);

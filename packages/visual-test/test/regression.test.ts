@@ -3730,3 +3730,31 @@ describe("grid rows sharing free space", () => {
     expect(b.find((x) => x.p === "0.1.0.0")?.h).toBe(70);
   });
 });
+
+describe("min-content size of flex content in a grid track", () => {
+  const widthOf = async (inner: string): Promise<number> => {
+    let boxes: { p: string; w: number }[] = [];
+    await render({
+      value: `<!DOCTYPE html><html><head><style>*{margin:0;padding:0}</style></head><body><div style="display:grid;grid-template-columns:min-content">${inner}</div></body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        boxes = b;
+      },
+    });
+    return boxes.find((x) => x.p === "0.1.0.0")?.w ?? -1;
+  };
+
+  it("is the sum of the items for a row that cannot wrap", async () => {
+    expect(await widthOf('<div style="display:flex"><div style="min-width:30px;height:5px"></div><div style="min-width:40px;height:5px"></div></div>')).toBe(70);
+  });
+
+  it("is the widest item for a wrapping row and for a column", async () => {
+    expect(await widthOf('<div style="display:flex;flex-wrap:wrap"><div style="min-width:30px;height:5px"></div><div style="min-width:40px;height:5px"></div></div>')).toBe(40);
+    expect(await widthOf('<div style="display:flex;flex-direction:column"><div style="min-width:30px;height:5px"></div><div style="min-width:40px;height:5px"></div></div>')).toBe(40);
+  });
+
+  it("counts a definite width in full even when the item can shrink", async () => {
+    expect(await widthOf('<div style="display:flex"><div style="width:90px;flex:1;height:5px"></div></div>')).toBe(90);
+  });
+});

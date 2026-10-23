@@ -26,7 +26,9 @@ litehtml::pixel_t litehtml::render_item_image::_measure(
     // (shrink-to-fit / min-content): it contributes 0 to the min-content size instead of falling
     // back to the intrinsic size. This is what lets a flex item shrink below its image's natural
     // width (Chromium: the min-content contribution of a percentage-width replaced element is 0).
-    if (is_min_content && css().get_width().units() == css_units_percentage) {
+    // (a replaced element with a percentage max-width is compressible too: CSS Sizing 5.2.2)
+    if (is_min_content && (css().get_width().units() == css_units_percentage ||
+                           (css().get_max_width().units() == css_units_percentage && css().get_width().is_predefined()))) {
         m_pos.width = 0;
         m_pos.height = 0;
         src_el()->css_w().line_height_w().computed_value = height();

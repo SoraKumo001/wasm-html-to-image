@@ -68,12 +68,18 @@ litehtml::pixel_t litehtml::render_item_flex::_render_content(pixel_t x, pixel_t
 	pixel_t sum_cross_size = 0;
 	pixel_t sum_main_size = 0;
 	pixel_t max_inline_size = 0;
+	pixel_t min_content_main = 0;
+	const bool min_content_query_col = !is_main_inline && (self_size.size_mode & containing_block_context::size_mode_min_content) &&
+		(self_size.size_mode & containing_block_context::size_mode_content) && self_size.mode == writing_mode_horizontal_tb;
+	const bool min_content_query = is_main_inline && (self_size.size_mode & containing_block_context::size_mode_min_content) &&
+		(self_size.size_mode & containing_block_context::size_mode_content) && self_size.mode == writing_mode_horizontal_tb;
 
 	auto resolve_lines = [&]()
 	{
 		sum_cross_size = 0;
 		sum_main_size = 0;
 		max_inline_size = 0;
+		min_content_main = 0;
 		m_lines = get_lines(self_size, fmt_ctx, is_main_inline, container_main_size, single_line, main_gap);
 
 		/////////////////////////////////////////////////////////////////
@@ -86,6 +92,21 @@ litehtml::pixel_t litehtml::render_item_flex::_render_content(pixel_t x, pixel_t
 			{
 				// (the hypothetical main size is the base size clamped by min/max-width)
 				max_inline_size = std::max(max_inline_size, ln.main_size);
+				// min-content size of a row container: the items side by side when they cannot wrap, the widest
+				// item otherwise (CSS Flexbox 9.9.1); an item contributes its automatic minimum size.
+				if ((self_size.size_mode & containing_block_context::size_mode_min_content) &&
+					(self_size.size_mode & containing_block_context::size_mode_content) && self_size.mode == writing_mode_horizontal_tb)
+				{
+					pixel_t min_sum = 0, min_max = 0;
+					bool first_item = true;
+					for (auto& fi : ln.items)
+					{
+						min_sum += (first_item ? 0 : main_gap) + fi->min_content_contribution;
+						min_max = std::max(min_max, fi->min_content_contribution);
+						first_item = false;
+					}
+					min_content_main = std::max(min_content_main, single_line ? min_sum : min_max);
+				}
 			}
 			ln.init(container_main_size, fit_container, is_main_inline, self_size, fmt_ctx);
 			// A block-level column container with an auto width is as wide as the space it is given,
@@ -436,7 +457,20 @@ litehtml::pixel_t litehtml::render_item_flex::_render_content(pixel_t x, pixel_t
 		}
 	}
 
-	return max_inline_size;
+	if (min_content_query_col)
+	{
+		// min-content width of a column container: the widest item's min-content contribution
+		pixel_t widest = 0;
+		for (auto& ln : m_lines)
+			for (auto& fi : ln.items)
+			{
+				containing_block_context cb = self_size;
+				cb.size_mode = (self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content));
+				widest = std::max(widest, (pixel_t)fi->el->measure(cb, fmt_ctx));
+			}
+		return widest;
+	}
+	return min_content_query ? min_content_main : max_inline_size;
 }
 
 std::list<litehtml::flex_line> litehtml::render_item_flex::get_lines(const litehtml::containing_block_context &self_size,

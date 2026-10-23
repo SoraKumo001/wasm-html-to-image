@@ -1500,10 +1500,20 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                         int c = item.pos.col_start;
                         if (c >= num_columns || kinds[c] != 1) continue;
                         if (item.el->src_el()->css().get_overflow() != overflow_visible) continue;
+                        // An explicit min-width switches the automatic minimum off: it is the floor itself.
+                        {
+                            const css_length& imw = item.el->src_el()->css().get_min_width();
+                            if (!imw.is_predefined())
+                            {
+                                if (!imw.is_calc() && imw.units() != css_units_percentage)
+                                    minc[c] = std::max(minc[c], std::min(imw.calc_percent(render_inline) + item.el->content_offset_width(), m_grid_layout.column_widths[c]));
+                                continue;
+                            }
+                        }
                         containing_block_context cb = self_size;
                         // The grid's own exact size describes its box, not the intrinsic size of an item.
                         cb.size_mode &= ~(containing_block_context::size_mode_exact_width | containing_block_context::size_mode_exact_height);
-                        cb.size_mode |= containing_block_context::size_mode_min_content;
+                        cb.size_mode |= containing_block_context::size_mode_content | containing_block_context::size_mode_min_content;
                         pixel_t measured = item.el->measure(cb, fmt_ctx);
                         pixel_t w = std::max((pixel_t)item.el->inline_size(), measured);
                         minc[c] = std::max(minc[c], std::min((pixel_t)std::ceil(w), m_grid_layout.column_widths[c]));

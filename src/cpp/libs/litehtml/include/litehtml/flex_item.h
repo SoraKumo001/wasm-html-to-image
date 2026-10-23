@@ -32,6 +32,8 @@ namespace litehtml
 		pixel_t hypothetical_main_size;
 		pixel_t main_size; // Used outer main size after resolving flexible lengths.
 		pixel_t min_main_size;
+		// what the item adds to its container's min-content size: its definite width, else its min-content size
+		pixel_t min_content_contribution = 0;
 		def_value<pixel_t> max_main_size;
 
 		int grow;
