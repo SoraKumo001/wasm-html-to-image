@@ -1,5 +1,6 @@
 #include "render_image.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <iostream>
 
@@ -57,7 +58,24 @@ litehtml::pixel_t litehtml::render_item_image::_measure(
         used_ratio = (float)sz.height / (float)sz.width;
     }
 
-    if (width_is_auto && height_is_auto) {
+    if (width_is_auto && height_is_auto && src_el()->is_ratio_only_replaced()) {
+        // An aspect ratio but no natural size (CSS 2.1 10.3.2): the width comes from the block-level
+        // equation, i.e. the containing block's width. Its min-content contribution is cyclic and
+        // counts as 0 (as for a percentage width), except for an absolutely positioned box, which is
+        // sized against its own containing block. The max-content (shrink-to-fit) size keeps the
+        // fill: the document root is measured in that mode, so it cannot tell a float from a block.
+        const bool positioned = css().get_position() == element_position_absolute ||
+                                css().get_position() == element_position_fixed;
+        if (is_min_content && !positioned) {
+            m_pos.width = 0;
+        } else {
+            const pixel_t avail = containing_block_size.render_width.type == containing_block_context::cbc_value_type_auto
+                                      ? (pixel_t)containing_block_size.width
+                                      : (pixel_t)containing_block_size.render_width;
+            m_pos.width = std::max<pixel_t>(0, avail - content_offset_width());
+        }
+        m_pos.height = used_ratio > 0 ? m_pos.width * used_ratio : sz.height;
+    } else if (width_is_auto && height_is_auto) {
         // Both axes auto: the intrinsic inline size, with the used ratio (or the intrinsic ratio
         // when there is no explicit aspect-ratio) deriving the block size.
         m_pos.width = sz.width;

@@ -167,6 +167,20 @@ void el_svg::parse_presentational_hints() {
     html_tag::parse_presentational_hints();
 }
 
+bool el_svg::is_ratio_only_replaced() const {
+    // No intrinsic width or height (absent, or a percentage), but a usable viewBox for the ratio.
+    auto has_size = [&](const char* name) {
+        const char* v = get_attr(name);
+        return v && !strchr(v, '%') && atof(v) > 0;
+    };
+    if (has_size("width") || has_size("height")) return false;
+    const char* vb = get_attr("viewbox");
+    float vx, vy, vw, vh;
+    return vb && (sscanf(vb, "%f %f %f %f", &vx, &vy, &vw, &vh) == 4 ||
+                  sscanf(vb, "%f,%f,%f,%f", &vx, &vy, &vw, &vh) == 4) &&
+           vw > 0 && vh > 0;
+}
+
 void el_svg::get_content_size(size& sz, pixel_t max_width) {
     // Only absolute lengths are an intrinsic size; "100%" is not 100px.
     auto absolute_px = [](const css_length& len) -> pixel_t {

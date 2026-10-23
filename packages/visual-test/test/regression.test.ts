@@ -3203,3 +3203,49 @@ describe("onLayout", () => {
     expect(boxes.find((b) => b.t === "body")?.p).toBe("0.1");
   });
 });
+
+describe("replaced box without a natural size (viewBox-only svg)", () => {
+  type Box = { t: string; x: number; y: number; w: number; h: number };
+  const svgBox = async (inner: string, wrapStyle = "width:600px"): Promise<Box> => {
+    let boxes: Box[] = [];
+    await render({
+      value: `<!DOCTYPE html><html><head><style>*{margin:0;padding:0}</style></head><body><div style="${wrapStyle}">${inner}</div></body></html>`,
+      width: 800,
+      format: "png",
+      onLayout: (b) => {
+        boxes = b;
+      },
+    });
+    return boxes.find((b) => b.t === "svg")!;
+  };
+  const svg = (style = "") => `<svg viewBox="0 0 1216 726" style="${style}"><rect width="1216" height="726"/></svg>`;
+
+  it("fills the containing block's width and takes its height from the viewBox ratio", async () => {
+    // Chromium: 600 x 358.2, not the viewBox size 1216 x 726 (CSS 2.1 10.3.2)
+    for (const inner of [svg(), `<span>${svg()}</span>`, `text ${svg()}`]) {
+      const b = await svgBox(inner);
+      expect(b.w).toBeCloseTo(600, 0);
+      expect(b.h).toBeCloseTo(358.2, 0);
+    }
+  });
+  it("an absolutely positioned one fills the space between its insets and centres on an auto margin", async () => {
+    const rel = "position:relative;width:600px;height:200px";
+    // left/right: 0 -> 600 wide; top/bottom: 0 with auto margins centres the 358px box (y = -79.1)
+    const a = await svgBox(svg("position:absolute;inset:0;margin:auto"), rel);
+    expect(a).toMatchObject({ x: 0 });
+    expect(a.w).toBeCloseTo(600, 0);
+    expect(a.y).toBeCloseTo(-79.1, 0);
+    // a given height derives the width from the ratio, centred horizontally
+    const b = await svgBox(svg("position:absolute;inset:0;margin:auto;height:100px"), rel);
+    expect(b.w).toBeCloseTo(167.5, 0);
+    expect(b.x).toBeCloseTo(216.3, 0);
+    // the insets narrow it
+    const c = await svgBox(svg("position:absolute;left:50px;right:100px"), rel);
+    expect(c.x).toBeCloseTo(50, 0);
+    expect(c.w).toBeCloseTo(450, 0);
+  });
+  it("keeps a natural size when width or height is given", async () => {
+    expect((await svgBox(svg("width:200px"))).h).toBeCloseTo(119.4, 0);
+    expect((await svgBox(svg("height:100px"))).w).toBeCloseTo(167.5, 0);
+  });
+});

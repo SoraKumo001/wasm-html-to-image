@@ -492,6 +492,29 @@ void litehtml::render_item::render_positioned(render_type rt) {
                 return width;
             };
 
+            // A replaced box takes its size from its own content (10.3.8/10.6.5), which the in-flow
+            // pass never measured for an absolutely positioned one: measure it here, against the width
+            // left between the insets when both are given (a ratio-only <svg> fills that width). Only
+            // the size is kept; the position is solved below.
+            if (el->src_el()->is_replaced()) {
+                pixel_t avail = containing_block_size.width;
+                if (!css_left.is_predefined() && !css_right.is_predefined()) {
+                    avail -= css_left.calc_percent(containing_block_size.width) +
+                             css_right.calc_percent(containing_block_size.width);
+                }
+                const pixel_t keep_x = el->m_pos.x;
+                const pixel_t keep_y = el->m_pos.y;
+                // (new_width() would add the old width as a "diff": this containing block has no
+                // render_width, so set both fields.)
+                containing_block_context natural_cb = containing_block_size;
+                natural_cb.width = std::max<pixel_t>(0, avail);
+                natural_cb.render_width = natural_cb.width;
+                natural_cb.size_mode = containing_block_context::size_mode_content;
+                el->measure(natural_cb, nullptr);
+                el->m_pos.x = keep_x;
+                el->m_pos.y = keep_y;
+            }
+
             pixel_t bottom = 0;
             pixel_t top = 0;
             pixel_t height = 0;
@@ -552,7 +575,9 @@ void litehtml::render_item::render_positioned(render_type rt) {
                     height = el->height() - el->content_offset_height();
                     pixel_t reminded = (containing_block_size.height - top - bottom) - height -
                                        el->content_offset_height();
-                    if (reminded > 0) {
+                    // Auto margins centre the box vertically even when it overflows (a negative
+                    // remainder); only the horizontal axis floors them at 0.
+                    if (reminded != 0) {
                         int divider = 0;
                         if (el->css().get_margins().top.is_predefined()) divider++;
                         if (el->css().get_margins().bottom.is_predefined()) divider++;
