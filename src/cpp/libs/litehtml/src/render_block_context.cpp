@@ -265,8 +265,14 @@ litehtml::pixel_t litehtml::render_item_block_context::get_first_baseline()
 	{
 		return wm.is_vertical() ? default_baseline() : block_size(wm) - margin_block_end();
 	}
-	const auto &item = m_children.front();
-	return content_offset_block(wm) + item->block_start_pos(wm) + item->get_first_baseline();
+	for(const auto &item : m_children)
+	{
+		if(item->has_baseline())
+		{
+			return content_offset_block(wm) + item->block_start_pos(wm) + item->get_first_baseline();
+		}
+	}
+	return wm.is_vertical() ? default_baseline() : block_size(wm) - margin_block_end();
 }
 
 litehtml::pixel_t litehtml::render_item_block_context::get_last_baseline()
@@ -276,8 +282,14 @@ litehtml::pixel_t litehtml::render_item_block_context::get_last_baseline()
 	{
 		return wm.is_vertical() ? default_baseline() : block_size(wm) - margin_block_end();
 	}
-	const auto &item = m_children.back();
-	return content_offset_block(wm) + item->block_start_pos(wm) + item->get_last_baseline();
+	for(auto it = m_children.rbegin(); it != m_children.rend(); ++it)
+	{
+		if((*it)->has_baseline())
+		{
+			return content_offset_block(wm) + (*it)->block_start_pos(wm) + (*it)->get_last_baseline();
+		}
+	}
+	return wm.is_vertical() ? default_baseline() : block_size(wm) - margin_block_end();
 }
 
 

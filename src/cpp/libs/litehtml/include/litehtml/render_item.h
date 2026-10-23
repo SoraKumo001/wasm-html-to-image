@@ -628,6 +628,9 @@ namespace litehtml
                  * Get first baseline position. Default position is element bottom without bottom margin.
                  * @returns offset of the first baseline from element top
                  */
+                // False for a box with no line of text to take a baseline from (an empty block);
+                // a parent block then looks at its next child instead.
+                virtual bool has_baseline() { return true; }
                 virtual pixel_t get_first_baseline() { return default_baseline(); }
                 /**
                  * Get the last baseline position.  The default position is element bottom without bottom margin.

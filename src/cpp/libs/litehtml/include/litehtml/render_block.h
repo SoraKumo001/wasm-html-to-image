@@ -37,6 +37,7 @@ namespace litehtml
 		}
 		std::shared_ptr<render_item> init() override;
 		void apply_vertical_align() override;
+		bool has_baseline() override;
 		pixel_t get_first_baseline() override;
 		pixel_t get_last_baseline() override;
 	};

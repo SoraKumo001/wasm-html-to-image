@@ -607,13 +607,27 @@ void litehtml::render_item_block::apply_vertical_align()
     }
 }
 
+bool litehtml::render_item_block::has_baseline()
+{
+    for (const auto& el : m_children)
+    {
+        if (el->src_el()->css().get_display() != display_none &&
+            el->src_el()->css().get_float() == float_none &&
+            !el->src_el()->is_positioned() && el->has_baseline())
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 litehtml::pixel_t litehtml::render_item_block::get_first_baseline()
 {
     for (const auto& el : m_children)
     {
         if (el->src_el()->css().get_display() != display_none &&
             el->src_el()->css().get_float() == float_none &&
-            !el->src_el()->is_positioned())
+            !el->src_el()->is_positioned() && el->has_baseline())
         {
             return el->pos().y + el->get_first_baseline();
         }

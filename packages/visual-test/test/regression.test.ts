@@ -3921,3 +3921,16 @@ describe("flex-basis wider than the width of a shrinkable item", () => {
     expect(at(40, 2)).toEqual([255, 255, 255]);
   });
 });
+
+describe("first baseline of a block whose first child is empty", () => {
+  it("skips the empty child: a flex item's baseline falls back to its bottom edge", async () => {
+    const { at } = await renderPng(
+      '<div style="display:flex;align-items:baseline;width:60px"><div style="width:20px;height:5px;background:#00f"></div><div style="width:20px"><div></div><div style="height:10px;background:#f00"></div></div></div>',
+      100, 30,
+    );
+    // baselines meet at the bottom edges: the red box spans y=0..10, the blue one y=5..10
+    expect(at(30, 2)).toEqual([255, 0, 0]);
+    expect(at(10, 7)).toEqual([0, 0, 255]);
+    expect(at(10, 2)).toEqual([255, 255, 255]);
+  });
+});

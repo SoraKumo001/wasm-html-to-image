@@ -35,6 +35,9 @@ namespace litehtml
 		// last measured layout are kept for that case (horizontal writing only).
 		bool m_has_measured_baseline = false;
 		pixel_t m_measured_first_baseline = 0;
+	public:
+		bool has_baseline() override { return !m_line_boxes.empty() || m_has_measured_baseline; }
+	protected:
 		pixel_t m_measured_last_baseline = 0;
 		// Measure pass only: width of the floats met since the last finished line. Floats are not
 		// placed while measuring, so they cannot narrow a line; the line they sit beside needs their
