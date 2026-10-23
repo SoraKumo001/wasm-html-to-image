@@ -3864,3 +3864,14 @@ describe("max-content track in a narrow grid", () => {
     expect(at(150, 2)).toEqual([0, 0, 255]);
   });
 });
+
+describe("ratio-only svg in a max-content grid track", () => {
+  it("does not stretch to fill the unbounded measuring width", async () => {
+    const { height } = await render({
+      value: '<html><body style="margin:0"><div style="display:grid;grid-template-columns:max-content 1fr;width:200px"><div style="height:80px"><svg viewBox="0 0 40 60"></svg></div><div style="height:10px"></div></div></body></html>',
+      width: 600,
+      format: "png",
+    });
+    expect(height).toBeLessThan(2000);
+  });
+});

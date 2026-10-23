@@ -1387,7 +1387,8 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                 // a max-content track is the item's width with no line broken, however narrow the grid is
                 if (kinds[c] == 3 && !vert)
                 {
-                    cb.render_width = containing_block_context::typed_pixel(100000, containing_block_context::cbc_value_type_absolute);
+                    // (typed as auto, so percentages of it behave as auto and the item's own sizes stay intrinsic)
+                    cb.render_width = containing_block_context::typed_pixel(100000, containing_block_context::cbc_value_type_auto);
                     cb.width = cb.render_width;
                 }
                 pixel_t measured = item.el->measure(cb, fmt_ctx);

@@ -92,7 +92,9 @@ litehtml::pixel_t litehtml::render_item_image::_measure(
             const pixel_t avail = containing_block_size.render_width.type == containing_block_context::cbc_value_type_auto
                                       ? (pixel_t)containing_block_size.width
                                       : (pixel_t)containing_block_size.render_width;
-            m_pos.width = std::max<pixel_t>(0, avail - content_offset_width());
+            // (a max-content grid track measures its items against a huge width: a ratio-only box has no
+            // intrinsic width to contribute there, it does not stretch to fill it)
+            m_pos.width = avail >= 50000 ? 0 : std::max<pixel_t>(0, avail - content_offset_width());
         }
         m_pos.height = used_ratio > 0 ? m_pos.width * used_ratio : sz.height;
     } else if (width_is_auto && height_is_auto) {
