@@ -1887,6 +1887,7 @@ litehtml::containing_block_context litehtml::render_item::calculate_containing_b
                     }
                 }
             }
+            if (cb_context.size_mode & containing_block_context::size_mode_ignore_width) width = nullptr;
             if (width && !percent_width_is_indefinite(*width, cb_context)) {
                 // Mapping physical width to parent's physical width
                 calc_cb_length(*width, cb_context.width, ret.width);

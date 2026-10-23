@@ -177,6 +177,16 @@ void litehtml::flex_item_row_direction::direction_specific_init(const litehtml::
             el->measure(measure_cb, fmt_ctx ? &fmt_ctx_copy : nullptr);
 
 			min_main_size = get_el_main_size();
+			// Automatic minimum size (CSS Flexbox 4.5) = min(specified size, content size): an item with a
+			// definite width may shrink down to its content, not only to that width.
+			if (!m_container_wm.is_vertical() && !size_prop.is_predefined() && size_prop.units() != css_units_percentage)
+			{
+				formatting_context fmt_ctx_copy2;
+				if(fmt_ctx) fmt_ctx_copy2 = *fmt_ctx;
+				measure_cb.size_mode |= containing_block_context::size_mode_ignore_width;
+				el->measure(measure_cb, fmt_ctx ? &fmt_ctx_copy2 : nullptr);
+				min_main_size = std::min(min_main_size, get_el_main_size());
+			}
 			content_size = min_main_size;
 		} else
 		{

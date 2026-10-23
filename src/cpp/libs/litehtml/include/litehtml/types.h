@@ -493,6 +493,8 @@ namespace litehtml
                         // 0 instead of the element's intrinsic size. Used for a flex item's
                         // automatic minimum size (min-content contribution).
                         size_mode_min_content = 0x10,
+                        // Measure the box as if its own width were auto (its content size suggestion, CSS Flexbox 4.5).
+                        size_mode_ignore_width = 0x20,
                 };
 
                 struct typed_pixel

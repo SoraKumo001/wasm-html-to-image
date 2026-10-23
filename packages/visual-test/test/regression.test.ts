@@ -3546,3 +3546,20 @@ describe("grid flexible tracks and zero-width absolute boxes", () => {
     expect(b.find((x) => x.p === "0.1.0.0")?.w).toBe(72);
   });
 });
+
+describe("flex item automatic minimum size", () => {
+  it("lets an item with a definite width shrink down to its content, not only to that width", async () => {
+    let boxes: { p: string; w: number }[] = [];
+    await render({
+      value: `<!DOCTYPE html><html><head><style>*{margin:0;padding:0}</style></head><body><div style="display:flex;width:60px"><div style="width:90px;height:25px"></div><div style="width:20px;height:10px"></div></div></body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        boxes = b;
+      },
+    });
+    // 110px of items in 60px: both shrink in proportion to their size (90 -> 49.09, 20 -> 10.91)
+    expect(boxes.find((x) => x.p === "0.1.0.0")?.w).toBeCloseTo(49.09, 1);
+    expect(boxes.find((x) => x.p === "0.1.0.1")?.w).toBeCloseTo(10.91, 1);
+  });
+});
