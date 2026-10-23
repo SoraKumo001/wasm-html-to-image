@@ -3910,3 +3910,14 @@ describe("flex container of width 0", () => {
     expect(at(107, 2)).toEqual([255, 255, 255]);
   });
 });
+
+describe("flex-basis wider than the width of a shrinkable item", () => {
+  it("an inline-flex container is as wide as the item's width, not its flex-basis", async () => {
+    const { at } = await renderPng(
+      '<div style="display:inline-flex;vertical-align:top"><div style="width:20px;height:5px;background:#f00;flex:0 1 100px"></div></div>',
+      300, 20,
+    );
+    expect(at(10, 2)).toEqual([255, 0, 0]);
+    expect(at(40, 2)).toEqual([255, 255, 255]);
+  });
+});

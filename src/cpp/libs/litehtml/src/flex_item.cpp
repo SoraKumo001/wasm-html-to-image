@@ -235,7 +235,15 @@ void litehtml::flex_item_row_direction::direction_specific_init(const litehtml::
 		// the container may end up narrower than the basis and the item shrinks with it (Blink and the
 		// spec's flex fraction both give a shrinkable `flex: 0 1 100px` empty item a contribution of 0).
 		const bool shrinkable_in_query = (self_size.size_mode & containing_block_context::size_mode_content) && shrink > 0;
-		if (indefinite && (grow > 0 || shrinkable_in_query || el->css().get_flex_basis().units() == css_units_percentage ||
+		// ...but a definite width narrower than the basis is that contribution (`width:20px; flex:0 1 100px`).
+		const bool width_below_basis = shrinkable_in_query && size_prop.units() == css_units_px && !size_prop.is_predefined() &&
+			el->css().get_flex_basis().units() == css_units_px && size_prop.val() < el->css().get_flex_basis().val();
+		if (indefinite && width_below_basis)
+		{
+			flex_basis_predefined = true;
+			predef = flex_basis_auto;
+		}
+		else if (indefinite && (grow > 0 || shrinkable_in_query || el->css().get_flex_basis().units() == css_units_percentage ||
 			el->css().get_flex_basis().val() == 0)) {
 			flex_basis_predefined = true;
 			predef = flex_basis_content;
