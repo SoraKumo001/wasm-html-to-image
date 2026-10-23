@@ -734,8 +734,11 @@ namespace litehtml
       return add_length_property(name, val, "auto", f_length_percentage, important);
 
     case _width_:
-    case _height_:
     case _inline_size_:
+      // intrinsic sizing keywords: predef 1 fit-content, 2 max-content, 3 min-content (0 = auto)
+      return add_length_property(name, val, "auto;fit-content;max-content;min-content", f_length_percentage | f_positive, important);
+
+    case _height_:
     case _block_size_:
     case _min_width_:
     case _min_height_:

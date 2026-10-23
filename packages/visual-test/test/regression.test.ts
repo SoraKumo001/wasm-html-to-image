@@ -3407,3 +3407,30 @@ describe("grid: width when sized from its content", () => {
     expect(await width("width:600px", cols("auto auto"))).toBe(600);
   });
 });
+
+describe("intrinsic width keywords on a block", () => {
+  const widthOf = async (style: string, inner = '<div style="width:80px;height:20px"></div>'): Promise<number> => {
+    let w = -1;
+    await render({
+      value: `<!DOCTYPE html><html><head><style>*{margin:0;padding:0}</style></head><body><div id="t" style="${style}">${inner}</div></body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        w = b.find((x) => x.i === "t")?.w ?? -1;
+      },
+    });
+    return w;
+  };
+
+  it("shrinks a block with width:fit-content / max-content to its content", async () => {
+    expect(await widthOf("width:fit-content")).toBe(80);
+    expect(await widthOf("width:max-content")).toBe(80);
+    expect(await widthOf("width:fit-content;min-width:120px")).toBe(120);
+    expect(await widthOf("width:fit-content;margin:12px")).toBe(80);
+  });
+
+  it("keeps fit-content within the available width, and plain blocks full width", async () => {
+    expect(await widthOf("width:fit-content", '<div style="width:900px;height:20px"></div>')).toBe(600);
+    expect(await widthOf("")).toBe(600);
+  });
+});

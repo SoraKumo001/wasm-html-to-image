@@ -106,6 +106,25 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
 					el->place_logical(inline_offset, block_offset, self_size.new_inline_size(inline_available_size, self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content)), fmt_ctx);
 				}
 
+				// width: fit-content / max-content / min-content on a block: size the box to its content,
+				// like a shrink-to-fit float. The width is still "predefined" (auto) to the rest of layout.
+				if(el->src_el()->css().get_display() != display_table && el->css().get_width().is_predefined() && el->css().get_width().predef() > 0)
+				{
+					const int kw = el->css().get_width().predef();
+					int content_mode = (self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content)) | containing_block_context::size_mode_content;
+					if(kw == 3) content_mode |= containing_block_context::size_mode_min_content;
+					rw = el->measure(self_size.new_inline_size(inline_available_size, content_mode), fmt_ctx);
+					if(rw < inline_available_size || kw == 3)
+					{
+						rw = el->measure(self_size.new_inline_size(rw, self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content)), fmt_ctx);
+						inline_available_size = rw;
+					}
+					if (!(self_size.size_mode & containing_block_context::size_mode_measure))
+					{
+						el->place_logical(inline_offset, block_offset, self_size.new_inline_size(inline_available_size, self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content)), fmt_ctx);
+					}
+				}
+
 				// Render table with "width: auto" into returned width
 				if(el->src_el()->css().get_display() == display_table && rw < inline_available_size && el->src_el()->css().get_width().is_predefined())
 				{
