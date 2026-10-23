@@ -1,7 +1,7 @@
 /**
  * Shrink a real-page divergence to a minimal HTML/CSS case.
  *
- *   pnpm real:reduce <url> --select "<css selector>" [--prop h|w|x|y] [--min 2]
+ *   pnpm real:reduce <url> (--select "<css selector>" | --path 0.1.2.1) [--prop h|w|x|y] [--min 2]
  *                    [--ancestors 2] [--width 1000] [--max-trials 300] [--out dir]
  *
  * Extracts the first element matching the selector (plus a few ancestors) and the stylesheet rules
@@ -21,9 +21,18 @@ function arg(name: string, def?: string): string | undefined {
 }
 
 const url = process.argv[2];
-const selector = arg("select");
+// A path as printed by real:diff ("0.1.2.1": element-child indexes from <html>) becomes a selector.
+const pathArg = arg("path");
+const selector =
+  arg("select") ??
+  (pathArg
+    ? pathArg
+        .split(".")
+        .slice(1)
+        .reduce((sel, i) => `${sel} > :nth-child(${Number(i) + 1})`, "html")
+    : undefined);
 if (!url || url.startsWith("--") || !selector) {
-  console.error('usage: real:reduce <url> --select "<css selector>" [--prop h|w|x|y] [--min 2] [--ancestors 2] [--width 1000] [--max-trials 300] [--out dir]');
+  console.error('usage: real:reduce <url> (--select "<css selector>" | --path 0.1.2.1) [--prop h|w|x|y] [--min 2] [--ancestors 2] [--width 1000] [--max-trials 300] [--out dir]');
   process.exit(2);
 }
 const prop = (arg("prop", "h") ?? "h") as "h" | "w" | "x" | "y";

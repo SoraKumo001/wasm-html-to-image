@@ -254,6 +254,76 @@ std::vector<std::shared_ptr<render_item>> render_item_grid::group_into_columns(
 
 namespace
 {
+// A <number> written as math: calc(), min(), max(), clamp() over plain numbers, nested freely
+// (`grid-column: span min(var(--cols), var(--span))`). Anything else yields false.
+bool eval_number_math(const css_token& tok, double& out);
+
+double eval_number_expr(const css_token_vector& t, bool& ok);
+
+double eval_number_primary(const css_token_vector& t, size_t& i, bool& ok)
+{
+    while (i < t.size() && t[i].type == WHITESPACE) i++;
+    if (i >= t.size()) { ok = false; return 0; }
+    const auto& tok = t[i++];
+    double v = 0;
+    if (tok.type == NUMBER) return tok.n.number;
+    if (tok.type == ROUND_BLOCK) return eval_number_expr(tok.value, ok);
+    if (tok.type == CV_FUNCTION && eval_number_math(tok, v)) return v;
+    ok = false;
+    return 0;
+}
+
+double eval_number_term(const css_token_vector& t, size_t& i, bool& ok)
+{
+    double v = eval_number_primary(t, i, ok);
+    for (;;)
+    {
+        while (i < t.size() && t[i].type == WHITESPACE) i++;
+        if (i >= t.size() || (t[i].type != '*' && t[i].type != '/')) return v;
+        const bool mul = t[i++].type == '*';
+        const double r = eval_number_primary(t, i, ok);
+        if (mul) v *= r;
+        else if (r != 0) v /= r;
+        else ok = false;
+    }
+}
+
+double eval_number_expr(const css_token_vector& t, bool& ok)
+{
+    size_t i = 0;
+    double v = eval_number_term(t, i, ok);
+    for (;;)
+    {
+        while (i < t.size() && t[i].type == WHITESPACE) i++;
+        if (i >= t.size() || (t[i].type != '+' && t[i].type != '-')) return v;
+        const bool add = t[i++].type == '+';
+        const double r = eval_number_term(t, i, ok);
+        v = add ? v + r : v - r;
+    }
+}
+
+bool eval_number_math(const css_token& tok, double& out)
+{
+    const string name = lowcase(tok.name);
+    if (name != "calc" && name != "min" && name != "max" && name != "clamp") return false;
+    std::vector<css_token_vector> args(1);
+    for (const auto& t : tok.value)
+    {
+        if (t.type == ',') args.emplace_back();
+        else args.back().push_back(t);
+    }
+    std::vector<double> v;
+    bool ok = true;
+    for (const auto& a : args) v.push_back(eval_number_expr(a, ok));
+    if (!ok || v.empty()) return false;
+    if (name == "calc") { out = v[0]; return v.size() == 1; }
+    if (name == "min") { out = *std::min_element(v.begin(), v.end()); return true; }
+    if (name == "max") { out = *std::max_element(v.begin(), v.end()); return true; }
+    if (v.size() != 3) return false;  // clamp(min, val, max)
+    out = std::max(v[0], std::min(v[1], v[2]));
+    return true;
+}
+
 struct grid_line
 {
     int index = 0;
@@ -276,6 +346,15 @@ struct grid_line
             {
                 if (is_span) span = (int)tok.n.number;
                 else index = (int)tok.n.number;
+            }
+            else if (tok.type == CV_FUNCTION)
+            {
+                double v = 0;
+                if (eval_number_math(tok, v))
+                {
+                    if (is_span) span = std::max(1, (int)std::lround(v));
+                    else index = (int)std::lround(v);
+                }
             }
             else if (tok.type == IDENT && !is_span)
             {

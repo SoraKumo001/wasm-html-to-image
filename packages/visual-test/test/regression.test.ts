@@ -3272,3 +3272,29 @@ describe("grid: replaced items", () => {
     expect((await box("justify-items:stretch")).w).toBe(600);
   });
 });
+
+describe("grid: math in line values", () => {
+  it("evaluates calc/min/max/clamp in a span count and in a line number", async () => {
+    // 12 columns of 1fr in 600px with a 24px gap: one column is 28px, a 6-column span 288px
+    const item = async (gc: string, vars = "") => {
+      let boxes: { i: string; x: number; w: number }[] = [];
+      await render({
+        value: `<!DOCTYPE html><html><head><style>*{margin:0;padding:0}</style></head><body><div style="display:grid;width:600px;grid-template-columns:repeat(12,1fr);column-gap:24px;${vars}"><div id="s" style="grid-column:${gc};height:10px"></div></div></body></html>`,
+        width: 800,
+        format: "png",
+        onLayout: (b) => {
+          boxes = b;
+        },
+      });
+      return boxes.find((b) => b.i === "s")!;
+    };
+    expect(await item("span 6")).toMatchObject({ x: 0, w: 288 });
+    expect(await item("span min(12, 6)")).toMatchObject({ x: 0, w: 288 });
+    expect(await item("span min(var(--a), var(--b))", "--a:12;--b:6;")).toMatchObject({ x: 0, w: 288 });
+    expect(await item("span calc(3 * 2)")).toMatchObject({ x: 0, w: 288 });
+    expect(await item("span clamp(2, 9, 6)")).toMatchObject({ x: 0, w: 288 });
+    expect(await item("1 / span max(1, 4)")).toMatchObject({ x: 0, w: 184 });
+    // a line number from math: min(2, 3) is line 2, which starts at 52px
+    expect(await item("min(2, 3) / span 4")).toMatchObject({ x: 52, w: 184 });
+  });
+});
