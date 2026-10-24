@@ -33,6 +33,8 @@ export interface CliFlags {
    * Absent means infinite (libwebp loop_count 0 = the historical default).
    */
   animationLoop?: number;
+  /** `--font <path-or-glob>` (repeatable); local font files to register. */
+  font?: string[];
 }
 
 /** Default frame rate for `--animation` when `--animation-fps` is omitted. */
@@ -85,6 +87,80 @@ export function resolveAnimation(flags: CliFlags): AnimationResolution {
   };
 }
 
+const EXTENSION_FORMATS: Record<string, OutputFormat> = {
+  png: "png",
+  jpg: "jpeg",
+  jpeg: "jpeg",
+  webp: "webp",
+  apng: "apng",
+  gif: "gif",
+  svg: "svg",
+  pdf: "pdf",
+  tif: "tiff",
+  tiff: "tiff",
+  avif: "avif",
+  jxl: "jxl",
+};
+
+/** Output format implied by the output file's extension, if recognised. */
+export function inferFormat(output: string | undefined): OutputFormat | undefined {
+  if (!output) return undefined;
+  const ext = path.extname(output).slice(1).toLowerCase();
+  return EXTENSION_FORMATS[ext];
+}
+
+/** Inline markup passed on the command line (as opposed to a path or URL). */
+export function isInlineHtml(input: string): boolean {
+  return input.trimStart().startsWith("<");
+}
+
+/** Read all of standard input as UTF-8 text. */
+export async function readStdin(): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
+  return Buffer.concat(chunks).toString("utf-8");
+}
+
+/** Expand `*` / `?` in the last path segment; other patterns are literal paths. */
+export async function expandGlob(pattern: string): Promise<string[]> {
+  if (!/[*?]/.test(pattern)) return [pattern];
+  const dir = path.dirname(pattern);
+  const re = new RegExp(
+    "^" +
+      path
+        .basename(pattern)
+        .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+        .replace(/\*/g, ".*")
+        .replace(/\?/g, ".") +
+      "$",
+  );
+  const names = await fs.readdir(dir);
+  return names
+    .filter((n) => re.test(n))
+    .sort()
+    .map((n) => path.join(dir, n));
+}
+
+/** Load `--font` files; each is named after its file (without extension). */
+export async function loadFonts(
+  patterns: string[],
+): Promise<{ name: string; data: Uint8Array }[]> {
+  const fonts: { name: string; data: Uint8Array }[] = [];
+  for (const pattern of patterns) {
+    const files = await expandGlob(pattern);
+    if (files.length === 0) {
+      console.warn(`wasm-html-to-image: no font files match "${pattern}"`);
+    }
+    for (const file of files) {
+      fonts.push({
+        name: path.basename(file, path.extname(file)),
+        data: new Uint8Array(await fs.readFile(file)),
+      });
+    }
+  }
+  return fonts;
+}
+
 /**
  * URL inputs are fetched, not read from disk. `data:` URLs stay values so
  * image inputs keep flowing through the converter pipeline.
@@ -126,9 +202,14 @@ export async function buildRenderOptions(
   input: string,
   flags: CliFlags,
 ): Promise<HtmlToImageOptions> {
-  const source = isUrlInput(input)
-    ? { url: input }
-    : await readInput(input);
+  const source = isInlineHtml(input)
+    ? { value: input, baseUrl: process.cwd() }
+    : input === "-"
+      ? { value: await readStdin(), baseUrl: process.cwd() }
+      : isUrlInput(input)
+        ? { url: input }
+        : await readInput(input);
+  const fonts = flags.font?.length ? await loadFonts(flags.font) : [];
   const { animation, warning } = resolveAnimation(flags);
   if (warning) console.warn(`wasm-html-to-image: ${warning}`);
   return {
@@ -142,5 +223,6 @@ export async function buildRenderOptions(
     ...(flags.scale !== undefined ? { scale: flags.scale } : {}),
     ...(flags.dpi !== undefined ? { dpi: flags.dpi } : {}),
     ...(animation ? { animation } : {}),
+    ...(fonts.length ? { fonts } : {}),
   };
 }

@@ -1,9 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
+import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   buildRenderOptions,
   isUrlInput,
+  inferFormat,
+  isInlineHtml,
+  expandGlob,
+  loadFonts,
   DEFAULT_ANIMATION_FPS,
   type CliFlags,
 } from "../src/cli-options.js";
@@ -92,5 +98,35 @@ describe("cli options", () => {
         warn.mockRestore();
       }
     });
+  });
+
+  it("infers the format from the output extension", () => {
+    expect(inferFormat("a/out.JPG")).toBe("jpeg");
+    expect(inferFormat("out.webp")).toBe("webp");
+    expect(inferFormat("out.gif")).toBe("gif");
+    expect(inferFormat("out.unknown")).toBeUndefined();
+    expect(inferFormat(undefined)).toBeUndefined();
+  });
+
+  it("treats input starting with < as inline HTML", async () => {
+    expect(isInlineHtml("  <div>x</div>")).toBe(true);
+    expect(isInlineHtml("page.html")).toBe(false);
+    const opts = await buildRenderOptions("<p>hi</p>", flags());
+    expect(opts.value).toBe("<p>hi</p>");
+    expect(opts.baseUrl).toBe(process.cwd());
+  });
+
+  it("loads --font files, expanding globs, named after the file", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "cli-font-"));
+    await fs.writeFile(path.join(dir, "A.woff2"), "a");
+    await fs.writeFile(path.join(dir, "B.woff2"), "bb");
+    await fs.writeFile(path.join(dir, "C.txt"), "c");
+    expect(await expandGlob(path.join(dir, "*.woff2"))).toHaveLength(2);
+    const fonts = await loadFonts([path.join(dir, "*.woff2")]);
+    expect(fonts.map((f) => f.name)).toEqual(["A", "B"]);
+    expect(fonts[1].data.length).toBe(2);
+    const opts = await buildRenderOptions("<p>hi</p>", flags({ font: [path.join(dir, "A.woff2")] }));
+    expect(opts.fonts).toHaveLength(1);
+    await fs.rm(dir, { recursive: true });
   });
 });

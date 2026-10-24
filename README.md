@@ -109,6 +109,13 @@ npx wasm-html-to-image tategaki.html -o tategaki.png -w 600 -h 800
 npx wasm-html-to-image loader.html -o loader.webp -f webp --animation 2000 --animation-fps 20
 npx wasm-html-to-image loader.html -o loader.gif -f gif --animation 2000
 
+# Inline HTML (starts with <) or stdin (-); the format follows the output extension
+npx wasm-html-to-image '<h1 style="color:red">Hello</h1>' -o hello.webp
+echo '<h1>Hello</h1>' | npx wasm-html-to-image - -o hello.png
+
+# Register local fonts (repeatable, globs allowed)
+npx wasm-html-to-image card.html --font './fonts/*.woff2' -w 1200 -h 630 -o og.webp
+
 # Capture screenshot from URL
 npx wasm-html-to-image https://example.com -o site.png -w 1280 -h 720
 

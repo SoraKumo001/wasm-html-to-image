@@ -3,7 +3,13 @@ import { program } from "commander";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { render, type OutputFormat } from "./single.js";
-import { buildRenderOptions, isUrlInput, type CliFlags } from "./cli-options.js";
+import {
+  buildRenderOptions,
+  inferFormat,
+  isInlineHtml,
+  isUrlInput,
+  type CliFlags,
+} from "./cli-options.js";
 
 const OUTPUT_FORMATS = [
   "svg",
@@ -31,7 +37,7 @@ program
     "HTML to image converter on the single unified WASM module (svg/pdf direct, png/jpeg/webp/avif/jxl/raw/thumbhash via encode or html_to_image)",
   )
   .version("0.1.0")
-  .argument("<input>", "input HTML/image file path or URL")
+  .argument("<input>", "input HTML/image file path, URL, inline HTML string (starts with <), or - for stdin")
   .option("-o, --output <path>", "output file path")
   .option("-w, --width <number>", "viewport width", (v) => parseInt(v, 10), 800)
   .option("-h, --height <number>", "viewport height (omit for auto)", (v) =>
@@ -39,8 +45,12 @@ program
   )
   .option(
     "-f, --format <format>",
-    `output format (${OUTPUT_FORMATS.join(", ")})`,
-    "png",
+    `output format (${OUTPUT_FORMATS.join(", ")}); default: from the --output extension, else png`,
+  )
+  .option(
+    "--font <path>",
+    "local font file or glob such as './fonts/*.woff2' (repeatable)",
+    (v: string, prev: string[] = []) => [...prev, v],
   )
   .option(
     "-q, --quality <number>",
@@ -84,7 +94,9 @@ program
   )
   .action(async (input: string, options: CliFlags) => {
     try {
-      const format = String(options.format).toLowerCase();
+      const format = String(
+        options.format ?? inferFormat(options.output) ?? "png",
+      ).toLowerCase();
       if (!isOutputFormat(format)) {
         console.error(
           `Error: unsupported format "${options.format}". Choose from: ${OUTPUT_FORMATS.join(", ")}`,
@@ -104,11 +116,16 @@ program
       }
 
       const isUrl = isUrlInput(input);
+      const isVirtual = isInlineHtml(input) || input === "-";
+      if (isVirtual && !options.output) {
+        console.error("Error: --output is required for inline HTML or stdin input");
+        process.exit(1);
+      }
 
       let outputPath: string | undefined = options.output;
       if (!outputPath) {
         const ext = format;
-        outputPath = isUrl
+        outputPath = isUrl || isVirtual
           ? `output.${ext}`
           : path.format({
               dir: path.dirname(input),
@@ -130,6 +147,7 @@ program
         animation: options.animation,
         animationFps: options.animationFps,
         animationLoop: options.animationLoop,
+        font: options.font,
       };
 
       const result = await render(await buildRenderOptions(input, flags));
