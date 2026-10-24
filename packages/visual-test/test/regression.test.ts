@@ -3976,3 +3976,14 @@ describe("width: fit-content below the min-content width", () => {
     expect(at(55, 2)).toEqual([255, 255, 255]);
   });
 });
+
+describe("percentage height of an absolutely positioned box", () => {
+  it("resolves against the containing block, so the content overflows instead of growing the box", async () => {
+    const { at } = await renderPng(
+      '<div style="position:relative;height:100px;width:40px"><div style="position:absolute;height:30%;width:40px;background:#f00"><div style="min-height:40px"></div></div></div>',
+      60, 100,
+    );
+    expect(at(10, 20)).toEqual([255, 0, 0]);
+    expect(at(10, 60)).toEqual([255, 255, 255]);
+  });
+});

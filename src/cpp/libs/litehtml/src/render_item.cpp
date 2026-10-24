@@ -900,6 +900,12 @@ void litehtml::render_item::render_positioned(render_type rt) {
                             measure_cb.size_mode |= containing_block_context::size_mode_content;
                         }
                     }
+                    if (el->css().get_height().units() == css_units_percentage && !el->css().get_height().is_predefined() &&
+                        measure_cb.mode == writing_mode_horizontal_tb) {
+                        // a percentage height resolves against the containing block's padding box
+                        measure_cb.height = containing_block_context::typed_pixel(
+                            containing_block_size.height, containing_block_context::cbc_value_type_absolute);
+                    }
                     el->measure(measure_cb, nullptr);
                     restore_auto_margins();
                     el->place(left, top, measure_cb, nullptr);
