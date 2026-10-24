@@ -4360,3 +4360,17 @@ describe("width: fit-content on a ratio-only svg grid item", () => {
     expect(r.height).toBe(50);
   });
 });
+
+describe("replaced flex item stretched to a definite container height", () => {
+  const svg = (w: number, h: number) =>
+    `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><rect width="${w}" height="${h}" fill="#f00"/></svg>`)}`;
+  it("keeps its aspect ratio by growing wider", async () => {
+    const { at } = await renderPng(
+      `<div style="display:flex;height:60px;width:100px;background:#fff"><img src="${svg(20, 30)}"></div>`,
+      100, 70,
+    );
+    // 20x30 stretched to 60px tall is 40px wide
+    expect(at(35, 30)).toEqual([255, 0, 0]);
+    expect(at(45, 30)).toEqual([255, 255, 255]);
+  });
+});

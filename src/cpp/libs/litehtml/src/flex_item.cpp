@@ -324,6 +324,24 @@ void litehtml::flex_item_row_direction::direction_specific_init(const litehtml::
 		flex_base_size = el->css().get_flex_basis().calc_percent(parent_size) + render_offset - el->box_sizing_inline(m_container_wm);
 	}
 
+	// A replaced item with an intrinsic ratio that is stretched to a definite container height transfers
+	// that height to its main size (CSS Flexbox 9.2): the flex base size follows the stretched cross size.
+	if (!m_container_wm.is_vertical() && el->src_el()->is_replaced() && el->css().get_flex_basis().is_predefined() && el->css().get_flex_basis().predef() == flex_basis_auto &&
+		self_size.render_height.type != containing_block_context::cbc_value_type_auto &&
+		size_prop.is_predefined() && size_prop.predef() == 0 &&
+		el->css().get_height().is_predefined() && el->css().get_height().predef() == 0 &&
+		((align & 0xFF) == flex_align_items_stretch || (align & 0xFF) == flex_align_items_normal) &&
+		el->parent() && el->parent()->css().get_flex_wrap() == flex_wrap_nowrap)
+	{
+		litehtml::size sz;
+		el->src_el()->get_content_size(sz, 0);
+		if (sz.width > 0 && sz.height > 0)
+		{
+			const pixel_t cross = std::max<pixel_t>(0, (pixel_t)self_size.render_height - el->content_offset_block(m_container_wm));
+			flex_base_size = cross * sz.width / sz.height + render_offset;
+		}
+	}
+
 	scaled_flex_shrink_factor = (flex_base_size - render_offset) * shrink;
 }
 
