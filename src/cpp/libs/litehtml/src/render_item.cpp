@@ -442,6 +442,8 @@ void litehtml::render_item::render_positioned(render_type rt) {
                 containing_block_size.height = m_pos.height + m_padding.height();
                 containing_block_size.width = m_pos.width + m_padding.width();
             }
+            // an absolutely positioned box's percentage height resolves against this (definite) block
+            containing_block_size.height.type = containing_block_context::cbc_value_type_absolute;
 
             css_length css_left = el->src_el()->css().get_offsets().left;
             css_length css_right = el->src_el()->css().get_offsets().right;

@@ -295,6 +295,10 @@ litehtml::pixel_t litehtml::render_item_inline_context::_render_content(pixel_t 
                 }
             }
         }
+    } else if (self_size.mode == writing_mode_horizontal_tb)
+    {
+        // no line to take a height from: an earlier layout at another size must not leave its height behind
+        m_pos.height = 0;
     }
 
 	if (!(self_size.size_mode & containing_block_context::size_mode_measure) && src_el()->css().get_text_fit() != 0)

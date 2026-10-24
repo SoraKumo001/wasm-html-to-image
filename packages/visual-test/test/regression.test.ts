@@ -1244,12 +1244,17 @@ describe("regression: layout and paint probes", () => {
   });
 
   it("an absolutely positioned inline-flex box is blockified out of the line box", async () => {
-    const r = await render({
+    let boxes: { p: string; t: string; h: number }[] = [];
+    await render({
       value: `<html><body style="margin:0"><div style="display:flex;width:300px"><h1 style="margin:0;font-size:16px">Title text here</h1><div><input type="checkbox" style="position:absolute;display:inline-flex;width:100%;height:100%"></div></div></body></html>`,
       width: 300,
       format: "png",
+      onLayout: (b) => {
+        boxes = b as typeof boxes;
+      },
     });
-    expect(r.height).toBeLessThan(30); // the heading stayed on one line
+    // the heading stayed on one line (the box itself is 100% of the viewport tall, as in Chromium)
+    expect(boxes.find((b) => b.t === "h1")!.h).toBeLessThan(30);
   });
   it("auto-width table with percentage cells is shrink-to-fit, not collapsed", async () => {
     const cell = (w: string) => `<td style="width:${w}">先代<br>東京府・東京市</td>`;
@@ -4112,5 +4117,17 @@ describe("cross size of a wrapping column flex line", () => {
     );
     expect(at(60, 5)).toEqual([255, 0, 0]);
     expect(at(100, 5)).toEqual([255, 255, 255]);
+  });
+});
+
+describe("empty block measured again after being stretched", () => {
+  it("an item stretched in an earlier layout does not keep that height when it wraps onto a short line", async () => {
+    const { at } = await renderPng(
+      '<div style="display:flex;width:80px"><div style="display:flex;flex-wrap:wrap;padding:8px"><div style="width:20px;background:#f00"></div><div style="width:60px;height:30px;background:#00f"></div></div></div>',
+      120, 100,
+    );
+    // line 1 is empty (0 tall), line 2 holds the 30px box: it starts at y=8, the container is 46 tall
+    expect(at(40, 12)).toEqual([0, 0, 255]);
+    expect(at(40, 50)).toEqual([255, 255, 255]);
   });
 });
