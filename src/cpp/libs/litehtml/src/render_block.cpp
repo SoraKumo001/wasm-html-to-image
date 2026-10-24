@@ -56,7 +56,7 @@ litehtml::pixel_t litehtml::render_item_block::place_float(const std::shared_ptr
         // (percentage widths that sum to exactly 100% overshoot by float rounding error)
         if(el->inline_end_pos() > line_inline_end + 0.01)
         {
-			line_block_start = fmt_ctx->find_next_line_top(el->block_start_pos(), el->inline_size(), self_size.render_inline_size());
+			line_block_start = fmt_ctx->find_next_line_top(line_block_start, el->inline_size(), self_size.render_inline_size());
 			if (!(self_size.size_mode & containing_block_context::size_mode_measure))
 			{
 				el->place_logical(fmt_ctx->get_line_left(line_block_start), line_block_start, self_size.new_inline_size(shrunk_to_fit ? min_rendered_inline_size : line_inline_end, self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content)), fmt_ctx);
@@ -76,7 +76,7 @@ litehtml::pixel_t litehtml::render_item_block::place_float(const std::shared_ptr
     {
         if(line_inline_start + el->inline_size() > line_inline_end + 0.01)
         {
-            pixel_t new_block_start = fmt_ctx->find_next_line_top(el->block_start_pos(), el->inline_size(), self_size.render_inline_size());
+            pixel_t new_block_start = fmt_ctx->find_next_line_top(line_block_start, el->inline_size(), self_size.render_inline_size());
 			if (!(self_size.size_mode & containing_block_context::size_mode_measure))
 			{
 				el->place_logical(fmt_ctx->get_line_right(new_block_start, self_size.render_inline_size()) - el->inline_size(), new_block_start, self_size.new_inline_size(shrunk_to_fit ? min_rendered_inline_size : self_size.render_inline_size(), self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content)), fmt_ctx);

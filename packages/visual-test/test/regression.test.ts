@@ -4010,3 +4010,14 @@ describe("float wider than its container", () => {
     expect(at(95, 2)).toEqual([255, 255, 255]);
   });
 });
+
+describe("padded float that overflows its container", () => {
+  it("stays at the top of the line instead of being pushed down by its padding", async () => {
+    const { at } = await renderPng(
+      '<div style="width:20px"><div style="float:left;min-width:40px;padding:8px;background:#f00"></div></div>',
+      100, 40,
+    );
+    expect(at(10, 2)).toEqual([255, 0, 0]);
+    expect(at(10, 20)).toEqual([255, 255, 255]);
+  });
+});
