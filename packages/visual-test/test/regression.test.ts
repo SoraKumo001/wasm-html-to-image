@@ -4412,3 +4412,28 @@ describe("ratio-only svg next to a float", () => {
     expect(r.height).toBe(174);
   });
 });
+
+describe("ratio-only svg in a shrink-to-fit box with a definite width", () => {
+  for (const box of ["display:inline-flex", "display:inline-block", "float:left"]) {
+    it(`fills a ${box} box of width 50px`, async () => {
+      const r = await render({
+        value: `<html><body style="margin:0;font-size:0;line-height:0"><div style="${box};width:50px"><svg viewBox="0 0 100 60"></svg></div></body></html>`,
+        width: 200,
+        format: "png",
+      });
+      expect(r.height).toBe(30);
+    });
+  }
+});
+
+describe("ratio-only svg in an auto-width item of a row flex container", () => {
+  it("contributes no width, so the item and the svg stay empty", async () => {
+    const r = await render({
+      value:
+        '<html><body style="margin:0;font-size:0;line-height:0"><div style="display:flex"><div><svg viewBox="0 0 100 60"></svg></div></div></body></html>',
+      width: 200,
+      format: "png",
+    });
+    expect(r.height).toBeLessThan(5);
+  });
+});

@@ -82,7 +82,7 @@ litehtml::pixel_t litehtml::render_item_image::_measure(
                              pp->css().get_display() == display_grid || pp->css().get_display() == display_inline_grid));
                 if (floated || disp == display_inline_block || disp == display_inline_flex ||
                     disp == display_inline_grid || disp == display_inline_table)
-                    return true;
+                    return pc.get_width().is_predefined();  // a definite width is a width to fill
                 if (pc.get_position() == element_position_absolute || pc.get_position() == element_position_fixed)
                     return pc.get_width().is_predefined();
                 if (pc.get_width().is_predefined() && pc.get_width().predef() > 0) return true;  // fit-content / max-content / min-content
