@@ -1222,10 +1222,12 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                 if (definite(imw)) floors[c] = std::max(floors[c], std::max<pixel_t>(0, imw.calc_percent(render_inline) - item.el->box_sizing_width()) + item.el->content_offset_width());
                 continue;
             }
-            if (iw.units() == css_units_percentage) continue;
             containing_block_context cb = self_size;
             cb.size_mode &= ~(containing_block_context::size_mode_exact_width | containing_block_context::size_mode_exact_height);
             cb.size_mode |= containing_block_context::size_mode_content | containing_block_context::size_mode_min_content;
+            // the grid's width is the space on offer: a percentage width of the item is cyclic here
+            cb.render_width = containing_block_context::typed_pixel((pixel_t)cb.render_width, containing_block_context::cbc_value_type_auto);
+            cb.width = cb.render_width;
             floors[c] = std::max(floors[c], (pixel_t)ceil_layout_unit(item.el->measure(cb, fmt_ctx)));
         }
         return floors;
@@ -1552,6 +1554,12 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                         // The grid's own exact size describes its box, not the intrinsic size of an item.
                         cb.size_mode &= ~(containing_block_context::size_mode_exact_width | containing_block_context::size_mode_exact_height);
                         cb.size_mode |= containing_block_context::size_mode_content | containing_block_context::size_mode_min_content;
+                        if (!vert)
+                        {
+                            // the grid's width is the space on offer: a percentage width of the item is cyclic here
+                            cb.render_width = containing_block_context::typed_pixel((pixel_t)cb.render_width, containing_block_context::cbc_value_type_auto);
+                            cb.width = cb.render_width;
+                        }
                         pixel_t measured = item.el->measure(cb, fmt_ctx);
                         pixel_t w = std::max((pixel_t)item.el->inline_size(), measured);
                         minc[c] = std::max(minc[c], std::min((pixel_t)ceil_layout_unit(w), m_grid_layout.column_widths[c]));

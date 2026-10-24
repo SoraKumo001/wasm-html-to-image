@@ -4300,3 +4300,17 @@ describe("width: fit-content item of a column flex container", () => {
     expect(at(110, 2)).toEqual([255, 255, 255]);
   });
 });
+
+describe("percentage width of a grid item in a content-sized track", () => {
+  for (const tracks of ["", "grid-template-columns:auto;", "grid-template-columns:1fr;"]) {
+    it(`takes its content as the track floor (${tracks || "implicit"})`, async () => {
+      const { at } = await renderPng(
+        `<div style="display:grid;${tracks}width:60px"><div style="width:25%;height:5px;background:#f00"><div style="width:90px"></div></div></div>`,
+        120, 20,
+      );
+      // the track is 90px wide (the child's width), so 25% is 22.5px, not 15px
+      expect(at(20, 2)).toEqual([255, 0, 0]);
+      expect(at(26, 2)).toEqual([255, 255, 255]);
+    });
+  }
+});
