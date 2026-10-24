@@ -4512,3 +4512,15 @@ describe("baseline of a line that holds only an inline-block taller than the lin
     expect(at(15, 5)).toEqual([255, 255, 255]);
   });
 });
+
+describe("max-content width of a wrapping flex container", () => {
+  it("a fixed flex-basis does not hide the item's wider width", async () => {
+    const { at } = await renderPng(
+      '<div style="display:grid;justify-items:start;width:200px"><div style="display:flex;flex-wrap:wrap;background:#f00"><div style="width:90px;height:5px;flex:0 0 40px"></div></div></div>',
+      200, 10,
+    );
+    // the container is 90px wide (the item's width), not 40px
+    expect(at(80, 2)).toEqual([255, 0, 0]);
+    expect(at(95, 2)).toEqual([255, 255, 255]);
+  });
+});

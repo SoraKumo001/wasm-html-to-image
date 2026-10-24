@@ -322,6 +322,17 @@ void litehtml::flex_item_row_direction::direction_specific_init(const litehtml::
 	} else
 	{
 		flex_base_size = el->css().get_flex_basis().calc_percent(parent_size) + render_offset - el->box_sizing_inline(m_container_wm);
+		// The max-content size of a wrapping container sums its items' max-content contributions, which
+		// come from their own width rather than from their flex-basis.
+		if (!m_container_wm.is_vertical() && el->parent() && el->parent()->css().get_flex_wrap() != flex_wrap_nowrap &&
+			(self_size.size_mode & containing_block_context::size_mode_measure) &&
+			(self_size.size_mode & containing_block_context::size_mode_content) &&
+			!size_prop.is_predefined() && size_prop.units() == css_units_px)
+		{
+			// (an item that cannot shrink still contributes at least its flex-basis)
+			const pixel_t own = size_prop.val() + render_offset - el->box_sizing_inline(m_container_wm);
+			flex_base_size = shrink > 0 ? own : std::max(own, flex_base_size);
+		}
 	}
 
 	// A replaced item with an intrinsic ratio that is stretched to a definite container height transfers
