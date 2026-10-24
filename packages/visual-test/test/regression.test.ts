@@ -4399,3 +4399,16 @@ describe("automatic minimum size of a replaced grid item", () => {
     expect(at(185, 2)).toEqual([255, 255, 255]);
   });
 });
+
+describe("ratio-only svg next to a float", () => {
+  it("keeps the containing block's width and drops below the float", async () => {
+    const r = await render({
+      value:
+        '<html><body style="margin:0;font-size:0;line-height:0"><div style="float:right;width:24px;height:24px"></div><svg viewBox="0 0 40 60"></svg></body></html>',
+      width: 100,
+      format: "png",
+    });
+    // the 100px wide box (150px tall) does not fit beside the 24px float: 24 + 150
+    expect(r.height).toBe(174);
+  });
+});

@@ -606,7 +606,11 @@ void litehtml::render_item_inline_context::place_inline(std::unique_ptr<line_box
     {
         cb_size_mode |= containing_block_context::size_mode_content;
     }
-    auto cb = self_size.new_inline_size(line_ctx.right, cb_size_mode);
+    // A ratio-only replaced box takes its width from the containing block, not from what a float left
+    // of the line: it then does not fit beside the float and moves below it.
+    const pixel_t cb_inline = (item->get_el()->src_el()->is_ratio_only_replaced() && self_size.mode == writing_mode_horizontal_tb)
+        ? (pixel_t)self_size.render_inline_size() : line_ctx.right;
+    auto cb = self_size.new_inline_size(cb_inline, cb_size_mode);
     pixel_t min_rendered_width = item->get_el()->measure(cb, fmt_ctx);
     if (!(self_size.size_mode & containing_block_context::size_mode_measure))
             {
