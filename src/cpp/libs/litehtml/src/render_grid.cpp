@@ -2099,7 +2099,8 @@ void litehtml::render_item_grid::place_grid_items(pixel_t x, pixel_t y, const co
         // width: fit-content / max-content / min-content is not `auto`: the item is not stretched to its area.
         const bool intrinsic_width = item.el->src_el()->css().get_width().is_predefined() && item.el->src_el()->css().get_width().predef() > 0;
         const bool j_stretch = ((j_normal && !replaced_start_x) && !intrinsic_width) || jst == flex_justify_content_stretch;
-        const bool a_stretch = (a_normal && !replaced_item) || (aln & 0xFF) == flex_align_items_stretch;
+        const bool intrinsic_height = item.el->src_el()->css().get_height().is_predefined() && item.el->src_el()->css().get_height().predef() > 0;
+        const bool a_stretch = !intrinsic_height && ((a_normal && !replaced_item) || (aln & 0xFF) == flex_align_items_stretch);
         if (!vert)
         {
             if (!j_stretch && item.el->src_el()->css().get_width().is_predefined())
@@ -2114,6 +2115,12 @@ void litehtml::render_item_grid::place_grid_items(pixel_t x, pixel_t y, const co
                 cb.size_mode &= ~containing_block_context::size_mode_exact_height;
                 cb.render_height = cell_h;
                 cb.height = cell_h;
+                if (intrinsic_height)
+                {
+                    // height: fit-content / max-content / min-content: the block size comes from the content
+                    cb.render_height = containing_block_context::typed_pixel(cell_h, containing_block_context::cbc_value_type_auto);
+                    cb.height = cb.render_height;
+                }
             }
         }
         const bool baseline_aligned = !vert && (aln & 0xFF) == flex_align_items_baseline;

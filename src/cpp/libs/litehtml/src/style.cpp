@@ -740,6 +740,9 @@ namespace litehtml
 
     case _height_:
     case _block_size_:
+      // intrinsic sizing keywords lay out like auto, but a box with one is not stretched
+      return add_length_property(name, val, "auto;fit-content;max-content;min-content", f_length_percentage | f_positive, important);
+
     case _min_width_:
     case _min_height_:
     case _min_inline_size_:

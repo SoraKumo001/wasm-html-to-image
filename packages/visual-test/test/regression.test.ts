@@ -4079,3 +4079,27 @@ describe("the hidden attribute", () => {
     expect(at(5, 15)).toEqual([255, 255, 255]);
   });
 });
+
+describe("height: fit-content on a grid or flex item", () => {
+  it("is not stretched to the row or line", async () => {
+    for (const display of ["grid", "flex"]) {
+      const { at } = await renderPng(
+        `<div style="display:${display};${display === "grid" ? "grid-template-columns:20px 20px" : ""}"><div style="width:20px;height:fit-content;background:#f00"><div style="height:10px"></div></div><div style="width:20px;height:40px"></div></div>`,
+        60, 60,
+      );
+      expect(at(5, 5)).toEqual([255, 0, 0]);
+      expect(at(5, 25)).toEqual([255, 255, 255]);
+    }
+  });
+});
+
+describe("width: fit-content on an item of a column flex container", () => {
+  it("is not stretched across the container", async () => {
+    const { at } = await renderPng(
+      '<div style="display:flex;flex-direction:column"><div style="width:fit-content;background:#f00"><div style="width:20px;height:10px"></div></div></div>',
+      60, 30,
+    );
+    expect(at(10, 5)).toEqual([255, 0, 0]);
+    expect(at(40, 5)).toEqual([255, 255, 255]);
+  });
+});

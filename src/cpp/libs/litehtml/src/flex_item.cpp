@@ -378,7 +378,7 @@ void litehtml::flex_item_row_direction::layout_item(litehtml::flex_line &ln,
                    !auto_margin_cross_start && !auto_margin_cross_end;
 	const css_length& cross_prop = m_container_wm.get_block_size(el->css());
 
-	if (stretch && cross_prop.is_predefined())
+	if (stretch && (cross_prop.is_predefined() && cross_prop.predef() == 0))
 	{
         // Cross Axis = Block
         child_cb.block_size() = ln.cross_size - el->content_offset_block(m_container_wm) + el->box_sizing_block(m_container_wm);
@@ -434,7 +434,7 @@ void litehtml::flex_item_row_direction::align_stretch(flex_line &ln, const conta
 
 	set_cross_position(ln.cross_start);
     const css_length& cross_prop = m_container_wm.get_block_size(el->css());
-	if (cross_prop.is_predefined())
+	if ((cross_prop.is_predefined() && cross_prop.predef() == 0))
 	{
         pixel_t new_block_size = ln.cross_size - el->content_offset_block(m_container_wm) + el->box_sizing_block(m_container_wm);
         
@@ -715,7 +715,7 @@ void litehtml::flex_item_column_direction::layout_item(litehtml::flex_line &ln,
                    !auto_margin_cross_start && !auto_margin_cross_end;
 	const css_length& cross_prop = m_container_wm.get_inline_size(el->css());
 
-	if (stretch && cross_prop.is_predefined())
+	if (stretch && (cross_prop.is_predefined() && cross_prop.predef() == 0))
 	{
         // Cross Axis = Inline
         child_cb.inline_size() = ln.cross_size - el->content_offset_inline(m_container_wm) + el->box_sizing_inline(m_container_wm);
@@ -770,7 +770,7 @@ void litehtml::flex_item_column_direction::align_stretch(flex_line &ln, const co
 
 	set_cross_position(ln.cross_start);
 	const css_length& cross_prop = m_container_wm.get_inline_size(el->css());
-	if (cross_prop.is_predefined())
+	if ((cross_prop.is_predefined() && cross_prop.predef() == 0))
 	{
         pixel_t new_inline_size = ln.cross_size - el->content_offset_inline(m_container_wm) + el->box_sizing_inline(m_container_wm);
         
