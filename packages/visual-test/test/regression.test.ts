@@ -4068,3 +4068,14 @@ describe("percentage width of an item in an auto grid track", () => {
     expect(at(40, 2)).toEqual([255, 255, 255]);
   });
 });
+
+describe("the hidden attribute", () => {
+  it("hides the element unless the author sets display", async () => {
+    const { at } = await renderPng(
+      '<style>.show{display:block}</style><div hidden style="height:10px;background:#f00"></div><div class="show" hidden style="height:10px;background:#00f"></div>',
+      40, 30,
+    );
+    expect(at(5, 5)).toEqual([0, 0, 255]); // the first box is gone, the second (author display:block) sits at the top
+    expect(at(5, 15)).toEqual([255, 255, 255]);
+  });
+});

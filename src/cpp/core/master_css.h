@@ -69,6 +69,7 @@ const char* satoru_master_css =
     "input[type=\"radio\"] { border-radius: 50%; }\n"
     "input[type=\"checkbox\"][checked], input[type=\"radio\"][checked] { background-color: #0075ff; border-color: #0075ff; }\n"
     "svg { display: inline-block; overflow: hidden; }\n"
+    "*[hidden] { display: none; }\n"
     "*[dir=\"rtl\"] { direction: rtl; }\n"
     "*[dir=\"ltr\"] { direction: ltr; }\n"
     "head, title, meta, link, style, script, noscript, template { display: none; }\n";
