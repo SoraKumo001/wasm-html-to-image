@@ -4465,3 +4465,14 @@ describe("a float after a run of inline content", () => {
     expect(at(90, 20)).toEqual([255, 255, 255]);
   });
 });
+
+describe("max-content width of a float holding a float and inline content", () => {
+  it("adds the inline content beside the inner float", async () => {
+    const { at } = await renderPng(
+      '<div style="float:left;background:#fff"><div style="float:left;width:50px;height:5px;background:#00f"></div><div style="display:inline-block;width:20px;height:5px;background:#f00;vertical-align:top"></div></div>',
+      100, 10,
+    );
+    // the outer float is 70px wide (50 + 20), so the red box sits at x 50..70
+    expect(at(60, 2)).toEqual([255, 0, 0]);
+  });
+});

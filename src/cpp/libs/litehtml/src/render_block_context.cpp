@@ -17,6 +17,10 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
     bool is_first = true;
     satoru::WritingModeContext wm = get_wm_context();
     std::shared_ptr<render_item> prev_child;
+    // Max-content sizing puts floats and the inline content beside them on one line.
+    const bool max_content_sizing = (self_size.size_mode & containing_block_context::size_mode_content) &&
+                                    !(self_size.size_mode & containing_block_context::size_mode_min_content);
+    pixel_t float_run_width = 0;
     for (const auto& el : m_children)
     {
         struct prev_setter { std::shared_ptr<render_item>& slot; const std::shared_ptr<render_item>& cur; ~prev_setter() { slot = cur; } } set_prev{prev_child, el};
@@ -44,6 +48,7 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
                 }
             }
             pixel_t rw = place_float(el, float_offset, self_size, fmt_ctx);
+            if (max_content_sizing) float_run_width += rw;
             if (rw > max_inline_size)
             {
                 max_inline_size = rw;
@@ -231,6 +236,12 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
 					{
 						el->inline_shift(auto_margin);
 					}
+				}
+				if (max_content_sizing)
+				{
+					const bool is_run = dynamic_cast<render_item_inline_context*>(el.get()) &&
+						(*el->src_el()->get_tagName() == 0 || std::string(el->src_el()->get_tagName()) == "anonymous");
+					if (is_run) rw += float_run_width; else float_run_width = 0;
 				}
                 if (rw > max_inline_size)
                 {
