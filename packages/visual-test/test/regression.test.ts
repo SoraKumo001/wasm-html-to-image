@@ -4236,3 +4236,21 @@ describe("baseline of a column flex container", () => {
     expect(r.height).toBeLessThan(10);
   });
 });
+
+describe("percentage height under a flex item of an auto-height container", () => {
+  const heightOf = async (container: string) => {
+    const r = await render({
+      value: `<html><body style="margin:0;font-size:0;line-height:0">${container}</body></html>`,
+      width: 100,
+      format: "png",
+    });
+    return r.height;
+  };
+  const inner = '<div><div style="height:30%"><div style="height:36px"></div></div></div>';
+  it("is auto under a stretched row item", async () => {
+    expect(await heightOf(`<div style="display:flex">${inner}</div>`)).toBe(36);
+  });
+  it("is auto under a column item", async () => {
+    expect(await heightOf(`<div style="display:flex;flex-direction:column">${inner}</div>`)).toBe(36);
+  });
+});

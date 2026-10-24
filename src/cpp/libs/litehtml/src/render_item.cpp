@@ -1806,7 +1806,8 @@ static bool percent_height_is_indefinite(const litehtml::css_length& len,
     if (len.is_predefined()) return false;
     const bool is_percent = len.units() == litehtml::css_units_percentage ||
                             (len.is_calc() && len.calc_percent() != 0);
-    return is_percent && cb_context.height.type == litehtml::containing_block_context::cbc_value_type_auto;
+    return is_percent && (cb_context.height.type == litehtml::containing_block_context::cbc_value_type_auto ||
+                          cb_context.height_cyclic);
 }
 
 // A percentage inline-size is cyclic when the containing block's inline-size is itself being
@@ -1928,6 +1929,7 @@ litehtml::containing_block_context litehtml::render_item::calculate_containing_b
         if (cb_context.size_mode & containing_block_context::size_mode_exact_height) {
             ret.height.value = cb_context.height;
             ret.height.type = containing_block_context::cbc_value_type_absolute;
+            ret.height_cyclic = (cb_context.size_mode & containing_block_context::size_mode_cyclic_height) != 0;
         } else {
             auto* height = &css().get_height();
             if (is_flex_child) {

@@ -460,6 +460,9 @@ void litehtml::flex_line::init(pixel_t container_main_size, bool fit_container,
             child_cb.size_mode = (wm.is_vertical() ? containing_block_context::size_mode_exact_width
                                                    : containing_block_context::size_mode_exact_height) |
                                  containing_block_context::size_mode_measure;
+            if (!wm.is_vertical() && self_size.height.type == containing_block_context::cbc_value_type_auto) {
+                child_cb.size_mode |= containing_block_context::size_mode_cyclic_height;
+            }
 
                         if (wm.get_inline_size(item->el->css()).is_predefined()) {
                 child_cb.size_mode |= containing_block_context::size_mode_content;

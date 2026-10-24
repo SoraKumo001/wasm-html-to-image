@@ -495,6 +495,9 @@ namespace litehtml
                         size_mode_min_content = 0x10,
                         // Measure the box as if its own width were auto (its content size suggestion, CSS Flexbox 4.5).
                         size_mode_ignore_width = 0x20,
+                        // With size_mode_exact_height: the height is a stretched flex item's and is not
+                        // definite for percentage heights of its descendants (the container's height is auto).
+                        size_mode_cyclic_height = 0x40,
                 };
 
                 struct typed_pixel
@@ -572,6 +575,8 @@ namespace litehtml
                 int context_idx;
                 uint32_t size_mode;
                 writing_mode mode;
+                // The height above is a used size that percentage heights must not resolve against.
+                bool height_cyclic = false;
 
                 containing_block_context() :
                                 width(0, cbc_value_type_auto),
