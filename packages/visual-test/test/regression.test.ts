@@ -3946,3 +3946,14 @@ describe("percentage height of a flex item", () => {
     expect(at(10, 25)).toEqual([255, 255, 255]);
   });
 });
+
+describe("baseline of a nested flex container with a padded empty item", () => {
+  it("does not shift the container by the item's padding", async () => {
+    const { at } = await renderPng(
+      '<div style="display:flex;align-items:baseline"><div style="display:flex"><div style="padding:8px;background:#f00"></div></div></div>',
+      60, 40,
+    );
+    expect(at(8, 2)).toEqual([255, 0, 0]);
+    expect(at(8, 14)).toEqual([255, 0, 0]);
+  });
+});
