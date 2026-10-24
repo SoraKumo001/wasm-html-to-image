@@ -87,7 +87,10 @@ litehtml::pixel_t litehtml::render_item_image::_measure(
             return false;
         };
         if ((is_min_content && !positioned) || (is_content_size && !positioned && in_shrink_to_fit())) {
-            m_pos.width = 0;
+            // (a percentage width is cyclic here: it counts as auto, and a box with no natural width then
+            // takes the 300px default object width for the max-content size)
+            const bool percent_width = css().get_width().units() == css_units_percentage && !css().get_width().is_predefined();
+            m_pos.width = (percent_width && !is_min_content) ? 300 : 0;
         } else {
             const pixel_t avail = containing_block_size.render_width.type == containing_block_context::cbc_value_type_auto
                                       ? (pixel_t)containing_block_size.width

@@ -2692,7 +2692,9 @@ describe("regression: layout and paint probes", () => {
     const svg = `<svg width="100%" height="100%" viewBox="0 0 21 18.9" style="width:84px"><rect width="21" height="18.9" fill="#f00"/></svg>`;
     const block = await render({ value: page(`<div>${svg}</div>`), width: 200, format: "png" });
     const flex = await render({ value: page(`<div style="display:flex;flex-direction:column">${svg}</div>`), width: 200, format: "png" });
-    expect(Math.abs(block.height - 75.6)).toBeLessThan(1); // 84 * 18.9 / 21
+    // 84 * 18.9 / 21, plus the strut's descent below the baseline the inline svg sits on (no vertical-align: middle)
+    expect(block.height).toBeGreaterThan(75.6);
+    expect(block.height).toBeLessThan(90);
     expect(Math.abs(flex.height - 75.6)).toBeLessThan(1);
   });
   it("equal-specificity rules apply in source order, not in the order of the element's classes", async () => {
@@ -4030,5 +4032,27 @@ describe("grid item shorter than a line of text", () => {
     );
     expect(at(10, 1)).toEqual([255, 0, 0]);
     expect(at(10, 5)).toEqual([0, 0, 255]);
+  });
+});
+
+describe("inline svg", () => {
+  it("sits on the baseline like an image: the UA sheet gives it no vertical-align", async () => {
+    const page = (style: string) =>
+      `<!DOCTYPE html><html><body style="margin:0"><div style="font:16px/20px sans-serif"><svg width="10" height="60" viewBox="0 0 10 60"${style}><rect width="10" height="60" fill="#f00"/></svg></div></body></html>`;
+    const plain = await render({ value: page(""), width: 40, format: "png" });
+    const baseline = await render({ value: page(' style="vertical-align:baseline"'), width: 40, format: "png" });
+    expect(plain.height).toBe(baseline.height);
+  });
+});
+
+describe("ratio-only replaced box with a percentage width in a shrink-to-fit box", () => {
+  it("the box takes the 300px default width and the svg resolves its percentage against it", async () => {
+    const { at } = await renderPng(
+      '<div style="float:left;background:#00f"><svg viewBox="0 0 100 60" style="width:25%;vertical-align:top"></svg></div>',
+      400, 40,
+    );
+    // float is 300 wide (blue), the svg inside is 75 wide
+    expect(at(200, 5)).toEqual([0, 0, 255]);
+    expect(at(320, 5)).toEqual([255, 255, 255]);
   });
 });
