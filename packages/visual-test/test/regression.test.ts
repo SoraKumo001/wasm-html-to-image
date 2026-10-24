@@ -4488,3 +4488,15 @@ describe("baseline of an empty inline-block with a margin", () => {
     expect(at(10, 1)).toEqual([255, 255, 255]);
   });
 });
+
+describe("height of a box whose float joined the preceding inline line", () => {
+  it("does not count the float below the inline content", async () => {
+    const r = await render({
+      value:
+        '<html><body style="margin:0;font-size:0;line-height:0"><div style="display:inline-block;height:20px"></div><div style="float:right;margin:8px"></div></body></html>',
+      width: 100,
+      format: "png",
+    });
+    expect(r.height).toBe(20);
+  });
+});

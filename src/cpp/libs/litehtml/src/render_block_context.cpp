@@ -21,6 +21,7 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
     const bool max_content_sizing = (self_size.size_mode & containing_block_context::size_mode_content) &&
                                     !(self_size.size_mode & containing_block_context::size_mode_min_content);
     pixel_t float_run_width = 0;
+    pixel_t prev_run_rw = 0, prev_run_h = 0;  // the preceding child's measured inline size and block size
     for (const auto& el : m_children)
     {
         struct prev_setter { std::shared_ptr<render_item>& slot; const std::shared_ptr<render_item>& cur; ~prev_setter() { slot = cur; } } set_prev{prev_child, el};
@@ -40,7 +41,14 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
             {
                 auto* run = dynamic_cast<render_item_inline_context*>(prev_child.get());
                 pixel_t line_h = 0, used_w = 0;
-                if(run && (*run->src_el()->get_tagName() == 0 || std::string(run->src_el()->get_tagName()) == "anonymous") && run->last_line_extent(line_h, used_w) && line_h > 0)
+                const bool is_run = run && (*run->src_el()->get_tagName() == 0 || std::string(run->src_el()->get_tagName()) == "anonymous");
+                // (measure passes lay no line boxes out: the run's own extent stands in for its last line)
+                if(is_run && !run->last_line_extent(line_h, used_w) && prev_run_h > 0)
+                {
+                    line_h = prev_run_h;
+                    used_w = prev_run_rw;
+                }
+                if(is_run && line_h > 0)
                 {
                     const pixel_t avail = self_size.render_inline_size();
                     const pixel_t float_w = el->measure(self_size.new_inline_size(avail, (self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content)) | (el->src_el()->css().get_width().is_predefined() ? containing_block_context::size_mode_content : 0)), fmt_ctx);
@@ -247,6 +255,8 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
                 {
                     max_inline_size = rw;
 				}
+				prev_run_rw = rw;
+				prev_run_h = el->block_size(wm);
 				margin_block_start(block_start_margin);
 				// (placing the box laid its content out again, which restored the margins it was given)
 				if(self_collapsed)
