@@ -278,7 +278,7 @@ litehtml::pixel_t litehtml::render_item_block_context::get_first_baseline()
 	{
 		if(item->has_baseline())
 		{
-			return content_offset_block(wm) + item->block_start_pos(wm) + item->get_first_baseline();
+			return content_offset_block(wm) + item->block_start_pos(wm) - (item->margin_block_start() + item->padding_block_start() + item->border_block_start()) + item->get_first_baseline();
 		}
 	}
 	return wm.is_vertical() ? default_baseline() : block_size(wm) - margin_block_end();
@@ -295,7 +295,7 @@ litehtml::pixel_t litehtml::render_item_block_context::get_last_baseline()
 	{
 		if((*it)->has_baseline())
 		{
-			return content_offset_block(wm) + (*it)->block_start_pos(wm) + (*it)->get_last_baseline();
+			return content_offset_block(wm) + (*it)->block_start_pos(wm) - ((*it)->margin_block_start() + (*it)->padding_block_start() + (*it)->border_block_start()) + (*it)->get_last_baseline();
 		}
 	}
 	return wm.is_vertical() ? default_baseline() : block_size(wm) - margin_block_end();

@@ -4176,3 +4176,15 @@ describe("baseline alignment details", () => {
     expect(at(5, 8)).toEqual([255, 255, 255]);
   });
 });
+
+describe("first baseline through a block holding a padded flex container", () => {
+  it("is measured from the block's margin-box top, so a baseline-aligned neighbour lands on it", async () => {
+    const { at } = await renderPng(
+      '<div style="display:flex;align-items:baseline"><div style="display:flex;padding:8px"><div style="padding:8px"></div></div><div><div style="display:flex;padding:8px;background:#f00"><div></div></div></div></div>',
+      60, 60,
+    );
+    // item 1's baseline is y=24; item 2's is its flex child's bottom (8 below its top): it starts at y=16
+    expect(at(5, 20)).toEqual([255, 255, 255]);
+    expect(at(40, 18)).toEqual([255, 0, 0]);
+  });
+});
