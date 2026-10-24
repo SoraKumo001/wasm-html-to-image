@@ -1391,6 +1391,12 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                     cb.render_width = containing_block_context::typed_pixel(100000, containing_block_context::cbc_value_type_auto);
                     cb.width = cb.render_width;
                 }
+                else if (!vert)
+                {
+                    // the grid's width is the space on offer, not a definite size to resolve percentages against
+                    cb.render_width = containing_block_context::typed_pixel((pixel_t)cb.render_width, containing_block_context::cbc_value_type_auto);
+                    cb.width = cb.render_width;
+                }
                 pixel_t measured = item.el->measure(cb, fmt_ctx);
                 // measure() returns the margin-box inline size (padding and border included), so
                 // adding the offsets again would count them twice.

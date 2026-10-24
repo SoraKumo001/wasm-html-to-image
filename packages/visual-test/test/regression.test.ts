@@ -4056,3 +4056,15 @@ describe("ratio-only replaced box with a percentage width in a shrink-to-fit box
     expect(at(320, 5)).toEqual([255, 255, 255]);
   });
 });
+
+describe("percentage width of an item in an auto grid track", () => {
+  it("is cyclic while the track is sized: the track takes the item's content, then the percentage resolves against it", async () => {
+    const { at } = await renderPng(
+      '<div style="display:grid;grid-template-columns:auto 1fr;width:60px"><div style="width:50%;background:#f00"><div style="width:60px;height:5px"></div></div></div>',
+      100, 20,
+    );
+    // track = 60 (the content), item = 50% of the track = 30
+    expect(at(20, 2)).toEqual([255, 0, 0]);
+    expect(at(40, 2)).toEqual([255, 255, 255]);
+  });
+});
