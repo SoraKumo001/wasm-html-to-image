@@ -3953,6 +3953,16 @@ describe("percentage height of a flex item", () => {
     expect(at(10, 15)).toEqual([255, 0, 0]);
     expect(at(10, 25)).toEqual([255, 255, 255]);
   });
+  it("a border-box item with margins keeps the full percentage height", async () => {
+    const { at } = await renderPng(
+      '<div style="display:flex;height:80px;width:40px;background:#fff"><div style="box-sizing:border-box;height:25%;width:20px;margin:12px;padding:3px;background:#f00"></div></div>',
+      60, 100,
+    );
+    // 25% of 80px = 20px border box, starting below the 12px margin: y 12..32
+    expect(at(20, 15)).toEqual([255, 0, 0]);
+    expect(at(20, 30)).toEqual([255, 0, 0]);
+    expect(at(20, 34)).toEqual([255, 255, 255]);
+  });
 });
 
 describe("baseline of a nested flex container with a padded empty item", () => {
