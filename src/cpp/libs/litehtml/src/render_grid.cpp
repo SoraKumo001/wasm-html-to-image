@@ -1852,15 +1852,8 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             // height() returns margin box height (m_pos.height + margins + padding + borders)
             pixel_t total_h = vert ? item.el->width() : item.el->height();
             if (baseline_item[item_idx]) total_h = std::max(total_h, row_ascent[item.pos.row_start] + row_descent[item.pos.row_start]);
-            pixel_t min_content_h = item.el->src_el()->css().get_font_size() * 1.2f;
-            // content_offset_height() already includes margins, padding, and borders
-            pixel_t content_h = total_h - (vert ? item.el->content_offset_width() : item.el->content_offset_height());
-            pixel_t min_h = min_content_h + (vert ? item.el->content_offset_width() : item.el->content_offset_height());
-            // The one-line floor only applies to content that actually laid out: an empty item
-            // (e.g. a collapsed accordion panel) has a zero height and must not reserve a line.
-            // An item with a definite block size is exactly that tall, however small its line is.
+            // (content_offset_height() already includes margins, padding, and borders)
             const css_length& item_block_size = vert ? item.el->src_el()->css().get_width() : item.el->src_el()->css().get_height();
-            if (content_h > 0 && total_h < min_h && item_block_size.is_predefined()) total_h = min_h;
             if (item.pos.row_span() == 1 && item.pos.row_start < num_rows)
                 row_limit[item.pos.row_start] = std::max(row_limit[item.pos.row_start], total_h);
 

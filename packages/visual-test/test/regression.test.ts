@@ -4021,3 +4021,14 @@ describe("padded float that overflows its container", () => {
     expect(at(10, 20)).toEqual([255, 255, 255]);
   });
 });
+
+describe("grid item shorter than a line of text", () => {
+  it("an auto row is as tall as a fixed-height block inside the item, not one line", async () => {
+    const { at } = await renderPng(
+      '<div style="display:grid"><div><div style="height:3px;background:#f00"></div></div></div><div style="height:4px;background:#00f"></div>',
+      40, 40,
+    );
+    expect(at(10, 1)).toEqual([255, 0, 0]);
+    expect(at(10, 5)).toEqual([0, 0, 255]);
+  });
+});
