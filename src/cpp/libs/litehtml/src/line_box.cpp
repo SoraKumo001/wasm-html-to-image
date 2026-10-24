@@ -887,12 +887,12 @@ std::list< std::unique_ptr<litehtml::line_box_item> > litehtml::line_box::finish
 				{
 					m_block_size += diff2;
 					top_shift += diff2;
-					m_baseline += diff2;
 				}
 				const pixel_t diff1 = inline_boxes_dims.bottom - (line_max_height.bottom + top_shift_correction);
 				if(diff1 > 0)
 				{
 					m_block_size += diff1;
+					m_baseline += diff1;
 				}
 			}
 		} else if(inline_boxes_dims.count != 0)

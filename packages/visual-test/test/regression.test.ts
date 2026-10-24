@@ -4500,3 +4500,15 @@ describe("height of a box whose float joined the preceding inline line", () => {
     expect(r.height).toBe(20);
   });
 });
+
+describe("baseline of a line that holds only an inline-block taller than the line height", () => {
+  it("is the inline-block's bottom edge, so a flex sibling aligns to it", async () => {
+    const { at } = await renderPng(
+      '<div style="display:flex;align-items:baseline;font-size:0;line-height:0;background:#fff"><div><div style="display:inline-block;width:10px;height:16px"></div></div><div style="width:10px;height:4px;background:#f00"></div></div>',
+      40, 20,
+    );
+    // the 4px box sits on the baseline at y 16: it fills y 12..16
+    expect(at(15, 14)).toEqual([255, 0, 0]);
+    expect(at(15, 5)).toEqual([255, 255, 255]);
+  });
+});
