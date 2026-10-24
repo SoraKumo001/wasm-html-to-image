@@ -4314,3 +4314,15 @@ describe("percentage width of a grid item in a content-sized track", () => {
     });
   }
 });
+
+describe("ratio-only svg inside a flex container in a shrink-to-fit box", () => {
+  it("contributes no width, so the inline-block stays empty", async () => {
+    const r = await render({
+      value:
+        '<html><body style="margin:0;font-size:0;line-height:0"><div style="display:inline-block"><div style="display:flex"><svg viewBox="0 0 100 60"></svg></div></div></body></html>',
+      width: 200,
+      format: "png",
+    });
+    expect(r.height).toBeLessThan(5);
+  });
+});

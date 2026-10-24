@@ -82,7 +82,7 @@ litehtml::pixel_t litehtml::render_item_image::_measure(
                     return pc.get_width().is_predefined();
                 if (pc.get_width().is_predefined() && pc.get_width().predef() > 0) return true;  // fit-content / max-content / min-content
                 if (!pc.get_width().is_predefined()) return false;
-                if (disp != display_block && disp != display_inline) return false;  // flex / grid / table: not handled here
+                if (disp != display_block && disp != display_inline && disp != display_flex) return false;  // grid / table: not handled here
             }
             return false;
         };
