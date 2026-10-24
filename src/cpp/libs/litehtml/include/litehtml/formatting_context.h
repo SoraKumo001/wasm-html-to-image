@@ -14,6 +14,7 @@ namespace litehtml
 		pixel_pixel_cache m_cache_line_left;
 		pixel_pixel_cache m_cache_line_right;
 		pixel_t m_current_block_pos;
+		pixel_t m_measured_float_bottom = 0;
 		pixel_t m_current_inline_pos;
 		writing_mode m_writing_mode;
 
@@ -51,6 +52,10 @@ namespace litehtml
 		void clear_floats(int context);
 		pixel_t find_next_line_top( pixel_t top, pixel_t width, pixel_t def_right );
 		pixel_t get_floats_height(element_float el_float = float_none) const;
+		// Measure passes do not register floats; this keeps how far down they reach so that a box which
+		// contains its floats (a flow root) still grows to them.
+		void note_measured_float_bottom(pixel_t bottom) { if (bottom > m_measured_float_bottom) m_measured_float_bottom = bottom; }
+		pixel_t measured_float_bottom() const { return m_measured_float_bottom; }
 		pixel_t get_left_floats_height() const;
 		pixel_t get_right_floats_height() const;
 		pixel_t get_line_left( pixel_t y );

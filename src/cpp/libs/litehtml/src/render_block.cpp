@@ -65,6 +65,7 @@ litehtml::pixel_t litehtml::render_item_block::place_float(const std::shared_ptr
 		if(skip_ledger)
 		{
 			ret_inline_size = min_rendered_inline_size;
+			fmt_ctx->note_measured_float_bottom(line_block_start + el->height());
 		} else
 		{
 			fmt_ctx->add_float(el, min_rendered_inline_size, self_size.context_idx);
@@ -91,6 +92,7 @@ litehtml::pixel_t litehtml::render_item_block::place_float(const std::shared_ptr
 		if(skip_ledger)
 		{
 			ret_inline_size = min_rendered_inline_size;
+			fmt_ctx->note_measured_float_bottom(line_block_start + el->height());
 		} else
 		{
 			fmt_ctx->add_float(el, min_rendered_inline_size, self_size.context_idx);
@@ -395,7 +397,7 @@ litehtml::pixel_t litehtml::render_item_block::_measure(const containing_block_c
 	} else if (src_el()->is_block_formatting_context())
 	{
 		// add the floats' height to the block height
-		pixel_t floats_block_size = fmt_ctx->get_floats_height();
+		pixel_t floats_block_size = std::max(fmt_ctx->get_floats_height(), fmt_ctx->measured_float_bottom());
         pixel_t& physical_block_size = (self_size.mode == writing_mode_horizontal_tb) ? m_pos.height : m_pos.width;
 		if (floats_block_size > physical_block_size)
 		{
@@ -546,7 +548,7 @@ void litehtml::render_item_block::_place(pixel_t inline_pos, pixel_t block_pos, 
             m_pos.width = m_pos.height * ar.width / ar.height;
 	} else if (src_el()->is_block_formatting_context())
 	{
-		pixel_t floats_block_size = fmt_ctx->get_floats_height();
+		pixel_t floats_block_size = std::max(fmt_ctx->get_floats_height(), fmt_ctx->measured_float_bottom());
         pixel_t& physical_block_size = (self_size.mode == writing_mode_horizontal_tb) ? m_pos.height : m_pos.width;
 		if (floats_block_size > physical_block_size)
 		{

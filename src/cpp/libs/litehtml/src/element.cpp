@@ -316,7 +316,8 @@ bool element::is_block_formatting_context() const
 	if(m_css.get_display() == display_block)
 	{
 		auto par = parent();
-		if(par && (par->css().get_display() == display_inline_flex || par->css().get_display() == display_flex))
+		if(par && (par->css().get_display() == display_inline_flex || par->css().get_display() == display_flex ||
+				   par->css().get_display() == display_inline_grid || par->css().get_display() == display_grid))
 		{
 			return true;
 		}

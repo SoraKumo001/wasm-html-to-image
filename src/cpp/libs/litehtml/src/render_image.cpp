@@ -75,7 +75,12 @@ litehtml::pixel_t litehtml::render_item_image::_measure(
                 const auto& pc = p->css();
                 const auto disp = pc.get_display();
                 if (p == parent() && (disp == display_grid || disp == display_inline_grid)) return true;  // a grid sizes its tracks from the item's contribution
-                if (pc.get_float() != float_none || disp == display_inline_block || disp == display_inline_flex ||
+                // (a flex / grid item is blockified: its float computes to none)
+                const auto* pp = p->parent().get();
+                const bool floated = pc.get_float() != float_none &&
+                    !(pp && (pp->css().get_display() == display_flex || pp->css().get_display() == display_inline_flex ||
+                             pp->css().get_display() == display_grid || pp->css().get_display() == display_inline_grid));
+                if (floated || disp == display_inline_block || disp == display_inline_flex ||
                     disp == display_inline_grid || disp == display_inline_table)
                     return true;
                 if (pc.get_position() == element_position_absolute || pc.get_position() == element_position_fixed)

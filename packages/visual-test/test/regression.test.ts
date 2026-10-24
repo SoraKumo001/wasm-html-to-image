@@ -4326,3 +4326,25 @@ describe("ratio-only svg inside a flex container in a shrink-to-fit box", () => 
     expect(r.height).toBeLessThan(5);
   });
 });
+
+describe("floats inside a flex or grid item", () => {
+  for (const container of ["flex", "grid"]) {
+    it(`a ${container} item contains its float`, async () => {
+      const r = await render({
+        value: `<html><body style="margin:0;font-size:0;line-height:0"><div style="display:${container}"><div><div style="float:left;width:5px;height:10px"></div></div></div></body></html>`,
+        width: 100,
+        format: "png",
+      });
+      expect(r.height).toBe(10);
+    });
+  }
+  it("a float child of a flex container is a flex item, not a float", async () => {
+    const r = await render({
+      value:
+        '<html><body style="margin:0;font-size:0;line-height:0"><div style="display:flex"><div style="float:left;height:60px;flex:1"><svg viewBox="0 0 40 20"></svg></div></div></body></html>',
+      width: 100,
+      format: "png",
+    });
+    expect(r.height).toBe(60);
+  });
+});
