@@ -4143,3 +4143,14 @@ describe("percentage height of a grid item", () => {
     expect(at(10, 30)).toEqual([255, 255, 255]);
   });
 });
+
+describe("min-content size of a grid with minmax(40px, 1fr)", () => {
+  it("is the track's minimum, not its item's width, so a nested grid can shrink in a narrow auto track", async () => {
+    const { at } = await renderPng(
+      '<div style="display:grid;width:60px"><div style="display:grid;grid-template-columns:minmax(40px,1fr) 1fr;background:#f00"><div style="width:90px;height:5px"></div></div></div>',
+      120, 10,
+    );
+    expect(at(50, 2)).toEqual([255, 0, 0]);
+    expect(at(70, 2)).toEqual([255, 255, 255]);
+  });
+});

@@ -1326,7 +1326,9 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         for (int i = 0; i < num_columns && i < (int)m_grid_layout.column_widths.size(); i++)
         {
             const pixel_t f = fr_factor(i);
-            m_grid_layout.column_widths[i] = std::max(m_grid_layout.column_widths[i], std::max(f > 0 ? fraction * f : fr_contrib[i], min_content_constraint ? fr_contrib[i] : (pixel_t)0));
+            // (the minimum of minmax(40px, 1fr) is a length: the items' contributions cannot raise it)
+            const bool item_sized_min = columns_template[i].units() == css_units_fr || f <= 0;
+            m_grid_layout.column_widths[i] = std::max(m_grid_layout.column_widths[i], std::max(f > 0 ? fraction * f : fr_contrib[i], min_content_constraint && item_sized_min ? fr_contrib[i] : (pixel_t)0));
         }
     }
 
