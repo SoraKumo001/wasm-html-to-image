@@ -4188,3 +4188,14 @@ describe("first baseline through a block holding a padded flex container", () =>
     expect(at(40, 18)).toEqual([255, 0, 0]);
   });
 });
+
+describe("baseline-aligned line height with a nested flex container", () => {
+  it("is measured from placed descendants: the line is as tall as Chromium makes it", async () => {
+    const r = await render({
+      value: '<html><body style="margin:0"><div style="display:flex;align-items:baseline"><div style="display:flex;padding:8px"><div style="padding:8px"></div></div><div><div style="display:flex;padding:8px"><div></div></div></div></div></body></html>',
+      width: 100,
+      format: "png",
+    });
+    expect(r.height).toBe(32);
+  });
+});

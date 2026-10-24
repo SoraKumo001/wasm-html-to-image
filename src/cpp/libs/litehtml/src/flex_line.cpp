@@ -363,6 +363,12 @@ void litehtml::flex_line::init(pixel_t container_main_size, bool fit_container,
             }
 
             item->el->measure(child_cb, fmt_ctx);
+            if ((item->align & 0xFF) == flex_align_items_baseline && !(self_size.size_mode & containing_block_context::size_mode_measure)) {
+                // a measure pass leaves the descendants unplaced, and a baseline is read from their positions
+                containing_block_context place_cb = child_cb;
+                place_cb.size_mode &= ~containing_block_context::size_mode_measure;
+                item->el->place(0, 0, place_cb, fmt_ctx);
+            }
 
             if ((item->align & 0xFF) == flex_align_items_baseline) {
                 if (item->align & flex_align_items_last) {
