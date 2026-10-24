@@ -25,6 +25,8 @@ namespace litehtml
                 }
                 std::shared_ptr<render_item> init() override;
 
+                // a flex/grid container always has a baseline (synthesized from its first item when that has none)
+                bool has_baseline() override { return !m_children.empty(); }
                 pixel_t get_first_baseline() override;
                 pixel_t get_last_baseline() override;
         };

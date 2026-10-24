@@ -631,7 +631,7 @@ litehtml::pixel_t litehtml::render_item_block::get_first_baseline()
             el->src_el()->css().get_float() == float_none &&
             !el->src_el()->is_positioned() && el->has_baseline())
         {
-            return el->pos().y + el->get_first_baseline();
+            return el->pos().y - el->content_offset_top() + el->get_first_baseline();
         }
     }
     return render_item::get_first_baseline();
@@ -646,7 +646,7 @@ litehtml::pixel_t litehtml::render_item_block::get_last_baseline()
             el->src_el()->css().get_float() == float_none &&
             !el->src_el()->is_positioned())
         {
-            return el->pos().y + el->get_last_baseline();
+            return el->pos().y - el->content_offset_top() + el->get_last_baseline();
         }
     }
     return render_item::get_last_baseline();

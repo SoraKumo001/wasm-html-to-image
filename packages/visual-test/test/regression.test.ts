@@ -4154,3 +4154,25 @@ describe("min-content size of a grid with minmax(40px, 1fr)", () => {
     expect(at(70, 2)).toEqual([255, 255, 255]);
   });
 });
+
+describe("baseline alignment details", () => {
+  it("in a column container the items line their border edges up on the widest start margin", async () => {
+    const { at } = await renderPng(
+      '<div style="display:flex;flex-direction:column;align-items:baseline"><div style="margin:4px;width:10px;height:5px;background:#f00"></div><div style="width:10px;height:5px;background:#00f"></div></div>',
+      40, 30,
+    );
+    // both boxes start at x=4 (the first one's margin sets the shared edge)
+    expect(at(6, 6)).toEqual([255, 0, 0]);
+    expect(at(6, 13)).toEqual([0, 0, 255]);
+    expect(at(1, 13)).toEqual([255, 255, 255]);
+  });
+  it("a flex container counts as having a baseline even when its item is empty", async () => {
+    const { at } = await renderPng(
+      '<div style="display:flex;align-items:baseline"><div><div style="display:flex"><div style="margin:6px 0;height:0"></div></div></div><div style="height:5px;width:10px;background:#f00"></div></div>',
+      40, 40,
+    );
+    // the first item's baseline is the bottom of its flex item's border box (y=6): the red box sits on it, y=1..6
+    expect(at(5, 3)).toEqual([255, 0, 0]);
+    expect(at(5, 8)).toEqual([255, 255, 255]);
+  });
+});

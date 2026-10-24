@@ -800,7 +800,15 @@ void litehtml::flex_item_column_direction::align_baseline(litehtml::flex_line &l
 													   const containing_block_context &self_size,
 													   formatting_context *fmt_ctx)
 {
-	set_cross_position(ln.cross_start);
+	// A column container has no inline baseline: the items sharing it line up their border edges on the
+	// start of the line, the widest start margin setting that edge.
+	pixel_t shared_margin = 0;
+	for (auto& it : ln.items)
+	{
+		if ((it->align & 0xFF) == flex_align_items_baseline)
+			shared_margin = std::max(shared_margin, m_container_wm.inline_start(it->el->get_margins()));
+	}
+	set_cross_position(ln.cross_start + shared_margin - m_container_wm.inline_start(el->get_margins()));
 }
 
 litehtml::pixel_t litehtml::flex_item_column_direction::get_el_main_size()
