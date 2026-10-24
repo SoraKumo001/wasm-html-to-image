@@ -1755,7 +1755,9 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         {
             const auto op = len.get_op();
             row_kinds[i] = (op == css_length::op_fit_content || op == css_length::op_minmax) ? 1 : 0;
-            row_auto[i] = 0;
+            // minmax(<min>, auto): an auto maximum is stretched like an auto track
+            row_auto[i] = (op == css_length::op_minmax && len.get_operands().size() == 2 &&
+                           len.get_operands()[1].is_predefined() && len.get_operands()[1].predef() == 0) ? 1 : 0;
         }
         else if (len.units() == css_units_percentage)
         {

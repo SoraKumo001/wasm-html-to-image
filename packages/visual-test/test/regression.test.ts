@@ -4266,3 +4266,14 @@ describe("percentage height of a column flex item against a fixed container", ()
     expect(at(20, 22)).toEqual([0, 0, 255]);
   });
 });
+
+describe("grid rows with an auto maximum", () => {
+  it("minmax(<length>, auto) stretches into the free space of a fixed-height grid", async () => {
+    const { at } = await renderPng(
+      '<div style="display:grid;grid-auto-rows:minmax(30px,auto);height:60px;width:40px"><div style="background:#f00"></div></div>',
+      60, 80,
+    );
+    expect(at(10, 55)).toEqual([255, 0, 0]);
+    expect(at(10, 65)).toEqual([255, 255, 255]);
+  });
+});
