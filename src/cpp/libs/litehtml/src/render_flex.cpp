@@ -733,7 +733,13 @@ litehtml::pixel_t litehtml::render_item_flex::get_first_baseline()
 	{
 		if(!m_lines.front().items.empty())
 		{
-			return m_lines.front().items.front()->cross_pos + m_lines.front().items.front()->el->get_first_baseline() + content_offset_top();
+			const auto& item_el = m_lines.front().items.front()->el;
+			if(css().get_flex_direction() == flex_direction_column || css().get_flex_direction() == flex_direction_column_reverse)
+			{
+				// cross_pos is horizontal here; the baseline is measured down the block axis.
+				return item_el->pos().y - item_el->content_offset_top() + item_el->get_first_baseline();
+			}
+			return m_lines.front().items.front()->cross_pos + item_el->get_first_baseline() + content_offset_top();
 		}
 	}
 	return height();
@@ -760,7 +766,13 @@ litehtml::pixel_t litehtml::render_item_flex::get_last_baseline()
 	{
 		if(!m_lines.front().items.empty())
 		{
-			return m_lines.front().items.front()->cross_pos + m_lines.front().items.front()->el->get_last_baseline() + content_offset_top();
+			const auto& item_el = m_lines.front().items.front()->el;
+			if(css().get_flex_direction() == flex_direction_column || css().get_flex_direction() == flex_direction_column_reverse)
+			{
+				// cross_pos is horizontal here; the baseline is measured down the block axis.
+				return item_el->pos().y - item_el->content_offset_top() + item_el->get_last_baseline();
+			}
+			return m_lines.front().items.front()->cross_pos + item_el->get_last_baseline() + content_offset_top();
 		}
 	}
 	return height();

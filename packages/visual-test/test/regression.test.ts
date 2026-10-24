@@ -4222,3 +4222,17 @@ describe("absolute box inside a box that only creates a stacking context", () =>
     }
   });
 });
+
+describe("baseline of a column flex container", () => {
+  it("is measured down the block axis, not from the item's horizontal offset", async () => {
+    // The 90px item overflows to the left of its 20px column (align-items:flex-end); that
+    // horizontal offset must not move the inline-flex box down.
+    const r = await render({
+      value:
+        '<html><body style="margin:0;font-size:0;line-height:0"><div style="display:inline-flex"><div style="display:flex;flex-direction:column;align-items:flex-end;width:20px"><div style="width:90px"></div></div></div></body></html>',
+      width: 100,
+      format: "png",
+    });
+    expect(r.height).toBeLessThan(10);
+  });
+});
