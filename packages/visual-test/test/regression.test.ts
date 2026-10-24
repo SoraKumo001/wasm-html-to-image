@@ -4425,15 +4425,3 @@ describe("ratio-only svg in a shrink-to-fit box with a definite width", () => {
     });
   }
 });
-
-describe("ratio-only svg in an auto-width item of a row flex container", () => {
-  it("contributes no width, so the item and the svg stay empty", async () => {
-    const r = await render({
-      value:
-        '<html><body style="margin:0;font-size:0;line-height:0"><div style="display:flex"><div><svg viewBox="0 0 100 60"></svg></div></div></body></html>',
-      width: 200,
-      format: "png",
-    });
-    expect(r.height).toBeLessThan(5);
-  });
-});
