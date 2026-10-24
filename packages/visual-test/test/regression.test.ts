@@ -3436,8 +3436,9 @@ describe("intrinsic width keywords on a block", () => {
     expect(await widthOf("float:left", `<div style="padding:4px">${held}</div>`)).toBe(108);
   });
 
-  it("keeps fit-content within the available width, and plain blocks full width", async () => {
-    expect(await widthOf("width:fit-content", '<div style="width:900px;height:20px"></div>')).toBe(600);
+  it("keeps fit-content within the available width unless the min-content is wider, and plain blocks full width", async () => {
+    expect(await widthOf("width:fit-content", '<div style="width:900px;height:20px"></div>')).toBe(900);
+    expect(await widthOf("width:fit-content", '<div style="height:20px"></div>')).toBe(0);
     expect(await widthOf("")).toBe(600);
   });
 });
@@ -3955,5 +3956,23 @@ describe("baseline of a nested flex container with a padded empty item", () => {
     );
     expect(at(8, 2)).toEqual([255, 0, 0]);
     expect(at(8, 14)).toEqual([255, 0, 0]);
+  });
+});
+
+describe("width: fit-content below the min-content width", () => {
+  it("a block does not shrink under its min-content width", async () => {
+    const { at } = await renderPng(
+      '<div style="width:44px"><div style="width:fit-content;background:#f00"><div style="width:50px;height:5px"></div></div></div>',
+      100, 20,
+    );
+    expect(at(47, 2)).toEqual([255, 0, 0]);
+  });
+  it("a grid item is neither stretched nor squeezed below it", async () => {
+    const { at } = await renderPng(
+      '<div style="display:grid;grid-template-columns:44px"><div style="width:fit-content;background:#f00"><div style="width:50px;height:5px"></div></div></div>',
+      100, 20,
+    );
+    expect(at(47, 2)).toEqual([255, 0, 0]);
+    expect(at(55, 2)).toEqual([255, 255, 255]);
   });
 });

@@ -139,7 +139,13 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
 					int content_mode = (self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content)) | containing_block_context::size_mode_content;
 					if(kw == 3) content_mode |= containing_block_context::size_mode_min_content;
 					rw = el->measure(self_size.new_inline_size(inline_available_size, content_mode), fmt_ctx);
-					if(rw < inline_available_size || kw == 3)
+					if(kw == 1 && rw >= inline_available_size)
+					{
+						// fit-content never goes below the min-content width: min(max-content, max(min-content, available))
+						const pixel_t min_rw = el->measure(self_size.new_inline_size(inline_available_size, content_mode | containing_block_context::size_mode_min_content), fmt_ctx);
+						if(min_rw > inline_available_size) rw = min_rw;
+					}
+					if(rw < inline_available_size || kw == 3 || (kw == 1 && rw > inline_available_size))
 					{
 						el->measure(self_size.new_inline_size(rw, self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content)), fmt_ctx);
 						inline_available_size = rw;
