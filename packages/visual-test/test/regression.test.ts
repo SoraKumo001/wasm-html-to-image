@@ -4524,3 +4524,14 @@ describe("max-content width of a wrapping flex container", () => {
     expect(at(95, 2)).toEqual([255, 255, 255]);
   });
 });
+
+describe("a wrapper of an empty flex container", () => {
+  it("keeps both margins: a flex container does not collapse through itself", async () => {
+    const r = await render({
+      value: '<html><body style="margin:0;font-size:0;line-height:0"><div><div style="display:flex;margin:2px"></div></div></body></html>',
+      width: 100,
+      format: "png",
+    });
+    expect(r.height).toBe(4);
+  });
+});

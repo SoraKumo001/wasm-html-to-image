@@ -118,12 +118,14 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
 				// collapses with, instead of counting top and bottom separately.
 				bool self_collapsed = false;
 				pixel_t self_collapsed_margin = 0;
+				el->set_collapsed_through(false);
 				bool only_flow_blocks = true;
 					for(const auto& c : el->children())
 					{
 						const auto& cc = c->src_el()->css();
-						if(cc.get_display() != display_block || cc.get_float() != float_none ||
-						   cc.get_position() == element_position_absolute || cc.get_position() == element_position_fixed)
+						// (an out-of-flow positioned child takes no part in the margin collapsing)
+						if(cc.get_position() == element_position_absolute || cc.get_position() == element_position_fixed) continue;
+						if(cc.get_display() != display_block || cc.get_float() != float_none || !c->collapsed_through())
 						{
 							only_flow_blocks = false;
 							break;
@@ -140,6 +142,7 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
 					el->margin_block_end(0);
 					current_margin = combined;
 					self_collapsed = true;
+					el->set_collapsed_through(true);
 					// what actually sits in block_offset after this box is its margin collapsed with the one before it
 					self_collapsed_margin = is_first ? combined
 						: std::max<pixel_t>(0, std::max(last_block_margin, combined)) + std::min<pixel_t>(0, std::min(last_block_margin, combined));

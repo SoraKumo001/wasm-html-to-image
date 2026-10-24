@@ -79,6 +79,7 @@ namespace litehtml
         // Bottom margin this box handed to its parent when they collapsed (the margin itself is then
         // zeroed). A parent measured again while this box answers from its cache needs it back.
         pixel_t m_collapsed_out_margin = 0;
+        bool m_collapsed_through = false;
         // Position right after the last relative shift. A line box is finished several times per
         // layout; the shift must be applied once per fresh position, not once per call.
         position m_relative_shifted_pos;
@@ -256,6 +257,9 @@ namespace litehtml
         void margin_block_start(pixel_t val);
         void margin_block_end(pixel_t val);
         pixel_t collapsed_out_margin() const { return m_collapsed_out_margin; }
+        // The last layout found the box collapsing through itself (its margins are one margin).
+        bool collapsed_through() const { return m_collapsed_through; }
+        void set_collapsed_through(bool v) { m_collapsed_through = v; }
         void collapse_margin_out()
         {
             if (margin_block_end() != 0) m_collapsed_out_margin = margin_block_end();
