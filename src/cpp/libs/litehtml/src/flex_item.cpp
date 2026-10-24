@@ -583,6 +583,13 @@ void litehtml::flex_item_column_direction::direction_specific_init(const litehtm
 				pixel_t content_main = content_extent + el->content_offset_block(m_container_wm);
 				if (content_main < min_main_size) min_main_size = content_main;
 			}
+			else if (!m_container_wm.is_vertical() && size_prop.units() == css_units_percentage &&
+					 self_size.render_height.type != containing_block_context::cbc_value_type_auto)
+			{
+				// A percentage against a definite container height is a specified size suggestion too.
+				pixel_t specified = size_prop.calc_percent(parent_size) + render_offset - el->box_sizing_block(m_container_wm);
+				if (specified < min_main_size) min_main_size = specified;
+			}
 		} else
 		{
 			min_main_size = render_offset;

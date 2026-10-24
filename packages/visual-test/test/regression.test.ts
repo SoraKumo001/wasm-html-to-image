@@ -4254,3 +4254,15 @@ describe("percentage height under a flex item of an auto-height container", () =
     expect(await heightOf(`<div style="display:flex;flex-direction:column">${inner}</div>`)).toBe(36);
   });
 });
+
+describe("percentage height of a column flex item against a fixed container", () => {
+  it("shrinks to the percentage even when the content is taller", async () => {
+    const { at } = await renderPng(
+      '<div style="display:flex;flex-direction:column;height:20px;width:40px;background:#fff"><div style="box-sizing:border-box;height:100%;padding:8px;background:#f00"><div style="height:10px"></div></div></div><div style="background:#00f;height:30px"></div>',
+      60, 60,
+    );
+    // The item is 20px (100% of the container), not 26px (its padded content)
+    expect(at(20, 18)).toEqual([255, 0, 0]);
+    expect(at(20, 22)).toEqual([0, 0, 255]);
+  });
+});
