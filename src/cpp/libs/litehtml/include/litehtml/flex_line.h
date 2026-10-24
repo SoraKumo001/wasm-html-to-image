@@ -22,6 +22,8 @@ namespace litehtml
                 bool reverse_main;
                 bool reverse_cross;
                 pixel_t main_gap;
+                // A wrapping container sizes each line from its items; only a single line is held to the container's cross size.
+                bool multiline = false;
 
                 flex_line(bool _reverse_main, bool _reverse_cross, pixel_t _main_gap = 0) :
                                 cross_start(0),

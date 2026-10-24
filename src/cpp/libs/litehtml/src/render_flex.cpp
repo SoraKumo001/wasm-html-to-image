@@ -492,6 +492,7 @@ std::list<litehtml::flex_line> litehtml::render_item_flex::get_lines(const liteh
 
 	std::list<flex_line> lines;
 	flex_line line(reverse_main, reverse_cross, main_gap);
+	line.multiline = css().get_flex_wrap() != flex_wrap_nowrap;
 	std::list<std::shared_ptr<flex_item>> items;
 	int src_order = 0;
 	bool sort_required = false;
@@ -547,6 +548,7 @@ std::list<litehtml::flex_line> litehtml::render_item_flex::get_lines(const liteh
 		{
 			lines.emplace_back(line);
 			line = flex_line(reverse_main, reverse_cross, main_gap);
+			line.multiline = css().get_flex_wrap() != flex_wrap_nowrap;
 			gap = 0;
 		}
 		line.flex_base_size += gap + item->flex_base_size;

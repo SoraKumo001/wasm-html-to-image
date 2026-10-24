@@ -4103,3 +4103,14 @@ describe("width: fit-content on an item of a column flex container", () => {
     expect(at(40, 5)).toEqual([255, 255, 255]);
   });
 });
+
+describe("cross size of a wrapping column flex line", () => {
+  it("is the widest item's size, not clamped to the container's width", async () => {
+    const { at } = await renderPng(
+      '<div style="display:flex;flex-direction:column;flex-wrap:wrap;width:40px"><div style="background:#f00"><div style="width:80px;height:10px"></div></div></div>',
+      120, 30,
+    );
+    expect(at(60, 5)).toEqual([255, 0, 0]);
+    expect(at(100, 5)).toEqual([255, 255, 255]);
+  });
+});
