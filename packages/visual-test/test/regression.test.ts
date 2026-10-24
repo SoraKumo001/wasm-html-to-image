@@ -4441,3 +4441,15 @@ describe("a block whose only content is a collapsed-through margin", () => {
     expect(await heightOf('<div><div style="margin:12px"></div></div><div style="height:5px"></div>')).toBe(17);
   });
 });
+
+describe("percentage width of an inline-block next to a float", () => {
+  it("resolves against the containing block, not the space the float left", async () => {
+    const { at } = await renderPng(
+      '<div style="width:120px;background:#fff;font-size:0;line-height:0"><div style="float:right;width:50px;height:5px;background:#00f"></div><div style="display:inline-block;width:25%;height:5px;background:#f00"></div></div>',
+      140, 10,
+    );
+    // 25% of 120px = 30px (not 25% of the 70px beside the float)
+    expect(at(25, 2)).toEqual([255, 0, 0]);
+    expect(at(35, 2)).toEqual([255, 255, 255]);
+  });
+});
