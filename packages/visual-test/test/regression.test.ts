@@ -4476,3 +4476,15 @@ describe("max-content width of a float holding a float and inline content", () =
     expect(at(60, 2)).toEqual([255, 0, 0]);
   });
 });
+
+describe("baseline of an empty inline-block with a margin", () => {
+  it("is the bottom margin edge, so a following empty inline-block lines up with it", async () => {
+    const { at } = await renderPng(
+      '<div style="font-size:0;line-height:0;background:#fff"><div style="display:inline-block;margin:4px"><div></div></div><div style="display:inline-block;width:10px;height:4px;background:#f00"></div></div>',
+      40, 20,
+    );
+    // the first box's margin edge is at y 8, and the second box sits on it: y 4..8
+    expect(at(10, 5)).toEqual([255, 0, 0]);
+    expect(at(10, 1)).toEqual([255, 255, 255]);
+  });
+});

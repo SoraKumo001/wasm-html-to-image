@@ -318,6 +318,8 @@ litehtml::pixel_t litehtml::render_item_block_context::get_first_baseline()
     satoru::WritingModeContext wm = get_wm_context();
 	if(m_children.empty())
 	{
+		// (an empty inline-block has no line box: its baseline is the bottom margin edge, CSS 2.1 10.8.1)
+		if(src_el()->css().get_display() == display_inline_block && !wm.is_vertical()) return block_size(wm);
 		return wm.is_vertical() ? default_baseline() : block_size(wm) - margin_block_end();
 	}
 	for(const auto &item : m_children)
@@ -327,6 +329,7 @@ litehtml::pixel_t litehtml::render_item_block_context::get_first_baseline()
 			return content_offset_block(wm) + item->block_start_pos(wm) - (item->margin_block_start() + item->padding_block_start() + item->border_block_start()) + item->get_first_baseline();
 		}
 	}
+	if(src_el()->css().get_display() == display_inline_block && !wm.is_vertical()) return block_size(wm);
 	return wm.is_vertical() ? default_baseline() : block_size(wm) - margin_block_end();
 }
 
@@ -335,6 +338,8 @@ litehtml::pixel_t litehtml::render_item_block_context::get_last_baseline()
     satoru::WritingModeContext wm = get_wm_context();
 	if(m_children.empty())
 	{
+		// (an empty inline-block has no line box: its baseline is the bottom margin edge, CSS 2.1 10.8.1)
+		if(src_el()->css().get_display() == display_inline_block && !wm.is_vertical()) return block_size(wm);
 		return wm.is_vertical() ? default_baseline() : block_size(wm) - margin_block_end();
 	}
 	for(auto it = m_children.rbegin(); it != m_children.rend(); ++it)
@@ -344,6 +349,7 @@ litehtml::pixel_t litehtml::render_item_block_context::get_last_baseline()
 			return content_offset_block(wm) + (*it)->block_start_pos(wm) - ((*it)->margin_block_start() + (*it)->padding_block_start() + (*it)->border_block_start()) + (*it)->get_last_baseline();
 		}
 	}
+	if(src_el()->css().get_display() == display_inline_block && !wm.is_vertical()) return block_size(wm);
 	return wm.is_vertical() ? default_baseline() : block_size(wm) - margin_block_end();
 }
 
