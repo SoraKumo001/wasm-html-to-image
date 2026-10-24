@@ -400,6 +400,17 @@ void litehtml::flex_item_row_direction::layout_item(litehtml::flex_line &ln,
 		{
 			child_cb.size_mode |= containing_block_context::size_mode_content;
 		}
+		else if (!m_container_wm.is_vertical() && cross_prop.units() == css_units_percentage &&
+				 self_size.render_block_size().type != containing_block_context::cbc_value_type_auto)
+		{
+			// A percentage height against a definite container height is a definite cross size.
+			pixel_t content = cross_prop.calc_percent(self_size.render_block_size().value);
+			if (el->css().get_box_sizing() == box_sizing_border_box)
+				content = std::max<pixel_t>(0, content - (el->content_offset_block(m_container_wm) - el->box_sizing_block(m_container_wm)));
+			child_cb.block_size() = content;
+			child_cb.render_block_size() = content;
+			child_cb.size_mode |= containing_block_context::size_mode_exact_height;
+		}
 	}
 
 	el->measure(child_cb, fmt_ctx);

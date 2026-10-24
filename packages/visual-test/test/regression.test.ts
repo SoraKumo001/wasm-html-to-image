@@ -3934,3 +3934,15 @@ describe("first baseline of a block whose first child is empty", () => {
     expect(at(10, 2)).toEqual([255, 255, 255]);
   });
 });
+
+describe("percentage height of a flex item", () => {
+  it("resolves against the definite height of the container", async () => {
+    const { at } = await renderPng(
+      '<div style="display:flex;height:80px;width:40px;background:#fff"><div style="height:25%;width:40px;background:#f00"><div style="min-height:30px"></div></div></div>',
+      60, 100,
+    );
+    // 25% of 80px = 20px; the 30px child overflows instead of stretching the item
+    expect(at(10, 15)).toEqual([255, 0, 0]);
+    expect(at(10, 25)).toEqual([255, 255, 255]);
+  });
+});
