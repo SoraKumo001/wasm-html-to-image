@@ -4385,3 +4385,17 @@ describe("percentage-width ratio-only svg in a max-content grid track", () => {
     expect(at(310, 5)).toEqual([0, 0, 255]);
   });
 });
+
+describe("automatic minimum size of a replaced grid item", () => {
+  it("an svg (overflow: hidden) still holds its fr track open", async () => {
+    const { at } = await renderPng(
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;width:240px;background:#fff"><div style="height:5px;background:#00f"></div><svg viewBox="0 0 100 60" preserveAspectRatio="none" style="width:120px;height:5px"><rect width="100" height="60" fill="#f00"/></svg><div></div></div>',
+      260, 10,
+    );
+    // 1fr tracks: the svg floors the middle track at 120px, the others share the remaining 120px (60 + 60)
+    expect(at(30, 2)).toEqual([0, 0, 255]);
+    expect(at(70, 2)).toEqual([255, 0, 0]);
+    expect(at(175, 2)).toEqual([255, 0, 0]);
+    expect(at(185, 2)).toEqual([255, 255, 255]);
+  });
+});
