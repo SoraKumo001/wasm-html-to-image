@@ -1219,7 +1219,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             // An explicit min-width switches the automatic minimum off: it is the floor itself.
             if (!imw.is_predefined())
             {
-                if (definite(imw)) floors[c] = std::max(floors[c], imw.calc_percent(render_inline) + item.el->content_offset_width());
+                if (definite(imw)) floors[c] = std::max(floors[c], std::max<pixel_t>(0, imw.calc_percent(render_inline) - item.el->box_sizing_width()) + item.el->content_offset_width());
                 continue;
             }
             if (iw.units() == css_units_percentage) continue;
@@ -1544,7 +1544,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                             if (!imw.is_predefined())
                             {
                                 if (!imw.is_calc() && imw.units() != css_units_percentage)
-                                    minc[c] = std::max(minc[c], std::min(imw.calc_percent(render_inline) + item.el->content_offset_width(), m_grid_layout.column_widths[c]));
+                                    minc[c] = std::max(minc[c], std::min(std::max<pixel_t>(0, imw.calc_percent(render_inline) - item.el->box_sizing_width()) + item.el->content_offset_width(), m_grid_layout.column_widths[c]));
                                 continue;
                             }
                         }

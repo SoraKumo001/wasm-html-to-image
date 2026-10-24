@@ -4277,3 +4277,15 @@ describe("grid rows with an auto maximum", () => {
     expect(at(10, 65)).toEqual([255, 255, 255]);
   });
 });
+
+describe("min-width of a border-box grid item in an fr track", () => {
+  it("does not add the padding to a min-width that already includes it", async () => {
+    const { at } = await renderPng(
+      '<div style="display:grid;grid-template-columns:1fr 1fr;width:60px"><div style="box-sizing:border-box;min-width:10px;padding:12px;background:#f00;height:10px"></div></div>',
+      80, 20,
+    );
+    // the tracks stay 30px + 30px: the item's 24px padding box fits the first one
+    expect(at(28, 5)).toEqual([255, 0, 0]);
+    expect(at(32, 5)).toEqual([255, 255, 255]);
+  });
+});
