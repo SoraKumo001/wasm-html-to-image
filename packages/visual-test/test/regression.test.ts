@@ -4374,3 +4374,14 @@ describe("replaced flex item stretched to a definite container height", () => {
     expect(at(45, 30)).toEqual([255, 255, 255]);
   });
 });
+
+describe("percentage-width ratio-only svg in a max-content grid track", () => {
+  it("takes the 300px default width for the track", async () => {
+    const { at } = await renderPng(
+      '<div style="display:grid;grid-template-columns:max-content 1fr;width:500px;background:#fff"><div style="height:20px;background:#f00"><svg viewBox="0 0 40 60" style="width:30%"></svg></div><div style="height:20px;background:#00f"></div></div>',
+      520, 30,
+    );
+    expect(at(290, 5)).toEqual([255, 0, 0]);
+    expect(at(310, 5)).toEqual([0, 0, 255]);
+  });
+});
