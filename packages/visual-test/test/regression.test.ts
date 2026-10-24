@@ -4425,3 +4425,19 @@ describe("ratio-only svg in a shrink-to-fit box with a definite width", () => {
     });
   }
 });
+
+describe("a block whose only content is a collapsed-through margin", () => {
+  const heightOf = async (body: string) =>
+    (await render({
+      value: `<html><body style="margin:0;font-size:0;line-height:0">${body}</body></html>`,
+      width: 100,
+      format: "png",
+    })).height;
+  it("an empty block's margin is counted once in the page height", async () => {
+    expect(await heightOf('<div style="margin:12px"></div>')).toBe(12);
+  });
+  it("a wrapper of an empty block collapses through itself too", async () => {
+    // wrapper (collapsed-through 12px) + sibling 5px: the margin is not doubled
+    expect(await heightOf('<div><div style="margin:12px"></div></div><div style="height:5px"></div>')).toBe(17);
+  });
+});

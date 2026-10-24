@@ -87,7 +87,18 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
 				// collapses with, instead of counting top and bottom separately.
 				bool self_collapsed = false;
 				pixel_t self_collapsed_margin = 0;
-				if(el->children().empty() && el->block_size(el->get_wm_context()) == el->get_wm_context().block_start(el->get_margins()) + el->get_wm_context().block_end(el->get_margins()) &&
+				bool only_flow_blocks = true;
+					for(const auto& c : el->children())
+					{
+						const auto& cc = c->src_el()->css();
+						if(cc.get_display() != display_block || cc.get_float() != float_none ||
+						   cc.get_position() == element_position_absolute || cc.get_position() == element_position_fixed)
+						{
+							only_flow_blocks = false;
+							break;
+						}
+					}
+					if(only_flow_blocks && el->block_size(el->get_wm_context()) == el->get_wm_context().block_start(el->get_margins()) + el->get_wm_context().block_end(el->get_margins()) &&
 				   el->src_el()->css().get_display() == display_block && !el->src_el()->is_block_formatting_context() && !el->src_el()->is_replaced() &&
 				   el->css().get_height().is_predefined() && el->css().get_min_height().is_predefined())
 				{
@@ -208,6 +219,12 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
                     max_inline_size = rw;
 				}
 				margin_block_start(block_start_margin);
+				// (placing the box laid its content out again, which restored the margins it was given)
+				if(self_collapsed)
+				{
+					el->margin_block_start(current_margin);
+					el->margin_block_end(0);
+				}
                 block_offset += el->block_size(wm);
 				// (a cached child handed its bottom margin to its own parent: count it again for this one)
 				if(!self_collapsed && wm.block_end(el->get_margins()) == 0) block_offset += el->collapsed_out_margin();
