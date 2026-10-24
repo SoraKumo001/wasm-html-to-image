@@ -56,6 +56,7 @@ namespace litehtml
 		// inline formatting context (P3 pagination). Empty otherwise.
 		void						get_line_boundaries(position::vector& boxes) const;
 		bool						is_positioned()				const;
+		bool						is_abs_containing_block()	const;
 		bool						is_float()					const;
 		bool						is_block_formatting_context() const;
 
@@ -284,6 +285,17 @@ namespace litehtml
 			return true;
 		}
 		return false;
+	}
+
+	// What absolutely positioned descendants resolve against: a positioned box, or one that a transform
+	// or filter makes the containing block. Stacking-only effects (opacity, isolation, z-index, blend modes,
+	// masks) do not.
+	inline bool litehtml::element::is_abs_containing_block()	const
+	{
+		return css().get_position() > element_position_static ||
+			!css().get_transform().empty() ||
+			!css().get_filter().empty() ||
+			!css().get_backdrop_filter().empty();
 	}
 
 	inline bool litehtml::element::is_float()	const

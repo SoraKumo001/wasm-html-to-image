@@ -1,3 +1,4 @@
+#include <functional>
 #include "render_item.h"
 
 #include <typeinfo>
@@ -945,7 +946,11 @@ void litehtml::render_item::render_positioned(render_type rt) {
 }
 
 void litehtml::render_item::add_positioned(const std::shared_ptr<litehtml::render_item>& el) {
-    if (src_el()->is_positioned() || is_root()) {
+    // an absolutely positioned box resolves against the nearest real containing block; a box that is only
+    // stacked (opacity, isolation, z-index...) keeps the nearest stacking ancestor
+    const auto child_pos = el->src_el()->css().get_position();
+    const bool child_is_abs = child_pos == element_position_absolute || child_pos == element_position_fixed;
+    if ((child_is_abs ? src_el()->is_abs_containing_block() : src_el()->is_positioned()) || is_root()) {
         m_positioned.push_back(el);
     } else {
         auto el_parent = parent();
@@ -1064,13 +1069,22 @@ void litehtml::render_item::draw_stacking_context(uint_ptr hdc, pixel_t x, pixel
 
     std::map<int, bool> z_indexes;
     if (with_positioned) {
-        for (const auto& idx : m_positioned) {
-            int z_index = 0;
-            if (idx->src_el()->css().get_position() != element_position_static) {
-                z_index = idx->src_el()->css().get_z_index();
+        // The boxes this stacking context paints in its z-index passes: the stacked descendants not inside
+        // another stacking context. (m_positioned follows containing blocks, which is not the same set.)
+        std::function<void(const render_item&)> collect = [&](const render_item& ri) {
+            for (const auto& child : ri.m_children) {
+                if (child->src_el()->is_positioned()) {
+                    int z_index = 0;
+                    if (child->src_el()->css().get_position() != element_position_static) {
+                        z_index = child->src_el()->css().get_z_index();
+                    }
+                    z_indexes[z_index] = true;
+                } else {
+                    collect(*child);
+                }
             }
-            z_indexes[z_index] = true;
-        }
+        };
+        collect(*this);
 
         for (const auto& idx : z_indexes) {
             if (idx.first < 0) {

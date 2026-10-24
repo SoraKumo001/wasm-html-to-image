@@ -4199,3 +4199,16 @@ describe("baseline-aligned line height with a nested flex container", () => {
     expect(r.height).toBe(32);
   });
 });
+
+describe("absolute box inside a box that only creates a stacking context", () => {
+  it("resolves against the positioned ancestor, not against isolation / opacity / mix-blend-mode boxes", async () => {
+    for (const style of ["isolation:isolate", "opacity:.99", "mix-blend-mode:multiply"]) {
+      const { at } = await renderPng(
+        `<div style="position:relative"><div style="${style};margin-left:60px;height:10px"><i style="position:absolute;left:0;top:0;width:10px;height:5px;background:#f00"></i></div></div>`,
+        100, 20,
+      );
+      expect(near(at(5, 2), [255, 0, 0]), style).toBe(true);
+      expect(at(65, 2)).toEqual([255, 255, 255]);
+    }
+  });
+});
