@@ -3999,3 +3999,14 @@ describe("bottom margin of a nested block in a shrink-to-fit box", () => {
     expect(at(10, 22)).toEqual([0, 0, 255]);
   });
 });
+
+describe("float wider than its container", () => {
+  it("a width:auto float whose content cannot shrink is as wide as that content", async () => {
+    const { at } = await renderPng(
+      '<div style="width:45px"><div style="float:left;background:#f00"><div style="width:90px;height:5px"></div></div></div>',
+      120, 20,
+    );
+    expect(at(80, 2)).toEqual([255, 0, 0]);
+    expect(at(95, 2)).toEqual([255, 255, 255]);
+  });
+});

@@ -38,7 +38,9 @@ litehtml::pixel_t litehtml::render_item_block::place_float(const std::shared_ptr
 	// placement must hand it the same inline size: passing the container's width instead makes it
 	// lay its children out again at the wide size, so a descendant positioned from the right edge
 	// (an inner float:right, text-align:right) ends up outside the narrow box.
-	const bool shrunk_to_fit = min_rendered_inline_size < el->inline_size() && el->src_el()->css().get_width().is_predefined();
+	// (content that cannot shrink below its min-content width makes the float wider than the space it has)
+	const bool shrunk_to_fit = (min_rendered_inline_size < el->inline_size() || min_rendered_inline_size > line_inline_end - line_inline_start) &&
+		el->src_el()->css().get_width().is_predefined();
 	if(shrunk_to_fit)
 	{
 		// (a box held up by min-width reports 0 once it is given its width exactly: keep the content size)
