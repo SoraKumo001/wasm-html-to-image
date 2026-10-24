@@ -4131,3 +4131,15 @@ describe("empty block measured again after being stretched", () => {
     expect(at(40, 50)).toEqual([255, 255, 255]);
   });
 });
+
+describe("percentage height of a grid item", () => {
+  it("resolves against the grid area once the rows are sized from the content", async () => {
+    const { at } = await renderPng(
+      '<div style="display:grid;width:40px"><div style="height:50%;background:#f00"><div style="height:40px"></div></div></div>',
+      60, 60,
+    );
+    // the row is 40px (the content); 50% of it is 20px
+    expect(at(10, 10)).toEqual([255, 0, 0]);
+    expect(at(10, 30)).toEqual([255, 255, 255]);
+  });
+});

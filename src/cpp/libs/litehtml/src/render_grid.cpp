@@ -2066,8 +2066,9 @@ void litehtml::render_item_grid::place_grid_items(pixel_t x, pixel_t y, const co
             if (!item_h.is_predefined())
             {
                 cb.size_mode &= ~containing_block_context::size_mode_exact_height;
-                cb.render_height = cell_h;
-                cb.height = cell_h;
+                // a percentage resolves against the grid area, which is definite once the rows are sized
+                cb.render_height = containing_block_context::typed_pixel(cell_h, containing_block_context::cbc_value_type_absolute);
+                cb.height = cb.render_height;
             }
         }
 
