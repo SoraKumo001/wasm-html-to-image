@@ -4348,3 +4348,15 @@ describe("floats inside a flex or grid item", () => {
     expect(r.height).toBe(60);
   });
 });
+
+describe("width: fit-content on a ratio-only svg grid item", () => {
+  it("still fills the grid area", async () => {
+    const r = await render({
+      value:
+        '<html><body style="margin:0;font-size:0;line-height:0"><div style="display:grid"><svg viewBox="0 0 40 20" style="width:fit-content"></svg></div></body></html>',
+      width: 100,
+      format: "png",
+    });
+    expect(r.height).toBe(50);
+  });
+});

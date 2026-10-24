@@ -2110,7 +2110,9 @@ void litehtml::render_item_grid::place_grid_items(pixel_t x, pixel_t y, const co
         const bool j_normal = jst == flex_justify_content_auto || jst == flex_justify_content_normal;
         const bool a_normal = (aln & 0xFF) == flex_align_items_auto || (aln & 0xFF) == flex_align_items_normal;
         // width: fit-content / max-content / min-content is not `auto`: the item is not stretched to its area.
-        const bool intrinsic_width = item.el->src_el()->css().get_width().is_predefined() && item.el->src_el()->css().get_width().predef() > 0;
+        // (a ratio-only replaced box has no content width of its own: it fills the area either way)
+        const bool intrinsic_width = item.el->src_el()->css().get_width().is_predefined() && item.el->src_el()->css().get_width().predef() > 0 &&
+                                     !(replaced_item && item.el->src_el()->is_ratio_only_replaced());
         const bool j_stretch = ((j_normal && !replaced_start_x) && !intrinsic_width) || jst == flex_justify_content_stretch;
         const bool intrinsic_height = item.el->src_el()->css().get_height().is_predefined() && item.el->src_el()->css().get_height().predef() > 0;
         const bool a_stretch = !intrinsic_height && ((a_normal && !replaced_item) || (aln & 0xFF) == flex_align_items_stretch);
