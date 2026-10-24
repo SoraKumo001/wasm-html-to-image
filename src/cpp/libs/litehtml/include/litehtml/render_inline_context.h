@@ -74,6 +74,16 @@ namespace litehtml
 		pixel_t get_first_baseline() override;
 		pixel_t get_last_baseline() override;
 
+		// Height and used width of the last line box (false when there is none): a float that follows this
+		// run of inline content joins that line when it fits.
+		bool last_line_extent(pixel_t& height, pixel_t& used_width) const
+		{
+			if(m_line_boxes.empty()) return false;
+			height = m_line_boxes.back()->height();
+			used_width = m_line_boxes.back()->width();
+			return true;
+		}
+
 		// Absolute document-space rects of the laid-out line boxes (P3 pagination).
 		void get_line_boundaries(position::vector& boxes) const override
 		{

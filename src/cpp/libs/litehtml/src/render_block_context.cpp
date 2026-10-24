@@ -1,5 +1,7 @@
 #include "render_block_context.h"
 #include "document.h"
+#include "render_inline_context.h"
+#include "element.h"
 #include "types.h"
 
 litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /*x*/, pixel_t /*y*/, bool second_pass, const containing_block_context &self_size, formatting_context* fmt_ctx)
@@ -14,8 +16,10 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
 	std::shared_ptr<render_item> last_margin_el;
     bool is_first = true;
     satoru::WritingModeContext wm = get_wm_context();
+    std::shared_ptr<render_item> prev_child;
     for (const auto& el : m_children)
     {
+        struct prev_setter { std::shared_ptr<render_item>& slot; const std::shared_ptr<render_item>& cur; ~prev_setter() { slot = cur; } } set_prev{prev_child, el};
         // we don't need to process absolute and fixed positioned element on the second pass
         if (second_pass)
         {
@@ -25,7 +29,21 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
 
         if(el->src_el()->css().get_float() != float_none)
         {
-            pixel_t rw = place_float(el, block_offset, self_size, fmt_ctx);
+            // A float right after a run of inline content (an anonymous box) joins its last line when it fits,
+            // instead of starting below it.
+            pixel_t float_offset = block_offset;
+            if(prev_child && self_size.mode == writing_mode_horizontal_tb && el->src_el()->css().get_clear() == clear_none)
+            {
+                auto* run = dynamic_cast<render_item_inline_context*>(prev_child.get());
+                pixel_t line_h = 0, used_w = 0;
+                if(run && (*run->src_el()->get_tagName() == 0 || std::string(run->src_el()->get_tagName()) == "anonymous") && run->last_line_extent(line_h, used_w) && line_h > 0)
+                {
+                    const pixel_t avail = self_size.render_inline_size();
+                    const pixel_t float_w = el->measure(self_size.new_inline_size(avail, (self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content)) | (el->src_el()->css().get_width().is_predefined() ? containing_block_context::size_mode_content : 0)), fmt_ctx);
+                    if(used_w + float_w <= avail + 0.01f) float_offset = block_offset - line_h;
+                }
+            }
+            pixel_t rw = place_float(el, float_offset, self_size, fmt_ctx);
             if (rw > max_inline_size)
             {
                 max_inline_size = rw;

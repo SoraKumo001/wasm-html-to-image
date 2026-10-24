@@ -4453,3 +4453,15 @@ describe("percentage width of an inline-block next to a float", () => {
     expect(at(35, 2)).toEqual([255, 255, 255]);
   });
 });
+
+describe("a float after a run of inline content", () => {
+  it("joins the last line when it fits beside the content", async () => {
+    const { at } = await renderPng(
+      '<div style="font-size:0;line-height:0;background:#fff"><div style="display:inline-block;width:50px;height:40px;background:#00f"></div><div style="float:right;width:20px;height:5px;background:#f00"></div></div>',
+      100, 50,
+    );
+    // the float sits at the top of the line (y 0..5), not below the 40px inline-block
+    expect(at(90, 2)).toEqual([255, 0, 0]);
+    expect(at(90, 20)).toEqual([255, 255, 255]);
+  });
+});
