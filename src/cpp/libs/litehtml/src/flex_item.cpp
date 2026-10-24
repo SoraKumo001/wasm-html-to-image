@@ -766,13 +766,16 @@ void litehtml::flex_item_column_direction::layout_item(litehtml::flex_line &ln,
 		// A shrink-to-fit item has its width by now: place it with that width as an exact one, or the
 		// text-align of its lines would be skipped (see the row direction).
 		containing_block_context place_cb = child_cb;
-		if (!m_container_wm.is_vertical() && el->css().get_writing_mode() == writing_mode_horizontal_tb && !stretch && cross_prop.is_predefined())
+		if (!m_container_wm.is_vertical() && el->css().get_writing_mode() == writing_mode_horizontal_tb && cross_prop.is_predefined() && (!stretch || cross_prop.predef() != 0))
 		{
 			place_cb.width = el->inline_size(m_container_wm) - el->content_offset_inline(m_container_wm) + el->box_sizing_inline(m_container_wm);
 			place_cb.width.type = containing_block_context::cbc_value_type_absolute;
 			place_cb.render_width = place_cb.width;
 			place_cb.size_mode |= containing_block_context::size_mode_exact_width;
 			place_cb.size_mode &= ~containing_block_context::size_mode_content;
+			// The content was laid out for the shrink-to-fit width before min/max-width clamped it, and
+			// percentage widths of the children resolved against that unclamped width.
+			el->measure(place_cb, fmt_ctx);
 		}
 		el->place(0, 0, place_cb, fmt_ctx);
 	}

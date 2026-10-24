@@ -4289,3 +4289,14 @@ describe("min-width of a border-box grid item in an fr track", () => {
     expect(at(32, 5)).toEqual([255, 255, 255]);
   });
 });
+
+describe("width: fit-content item of a column flex container", () => {
+  it("lays its children out at the min-width clamped width", async () => {
+    const { at } = await renderPng(
+      '<div style="display:flex;flex-direction:column"><div style="width:fit-content;min-width:100px"><div style="height:5px;background:#f00"></div></div></div>',
+      150, 20,
+    );
+    expect(at(90, 2)).toEqual([255, 0, 0]);
+    expect(at(110, 2)).toEqual([255, 255, 255]);
+  });
+});
