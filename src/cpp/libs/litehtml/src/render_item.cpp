@@ -228,6 +228,7 @@ void litehtml::render_item::calc_outlines(pixel_t parent_width) {
 
     m_margins.top = m_element->css().get_margins().top.calc_percent(parent_width);
     m_margins.bottom = m_element->css().get_margins().bottom.calc_percent(parent_width);
+    m_collapsed_out_margin = 0;
 
     m_padding.top = m_element->css().get_padding().top.calc_percent(parent_width);
     m_padding.bottom = m_element->css().get_padding().bottom.calc_percent(parent_width);

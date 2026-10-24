@@ -76,6 +76,9 @@ namespace litehtml
         containing_block_context m_cached_cb_context;
         containing_block_context m_self_size;
         pixel_t m_cached_parent_width = -1;
+        // Bottom margin this box handed to its parent when they collapsed (the margin itself is then
+        // zeroed). A parent measured again while this box answers from its cache needs it back.
+        pixel_t m_collapsed_out_margin = 0;
         // Position right after the last relative shift. A line box is finished several times per
         // layout; the shift must be applied once per fresh position, not once per call.
         position m_relative_shifted_pos;
@@ -252,6 +255,12 @@ namespace litehtml
         void margin_inline_end(pixel_t val);
         void margin_block_start(pixel_t val);
         void margin_block_end(pixel_t val);
+        pixel_t collapsed_out_margin() const { return m_collapsed_out_margin; }
+        void collapse_margin_out()
+        {
+            if (margin_block_end() != 0) m_collapsed_out_margin = margin_block_end();
+            margin_block_end(0);
+        }
 
         void padding_inline_start(pixel_t val);
         void padding_inline_end(pixel_t val);

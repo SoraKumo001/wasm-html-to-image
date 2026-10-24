@@ -3987,3 +3987,15 @@ describe("percentage height of an absolutely positioned box", () => {
     expect(at(10, 60)).toEqual([255, 255, 255]);
   });
 });
+
+describe("bottom margin of a nested block in a shrink-to-fit box", () => {
+  it("a float measured twice keeps the margin its last descendant collapsed out", async () => {
+    const { at } = await renderPng(
+      '<div style="float:left;background:#f00"><div style="width:40px"><div style="height:8px;margin-bottom:12px"></div></div></div><div style="clear:both;height:5px;background:#00f"></div>',
+      80, 60,
+    );
+    // float: 8px content + 12px margin = 20px, then the blue strip starts at y=20
+    expect(at(10, 15)).toEqual([255, 0, 0]);
+    expect(at(10, 22)).toEqual([0, 0, 255]);
+  });
+});

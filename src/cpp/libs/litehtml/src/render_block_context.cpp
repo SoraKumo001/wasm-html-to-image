@@ -209,7 +209,10 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
 				}
 				margin_block_start(block_start_margin);
                 block_offset += el->block_size(wm);
+				// (a cached child handed its bottom margin to its own parent: count it again for this one)
+				if(!self_collapsed && wm.block_end(el->get_margins()) == 0) block_offset += el->collapsed_out_margin();
                 last_block_margin = self_collapsed ? self_collapsed_margin : wm.block_end(el->get_margins());
+				if(!self_collapsed && last_block_margin == 0) last_block_margin = el->collapsed_out_margin();
 				last_margin_el = el;
                 margin_taken_through_top = self_collapsed && is_first;
                 is_first = false;
@@ -240,7 +243,7 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
                 }
                 if(last_margin_el)
                 {
-                    last_margin_el->margin_block_end(0);
+                    last_margin_el->collapse_margin_out();
                 }
             }
         }
@@ -256,7 +259,7 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
             }
 			if(last_margin_el)
 			{
-				last_margin_el->margin_block_end(0);
+				last_margin_el->collapse_margin_out();
 			}
         }
     }
