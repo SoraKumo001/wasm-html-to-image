@@ -4547,3 +4547,24 @@ describe("baseline of a padded column flex container", () => {
     expect(at(14, 8)).toEqual([255, 255, 255]);
   });
 });
+
+describe("max-content contribution of a flex item with a definite width and flex-basis", () => {
+  const boxWidth = async (item: string) => {
+    const { img, at } = await renderPng(
+      `<div style="display:grid;justify-items:start;width:300px"><div style="display:inline-flex;background:#f00;height:4px">${item}</div></div>`,
+      300, 6,
+    );
+    let w = 0;
+    for (let x = 0; x < img.width; x++) if (at(x, 1)[1] === 0) w = x + 1;
+    return w;
+  };
+  it("a growable, shrinkable item contributes its width (flex: 2 1 0)", async () => {
+    expect(await boxWidth('<div style="width:20px;flex:2 1 0"></div>')).toBe(20);
+  });
+  it("an item that can neither grow nor shrink contributes its flex-basis", async () => {
+    expect(await boxWidth('<div style="width:90px;flex:0 0 40px"></div>')).toBe(40);
+  });
+  it("an item that can grow but not shrink contributes at least its width", async () => {
+    expect(await boxWidth('<div style="width:90px;flex:1 0 40px"></div>')).toBe(90);
+  });
+});

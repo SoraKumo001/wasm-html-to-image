@@ -243,6 +243,13 @@ void litehtml::flex_item_row_direction::direction_specific_init(const litehtml::
 			flex_basis_predefined = true;
 			predef = flex_basis_auto;
 		}
+		else if (indefinite && (self_size.size_mode & containing_block_context::size_mode_content) &&
+				 !size_prop.is_predefined() && size_prop.units() == css_units_px &&
+				 el->css().get_flex_basis().units() == css_units_px)
+		{
+			// A definite width and basis: the contribution is worked out below from the item's own width
+			// (CSS Flexbox 9.9.1) instead of measuring its content.
+		}
 		else if (indefinite && (grow > 0 || shrinkable_in_query || el->css().get_flex_basis().units() == css_units_percentage ||
 			el->css().get_flex_basis().val() == 0)) {
 			flex_basis_predefined = true;
@@ -324,14 +331,26 @@ void litehtml::flex_item_row_direction::direction_specific_init(const litehtml::
 		flex_base_size = el->css().get_flex_basis().calc_percent(parent_size) + render_offset - el->box_sizing_inline(m_container_wm);
 		// The max-content size of a wrapping container sums its items' max-content contributions, which
 		// come from their own width rather than from their flex-basis.
-		if (!m_container_wm.is_vertical() && el->parent() && el->parent()->css().get_flex_wrap() != flex_wrap_nowrap &&
+		if (!m_container_wm.is_vertical() && el->parent() &&
 			(self_size.size_mode & containing_block_context::size_mode_measure) &&
 			(self_size.size_mode & containing_block_context::size_mode_content) &&
 			!size_prop.is_predefined() && size_prop.units() == css_units_px)
 		{
-			// (an item that cannot shrink still contributes at least its flex-basis)
 			const pixel_t own = size_prop.val() + render_offset - el->box_sizing_inline(m_container_wm);
-			flex_base_size = shrink > 0 ? own : std::max(own, flex_base_size);
+			if (el->parent()->css().get_flex_wrap() != flex_wrap_nowrap)
+			{
+				// (an item that cannot shrink still contributes at least its flex-basis)
+				flex_base_size = shrink > 0 ? own : std::max(own, flex_base_size);
+			}
+			else
+			{
+				// CSS Flexbox 9.9.1: the contribution is the item's own size, kept within its flex base size
+				// from above when it cannot grow and from below when it cannot shrink.
+				pixel_t contribution = own;
+				if (!(grow > 0)) contribution = std::min(contribution, flex_base_size);
+				if (!(shrink > 0)) contribution = std::max(contribution, flex_base_size);
+				flex_base_size = contribution;
+			}
 		}
 	}
 
