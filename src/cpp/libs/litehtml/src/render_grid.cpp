@@ -2397,7 +2397,12 @@ litehtml::pixel_t litehtml::render_item_grid::get_first_baseline()
                 // even when every item in it is empty.
                 // See core/layout/layout_box.cc, LayoutBox::SynthesizeBaselineFromBorderBox and
                 // core/layout/grid/layout_grid.cc, LayoutGrid::FirstLineBoxBaseline.
-                return best->el->pos().y - best->el->content_offset_top() + best->el->get_first_baseline();
+                // The items sit inside the content box, while a baseline is measured from the margin
+                // box top (the same frame as the flex and inline callers): the container's own
+                // margin, border and padding (a grid with `padding:4px` raises its baseline by 4)
+                // has to be added here, as the item's own offset is for its own box.
+                return content_offset_top() + best->el->pos().y - best->el->content_offset_top() +
+                       best->el->get_first_baseline();
             }
         }
     }
