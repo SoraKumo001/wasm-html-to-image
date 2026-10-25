@@ -108,6 +108,14 @@ export async function runPageScripts(
             dispatchEvent: () => false,
           });
         }
+        // jsdom has no fetch: lend it Node's, resolving relative URLs against the page.
+        if (!window.fetch && typeof fetch === "function") {
+          window.fetch = (input: any, init?: any) =>
+            fetch(typeof input === "string" ? new URL(input, window.location.href).href : input, init);
+          for (const name of ["Request", "Response", "Headers"]) {
+            if (!window[name] && (globalThis as any)[name]) window[name] = (globalThis as any)[name];
+          }
+        }
         for (const name of ["ResizeObserver", "IntersectionObserver"]) {
           if (!window[name]) {
             window[name] = class {
@@ -126,17 +134,35 @@ export async function runPageScripts(
     },
   };
 
+  // A page's unhandled promise rejection or timer error would otherwise take the whole process down.
+  const swallow = () => {};
+  process.on("unhandledRejection", swallow);
+  process.on("uncaughtException", swallow);
+  const releaseGuard = () => {
+    // late rejections can still arrive just after the window is closed
+    setTimeout(() => {
+      process.off("unhandledRejection", swallow);
+      process.off("uncaughtException", swallow);
+    }, 200).unref();
+  };
+
   const started = Date.now();
   const remaining = () => Math.max(0, timeout - (Date.now() - started));
 
-  const dom = source.url
-    ? await Promise.race([
-        JSDOM.fromURL(source.url, jsdomOptions),
-        sleep(timeout).then(() => {
-          throw new Error(`Timed out loading ${source.url} for the \`javascript\` option (${timeout} ms).`);
-        }),
-      ])
-    : new JSDOM(source.html ?? "", { ...jsdomOptions, url: source.baseUrl || "about:blank" });
+  let dom: any;
+  try {
+    dom = source.url
+      ? await Promise.race([
+          JSDOM.fromURL(source.url, jsdomOptions),
+          sleep(timeout).then(() => {
+            throw new Error(`Timed out loading ${source.url} for the \`javascript\` option (${timeout} ms).`);
+          }),
+        ])
+      : new JSDOM(source.html ?? "", { ...jsdomOptions, url: source.baseUrl || "about:blank" });
+  } catch (error) {
+    releaseGuard();
+    throw error;
+  }
 
   try {
     const { window } = dom;
@@ -156,6 +182,7 @@ export async function runPageScripts(
     return { html: dom.serialize(), baseUrl: window.location.href };
   } finally {
     dom.window.close();
+    releaseGuard();
   }
 }
 

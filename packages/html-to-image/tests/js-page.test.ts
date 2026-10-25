@@ -45,6 +45,20 @@ describe("javascript option (jsdom)", () => {
     expect(out.html).toContain(">false<");
   });
 
+  it("lends fetch/Request and survives a page's unhandled rejection", async () => {
+    const out = await runPageScripts(
+      {
+        html: page(
+          '<p id="f"></p>',
+          'document.getElementById("f").textContent = [typeof fetch, typeof Request, typeof Response].join(",");' +
+            'Promise.reject(new Error("boom")); setTimeout(() => { throw new Error("late"); }, 10);',
+        ),
+      },
+      { settleMs: 100 },
+    );
+    expect(out.html).toContain(">function,function,function<");
+  });
+
   it("applyJavaScript replaces string HTML and leaves other inputs alone", async () => {
     const opts = await applyJavaScript({
       value: page('<div id="a">1</div>', 'document.getElementById("a").textContent = "2";'),
