@@ -561,6 +561,37 @@ void litehtml::flex_item_column_direction::direction_specific_init(const litehtm
 	const css_length& cross_size = m_container_wm.get_inline_size(el->css());
 	const bool specified_cross = !m_container_wm.is_vertical() && !cross_size.is_predefined() &&
 		!cross_size.is_calc() && self_size.render_width.value > 0;
+	// A multi-line column container also breaks lines in the inline axis: each line's cross size is
+	// the largest hypothetical (fit-content) inline size of its items (CSS Flexbox 9.4.8), so an item
+	// whose content does not fit the container's content width is laid out wider than the container.
+	// The base block size has to be measured at that width: measured at the container width, its
+	// height is frozen too small for the box the item ends up with (e.g. a ratio-sized svg inside an
+	// auto-width wrapper). Only raise the width, never lower it, so ordinary stretching is unchanged.
+	const bool multiline_cross = el->parent() && el->parent()->css().get_flex_wrap() != flex_wrap_nowrap;
+	def_value<pixel_t> fit_inline_size(0);
+	auto stretched_inline_size = [&]() -> pixel_t
+	{
+		pixel_t width = self_size.render_width.value - el->content_offset_width() + el->box_sizing_width();
+		if (!multiline_cross || !cross_size.is_predefined() || width <= 0) return width;
+		if (fit_inline_size.is_default())
+		{
+			formatting_context fmt_ctx_copy;
+			if (fmt_ctx) fmt_ctx_copy = *fmt_ctx;
+			// Width auto with the content mode is the fit-content measure (available width, floored by
+			// the item's min-content width and clamped by its max-width).
+			containing_block_context fit_cb = self_size;
+			fit_cb.height.type = containing_block_context::cbc_value_type_auto;
+			fit_cb.size_mode &= ~(containing_block_context::size_mode_exact_width |
+								  containing_block_context::size_mode_exact_height);
+			fit_cb.size_mode |= containing_block_context::size_mode_measure |
+								containing_block_context::size_mode_content;
+			el->measure(fit_cb, fmt_ctx ? &fmt_ctx_copy : nullptr);
+			fit_inline_size = std::max<pixel_t>(0, el->inline_size(m_container_wm) -
+												   el->content_offset_inline(m_container_wm) +
+												   el->box_sizing_inline(m_container_wm));
+		}
+		return std::max(width, (pixel_t) fit_inline_size);
+	};
 	auto apply_stretch_width = [&](containing_block_context& cb)
 	{
 		if (specified_cross)
@@ -573,7 +604,7 @@ void litehtml::flex_item_column_direction::direction_specific_init(const litehtm
 			return;
 		}
 		if (!stretch_cross) return;
-		cb.width = self_size.render_width.value - el->content_offset_width() + el->box_sizing_width();
+		cb.width = stretched_inline_size();
 		cb.width.type = containing_block_context::cbc_value_type_absolute;
 		cb.render_width = cb.width;
 		cb.size_mode |= containing_block_context::size_mode_exact_width;
