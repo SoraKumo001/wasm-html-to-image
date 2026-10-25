@@ -1341,7 +1341,18 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         pixel_t sum = m_grid_layout.column_gap * (num_columns - 1);
         for (int i = 0; i < num_columns && i < (int)m_grid_layout.column_widths.size(); i++) sum += m_grid_layout.column_widths[i];
         if (sum > render_inline.value)
+        {
+            // The flexible tracks start from their minimums again: the sizes they got from their items'
+            // max-content would otherwise count as a base that the shared space has to hold.
+            for (int i = 0; i < num_columns && i < (int)m_grid_layout.column_widths.size(); i++)
+            {
+                const auto& fl = columns_template[i];
+                if (fl.units() == css_units_fr) m_grid_layout.column_widths[i] = 0;
+                else if (fl.is_calc() && fl.get_op() == css_length::op_minmax && fl.get_operands()[1].units() == css_units_fr)
+                    m_grid_layout.column_widths[i] = std::max<pixel_t>(0, fl.get_operands()[0].calc_percent(render_inline));
+            }
             resolve_flex_tracks(std::max<pixel_t>(0, render_inline.value - fixed_width), nullptr);
+        }
     }
 
     // Content-sized columns (auto, min-content, max-content, fit-content()): size them from the

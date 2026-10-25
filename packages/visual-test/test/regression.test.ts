@@ -4670,3 +4670,16 @@ describe("row height of a grid item wider than its track because of min-width", 
     expect(r.height).toBe(25);
   });
 });
+
+describe("shrink-to-fit grid with a minmax(<length>, 1fr) track in a narrow box", () => {
+  it("shares the space on offer instead of keeping the items' max-content sizes", async () => {
+    const svg = '<svg viewBox="0 0 100 20" style="width:100%"></svg>';
+    const { at } = await renderPng(
+      `<div style="width:40px;background:#fff;font-size:0;line-height:0"><div style="display:inline-grid;grid-template-columns:1fr minmax(40px,1fr);background:#f00;height:4px">${svg}</div></div>`,
+      100, 8,
+    );
+    // 40px wide: the minmax track keeps its 40px, the 1fr track gets none
+    expect(at(35, 2)).toEqual([255, 0, 0]);
+    expect(at(60, 2)).toEqual([255, 255, 255]);
+  });
+});
