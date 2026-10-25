@@ -2368,9 +2368,10 @@ void render_item_grid::draw_children(uint_ptr hdc, pixel_t x, pixel_t y, const p
 
 litehtml::pixel_t litehtml::render_item_grid::get_first_baseline()
 {
-    if (src_el()->css().get_display() == display_inline_grid && !m_grid_layout.items.empty())
+    const bool vert = css().get_writing_mode() != writing_mode_horizontal_tb;
+    if (!m_grid_layout.items.empty())
     {
-        // An inline grid aligns by the first row: the first item in row-major order.
+        // A grid's first baseline comes from its first row: the first item in row-major order.
         const grid_item* best = &m_grid_layout.items.front();
         for (const auto& item : m_grid_layout.items)
         {
@@ -2382,12 +2383,28 @@ litehtml::pixel_t litehtml::render_item_grid::get_first_baseline()
         }
         if (best->pos.row_start >= 0 && best->pos.row_start < (int)m_grid_layout.row_offsets.size())
         {
-            return m_grid_layout.row_offsets[best->pos.row_start] +
-                   best->el->content_offset_top() +
-                   best->el->get_first_baseline();
+            if (src_el()->css().get_display() == display_inline_grid)
+            {
+                return m_grid_layout.row_offsets[best->pos.row_start] +
+                       best->el->content_offset_top() +
+                       best->el->get_first_baseline();
+            }
+            if (!vert)
+            {
+                // An item without a line box of its own (an empty box) has no baseline for the
+                // block path, which then moves on to a later item; but a grid item still has one:
+                // it is synthesized from the item's border-box bottom. So the first row decides
+                // even when every item in it is empty.
+                // See core/layout/layout_box.cc, LayoutBox::SynthesizeBaselineFromBorderBox and
+                // core/layout/grid/layout_grid.cc, LayoutGrid::FirstLineBoxBaseline.
+                return best->el->pos().y - best->el->content_offset_top() + best->el->get_first_baseline();
+            }
         }
     }
-    return render_item_block::get_first_baseline();
+    if (vert) return render_item_block::get_first_baseline();
+    // No item to take a baseline from (an empty grid container): Blink synthesizes it from the
+    // border-box bottom, i.e. the margin box less its end margin, as for flex.
+    return height() - margin_block_end();
 }
 
 litehtml::pixel_t litehtml::render_item_grid::get_last_baseline()
