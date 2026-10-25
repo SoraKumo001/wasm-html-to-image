@@ -4644,3 +4644,16 @@ describe("shrink-to-fit width of a wrapping flex container", () => {
     expect(at(105, 6)).toEqual([255, 255, 255]);
   });
 });
+
+describe("wrapping flex container with no space on offer", () => {
+  it("falls back to its min-content width, so the items stack", async () => {
+    const r = await render({
+      value:
+        '<html><body style="margin:0;font-size:0;line-height:0"><div style="width:20px"><div style="display:inline-block;padding:12px"><div style="display:flex;flex-wrap:wrap;gap:4px"><div></div><div></div></div></div></div></body></html>',
+      width: 100,
+      format: "png",
+    });
+    // two empty items on separate lines: 4px gap + 24px padding
+    expect(r.height).toBe(28);
+  });
+});

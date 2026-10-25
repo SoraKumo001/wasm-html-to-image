@@ -504,7 +504,7 @@ litehtml::pixel_t litehtml::render_item_flex::_render_content(pixel_t x, pixel_t
 		for (auto& ln : m_lines)
 			for (auto& fi : ln.items) widest = std::max(widest, fi->min_content_contribution);
 		max_inline_size = wrap_one_line_width;
-		if (wrap_available > 0) max_inline_size = std::min(max_inline_size, std::max(wrap_available, widest));
+		max_inline_size = std::min(max_inline_size, std::max(std::max<pixel_t>(0, wrap_available), widest));
 	}
 	return min_content_query ? min_content_main : max_inline_size;
 }
