@@ -868,8 +868,11 @@ std::list< std::unique_ptr<litehtml::line_box_item> > litehtml::line_box::finish
 		{
 			// We have inline items
 			top_shift = std::abs(line_max_height.top);
-			// The half-leading above the text is floored (Blink: the ascent gets floor(half), the descent
-			// the rest), so a fractional leading never moves the baseline down.
+			// Half-leading: Blink floors half of (line-height - ascent - descent) into the ascent and
+			// gives the rest to the descent (`blink::CalculateLeadingSpace` in
+			// core/layout/inline/line_utils.cc, chromium/src@faa920470c39 line 35-44), so a
+			// fractional leading never moves the baseline down. `line_max_height.height()` is the
+			// content height (ascent + descent for text, not the font line height).
 			const pixel_t top_shift_correction = std::floor((line_height.value() - line_max_height.height()) / 2);
 			// We have to calculate the baseline from the top of the line box due to possible round errors.
 			// The top_shift_correction is actually text offset from the top of the line box.

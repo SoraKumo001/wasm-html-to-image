@@ -21,11 +21,19 @@ namespace litehtml
 		void clear_inline_boxes() override { m_boxes.clear(); }
 		pixel_t get_first_baseline() override
 		{
-			return src_el()->css().get_font_metrics().height - src_el()->css().get_font_metrics().base_line();
+			const font_metrics& fm = src_el()->css().get_font_metrics();
+			// A text run's box is the font ascent plus descent (el_text::get_content_size), so its
+			// baseline is the ascent alone: the font line gap is leading that the line box splits
+			// around the baseline, not part of the box (Blink `FontHeight` /
+			// `blink::CalculateLeadingSpace`, chromium/src@faa920470c39).
+			if (css().get_display() == display_inline_text) return fm.ascent;
+			return fm.height - fm.base_line();
 		}
 		pixel_t get_last_baseline() override
 		{
-			return src_el()->css().get_font_metrics().height - src_el()->css().get_font_metrics().base_line();
+			const font_metrics& fm = src_el()->css().get_font_metrics();
+			if (css().get_display() == display_inline_text) return fm.ascent;
+			return fm.height - fm.base_line();
 		}
 
 		std::shared_ptr<render_item> clone() override

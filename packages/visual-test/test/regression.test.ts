@@ -4826,3 +4826,32 @@ describe("inline-block input", () => {
     expect(height).toBe(30);
   });
 });
+
+// Arimo is metric-compatible with Arial, whose hhea line gap (67/2048 em) is not part of the
+// ascent or the descent. That makes the split of the leading visible: Blink floors half of
+// (line-height - ascent - descent) into the ascent (blink::CalculateLeadingSpace, line_utils.cc),
+// it does not put the whole font line gap above the baseline.
+const LINE_GAP_FONT_FACE =
+  "@font-face{font-family:'ArimoProbe';src:url('https://cdn.jsdelivr.net/npm/@fontsource/arimo@5/files/arimo-latin-400-normal.woff2') format('woff2')}";
+
+describe("leading of a font with a line gap", () => {
+  it("splits the font line gap around the baseline like Blink", async () => {
+    const img = await renderProbeText(
+      '<div style="font-family:\'ArimoProbe\',sans-serif;font-size:100px;line-height:140px;color:#000">HH</div>',
+      800,
+      LINE_GAP_FONT_FACE,
+    );
+    let firstInk = -1;
+    for (let y = 0; y < img.height && firstInk < 0; y++) {
+      for (let x = 0; x < img.width; x++) {
+        const i = (img.width * y + x) * 4;
+        if (img.data[i + 3] > 0 && img.data[i] < 128) {
+          firstInk = y;
+          break;
+        }
+      }
+    }
+    // Chromium: ink rows 36..104 (putting the whole 3px line gap above the baseline gives 34).
+    expect(firstInk).toBe(36);
+  });
+});

@@ -134,11 +134,17 @@ void litehtml::el_text::compute_styles(bool /*recursive*/)
         if (el_parent->css().get_writing_mode() == writing_mode_horizontal_tb)
         {
 		    m_size.width	= get_document()->container()->text_width(m_use_transformed ? m_transformed_text.c_str() : m_text.c_str(), font, el_parent->get_direction(), el_parent->css().get_writing_mode());
-		    m_size.height	= fm.height;
+		    // The text box is the font ascent plus descent. The font's line gap is leading, not
+		    // part of the box: Blink keeps the box as a `FontHeight` (ascent/descent) and hands the
+		    // gap out around the baseline (`FontHeight::LineHeight()` is ascent + descent;
+		    // `blink::CalculateLeadingSpace` in core/layout/inline/line_utils.cc splits
+		    // line-height - LineHeight()). Read at chromium/src@faa920470c39 (line 35-44) and
+		    // platform/fonts/font_height.h (line 30).
+		    m_size.height	= fm.ascent + fm.descent;
         }
         else
         {
-		    m_size.width	= fm.height;
+		    m_size.width	= fm.ascent + fm.descent;
 		    m_size.height	= get_document()->container()->text_width(m_use_transformed ? m_transformed_text.c_str() : m_text.c_str(), font, el_parent->get_direction(), el_parent->css().get_writing_mode());
         }
 	}
