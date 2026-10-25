@@ -141,19 +141,26 @@ export async function expandGlob(pattern: string): Promise<string[]> {
     .map((n) => path.join(dir, n));
 }
 
-/** Load `--font` files; each is named after its file (without extension). */
+/**
+ * Load `--font` files. Each is named after its file (without extension), or after the family
+ * given as `Family Name=path` (use it to stand in for a system font such as `Segoe UI`).
+ */
 export async function loadFonts(
   patterns: string[],
 ): Promise<{ name: string; data: Uint8Array }[]> {
   const fonts: { name: string; data: Uint8Array }[] = [];
-  for (const pattern of patterns) {
+  for (const spec of patterns) {
+    // `Family=path`: a drive letter (`C:\...`) has no `=`, so the first `=` splits family and path.
+    const eq = spec.indexOf("=");
+    const family = eq > 0 ? spec.slice(0, eq).trim() : undefined;
+    const pattern = eq > 0 ? spec.slice(eq + 1) : spec;
     const files = await expandGlob(pattern);
     if (files.length === 0) {
       console.warn(`wasm-html-to-image: no font files match "${pattern}"`);
     }
     for (const file of files) {
       fonts.push({
-        name: path.basename(file, path.extname(file)),
+        name: family ?? path.basename(file, path.extname(file)),
         data: new Uint8Array(await fs.readFile(file)),
       });
     }

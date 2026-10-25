@@ -49,7 +49,7 @@ program
   )
   .option(
     "--font <path>",
-    "local font file or glob such as './fonts/*.woff2' (repeatable)",
+    "local font file or glob such as './fonts/*.woff2' (repeatable); 'Family=path' registers it under that family name, e.g. 'Segoe UI=C:/Windows/Fonts/segoeui.ttf'",
     (v: string, prev: string[] = []) => [...prev, v],
   )
   .option(

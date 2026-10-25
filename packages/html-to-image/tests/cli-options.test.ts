@@ -127,6 +127,10 @@ describe("cli options", () => {
     expect(fonts[1].data.length).toBe(2);
     const opts = await buildRenderOptions("<p>hi</p>", flags({ font: [path.join(dir, "A.woff2")] }));
     expect(opts.fonts).toHaveLength(1);
+    // `Family=path` registers the file under that family name (a stand-in for a system font)
+    const named = await loadFonts([`Segoe UI=${path.join(dir, "A.woff2")}`]);
+    expect(named.map((f) => f.name)).toEqual(["Segoe UI"]);
+    expect(named[0].data.length).toBe(1);
     await fs.rm(dir, { recursive: true });
   });
 });

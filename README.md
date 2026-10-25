@@ -116,6 +116,9 @@ echo '<h1>Hello</h1>' | npx wasm-html-to-image - -o hello.png
 # Register local fonts (repeatable, globs allowed)
 npx wasm-html-to-image card.html --font './fonts/*.woff2' -w 1200 -h 630 -o og.webp
 
+# Stand in for a system font the page asks for (the engine cannot see system fonts)
+npx wasm-html-to-image https://go.dev/ --font "Segoe UI=C:/Windows/Fonts/segoeui.ttf" -w 1600 -o go.png
+
 # Capture screenshot from URL
 npx wasm-html-to-image https://example.com -o site.png -w 1280 -h 720
 
