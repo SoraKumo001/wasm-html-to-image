@@ -120,7 +120,23 @@ litehtml::pixel_t litehtml::render_item_image::_measure(
             }
             return false;
         };
-        if ((is_min_content && !positioned) || (is_content_size && !positioned && in_shrink_to_fit())) {
+        // The 0 is only right while the inline size this box would fill is still open. The main size
+        // of a block-level flex container is definite before its items are measured, so an item's
+        // auto inline size resolves against it (Blink: LayoutReplaced::ComputeReplacedSize uses the
+        // available inline size there); an inline-flex is shrink-to-fit, where the box's own inline
+        // size would feed back into the container's, so it stays cyclic. 0 / the max-content trial
+        // width means the container itself is being sized from this item.
+        const bool flex_main_definite = [&]() -> bool {
+            const auto* p = parent().get();
+            if (!p || p->css().get_display() != display_flex ||
+                p->css().get_writing_mode() != writing_mode_horizontal_tb) return false;
+            const auto dir = p->css().get_flex_direction();
+            if (dir != flex_direction_row && dir != flex_direction_row_reverse) return false;
+            const pixel_t avail = (pixel_t)containing_block_size.render_inline_size();
+            return avail > 0 && avail < 50000;
+        }();
+        if ((is_min_content && !positioned) ||
+            (is_content_size && !positioned && in_shrink_to_fit() && !flex_main_definite)) {
             // (a percentage width is cyclic here: it counts as auto, and a box with no natural width then
             // takes the 300px default object width for the max-content size)
             const bool percent_width = css().get_width().units() == css_units_percentage && !css().get_width().is_predefined();

@@ -601,8 +601,12 @@ void litehtml::render_item_inline_context::place_inline(std::unique_ptr<line_box
     uint32_t cb_size_mode = self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content);
     // An auto-width inline box is shrink-to-fit: its first measure asks for the content size, so
     // percentages inside it (e.g. a flex-basis) contribute their content instead of resolving
-    // against the line width.
-    if (ruby_atomic || item->get_el()->src_el()->css().get_width().is_predefined())
+    // against the line width. A replaced box has no content to shrink to: its auto inline size comes
+    // from the containing block (a ratio-only svg fills the line width), so asking for a content size
+    // only makes the box cyclic-0 in a shrink-to-fit ancestor. (Blink: LayoutReplaced::ComputeReplacedSize
+    // resolves it against the available inline size.)
+    if (ruby_atomic || (item->get_el()->src_el()->css().get_width().is_predefined() &&
+                        !item->get_el()->src_el()->is_replaced()))
     {
         cb_size_mode |= containing_block_context::size_mode_content;
     }
