@@ -777,6 +777,14 @@ litehtml::pixel_t litehtml::render_item_flex::get_first_baseline()
 			return m_lines.front().items.front()->cross_pos + item_el->get_first_baseline() + content_offset_top();
 		}
 	}
+	// No item to take a baseline from (an empty flex container): Blink synthesizes it from the
+	// border-box bottom, i.e. the margin box less its end margin. See
+	// core/layout/layout_box.cc, LayoutBox::SynthesizeBaselineFromBorderBox and
+	// core/layout/flex/layout_flexible_box.cc, LayoutFlexibleBox::FirstLineBoxBaseline.
+	if (css().get_writing_mode() == writing_mode_horizontal_tb)
+	{
+		return height() - margin_block_end();
+	}
 	return height();
 }
 
@@ -809,6 +817,11 @@ litehtml::pixel_t litehtml::render_item_flex::get_last_baseline()
 			}
 			return m_lines.front().items.front()->cross_pos + item_el->get_last_baseline() + content_offset_top();
 		}
+	}
+	// Same synthesized baseline as get_first_baseline(): the border-box bottom for an empty container.
+	if (css().get_writing_mode() == writing_mode_horizontal_tb)
+	{
+		return height() - margin_block_end();
 	}
 	return height();
 }
