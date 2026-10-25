@@ -119,6 +119,11 @@ npx wasm-html-to-image card.html --font './fonts/*.woff2' -w 1200 -h 630 -o og.w
 # Stand in for a system font the page asks for (the engine cannot see system fonts)
 npx wasm-html-to-image https://go.dev/ --font "Segoe UI=C:/Windows/Fonts/segoeui.ttf" -w 1600 -o go.png
 
+# Several weights of one family: repeat --font, each file keeps its own weight and style,
+# and `font-weight` picks the nearest one (a single Regular file is never emboldened)
+npx wasm-html-to-image https://go.dev/ -w 1600 -o go.png \
+  --font "Segoe UI=C:/Windows/Fonts/segoeui.ttf" --font "Segoe UI=C:/Windows/Fonts/segoeuib.ttf"
+
 # Run the page's scripts first (Node only; jsdom is an optional dependency, trusted pages only)
 npx wasm-html-to-image https://go.dev/ --js -w 1600 -o go.png
 npx wasm-html-to-image https://example.com/ --js --js-wait '#app .ready' -o app.png   # or --js-wait 2000 (ms)
