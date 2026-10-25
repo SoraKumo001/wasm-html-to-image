@@ -9,6 +9,8 @@
  * site: height ratio, share of differing pixels, share of boxes off by more than 1.5px. The result
  * is compared with the last `--update` baseline; any site that got worse is listed and the exit
  * code is 1. Each site runs in its own process with a timeout, so one hang cannot sink the run.
+ * `--update` is refused together with `--only`: the baseline must cover every site, otherwise the
+ * sites it left out quietly stop being compared.
  *
  * The engine's own master CSS leaves `body` at margin 0 (the body fills the canvas), while
  * Chromium's UA gives it 8px, so the engine side is measured with that margin applied
@@ -90,6 +92,13 @@ if (flag("one")) {
 const here = path.dirname(fileURLToPath(import.meta.url));
 const sites: Site[] = JSON.parse(fs.readFileSync(path.join(here, "sites.json"), "utf8"));
 const only = arg("only")?.split(",");
+// A baseline recorded from a subset is a broken baseline: on the next full run every site that was
+// not in it is silently "new" (no comparison at all), while the baseline claims coverage it does
+// not have. So --update always means the whole list; use `real:diff <url>` to look at one site.
+if (flag("update") && only) {
+  console.error("--update needs the full site list: drop --only (or use `real:diff <url>` for one site)");
+  process.exit(2);
+}
 const timeout = Number(arg("timeout", "240")) * 1000;
 const scoresDir = path.join(CACHE_DIR, "scores");
 const baselineFile = path.join(scoresDir, "baseline.json");
