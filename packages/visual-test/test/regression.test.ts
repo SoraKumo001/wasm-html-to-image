@@ -4790,6 +4790,18 @@ describe("replaced flex item stretched shorter than its intrinsic height", () =>
   });
 });
 
+describe("grid auto column over a narrow grid, scroll container with min-width", () => {
+  it("keeps the explicit min-width as the track's floor", async () => {
+    const { at } = await renderPng(
+      '<div style="display:grid;grid-template-columns:auto 20px;width:45px;background:#fff"><div style="box-sizing:content-box;min-width:40px;padding:8px;overflow:hidden;height:4px;background:#f00"></div><div style="height:4px;background:#00f"></div></div>',
+      100, 8,
+    );
+    // the first track is 56px (40 + 2*8), so the second starts at x=56 even though the grid is 45px wide
+    expect(at(50, 2)).toEqual([255, 0, 0]);
+    expect(at(60, 2)).toEqual([0, 0, 255]);
+  });
+});
+
 describe("inline-block input", () => {
   it("aligns on its centred text, not on the top of the field", async () => {
     const { height } = await render({
