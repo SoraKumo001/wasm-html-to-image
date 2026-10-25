@@ -1745,6 +1745,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
     // `grid-template-rows:0fr` accordion must not expand).
     std::vector<int> row_kinds(num_rows, 1);
     std::vector<int> row_auto(num_rows, 1);
+    std::vector<int> row_min_only(num_rows, 0);  // minmax(<length>, auto): sized to its minimum, grown only from free space
     for (int i = 0; i < num_rows && i < (int)row_tracks.size(); i++)
     {
         const auto& len = row_tracks[i];
@@ -1766,6 +1767,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             // minmax(<min>, auto): an auto maximum is stretched like an auto track
             row_auto[i] = (op == css_length::op_minmax && len.get_operands().size() == 2 &&
                            len.get_operands()[1].is_predefined() && len.get_operands()[1].predef() == 0) ? 1 : 0;
+            row_min_only[i] = row_auto[i] && !len.get_operands()[0].is_predefined() ? 1 : 0;
         }
         else if (len.units() == css_units_percentage)
         {
@@ -1893,14 +1895,14 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                 int growable = 0;
                 for (int i = item.pos.row_start; i < item.pos.row_end && i < num_rows; i++)
                 {
-                    if (row_kinds[i]) growable++;
+                    if (row_kinds[i] && !(definite_block && row_min_only[i])) growable++;
                 }
                 if (growable > 0)
                 {
                     pixel_t diff = (total_h - current_total) / growable;
                     for (int i = item.pos.row_start; i < item.pos.row_end && i < num_rows; i++)
                     {
-                        if (row_kinds[i]) m_grid_layout.row_heights[i] += diff;
+                        if (row_kinds[i] && !(definite_block && row_min_only[i])) m_grid_layout.row_heights[i] += diff;
                     }
                 }
             }

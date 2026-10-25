@@ -4579,3 +4579,14 @@ describe("cross size of the line of a wrapping row container with a fixed height
     expect(at(5, 25)).toEqual([255, 0, 0]);
   });
 });
+
+describe("minmax(<length>, auto) rows in a grid of definite height", () => {
+  it("start at their minimum, so taller content overflows when there is no free space", async () => {
+    const { at } = await renderPng(
+      '<div style="display:grid;grid-auto-rows:minmax(30px,auto);height:60px;width:40px;background:#fff"><div style="height:36px"></div><div style="background:#f00"></div></div>',
+      60, 80,
+    );
+    // rows are 30 + 30: the second row starts at y 30 although the first item is 36px tall
+    expect(at(10, 32)).toEqual([255, 0, 0]);
+  });
+});
