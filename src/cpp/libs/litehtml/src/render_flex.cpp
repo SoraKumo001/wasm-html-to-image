@@ -92,6 +92,13 @@ litehtml::pixel_t litehtml::render_item_flex::_render_content(pixel_t x, pixel_t
 			{
 				// (the hypothetical main size is the base size clamped by min/max-width)
 				max_inline_size = std::max(max_inline_size, ln.main_size);
+				// max-content size of a wrapping row container is never below its widest item (Blink raises the
+				// max-content size to the min-content size, which is the largest single item's contribution).
+				if (!single_line && (self_size.size_mode & containing_block_context::size_mode_content) &&
+					!(self_size.size_mode & containing_block_context::size_mode_min_content) && self_size.mode == writing_mode_horizontal_tb)
+				{
+					for (auto& fi : ln.items) max_inline_size = std::max(max_inline_size, fi->min_content_contribution);
+				}
 				// min-content size of a row container: the items side by side when they cannot wrap, the widest
 				// item otherwise (CSS Flexbox 9.9.1); an item contributes its automatic minimum size.
 				if ((self_size.size_mode & containing_block_context::size_mode_min_content) &&

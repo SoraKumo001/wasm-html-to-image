@@ -337,20 +337,12 @@ void litehtml::flex_item_row_direction::direction_specific_init(const litehtml::
 			!size_prop.is_predefined() && size_prop.units() == css_units_px)
 		{
 			const pixel_t own = size_prop.val() + render_offset - el->box_sizing_inline(m_container_wm);
-			if (el->parent()->css().get_flex_wrap() != flex_wrap_nowrap)
-			{
-				// (an item that cannot shrink still contributes at least its flex-basis)
-				flex_base_size = shrink > 0 ? own : std::max(own, flex_base_size);
-			}
-			else
-			{
-				// CSS Flexbox 9.9.1: the contribution is the item's own size, kept within its flex base size
-				// from above when it cannot grow and from below when it cannot shrink.
-				pixel_t contribution = own;
-				if (!(grow > 0)) contribution = std::min(contribution, flex_base_size);
-				if (!(shrink > 0)) contribution = std::max(contribution, flex_base_size);
-				flex_base_size = contribution;
-			}
+			// CSS Flexbox 9.9.1 (Blink's max-content contribution, wrapping or not): the item's own size, kept
+			// within its flex base size from above when it cannot grow and from below when it cannot shrink.
+			pixel_t contribution = own;
+			if (!(grow > 0)) contribution = std::min(contribution, flex_base_size);
+			if (!(shrink > 0)) contribution = std::max(contribution, flex_base_size);
+			flex_base_size = contribution;
 		}
 	}
 

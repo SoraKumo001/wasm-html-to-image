@@ -4614,3 +4614,21 @@ describe("min-content of a grid with an auto track holding a scroll container", 
     expect(at(45, 2)).toEqual([255, 255, 255]);
   });
 });
+
+describe("max-content width of a wrapping flex container", () => {
+  const boxWidth = async (items: string) => {
+    const { img, at } = await renderPng(
+      `<div style="display:grid;justify-items:start;width:300px"><div style="display:inline-flex;flex-wrap:wrap;background:#f00;height:4px">${items}</div></div>`,
+      300, 6,
+    );
+    let w = 0;
+    for (let x = 0; x < img.width; x++) if (at(x, 1)[1] === 0) w = x + 1;
+    return w;
+  };
+  it("is at least the widest item even when its flex-basis is smaller", async () => {
+    expect(await boxWidth('<div style="width:90px;flex:0 0 40px"></div><div style="width:10px"></div>')).toBe(90);
+  });
+  it("sums the items' contributions otherwise", async () => {
+    expect(await boxWidth('<div style="width:10px;flex:0 0 40px"></div><div style="width:10px;flex:0 0 40px"></div>')).toBe(80);
+  });
+});
