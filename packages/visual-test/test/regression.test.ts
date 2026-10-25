@@ -4602,3 +4602,15 @@ describe("fit-content() grid track and an item with an explicit min-width", () =
     expect(at(90, 2)).toEqual([0, 0, 255]);
   });
 });
+
+describe("min-content of a grid with an auto track holding a scroll container", () => {
+  it("counts the scroll container's minimum contribution (0), not its content", async () => {
+    const { at } = await renderPng(
+      '<div style="width:120px;background:#fff"><div style="display:grid;grid-template-columns:1fr 1fr 1fr"><div style="display:grid;grid-template-columns:auto 1fr;gap:16px;background:#f00;height:5px"><div style="overflow:hidden"><div style="width:20px"></div></div></div></div></div>',
+      140, 10,
+    );
+    // the first outer track is 40px (a third of 120), as the inner grid's min-content is only 16px
+    expect(at(35, 2)).toEqual([255, 0, 0]);
+    expect(at(45, 2)).toEqual([255, 255, 255]);
+  });
+});

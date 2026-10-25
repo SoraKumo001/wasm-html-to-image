@@ -1415,6 +1415,13 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                 // adding the offsets again would count them twice.
                 pixel_t w = std::max((pixel_t)item.el->inline_size(),
                                      measured);
+                // In a min-content query an `auto` track takes its items' minimum contribution, which is 0 for a
+                // scroll container without a specified width (its automatic minimum size).
+                if (min_content_constraint && kinds[c] == 1 && !vert &&
+                    item.el->src_el()->css().get_overflow() != overflow_visible &&
+                    item.el->src_el()->css().get_width().is_predefined() && item.el->src_el()->css().get_width().predef() == 0 &&
+                    item.el->src_el()->css().get_min_width().is_predefined())
+                    w = item.el->content_offset_width();
                 // Round up: a track a fraction of a pixel too narrow makes the item's text wrap.
                 contrib[c] = std::max(contrib[c], (pixel_t)ceil_layout_unit(w));
             }
