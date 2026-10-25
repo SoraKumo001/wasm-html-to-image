@@ -4657,3 +4657,16 @@ describe("wrapping flex container with no space on offer", () => {
     expect(r.height).toBe(28);
   });
 });
+
+describe("row height of a grid item wider than its track because of min-width", () => {
+  it("measures the content at the min-width, not at the track width", async () => {
+    const svg = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="120" height="60" viewBox="0 0 120 60"><rect width="120" height="60" fill="#f00"/></svg>')}`;
+    const r = await render({
+      value: `<html><body style="margin:0;font-size:0;line-height:0"><div style="display:grid;grid-template-columns:60px"><div style="min-width:100px"><img src="${svg}" style="width:50%"></div></div></body></html>`,
+      width: 200,
+      format: "png",
+    });
+    // the image is 50% of 100px = 50px wide, 25px tall (not 50% of the 60px track: 15px)
+    expect(r.height).toBe(25);
+  });
+});

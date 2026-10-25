@@ -1829,6 +1829,15 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             if (i > item.pos.col_start) cell_width += m_grid_layout.column_gap;
         }
 
+        // An explicit min-width wider than the area is the width the item really has: its content is
+        // measured at that width (percentage sizes of the content follow it).
+        if (!vert)
+        {
+            const css_length& row_imw = item.el->src_el()->css().get_min_width();
+            if (!row_imw.is_predefined() && !row_imw.is_calc() && row_imw.units() == css_units_px)
+                cell_width = std::max(cell_width, std::max<pixel_t>(0, row_imw.val() - item.el->box_sizing_width()) + item.el->content_offset_width());
+        }
+
         containing_block_context cb = self_size;
         // Not an exact-size pass: the width is the containing block's (the grid area), and the item
         // subtracts its own margins, padding and borders from it.
