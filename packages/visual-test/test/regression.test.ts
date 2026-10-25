@@ -4692,6 +4692,13 @@ describe("clip: rect() of an absolutely positioned box", () => {
     );
     expect(at(10, 10)).toEqual([255, 255, 255]);
   });
+  it("understands the legacy space-separated syntax (go.dev's skip link)", async () => {
+    const { at } = await renderPng(
+      '<a style="position:absolute;left:5px;top:5px;width:40px;height:20px;background:#f00;overflow:hidden;clip:rect(0 0 0 0)"></a>',
+      80, 40,
+    );
+    expect(at(10, 10)).toEqual([255, 255, 255]);
+  });
   it("clips the box itself to the rect (relative to its border box)", async () => {
     const { at } = await renderPng(
       '<a style="position:absolute;left:5px;top:5px;width:40px;height:20px;background:#00f;clip:rect(0px,20px,20px,0px)"></a>',

@@ -1316,19 +1316,28 @@ void litehtml::render_item::draw_children(uint_ptr hdc, pixel_t x, pixel_t y, co
                     const auto& bclip = el->src_el()->css().get_clip();
                     if ((el_pos_kind == element_position_absolute || el_pos_kind == element_position_fixed) &&
                         bclip.size() == 1 && bclip[0].type == CV_FUNCTION && lowcase(bclip[0].name) == "rect") {
+                        // rect(<top>, <right>, <bottom>, <left>) or the legacy space-separated rect(<top> <right> <bottom> <left>)
+                        std::vector<css_token> cvals;
                         auto cargs = parse_comma_separated_list(bclip[0].value);
-                        if (cargs.size() == 4 && !cargs[0].empty() && !cargs[1].empty() && !cargs[2].empty() && !cargs[3].empty()) {
-                            css_length t_l, r_l, b_l, l_l;
-                            t_l.from_token(cargs[0][0], f_length);
-                            r_l.from_token(cargs[1][0], f_length);
-                            b_l.from_token(cargs[2][0], f_length);
-                            l_l.from_token(cargs[3][0], f_length);
-                            const auto& fm = el->css().get_font_metrics();
-                            const pixel_t ct = doc->to_pixels(t_l, fm, 0), cr = doc->to_pixels(r_l, fm, 0);
-                            const pixel_t cb = doc->to_pixels(b_l, fm, 0), cl = doc->to_pixels(l_l, fm, 0);
+                        for (const auto& group : cargs) {
+                            for (const auto& tok : group) {
+                                if (tok.type != WHITESPACE) cvals.push_back(tok);
+                            }
+                        }
+                        if (cvals.size() == 4) {
                             position border_box = el->pos();
                             border_box += el->get_paddings();
                             border_box += el->get_borders();
+                            const auto& fm = el->css().get_font_metrics();
+                            // an `auto` edge is the corresponding edge of the border box
+                            auto edge = [&](const css_token& tok, pixel_t auto_value) -> pixel_t {
+                                if (tok.type == IDENT && lowcase(tok.ident()) == "auto") return auto_value;
+                                css_length len;
+                                len.from_token(tok, f_length);
+                                return doc->to_pixels(len, fm, 0);
+                            };
+                            const pixel_t ct = edge(cvals[0], 0), cr = edge(cvals[1], border_box.width);
+                            const pixel_t cb = edge(cvals[2], border_box.height), cl = edge(cvals[3], 0);
                             const bool is_fixed = el_pos_kind == element_position_fixed && flag == draw_positioned;
                             position rect;
                             rect.x = (is_fixed ? 0 : pos.x) + border_box.x + cl;
