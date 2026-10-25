@@ -32,6 +32,21 @@ static litehtml::pixel_t measure_cell_width(const std::shared_ptr<litehtml::rend
     return inline_size;
 }
 
+// Minimum inline size a cell can shrink to.
+//
+// A table cell's inline size is imposed by the table through the containing block, so measuring the
+// cell as it stands just echoes the column back. A specified width is only a floor for the cell's
+// contents, though: content that cannot shrink (a replaced element, an unbreakable word) still
+// demands its own space, so the contribution has to be queried as an intrinsic min-content size
+// instead of at the used width. Browser engines resolve the minimum contribution of a cell the same
+// way, without capping it at the specified width.
+static litehtml::pixel_t measure_cell_min_width(const std::shared_ptr<litehtml::render_item>& el, litehtml::containing_block_context cb, litehtml::formatting_context* fmt_ctx)
+{
+    cb.size_mode |= litehtml::containing_block_context::size_mode_content |
+                    litehtml::containing_block_context::size_mode_min_content;
+    return el->measure(cb, fmt_ctx);
+}
+
 litehtml::render_item_table::render_item_table(std::shared_ptr<element> _src_el) :
         render_item(std::move(_src_el)),
         m_border_spacing_x(0),
@@ -115,31 +130,22 @@ litehtml::pixel_t litehtml::render_item_table::layout_table(pixel_t x, pixel_t y
                     if (!m_grid->column(col).css_width.is_predefined() && m_grid->column(col).css_width.units() != css_units_percentage)
                     {
                         pixel_t css_w = m_grid->column(col).css_width.calc_percent(self_size.width);
-						pixel_t el_w = 0;
-						if (containing_block_size.size_mode & containing_block_context::size_mode_measure)
-						{
-							el_w = measure_cell_width(cell->el, self_size.new_width(css_w), fmt_ctx);
-						} else
-						{
-							el_w = measure_cell_width(cell->el, self_size.new_width(css_w), fmt_ctx);
-						}
-                        cell->min_width = cell->max_width = std::max(css_w, el_w);
+                        // 'width' is a content-box size and only a floor for this column, which is a
+                        // border-box size: the padding/border of the cell and any content that
+                        // cannot shrink below the specified width still have to fit.
+                        const pixel_t content_min = measure_cell_min_width(
+                                cell->el, self_size.new_width(cell->el->content_offset_width()), fmt_ctx);
+                        cell->min_width = cell->max_width = std::max(
+                                css_w + cell->el->content_offset_width(), content_min);
                         cell->el->pos().width = cell->min_width - cell->el->content_offset_left() -
 								cell->el->content_offset_right();
                     }
                     else
                     {
                         // calculate minimum content width
-						if (containing_block_size.size_mode & containing_block_context::size_mode_measure)
-						{
-							cell->min_width = measure_cell_width(cell->el, self_size.new_width(cell->el->content_offset_width()), fmt_ctx);
-							// calculate maximum content width
-							cell->max_width = measure_cell_width(cell->el, self_size.new_width(self_size.render_width - table_width_spacing), fmt_ctx);
-						} else
-						{
-							cell->min_width = measure_cell_width(cell->el, self_size.new_width(cell->el->content_offset_width()), fmt_ctx);
-							cell->max_width = measure_cell_width(cell->el, self_size.new_width(self_size.render_width - table_width_spacing), fmt_ctx);
-						}
+						cell->min_width = measure_cell_width(cell->el, self_size.new_width(cell->el->content_offset_width()), fmt_ctx);
+                        // calculate maximum content width
+						cell->max_width = measure_cell_width(cell->el, self_size.new_width(self_size.render_width - table_width_spacing), fmt_ctx);
                     }
                 }
             }
