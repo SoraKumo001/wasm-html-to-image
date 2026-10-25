@@ -35,8 +35,37 @@ litehtml::pixel_t litehtml::render_item_image::_measure(
         return content_offset_width();
     }
 
+    // A wrapping column flex container has no definite cross size when it measures an item's
+    // content size: the line's cross size depends on the items themselves, so the transferred size
+    // suggestion does not apply (CSS Flexbox 9.2). The measure nonetheless hands over the
+    // container's inline size as an exact (already stretched) width, but the item is placed at the
+    // line's cross size later. Deriving the block size from that provisional width makes a
+    // replaced item's main size depend on a width it never has: a 40x30 image in a 27px-wide
+    // wrapping column is 30px tall (and keeps its 40px width) until the line stretch resolves.
+    // A nowrap column stretches to the container's definite width, where the ratio transfer is
+    // right (40x30 -> 100x75). (Blink: FlexItem::ComputeFlexBaseSizeForChild / LayoutReplaced)
+    const bool provisional_flex_width =
+        (containing_block_size.size_mode & containing_block_context::size_mode_measure) &&
+        !(containing_block_size.size_mode &
+          (containing_block_context::size_mode_content |
+           containing_block_context::size_mode_min_content)) &&
+        css().get_width().is_predefined() && css().get_height().is_predefined() &&
+        sz.width > 0 && sz.height > 0 && [&]() {
+            auto p = parent();
+            if (!p) return false;
+            const auto disp = p->css().get_display();
+            if (disp != display_flex && disp != display_inline_flex) return false;
+            // Only a horizontal writing mode puts a column container's cross axis on the width; in a
+            // vertical one the exact inline size is the main size and the ratio transfer is right.
+            if (p->css().get_writing_mode() != writing_mode_horizontal_tb) return false;
+            const auto dir = p->css().get_flex_direction();
+            if (dir != flex_direction_column && dir != flex_direction_column_reverse) return false;
+            return p->css().get_flex_wrap() != flex_wrap_nowrap;
+        }();
+
     const bool width_is_auto =
-        self_size.width.type == containing_block_context::cbc_value_type_auto;
+        self_size.width.type == containing_block_context::cbc_value_type_auto ||
+        provisional_flex_width;
     const bool height_is_auto =
         self_size.height.type == containing_block_context::cbc_value_type_auto;
 
