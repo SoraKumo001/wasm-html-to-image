@@ -67,6 +67,7 @@ const char* satoru_master_css =
     "select { display: inline-block; box-sizing: border-box; height: 19px; padding: 0 20px 0 4px; border: 1px solid #767676; border-radius: 4px; background-color: #fff; color: #000; font-size: 13.333px; white-space: nowrap; overflow: hidden; vertical-align: baseline; }\n"
     "input[type=\"checkbox\"], input[type=\"radio\"] { display: inline-block; box-sizing: border-box; width: 13px; height: 13px; margin: 3px 3px 3px 4px; border: 1px solid #767676; border-radius: 2px; background-color: #fff; vertical-align: middle; }\n"
     "input[type=\"radio\"] { border-radius: 50%; }\n"
+    "input > span[data-satoru-placeholder] { color: #757575; }\n"
     "input[type=\"checkbox\"][checked], input[type=\"radio\"][checked] { background-color: #0075ff; border-color: #0075ff; }\n"
     "svg { display: inline-block; overflow: hidden; }\n"
     "*[hidden] { display: none; }\n"

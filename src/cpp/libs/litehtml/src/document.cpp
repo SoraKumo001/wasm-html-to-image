@@ -404,7 +404,7 @@ void document::create_node(void* gnode, elements_list& elements, bool parseTextN
 							element::ptr span = create_element("span", -1);
 							if (span)
 							{
-								span->set_attr("style", "color:#757575");
+								span->set_attr("data-satoru-placeholder", "");
 								span->appendChild(txt);
 								ret->appendChild(span);
 							}

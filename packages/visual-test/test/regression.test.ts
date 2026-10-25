@@ -4748,3 +4748,31 @@ describe("input placeholder", () => {
     expect(rows[rows.length - 1]).toBeLessThanOrEqual(24);
   });
 });
+
+describe("::placeholder", () => {
+  const darkest = (img: { data: Uint8Array; width: number; height: number }) => {
+    let best = [255, 255, 255];
+    for (let i = 0; i < img.data.length; i += 4) {
+      const v = [img.data[i], img.data[i + 1], img.data[i + 2]];
+      if (v[0] + v[1] + v[2] < best[0] + best[1] + best[2]) best = v;
+    }
+    return best;
+  };
+  const field = (css: string) =>
+    `<style>input{border:0;font:16px sans-serif;width:200px;height:30px}${css}</style><input placeholder="MMMM">`;
+
+  it("keeps the UA grey by default", async () => {
+    const { img } = await renderPng(field(""), 220, 40);
+    expect(near(darkest(img) as Rgb, [117, 117, 117], 3)).toBe(true);
+  });
+
+  it("recolors the placeholder text only", async () => {
+    const { img } = await renderPng(field("input::placeholder{color:#f00}"), 220, 40);
+    expect(darkest(img)).toEqual([255, 0, 0]);
+  });
+
+  it("ignores ::placeholder on elements that are not inputs", async () => {
+    const { img } = await renderPng(field("div::placeholder{color:#f00}"), 220, 40);
+    expect(near(darkest(img) as Rgb, [117, 117, 117], 3)).toBe(true);
+  });
+});

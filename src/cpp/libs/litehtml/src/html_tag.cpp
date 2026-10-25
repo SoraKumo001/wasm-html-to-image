@@ -394,6 +394,18 @@ void litehtml::html_tag::apply_stylesheet( const litehtml::css& stylesheet )
 							}
 							us->m_used = true;
 						};
+						// `input::placeholder`: the style goes to the span that wraps the placeholder text
+						auto apply_placeholder = [&]()
+							{
+								for(const auto& child : m_children)
+								{
+									if(child->get_attr("data-satoru-placeholder"))
+									{
+										child->add_style(*sel->m_style, sel->m_specificity);
+										us->m_used = true;
+									}
+								}
+							};
 
 
 					if(apply & select_match_pseudo_class)
@@ -413,14 +425,23 @@ void litehtml::html_tag::apply_stylesheet( const litehtml::css& stylesheet )
 								us->m_used = true;
 								handled = true;
 							}
+							if((apply & select_match_with_placeholder))
+							{
+								apply_placeholder();
+								handled = true;
+							}
 							if(!handled)
 							{
 								add_style(*sel->m_style, sel->m_specificity);
 								us->m_used = true;
 							}
 						}
-					} else if((apply & (select_match_with_after | select_match_with_before | select_match_with_first_letter)))
+					} else if((apply & (select_match_with_after | select_match_with_before | select_match_with_first_letter | select_match_with_placeholder)))
 					{
+						if((apply & select_match_with_placeholder))
+						{
+							apply_placeholder();
+						}
 						if((apply & (select_match_with_after | select_match_with_before)))
 						{
 							apply_before_after();
@@ -1010,6 +1031,11 @@ int litehtml::html_tag::select(const css_element_selector& selector, bool apply_
                         } else if(attr.name == _first_letter_)
                         {
                                 res |= select_match_with_first_letter;
+                        } else if(m_tag == _id("input") &&
+                                  (attr.name == _id("placeholder") || attr.name == _id("-webkit-input-placeholder") ||
+                                   attr.name == _id("-moz-placeholder")))
+                        {
+                                res |= select_match_with_placeholder;
                         } else
                         {
                                 return select_no_match;
@@ -2520,6 +2546,7 @@ void litehtml::html_tag::refresh_styles_impl()
                                                         usel->m_used = true;
                                                         handled = true;
                                                 }
+                                                if(apply & select_match_with_placeholder) handled = true;
                                                 if(!handled)
                                                 {
                                                         add_style(*usel->m_selector->m_style, usel->m_selector->m_specificity);
@@ -2567,6 +2594,7 @@ void litehtml::html_tag::refresh_styles_impl()
                                                 usel->m_used = true;
                                                 handled = true;
                                         }
+                                        if(apply & select_match_with_placeholder) handled = true;
                                         if(!handled)
                                         {
                                                 add_style(*usel->m_selector->m_style, usel->m_selector->m_specificity);
