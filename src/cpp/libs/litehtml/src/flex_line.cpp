@@ -413,7 +413,7 @@ void litehtml::flex_line::init(pixel_t container_main_size, bool fit_container,
         cross_size = std::max(first_baseline_bottom - first_baseline_top,
                               last_baseline_bottom - last_baseline_top);
         cross_size = std::max(cross_size, non_baseline_height);
-        if (!max_cross_size.is_default() && cross_size > max_cross_size) {
+        if (!multiline && !max_cross_size.is_default() && cross_size > max_cross_size) {
             cross_size = max_cross_size;
         }
 

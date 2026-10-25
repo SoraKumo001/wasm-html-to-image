@@ -4568,3 +4568,14 @@ describe("max-content contribution of a flex item with a definite width and flex
     expect(await boxWidth('<div style="width:90px;flex:1 0 40px"></div>')).toBe(90);
   });
 });
+
+describe("cross size of the line of a wrapping row container with a fixed height", () => {
+  it("is the tallest item, not the container's height", async () => {
+    const { at } = await renderPng(
+      '<div style="display:flex;flex-wrap:wrap;height:20px;width:40px;background:#fff"><div style="width:10px;background:#f00"></div><div style="width:10px;height:30px;background:#00f"></div></div>',
+      60, 40,
+    );
+    // the first item stretches to its 30px line (not the 20px container)
+    expect(at(5, 25)).toEqual([255, 0, 0]);
+  });
+});
