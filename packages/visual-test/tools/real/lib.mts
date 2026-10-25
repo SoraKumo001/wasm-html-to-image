@@ -226,6 +226,26 @@ export interface Input {
   baseUrl?: string;
 }
 
+/**
+ * Chromium's UA stylesheet keeps an 8px block margin on `body` (Blink html.css, the
+ * `body` rule `HTMLBodyElement` picks up). The engine deliberately renders `body` at margin 0
+ * (the body fills the canvas), so the gap is closed here, for measurement only, instead of in
+ * the engine's master CSS.
+ *
+ * Only applied when Chromium itself ended up with a uniform positive body margin: if a page
+ * rule (`body{margin:0}`, a reset such as `*{margin:0}`, ...) wins there, Chromium's body sits on
+ * the root's origin and the engine already matches, so injecting the margin would be wrong.
+ */
+export function chromiumBodyMargin(m: Measure): number | undefined {
+  const root = m.boxes.find((b) => b.t === "html");
+  const body = m.boxes.find((b) => b.t === "body");
+  if (!root || !body) return undefined;
+  const left = body.x - root.x;
+  const top = body.y - root.y;
+  const px = Math.round(top);
+  return px > 0 && Math.abs(left - top) < 1 ? px : undefined;
+}
+
 /*
  * measureOurs / measureChrome must measure under the same conditions. Differences, in the order
  * each side establishes them:
@@ -251,12 +271,23 @@ export interface Input {
  * The viewport height is equal in value (800) but not in kind: Chromium's is explicit, the
  * engine's is a default, and the engine has no way to set it without pinning the output height.
  * It stays implicit below; everything else is equivalent by construction.
+ *
+ * `uaBodyMarginPx` is the one deliberate difference the caller may opt into: Chromium's UA body
+ * margin (see `chromiumBodyMargin`), which the engine does not apply. Callers measuring against
+ * Chromium pass `chromiumBodyMargin(chrome)` so both sides lay out the same body box; the default
+ * stays untouched, so scores compare like with like without changing what the engine renders.
  */
-export async function measureOurs(store: Store, input: Input, width: number): Promise<Measure> {
+export async function measureOurs(
+  store: Store,
+  input: Input,
+  width: number,
+  opts: { uaBodyMarginPx?: number } = {},
+): Promise<Measure> {
   let boxes: LayoutBox[] = [];
   const common = {
     width,
     format: "png" as const,
+    ...(opts.uaBodyMarginPx ? { css: `body { margin: ${opts.uaBodyMarginPx}px; }` } : {}),
     resolveResource: store.resolver(),
     onLayout: (b: LayoutBox[]) => {
       boxes = b;

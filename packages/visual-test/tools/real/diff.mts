@@ -1,17 +1,22 @@
 /**
  * Compare the engine with Chromium on one real page, from a snapshot.
  *
- *   pnpm real:diff <url> [--width 1000] [--refresh] [--top 12] [--out dir]
+ *   pnpm real:diff <url> [--width 1000] [--refresh] [--top 12] [--out dir] [--no-ua-body-margin]
  *
  * Prints the page height ratio, per-band pixel difference, and the boxes where the layouts part
  * ways (entry points of a divergence, and likely height culprits), and writes a side-by-side image
  * of the worst region. Everything runs offline against `.real-cache/<slug>/`.
+ *
+ * The engine side is measured with Chromium's UA body margin applied (`chromiumBodyMargin`), since
+ * the engine's own master CSS keeps `body` at margin 0; `--no-ua-body-margin` drops that
+ * correction.
  */
 import fs from "node:fs";
 import path from "node:path";
 import { PNG } from "pngjs";
 import {
   CACHE_DIR,
+  chromiumBodyMargin,
   compareBoxes,
   ensureDir,
   launchChromium,
@@ -54,7 +59,9 @@ try {
 } finally {
   await browser.close();
 }
-const ours = await measureOurs(store, { url: store.finalUrl }, width);
+const ours = await measureOurs(store, { url: store.finalUrl }, width, {
+  uaBodyMarginPx: flag("no-ua-body-margin") ? undefined : chromiumBodyMargin(chrome),
+});
 
 const cmp = compareBoxes(ours.boxes, chrome.boxes);
 const px = pixelStats(ours.png, chrome.png);

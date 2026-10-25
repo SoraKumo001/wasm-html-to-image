@@ -3,17 +3,23 @@
  * made any of them worse.
  *
  *   pnpm real:score [--only nodejs,mdn] [--refresh] [--update] [--timeout 240]
+ *                   [--no-ua-body-margin]
  *
  * Every site in sites.json is snapshotted once (`.real-cache/`), then rendered by both sides. Per
  * site: height ratio, share of differing pixels, share of boxes off by more than 1.5px. The result
  * is compared with the last `--update` baseline; any site that got worse is listed and the exit
  * code is 1. Each site runs in its own process with a timeout, so one hang cannot sink the run.
+ *
+ * The engine's own master CSS leaves `body` at margin 0 (the body fills the canvas), while
+ * Chromium's UA gives it 8px, so the engine side is measured with that margin applied
+ * (`chromiumBodyMargin`) to keep the two body boxes the same. `--no-ua-body-margin` drops the
+ * correction and scores the raw engine default.
  */
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { CACHE_DIR, compareBoxes, ensureDir, launchChromium, measureChrome, measureOurs, pixelStats, snapshot } from "./lib.mts";
+import { CACHE_DIR, chromiumBodyMargin, compareBoxes, ensureDir, launchChromium, measureChrome, measureOurs, pixelStats, snapshot } from "./lib.mts";
 
 interface Site {
   name: string;
@@ -57,7 +63,9 @@ if (flag("one")) {
     } finally {
       await browser.close();
     }
-    const ours = await measureOurs(store, { url: store.finalUrl }, width);
+    const ours = await measureOurs(store, { url: store.finalUrl }, width, {
+      uaBodyMarginPx: flag("no-ua-body-margin") ? undefined : chromiumBodyMargin(chrome),
+    });
     const cmp = compareBoxes(ours.boxes, chrome.boxes);
     const px = pixelStats(ours.png, chrome.png);
     const total = cmp.matched + cmp.oursOnly + cmp.chromeOnly;
@@ -93,6 +101,7 @@ for (const site of sites.filter((s) => !only || only.includes(s.name))) {
   const t0 = Date.now();
   const args = ["--import", "tsx", fileURLToPath(import.meta.url), "--one", site.url, "--width", String(site.width), "--name", site.name];
   if (flag("refresh")) args.push("--refresh");
+  if (flag("no-ua-body-margin")) args.push("--no-ua-body-margin");
   const r = spawnSync(process.execPath, args, { encoding: "utf8", timeout, maxBuffer: 64 * 1024 * 1024 });
   const line = (r.stdout ?? "").split("\n").reverse().find((l) => l.startsWith("SCORE:"));
   const score: Score = line ? JSON.parse(line.slice(6)) : { name: site.name, ok: false, error: r.error ? String(r.error.message) : `exit ${r.status}` };

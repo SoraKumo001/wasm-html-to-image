@@ -3,6 +3,10 @@
 
 const char* satoru_master_css =
     "html { display: block; margin: 0; padding: 0; }\n"
+    // margin: 0 is deliberate: the engine's body fills the canvas. Chromium's UA keeps 8px here
+    // (Blink html.css), so the Chromium comparison tools opt in to that value for their own
+    // measurement (packages/visual-test/tools/real/lib.mts) instead of the engine changing
+    // its default.
     "body { display: block; margin: 0; padding: 0; font-family: sans-serif;}\n"
     "p, dl, multicol, menu, ol, ul { display: block; margin-block-start: 1em; margin-block-end: "
     "1em; }\n"
