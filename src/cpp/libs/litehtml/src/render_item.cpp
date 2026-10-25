@@ -1137,33 +1137,6 @@ void litehtml::render_item::draw_children(uint_ptr hdc, pixel_t x, pixel_t y, co
             doc->container()->set_clip(clip_box, bdr_radius);
             overflow_clipped = true;
         }
-    } else if (!src_el()->css().get_clip().empty()) {
-        const auto& clip_tokens = src_el()->css().get_clip();
-        if (clip_tokens.size() == 1 && clip_tokens[0].type == CV_FUNCTION &&
-            lowcase(clip_tokens[0].name) == "rect") {
-            auto args = parse_comma_separated_list(clip_tokens[0].value);
-            if (args.size() == 4) {
-                css_length top_l, right_l, bottom_l, left_l;
-                top_l.from_token(args[0][0], f_length);
-                right_l.from_token(args[1][0], f_length);
-                bottom_l.from_token(args[2][0], f_length);
-                left_l.from_token(args[3][0], f_length);
-
-                pixel_t top = doc->to_pixels(top_l, css().get_font_metrics(), 0);
-                pixel_t right = doc->to_pixels(right_l, css().get_font_metrics(), 0);
-                pixel_t bottom = doc->to_pixels(bottom_l, css().get_font_metrics(), 0);
-                pixel_t left = doc->to_pixels(left_l, css().get_font_metrics(), 0);
-
-                position clip_rect;
-                clip_rect.x = x + m_pos.x + left;
-                clip_rect.y = y + m_pos.y + top;
-                clip_rect.width = right - left;
-                clip_rect.height = bottom - top;
-
-                doc->container()->set_clip(clip_rect, border_radiuses());
-                overflow_clipped = true;
-            }
-        }
     }
 
     for (const auto& el : m_children) {
@@ -1335,6 +1308,39 @@ void litehtml::render_item::draw_children(uint_ptr hdc, pixel_t x, pixel_t y, co
                     }
                 }
 
+                // `clip: rect()` clips an absolutely positioned box and everything in it (it is not limited to
+                // its children: a visually hidden `overflow: hidden; clip: rect(0, 0, 0, 0)` link paints nothing).
+                bool box_clipped = false;
+                {
+                    const auto el_pos_kind = el->src_el()->css().get_position();
+                    const auto& bclip = el->src_el()->css().get_clip();
+                    if ((el_pos_kind == element_position_absolute || el_pos_kind == element_position_fixed) &&
+                        bclip.size() == 1 && bclip[0].type == CV_FUNCTION && lowcase(bclip[0].name) == "rect") {
+                        auto cargs = parse_comma_separated_list(bclip[0].value);
+                        if (cargs.size() == 4 && !cargs[0].empty() && !cargs[1].empty() && !cargs[2].empty() && !cargs[3].empty()) {
+                            css_length t_l, r_l, b_l, l_l;
+                            t_l.from_token(cargs[0][0], f_length);
+                            r_l.from_token(cargs[1][0], f_length);
+                            b_l.from_token(cargs[2][0], f_length);
+                            l_l.from_token(cargs[3][0], f_length);
+                            const auto& fm = el->css().get_font_metrics();
+                            const pixel_t ct = doc->to_pixels(t_l, fm, 0), cr = doc->to_pixels(r_l, fm, 0);
+                            const pixel_t cb = doc->to_pixels(b_l, fm, 0), cl = doc->to_pixels(l_l, fm, 0);
+                            position border_box = el->pos();
+                            border_box += el->get_paddings();
+                            border_box += el->get_borders();
+                            const bool is_fixed = el_pos_kind == element_position_fixed && flag == draw_positioned;
+                            position rect;
+                            rect.x = (is_fixed ? 0 : pos.x) + border_box.x + cl;
+                            rect.y = (is_fixed ? 0 : pos.y) + border_box.y + ct;
+                            rect.width = std::max<pixel_t>(0, cr - cl);
+                            rect.height = std::max<pixel_t>(0, cb - ct);
+                            doc->container()->set_clip(rect, border_radiuses());
+                            box_clipped = true;
+                        }
+                    }
+                }
+
                 if (flag == draw_positioned &&
                     el->src_el()->css().get_position() == element_position_fixed) {
                     el->src_el()->draw(hdc, 0, 0, clip, el);
@@ -1346,6 +1352,7 @@ void litehtml::render_item::draw_children(uint_ptr hdc, pixel_t x, pixel_t y, co
                                                   (flag == draw_positioned));
                     }
                 }
+                if (box_clipped) doc->container()->del_clip();
 
                 if (has_props) {
                     if (!mask.empty()) doc->container()->pop_mask(hdc);

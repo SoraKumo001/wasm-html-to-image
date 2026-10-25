@@ -1454,6 +1454,44 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                 content_total += w;
             }
 
+            // "Maximize tracks" (Blink / CSS Grid 12.6): with a definite inline size the free space is handed out
+            // to the content-sized tracks up to their growth limit, before the fr tracks take what is left. A
+            // minmax(auto, <length>) track therefore reaches its maximum instead of staying at its content size.
+            if (!content_inline)
+            {
+                std::vector<int> growing;
+                pixel_t all_content = 0;
+                for (int i = 0; i < num_columns; i++)
+                {
+                    if (kinds[i]) all_content += m_grid_layout.column_widths[i];
+                    if (kinds[i] == 5 && !columns_template[i].get_operands()[1].is_predefined() &&
+                        columns_template[i].get_operands()[0].is_predefined())
+                        growing.push_back(i);
+                }
+                pixel_t room = render_inline - gaps - fixed_width - all_content;
+                while (!growing.empty() && room > 0.01f)
+                {
+                    const pixel_t share = room / (pixel_t)growing.size();
+                    bool capped = false;
+                    for (size_t k = 0; k < growing.size();)
+                    {
+                        const int i = growing[k];
+                        const pixel_t cap = columns_template[i].get_operands()[1].calc_percent(render_inline);
+                        const pixel_t gap_to_cap = cap - m_grid_layout.column_widths[i];
+                        if (gap_to_cap <= share)
+                        {
+                            if (gap_to_cap > 0) { m_grid_layout.column_widths[i] = cap; room -= gap_to_cap; content_total += gap_to_cap; }
+                            growing.erase(growing.begin() + k);
+                            capped = true;
+                        }
+                        else k++;
+                    }
+                    if (capped) continue;
+                    for (int i : growing) { m_grid_layout.column_widths[i] += share; content_total += share; }
+                    break;
+                }
+            }
+
             // Items spanning several columns (CSS Grid 12.5, "increase sizes to accommodate spanning
             // items"; Blink processes them by increasing span, after the single-column ones): what an
             // item needs beyond the tracks it spans is shared equally by the content-sized ones.

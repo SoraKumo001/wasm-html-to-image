@@ -550,6 +550,7 @@ namespace litehtml
     case _offset_rotate_:
     case _offset_anchor_:
     case _offset_position_:
+    case _clip_:
       add_parsed_property(name, property_value(value, important, false, m_layer, m_specificity));
       break;
 
@@ -1708,7 +1709,6 @@ namespace litehtml
 
     case _fill_:
     case _stroke_:
-    case _clip_:
     case _margin_trim_:
     case __moz_orient_:
     case __webkit_appearance_:

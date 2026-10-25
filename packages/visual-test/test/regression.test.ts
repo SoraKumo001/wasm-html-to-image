@@ -4683,3 +4683,40 @@ describe("shrink-to-fit grid with a minmax(<length>, 1fr) track in a narrow box"
     expect(at(60, 2)).toEqual([255, 255, 255]);
   });
 });
+
+describe("clip: rect() of an absolutely positioned box", () => {
+  it("hides a visually hidden box (overflow: hidden; clip: rect(0, 0, 0, 0))", async () => {
+    const { at } = await renderPng(
+      '<a style="position:absolute;left:5px;top:5px;width:40px;height:20px;background:#f00;overflow:hidden;clip:rect(0,0,0,0)"></a>',
+      80, 40,
+    );
+    expect(at(10, 10)).toEqual([255, 255, 255]);
+  });
+  it("clips the box itself to the rect (relative to its border box)", async () => {
+    const { at } = await renderPng(
+      '<a style="position:absolute;left:5px;top:5px;width:40px;height:20px;background:#00f;clip:rect(0px,20px,20px,0px)"></a>',
+      80, 40,
+    );
+    expect(at(10, 10)).toEqual([0, 0, 255]);
+    expect(at(35, 10)).toEqual([255, 255, 255]);
+  });
+  it("does not clip a statically positioned box", async () => {
+    const { at } = await renderPng(
+      '<div style="width:40px;height:20px;background:#00f;clip:rect(0,0,0,0)"></div>',
+      80, 40,
+    );
+    expect(at(10, 10)).toEqual([0, 0, 255]);
+  });
+});
+
+describe("minmax(auto, <length>) column next to an fr column", () => {
+  it("reaches its maximum when the grid has free space", async () => {
+    const { at } = await renderPng(
+      '<div style="display:grid;grid-template-columns:2.5fr minmax(auto,60px);width:200px;background:#fff"><div style="height:4px;background:#00f"></div><div style="height:4px;background:#f00"></div></div>',
+      220, 8,
+    );
+    // the second column is 60px wide (x 140..200), the fr column the remaining 140px
+    expect(at(135, 2)).toEqual([0, 0, 255]);
+    expect(at(145, 2)).toEqual([255, 0, 0]);
+  });
+});
