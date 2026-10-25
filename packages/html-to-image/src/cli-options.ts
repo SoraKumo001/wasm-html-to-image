@@ -35,6 +35,16 @@ export interface CliFlags {
   animationLoop?: number;
   /** `--font <path-or-glob>` (repeatable); local font files to register. */
   font?: string[];
+  /** `--js`: run the page's scripts (jsdom) before rendering. */
+  js?: boolean;
+  /** `--js-wait <ms|selector>`: a number is the settle time after load, anything else a CSS selector to wait for. */
+  jsWait?: string;
+}
+
+/** `--js-wait`: milliseconds to settle after load, or a CSS selector to wait for. */
+export function resolveJavaScript(wait: string | undefined): true | { settleMs?: number; waitFor?: string } {
+  if (wait === undefined || wait === "") return true;
+  return /^\d+(\.\d+)?$/.test(wait) ? { settleMs: Number(wait) } : { waitFor: wait };
 }
 
 /** Default frame rate for `--animation` when `--animation-fps` is omitted. */
@@ -231,5 +241,6 @@ export async function buildRenderOptions(
     ...(flags.dpi !== undefined ? { dpi: flags.dpi } : {}),
     ...(animation ? { animation } : {}),
     ...(fonts.length ? { fonts } : {}),
+    ...(flags.js ? { javascript: resolveJavaScript(flags.jsWait) } : {}),
   };
 }

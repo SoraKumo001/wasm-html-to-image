@@ -92,6 +92,14 @@ program
     "how many times the animated WebP / APNG / GIF repeats (0 = infinite, the default; 1 = play once; requires --animation)",
     (v) => parseInt(v, 10),
   )
+  .option(
+    "--js",
+    "run the page's scripts in jsdom before rendering (needs the optional peer dependency jsdom; trusted pages only)",
+  )
+  .option(
+    "--js-wait <ms|selector>",
+    "with --js: milliseconds to wait after load (default 1000), or a CSS selector to wait for",
+  )
   .action(async (input: string, options: CliFlags) => {
     try {
       const format = String(
@@ -148,6 +156,8 @@ program
         animationFps: options.animationFps,
         animationLoop: options.animationLoop,
         font: options.font,
+        js: options.js,
+        jsWait: options.jsWait,
       };
 
       const result = await render(await buildRenderOptions(input, flags));

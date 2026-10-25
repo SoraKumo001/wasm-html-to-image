@@ -14,6 +14,7 @@ import {
   type RenderResult,
 } from "./core.js";
 import { isImageInput } from "./input.js";
+import { applyJavaScript } from "./js-page.js";
 
 export type {
   OutputFormat,
@@ -30,6 +31,8 @@ export type {
 } from "./core.js";
 export { DIAGNOSTIC_CODES, LogLevel, htmlToImage } from "./core.js";
 export { isImageInput };
+export type { JavaScriptOptions, ScriptedPage } from "./js-page.js";
+export { runPageScripts } from "./js-page.js";
 export { clearResourceCache } from "./core-resources.js";
 export type { HtmlToImageModule } from "./loader.js";
 export { dropCachedModule, loadHtmlToImageModule } from "./loader.js";
@@ -52,5 +55,5 @@ export async function render(
 export async function render(
   options: HtmlToImageOptions,
 ): Promise<RenderResult<Uint8Array | string>> {
-  return htmlToImage(await getDefaultModule(), options);
+  return htmlToImage(await getDefaultModule(), await applyJavaScript(options));
 }
