@@ -68,6 +68,13 @@ class SatoruFontManager : public satoru::IFontManager {
     // Any loaded typeface (all families, then the fallbacks) that has a glyph for @p u, or null.
     sk_sp<SkTypeface> findTypefaceForCodepoint(SkUnichar u) const;
 
+    // 未読み込みのデスクトップ定番 family (Verdana / Arial / ...) に対して、代替書体の
+    // 縦メトリクス (line-height: normal の高さ) だけを要求 family の hhea 相当へ
+    // 差し替えた typeface を返す。family が読み込み済み・@font-face 定義済み・未知の
+    // 場合は空 (呼び出し側は従来どおり generic fallback へ進む)。
+    std::vector<sk_sp<SkTypeface>> matchMetricFallbackFonts(const std::string& family, int weight,
+                                                            SkFontStyle::Slant slant, int stretch = 100);
+
    private:
     sk_sp<SkFontMgr> m_fontMgr;
 

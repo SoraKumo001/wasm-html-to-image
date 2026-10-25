@@ -4,6 +4,8 @@
 //   font_load    : SatoruFontManager ctor / loadFont / clear (登録・破棄)
 //   font_fallback: scanFontFaces / getFontUrls / getFontUrl / hasFontFaceSource /
 //                  matchFonts / getMatchedWeight / getMatchedSlant / selectFont (代替選択)
+//   font_metrics : 代替書体の縦メトリクス差し替え (matchMetricFallbackFonts と
+//                  MetricTypeface / MetricScalerContext。要求 family の hhea 相当に合わせる)
 //   font_cache   : g_* グローバルレジストリ / createSkFont (可変フォント複製cache含む)
 //   font_css     : cleanName / parseUnicodeRange / checkUnicodeRange / generateFontFaceCSS
 //                (SVG <defs> へ出す @font-face 生成は generateFontFaceCSS のみ)
@@ -15,15 +17,31 @@
 #include <memory>
 #include <mutex>
 #include <sstream>
+#include <utility>
 
 #include "core/text/unicode_service.h"
 #include "include/core/SkData.h"
 #include "include/core/SkFont.h"
 #include "include/core/SkFontArguments.h"
+#include "include/core/SkFontMetrics.h"
 #include "include/core/SkFontTypes.h"
 #include "include/core/SkSpan.h"
 #include "utils/logging.h"
 #include "utils/skia_utils.h"
+
+// Skia は、システムフォントマネージャ用に「全 virtual を実書体へ委譲する」
+// 型 (SkTypeface_proxy / SkScalerContext_proxy) を src/ports に持つ。本ビルドの
+// skia_lib はこの翻訳単位をコンパイルしないため、代替書体の縦メトリクスだけを
+// 差し替えるサブクラスを作れるよう、ここで取り込む (Skia 側は無改変)。
+// Skia 自身のビルドは -w なので、取り込み時だけ同種の警告を抑止する。
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wundef"
+#endif
+#include "src/ports/SkTypeface_proxy.cpp"
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
 
 // External declaration for the custom empty font manager
 extern sk_sp<SkFontMgr> SkFontMgr_New_Custom_Empty();
@@ -175,6 +193,194 @@ bool parse_weight_range(std::string_view s, int& start, int& end) {
     if (second_start == std::string::npos) return false;
     std::string_view second = s.substr(second_start);
     return parse_int(first, start) && parse_int(second, end);
+}
+
+// ============================================================================
+// Section font_fallback (3/3): 代替書体の縦メトリクス (line-height: normal)
+// ============================================================================
+//
+// このエンジンはシステムフォントを持たないため、`Verdana` や `Arial` のような
+// デスクトップ定番 family は代替書体 (通常は sans-serif = Noto Sans JP) で描かれる。
+// 代替書体の em メトリクスは要求された family と大きく異なることがあり、そのまま
+// 使うと `line-height: normal` の行の高さ (ひいては表の行送り) がブラウザとずれる。
+// 例: Verdana は 1.215em、Noto Sans JP は 1.448em。
+//
+// そこで、既知の family については代替書体の scaler context の縦メトリクスだけを
+// 要求 family の hhea 相当 (ascent / descent / line gap, em 比) に差し替える。
+// グリフの形・送り幅・描画は代替書体のまま (人工的な横方向の拡縮はしない)。
+//
+// 参考: Blink の `line-height: normal` は ascent + descent + line gap で、line gap は
+// ベースラインの上下に配分される。ここでは幅・字形ではなく、その縦方向の合計だけを
+// 合わせる (実装の転載はせず、コメントとして挙動のみ記す)。
+struct FontMetricProfile {
+    enum class Generic { Sans, Serif, Mono };
+    // em 比。各フォントの hhea テーブルから採取した値。
+    float ascent;
+    float descent;
+    float line_gap;
+    Generic generic;
+};
+
+constexpr FontMetricProfile kMetricProfiles[] = {
+    {1.005371f, 0.209961f, 0.000000f, FontMetricProfile::Generic::Sans},  // Verdana
+    {1.000488f, 0.206543f, 0.000000f, FontMetricProfile::Generic::Sans},  // Tahoma
+    {0.905273f, 0.211914f, 0.032715f, FontMetricProfile::Generic::Sans},  // Arial / Helvetica
+    {0.891113f, 0.216309f, 0.042480f, FontMetricProfile::Generic::Serif}, // Times New Roman
+    {0.832520f, 0.300293f, 0.000000f, FontMetricProfile::Generic::Mono},  // Courier New
+    {0.916992f, 0.219238f, 0.000000f, FontMetricProfile::Generic::Serif}, // Georgia
+    {0.938965f, 0.222168f, 0.000000f, FontMetricProfile::Generic::Sans},  // Trebuchet MS
+    {1.079102f, 0.250977f, 0.000000f, FontMetricProfile::Generic::Sans},  // Segoe UI / system-ui
+    {0.750000f, 0.250000f, 0.220703f, FontMetricProfile::Generic::Sans},  // Calibri
+    {0.950195f, 0.222168f, 0.000000f, FontMetricProfile::Generic::Serif}, // Cambria
+    {0.742676f, 0.257324f, 0.170898f, FontMetricProfile::Generic::Mono},  // Consolas
+    {1.102051f, 0.291504f, 0.000000f, FontMetricProfile::Generic::Sans},  // Comic Sans MS
+    {1.008789f, 0.210938f, 0.000000f, FontMetricProfile::Generic::Sans},  // Impact
+    {1.100586f, 0.309570f, 0.000000f, FontMetricProfile::Generic::Sans},  // Arial Black
+    {0.935547f, 0.211914f, 0.000000f, FontMetricProfile::Generic::Sans},  // Arial Narrow
+    {0.731934f, 0.284180f, 0.333008f, FontMetricProfile::Generic::Serif}, // Palatino Linotype
+    {0.923340f, 0.282227f, 0.000000f, FontMetricProfile::Generic::Serif}, // Book Antiqua
+    {1.005859f, 0.220215f, 0.000000f, FontMetricProfile::Generic::Sans},  // Century Gothic
+    {0.861816f, 0.263184f, 0.000000f, FontMetricProfile::Generic::Serif}, // Garamond
+    {0.941895f, 0.231934f, 0.000000f, FontMetricProfile::Generic::Serif}, // Bookman Old Style
+    {0.921875f, 0.209961f, 0.000000f, FontMetricProfile::Generic::Sans},  // MS Sans Serif
+    {0.789062f, 0.210938f, 0.000000f, FontMetricProfile::Generic::Mono},  // Lucida Console
+    {1.096680f, 0.439941f, 0.000000f, FontMetricProfile::Generic::Sans},  // Lucida Sans Unicode
+    {0.916504f, 0.217285f, 0.000000f, FontMetricProfile::Generic::Sans},  // Franklin Gothic Medium
+    {0.724609f, 0.275391f, 0.220703f, FontMetricProfile::Generic::Sans},  // Candara
+    {0.743652f, 0.256348f, 0.207520f, FontMetricProfile::Generic::Sans},  // Corbel
+    {0.750977f, 0.249023f, 0.220703f, FontMetricProfile::Generic::Serif}, // Constantia
+    {0.927734f, 0.234375f, 0.000000f, FontMetricProfile::Generic::Mono},  // Cascadia Code / Mono
+};
+
+struct MetricFamilyAlias {
+    const char* family;  // cleanName() 後 (小文字・空白/引用符なし)
+    int profile;         // kMetricProfiles の添字
+};
+
+constexpr MetricFamilyAlias kMetricFamilyAliases[] = {
+    {"verdana", 0},
+    {"tahoma", 1},
+    {"arial", 2},
+    {"helvetica", 2},
+    {"helveticaneue", 2},
+    {"timesnewroman", 3},
+    {"times", 3},
+    {"couriernew", 4},
+    {"courier", 4},
+    {"georgia", 5},
+    {"trebuchetms", 6},
+    {"segoeui", 7},
+    {"system-ui", 7},
+    {"-apple-system", 7},
+    {"blinkmacsystemfont", 7},
+    {"calibri", 8},
+    {"cambria", 9},
+    {"consolas", 10},
+    {"comicsansms", 11},
+    {"impact", 12},
+    {"arialblack", 13},
+    {"arialnarrow", 14},
+    {"palatinolinotype", 15},
+    {"bookantiqua", 16},
+    {"centurygothic", 17},
+    {"garamond", 18},
+    {"bookmanoldstyle", 19},
+    {"mssansserif", 20},
+    {"microsoftsansserif", 20},
+    {"lucidaconsole", 21},
+    {"lucidasansunicode", 22},
+    {"frankingothicmedium", 23},
+    {"franklingothicmedium", 23},
+    {"candara", 24},
+    {"corbel", 25},
+    {"constantia", 26},
+    {"cascadiacode", 27},
+    {"cascadiamono", 27},
+};
+
+int find_metric_profile(const std::string& clean_family) {
+    for (const auto& alias : kMetricFamilyAliases) {
+        if (clean_family == alias.family) return alias.profile;
+    }
+    return -1;
+}
+
+// 実書体の scaler context を包み、縦メトリクスだけを差し替える。
+class MetricScalerContext final : public SkScalerContext_proxy {
+   public:
+    MetricScalerContext(std::unique_ptr<SkScalerContext> real, SkTypeface_proxy& typeface,
+                        const SkScalerContextEffects& effects, const SkDescriptor* desc,
+                        const FontMetricProfile& profile)
+        : SkScalerContext_proxy(std::move(real), typeface, effects, desc), m_profile(profile) {}
+
+   protected:
+    void generateFontMetrics(SkFontMetrics* fm) override {
+        // 代替書体の実メトリクスを取得してから、縦方向だけ置き換える。
+        // 下線位置・x-height・送り幅などは代替書体の値を使う。
+        SkScalerContext_proxy::generateFontMetrics(fm);
+        const SkScalar size = fRec.fTextSize;
+        if (!(size > 0)) return;
+        fm->fAscent = -m_profile.ascent * size;
+        fm->fDescent = m_profile.descent * size;
+        fm->fLeading = m_profile.line_gap * size;
+        // fTop/fBottom はグリフの実測範囲。代替書体の広い方 (インク) を残す。
+        fm->fTop = std::min(fm->fTop, fm->fAscent);
+        fm->fBottom = std::max(fm->fBottom, fm->fDescent);
+    }
+
+   private:
+    FontMetricProfile m_profile;
+};
+
+// 実書体へ全 virtual を委譲しつつ、上記 scaler context を返す typeface。
+class MetricTypeface final : public SkTypeface_proxy {
+   public:
+    MetricTypeface(sk_sp<SkTypeface> base, const FontMetricProfile& profile)
+        : SkTypeface_proxy(base, base->fontStyle(), base->isFixedPitch()),
+          m_base(std::move(base)),
+          m_profile(profile) {}
+
+   protected:
+    std::unique_ptr<SkScalerContext> onCreateScalerContext(
+        const SkScalerContextEffects& effects, const SkDescriptor* desc) const override {
+        std::unique_ptr<SkScalerContext> real = m_base->createScalerContext(effects, desc);
+        if (!real) return SkTypeface_proxy::onCreateScalerContext(effects, desc);
+        return std::make_unique<MetricScalerContext>(
+            std::move(real), *const_cast<MetricTypeface*>(this), effects, desc, m_profile);
+    }
+
+    sk_sp<SkTypeface> onMakeClone(const SkFontArguments& args) const override {
+        sk_sp<SkTypeface> clone = m_base->makeClone(args);
+        if (!clone) return nullptr;
+        return sk_ref_sp<SkTypeface>(new MetricTypeface(std::move(clone), m_profile));
+    }
+
+   private:
+    sk_sp<SkTypeface> m_base;
+    FontMetricProfile m_profile;
+};
+
+// 同じ実書体 + 同じプロファイルには同じラッパーを返す (uniqueID を安定させる。
+// Skia の strike / typeface キャッシュは uniqueID で引かれる)。
+std::map<std::pair<SkTypefaceID, int>, sk_sp<SkTypeface>> g_metric_typeface_cache;
+
+sk_sp<SkTypeface> metric_adjusted_typeface(const sk_sp<SkTypeface>& base, int profile_index) {
+    if (!base) return nullptr;
+    const std::pair<SkTypefaceID, int> key(base->uniqueID(), profile_index);
+    {
+        std::lock_guard<std::mutex> lock(g_font_mutex);
+        auto it = g_metric_typeface_cache.find(key);
+        if (it != g_metric_typeface_cache.end()) return it->second;
+    }
+    sk_sp<SkTypeface> wrapped =
+        sk_ref_sp<SkTypeface>(new MetricTypeface(base, kMetricProfiles[profile_index]));
+    {
+        std::lock_guard<std::mutex> lock(g_font_mutex);
+        auto inserted = g_metric_typeface_cache.emplace(key, wrapped);
+        // 競合した場合は先に入ったラッパーを返す (uniqueID を 1 つに保つ)。
+        if (inserted.second) return wrapped;
+        return inserted.first->second;
+    }
 }
 }  // namespace
 
@@ -625,6 +831,46 @@ std::vector<sk_sp<SkTypeface>> SatoruFontManager::matchFonts(const std::string& 
     }
 
     return {};
+}
+
+std::vector<sk_sp<SkTypeface>> SatoruFontManager::matchMetricFallbackFonts(
+    const std::string& family, int weight, SkFontStyle::Slant slant, int stretch) {
+    const std::string clean_family = cleanName(family);
+    const int profile_index = find_metric_profile(clean_family);
+    if (profile_index < 0) return {};
+
+    // ページの @font-face が同名 family を持つ場合は、まだ読み込み中でも
+    // 本来の書体を優先する (代替メトリクスで先に確定させない)。
+    // font_request は family が第一キーなので、family の先頭だけ見ればよい。
+    font_request probe;
+    probe.family = clean_family;
+    probe.weight = -1;
+    probe.slant = SkFontStyle::kUpright_Slant;
+    auto face_it = m_fontFaces.lower_bound(probe);
+    if (face_it != m_fontFaces.end() && face_it->first.family == clean_family) return {};
+
+    // 既に実体が読み込まれている family は通常の matchFonts が返している。
+    if (m_typefaceCache.find(clean_family) != m_typefaceCache.end()) return {};
+
+    const FontMetricProfile& profile = kMetricProfiles[profile_index];
+    const bool sans = profile.generic == FontMetricProfile::Generic::Sans;
+    const char* generic = sans ? "sans-serif"
+                               : profile.generic == FontMetricProfile::Generic::Serif ? "serif"
+                                                                                      : "monospace";
+    std::vector<sk_sp<SkTypeface>> substitutes = matchFonts(generic, weight, slant, stretch);
+    if (substitutes.empty() && !sans) {
+        // serif/monospace が未取得のページでも、sans-serif の代替書体に
+        // その family の縦メトリクスだけを載せて使う。
+        substitutes = matchFonts("sans-serif", weight, slant, stretch);
+    }
+    if (substitutes.empty()) return {};
+
+    std::vector<sk_sp<SkTypeface>> out;
+    out.reserve(substitutes.size());
+    for (const auto& tf : substitutes) {
+        out.push_back(metric_adjusted_typeface(tf, profile_index));
+    }
+    return out;
 }
 
 int SatoruFontManager::getMatchedWeight(sk_sp<SkTypeface> typeface, const std::string& family) {

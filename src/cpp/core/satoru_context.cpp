@@ -112,6 +112,12 @@ std::vector<sk_sp<SkTypeface>> SatoruContext::get_typefaces(const std::string &f
     out_fake_bold = false;
     auto result = fontManager.matchFonts(family, weight, slant, stretch);
 
+    if (result.empty()) {
+        // システムフォント非依存のため、Verdana / Arial 等は代替書体で描かれる。
+        // 行の高さ (line-height: normal) だけは要求 family に合わせる。
+        result = fontManager.matchMetricFallbackFonts(family, weight, slant, stretch);
+    }
+
     if (!result.empty()) {
         // Fake bold check (only for non-variable fonts, though this flag will be
         // overridden in container_skia if Variable Font cloning succeeds)
