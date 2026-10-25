@@ -4855,3 +4855,88 @@ describe("leading of a font with a line gap", () => {
     expect(firstInk).toBe(36);
   });
 });
+
+// P0-2: small reproductions of four layout bugs found by the fuzzer. The seeds are only
+// useful as a name here: each probe below is the minimal document that used to paint
+// something in the wrong place, with the expected Chromium geometry sampled as pixels.
+describe("P0-2: ratio-only replaced sizing and empty baselines", () => {
+  it("a cyclic percentage in an inline-flex does not make a ratio-only svg take the trial width (seed 71)", async () => {
+    // The inner inline-flex is 25% of an indefinite (fit-content) containing block, so both
+    // its width and the auto-width svg (100% of that block) are cyclic. The svg must
+    // contribute 0 while the container is measured; contributing the 300px trial width
+    // inflated the outer inline-flex to the line and the svg to 75x112.
+    const { at } = await renderPng(
+      `<div style="display:inline-flex;background:#0f0">
+         <div style="display:inline-flex;width:25%"><svg viewBox="0 0 40 60"><rect width="40" height="60" fill="#f00"/></svg></div>
+         <div style="width:40px;height:20px;background:#00f"></div>
+       </div>`,
+      300,
+      120,
+    );
+    expect(near(at(20, 10), BLUE)).toBe(true); // the fixed sibling starts after the cyclic item
+    expect(near(at(4, 18), [0, 255, 0])).toBe(true); // the outer box is 40px wide, not the 300px line
+    expect(isWhite(at(60, 10))).toBe(true);
+    expect(isWhite(at(20, 40))).toBe(true); // the svg is 20px tall, not 112px
+  });
+
+  it("a fit-content column flex is not stretched by a ratio-only svg's trial width (seed 158)", async () => {
+    // A column container's cross size is the largest item contribution. The auto-width svg is
+    // 100% of the (indefinite) containing block, so its contribution is 0 and the 50px sibling
+    // decides the width. Resolving the svg against the measured trial width made the container
+    // 300px wide and the svg 300x150 (the blue sibling moved to y=150).
+    const { at } = await renderPng(
+      `<div style="display:inline-flex;flex-direction:column;width:fit-content;font-size:0;line-height:0">
+         <svg viewBox="0 0 40 20"><rect width="40" height="20" fill="#f00"/></svg>
+         <div style="width:50px;height:10px;background:#00f"></div>
+       </div>`,
+      300,
+      120,
+    );
+    expect(near(at(10, 10), RED)).toBe(true); // the svg stretches to the 50px content width
+    expect(near(at(10, 30), BLUE)).toBe(true); // and the sibling sits right below its 25px height
+    expect(isWhite(at(60, 10))).toBe(true); // the container is 50px wide, not the whole line
+    expect(isWhite(at(10, 60))).toBe(true); // the svg is 25px tall, not 150px
+  });
+
+  it("an empty flex and an empty grid synthesize their first baseline from the border-box bottom", async () => {
+    const boxes = async (display: string) => {
+      const { img } = await renderPng(
+        `<div style="display:flex;align-items:baseline">
+           <div style="display:${display};width:20px;height:20px;margin-bottom:6px;background:#f00"></div>
+           <div style="width:20px;height:30px;background:#00f"></div>
+         </div>`,
+        60,
+        60,
+      );
+      return { red: colorBox(img, isReddish)!, blue: colorBox(img, isBluish)! };
+    };
+    for (const display of ["flex", "grid"]) {
+      const { red, blue } = await boxes(display);
+      // Both baselines are border-box bottoms, so the 20px red box starts 10px below the
+      // 30px blue one. The old fallback used the margin-box bottom (6px lower), which put
+      // the red box 4px below the blue one's top instead of 10px.
+      expect(red.y1, display).toBe(blue.y1);
+      expect(red.y0, display).toBe(blue.y0 + 10);
+    }
+  });
+
+  it("a wrapping column flex measures an overflowing item at its fit-content width", async () => {
+    // The container is 40px wide, but the item's fit-content width is 80px (the green bar).
+    // Its block size has to be measured at that 80px: the ratio svg is then 80x40 and the item
+    // 50px tall. Measuring at the 40px container width made the svg 80x20 and the item 30px.
+    const { at } = await renderPng(
+      `<div style="display:flex;flex-direction:column;flex-wrap:wrap;width:40px;height:120px;font-size:0;line-height:0">
+         <div style="background:#f00">
+           <div style="width:80px;height:10px;background:#0f0"></div>
+           <svg viewBox="0 0 80 40"><rect width="80" height="40" fill="#00f"/></svg>
+         </div>
+       </div>`,
+      200,
+      200,
+    );
+    expect(near(at(60, 5), [0, 255, 0])).toBe(true); // the item is 80px wide, wider than its container
+    expect(isWhite(at(100, 5))).toBe(true);
+    expect(near(at(60, 40), BLUE)).toBe(true); // the svg keeps its 80x40 ratio
+    expect(isWhite(at(60, 70))).toBe(true); // the item is 50px tall (10 + 40)
+  });
+});
