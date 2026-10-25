@@ -22,6 +22,8 @@ export type { LayoutBox };
 
 export const CACHE_DIR = path.resolve(import.meta.dirname, "../../.real-cache");
 export const MAX_COMPARE_HEIGHT = 16000; // Chromium repeats content past ~16384px
+/** Layout viewport height both sides are measured at (`vh`, `vmin`, fixed boxes depend on it). */
+export const VIEWPORT_HEIGHT = 800;
 
 // ---------------------------------------------------------------------------------------------
 // Chromium
@@ -161,7 +163,7 @@ export async function snapshot(url: string, opts: { width?: number; refresh?: bo
 
   const browser = await launchChromium();
   try {
-    const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width, height: 800 } });
+    const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width, height: VIEWPORT_HEIGHT } });
     const page = await context.newPage();
     const pending: Promise<void>[] = [];
     page.on("response", (r) => {
@@ -224,6 +226,32 @@ export interface Input {
   baseUrl?: string;
 }
 
+/*
+ * measureOurs / measureChrome must measure under the same conditions. Differences, in the order
+ * each side establishes them:
+ *
+ *   condition        measureChrome                          measureOurs
+ *   scripts          javaScriptEnabled: false                none at all (no JS option)
+ *   viewport width   context viewport {width}                render `width`
+ *   viewport height  context viewport {VIEWPORT_HEIGHT}      implied by the engine's
+ *                                                            k_default_viewport_height (800). The
+ *                                                            render `height` option is NOT usable
+ *                                                            for this: it also fixes the output
+ *                                                            height (a 1249px page came out 800px).
+ *   resources        waitUntil "load" + networkidle           render() resolves every resource
+ *                                                            before laying out (blocking)
+ *   web fonts        document.fonts.ready (after load)        fonts arrive through the store during
+ *                                                            discovery, i.e. before layout: nothing
+ *                                                            to wait for afterwards
+ *   box coordinates  getBoundingClientRect + scrollX/Y        page coordinates from the document
+ *                                                            origin (scroll is 0 with JS off)
+ *   page height      scrollHeight, else root border-box       render result height
+ *   pixels           fullPage clip at MAX_COMPARE_HEIGHT      full-page PNG (pixelStats fits both)
+ *
+ * The viewport height is equal in value (800) but not in kind: Chromium's is explicit, the
+ * engine's is a default, and the engine has no way to set it without pinning the output height.
+ * It stays implicit below; everything else is equivalent by construction.
+ */
 export async function measureOurs(store: Store, input: Input, width: number): Promise<Measure> {
   let boxes: LayoutBox[] = [];
   const common = {
@@ -285,7 +313,7 @@ export async function measureChrome(
   width: number,
   opts: { screenshot?: boolean } = {},
 ): Promise<Measure> {
-  const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width, height: 800 } });
+  const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width, height: VIEWPORT_HEIGHT } });
   try {
     await store.attach(context);
     const page: Page = await context.newPage();
@@ -347,6 +375,8 @@ export interface BoxComparison {
   entries: BoxDelta[];
   /** Boxes whose own height differs while no child's does: the likely cause of a height shift. */
   heightCulprits: BoxDelta[];
+  /** Bad boxes per axis that is off by more than the tolerance (a box can count in several). */
+  breakdown: { x: number; y: number; w: number; h: number };
 }
 
 const parentPath = (p: string) => (p.includes(".") ? p.slice(0, p.lastIndexOf(".")) : "");
@@ -391,7 +421,15 @@ export function compareBoxes(ours: LayoutBox[], chrome: LayoutBox[], tol = 1.5):
   const hasBadChild = new Set<string>();
   for (const p of heightBad) hasBadChild.add(parentPath(p));
   const heightCulprits = all.filter((d) => heightBad.has(d.p) && !hasBadChild.has(d.p)).sort((a, b) => a.ref.y - b.ref.y);
-  return { matched: deltas.size, oursOnly, chromeOnly, bad, entries, heightCulprits };
+  // Off-by-axis breakdown: whether boxes moved (x, y) or changed size (w, h).
+  const breakdown = { x: 0, y: 0, w: 0, h: 0 };
+  for (const d of bad) {
+    if (Math.abs(d.dx) > tol) breakdown.x++;
+    if (Math.abs(d.dy) > tol) breakdown.y++;
+    if (Math.abs(d.dw) > tol) breakdown.w++;
+    if (Math.abs(d.dh) > tol) breakdown.h++;
+  }
+  return { matched: deltas.size, oursOnly, chromeOnly, bad, entries, heightCulprits, breakdown };
 }
 
 const round = (v: number) => Math.round(v * 100) / 100;
