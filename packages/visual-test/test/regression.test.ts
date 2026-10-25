@@ -4777,6 +4777,19 @@ describe("::placeholder", () => {
   });
 });
 
+describe("replaced flex item stretched shorter than its intrinsic height", () => {
+  it("gets narrower with the aspect ratio instead of keeping its natural width", async () => {
+    const png = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="300" height="50" viewBox="0 0 300 50"><rect width="300" height="50" fill="#f00"/></svg>')}`;
+    const { at } = await renderPng(
+      `<div style="display:flex;height:40px;width:400px;background:#fff"><img src="${png}"></div>`,
+      400, 50,
+    );
+    // 300x50 squeezed to 40px tall is 240px wide (it used to stay 300 wide)
+    expect(at(230, 20)).toEqual([255, 0, 0]);
+    expect(at(250, 20)).toEqual([255, 255, 255]);
+  });
+});
+
 describe("inline-block input", () => {
   it("aligns on its centred text, not on the top of the field", async () => {
     const { height } = await render({

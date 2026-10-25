@@ -361,6 +361,13 @@ void litehtml::flex_item_row_direction::direction_specific_init(const litehtml::
 		{
 			const pixel_t cross = std::max<pixel_t>(0, (pixel_t)self_size.render_height - el->content_offset_block(m_container_wm));
 			flex_base_size = cross * sz.width / sz.height + render_offset;
+			// The automatic minimum is then the transferred size too, not the intrinsic width: an image
+			// squeezed to a container shorter than itself gets narrower, not stuck at its natural width.
+			if (min_size_prop.is_predefined() && min_main_size > flex_base_size)
+			{
+				min_main_size = flex_base_size;
+				min_content_contribution = std::min(min_content_contribution, flex_base_size);
+			}
 		}
 	}
 
