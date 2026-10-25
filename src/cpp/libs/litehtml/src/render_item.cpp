@@ -207,6 +207,7 @@ void litehtml::render_item::place(pixel_t x, pixel_t y,
             }
         }
         const pixel_t shift = (m_pos.height - content_end) / 2;
+        m_control_shift = shift > 0.5f ? shift : 0;
         if (shift > 0.5f) {
             for (auto& el : m_children) {
                 el->block_shift(shift);

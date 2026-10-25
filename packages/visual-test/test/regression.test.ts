@@ -4776,3 +4776,16 @@ describe("::placeholder", () => {
     expect(near(darkest(img) as Rgb, [117, 117, 117], 3)).toBe(true);
   });
 });
+
+describe("inline-block input", () => {
+  it("aligns on its centred text, not on the top of the field", async () => {
+    const { height } = await render({
+      value:
+        '<html><body style="margin:0"><div style="font:16px sans-serif"><input style="display:inline-block;height:30px;width:100px;border:0;padding:0;font:13.5px sans-serif" value="Abc"></div></body></html>',
+      width: 220,
+      format: "png",
+    });
+    // Chromium: the line is exactly the field's 30px (the baseline sits in the middle of the field)
+    expect(height).toBe(30);
+  });
+});

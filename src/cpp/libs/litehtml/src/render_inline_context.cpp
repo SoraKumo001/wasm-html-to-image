@@ -892,7 +892,7 @@ litehtml::pixel_t litehtml::render_item_inline_context::get_first_baseline()
         }
         else
         {
-		    bl = line->bottom() - line->baseline() + content_offset_top();
+		    bl = line->bottom() - line->baseline() + content_offset_top() + m_control_shift;
         }
 	} else
 	{
@@ -920,7 +920,7 @@ litehtml::pixel_t litehtml::render_item_inline_context::get_last_baseline()
         }
         else
         {
-		    bl = line->bottom() - line->baseline() + content_offset_top();
+		    bl = line->bottom() - line->baseline() + content_offset_top() + m_control_shift;
         }
 	} else
 	{

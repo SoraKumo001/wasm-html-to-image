@@ -80,6 +80,8 @@ namespace litehtml
         // zeroed). A parent measured again while this box answers from its cache needs it back.
         pixel_t m_collapsed_out_margin = 0;
         bool m_collapsed_through = false;
+        // how far a single-line form control moved its text down to centre it; its baselines follow the text
+        pixel_t m_control_shift = 0;
         // Position right after the last relative shift. A line box is finished several times per
         // layout; the shift must be applied once per fresh position, not once per call.
         position m_relative_shifted_pos;
