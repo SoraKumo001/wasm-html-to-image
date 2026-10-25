@@ -40,7 +40,7 @@ async function loadJsdom(): Promise<any> {
     return await import("jsdom");
   } catch (cause) {
     throw new Error(
-      "The `javascript` option needs the optional peer dependency `jsdom` (npm install jsdom).",
+      "The `javascript` option needs the optional peer dependency `jsdom`. Install it with `npm i jsdom`, or with npx: `npx -p jsdom -p wasm-html-to-image wasm-html-to-image ... --js`.",
       { cause },
     );
   }
