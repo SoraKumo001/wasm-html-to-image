@@ -610,8 +610,17 @@ void litehtml::render_item_inline_context::place_inline(std::unique_ptr<line_box
     // a float left of the line: the box then may not fit beside the float and moves below it.
     const bool percent_width = !item->get_el()->css().get_width().is_predefined() &&
         item->get_el()->css().get_width().units() == css_units_percentage;
-    const pixel_t cb_inline = ((item->get_el()->src_el()->is_ratio_only_replaced() || percent_width) && self_size.mode == writing_mode_horizontal_tb)
-        ? (pixel_t)self_size.render_inline_size() : line_ctx.right;
+    const bool ratio_only = item->get_el()->src_el()->is_ratio_only_replaced();
+    // During an intrinsic-size query the containing block inline size is indefinite (auto): an auto-width
+    // ratio-only box is 100% of it, so the percentage is cyclic and contributes 0 instead of the trial width
+    // the query measures inside (Blink resolves such an auto inline size to 0 for the contribution). A
+    // definite containing block keeps its width, so the box still fills it.
+    const bool cyclic_ratio_only = ratio_only && !percent_width &&
+        (self_size.size_mode & containing_block_context::size_mode_content) &&
+        self_size.render_inline_size().type == containing_block_context::cbc_value_type_auto;
+    const pixel_t cb_inline = cyclic_ratio_only ? 0 :
+        (((ratio_only || percent_width) && self_size.mode == writing_mode_horizontal_tb)
+        ? (pixel_t)self_size.render_inline_size() : line_ctx.right);
     auto cb = self_size.new_inline_size(cb_inline, cb_size_mode);
     pixel_t min_rendered_width = item->get_el()->measure(cb, fmt_ctx);
     if (!(self_size.size_mode & containing_block_context::size_mode_measure))

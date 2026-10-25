@@ -548,7 +548,21 @@ std::list<litehtml::flex_line> litehtml::render_item_flex::get_lines(const liteh
 		{
 			item = std::make_shared<flex_item_column_direction>(el);
 		}
-		item->init(self_size, fmt_ctx, css().get_flex_align_items());
+		// A ratio-only replaced item with an auto inline size is 100% of its containing block. While an
+		// intrinsic-size query sizes the container from its content, that containing block inline size is
+		// indefinite, so the percentage is cyclic, the item contributes 0 (Blink resolves the auto inline
+		// size to 0 here instead of filling the width the query happens to measure in), and the items are
+		// measured at 0 so no flex base or automatic minimum takes the trial width.
+		containing_block_context item_size = self_size;
+		if(is_main_inline && self_size.mode == writing_mode_horizontal_tb &&
+			(self_size.size_mode & containing_block_context::size_mode_content) &&
+			!(self_size.size_mode & containing_block_context::size_mode_min_content) &&
+			self_size.render_inline_size().type == containing_block_context::cbc_value_type_auto &&
+			el->src_el()->is_ratio_only_replaced() && el->css().get_width().is_predefined())
+		{
+			item_size.render_inline_size() = 0;
+		}
+		item->init(item_size, fmt_ctx, css().get_flex_align_items());
 		item->src_order = src_order++;
 
 		if(prev_order.is_default())
