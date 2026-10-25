@@ -140,8 +140,30 @@ litehtml::pixel_t litehtml::render_item_table::layout_table(pixel_t x, pixel_t y
                         cell->el->pos().width = cell->min_width - cell->el->content_offset_left() -
 								cell->el->content_offset_right();
                     }
+                    else if (!m_grid->column(col).css_width.is_predefined() &&
+                             m_grid->column(col).css_width.units() == css_units_percentage && !is_fixed_layout &&
+                             self_size.width.type == containing_block_context::cbc_value_type_absolute)
+                    {
+                        // A percentage column of a table with a definite absolute width: the
+                        // percentage is the column's preferred size, but Blink does not make it a
+                        // minimum (TableLayoutAlgorithmAuto / Column::percent only feeds the
+                        // distribution step). The column still has to fit the cell's min-content,
+                        // so a content-bearing cell can push a 1% column past 1% of the table.
+                        // Measure that contribution as an intrinsic min-content size rather than
+                        // at the collapsing width, which would just echo the percentage back.
+                        //
+                        // Auto-width (and percentage-width) tables are excluded: their column
+                        // contributions feed the percentage/shrink-to-fit sizing in
+                        // calc_table_width, which this pass must not disturb.
+                        cell->min_width = measure_cell_min_width(
+                                cell->el, self_size.new_width(cell->el->content_offset_width()), fmt_ctx);
+                        // calculate maximum content width
+						cell->max_width = measure_cell_width(cell->el, self_size.new_width(self_size.render_width - table_width_spacing), fmt_ctx);
+                    }
                     else
                     {
+                        // auto column, or a percentage column that the block above does not cover
+                        // (table-layout:fixed, auto or percentage table width).
                         // calculate minimum content width
 						cell->min_width = measure_cell_width(cell->el, self_size.new_width(cell->el->content_offset_width()), fmt_ctx);
                         // calculate maximum content width
