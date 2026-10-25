@@ -553,8 +553,11 @@ std::list<litehtml::flex_line> litehtml::render_item_flex::get_lines(const liteh
 		// indefinite, so the percentage is cyclic, the item contributes 0 (Blink resolves the auto inline
 		// size to 0 here instead of filling the width the query happens to measure in), and the items are
 		// measured at 0 so no flex base or automatic minimum takes the trial width.
+		// A column container's inline size is its cross size: there the same cyclic 0 keeps an auto /
+		// fit-content item from stretching to the width the query happens to measure in, so a column that
+		// is itself shrink-to-fit stays as wide as its other items instead of as wide as the trial space.
 		containing_block_context item_size = self_size;
-		if(is_main_inline && self_size.mode == writing_mode_horizontal_tb &&
+		if(self_size.mode == writing_mode_horizontal_tb &&
 			(self_size.size_mode & containing_block_context::size_mode_content) &&
 			!(self_size.size_mode & containing_block_context::size_mode_min_content) &&
 			self_size.render_inline_size().type == containing_block_context::cbc_value_type_auto &&
@@ -564,6 +567,52 @@ std::list<litehtml::flex_line> litehtml::render_item_flex::get_lines(const liteh
 		}
 		item->init(item_size, fmt_ctx, css().get_flex_align_items());
 		item->src_order = src_order++;
+
+		// An explicit intrinsic inline size (fit-content / max-content / min-content) on a ratio-only
+		// replaced item behaves like `width: auto` in a flex container: when the cross size is definite
+		// and the item stretches to it, the main size is the ratio transferred from that cross size
+		// (CSS Flexbox 9.2; the same transfer flex_item_row_direction does for an auto inline size).
+		// The item was measured at a cyclic 0 above, which is right for its content contribution but
+		// wrong once the stretched cross size is known: without the transfer a shrink-to-fit container
+		// loses the width the ratio gives the item.
+		if(is_main_inline && self_size.mode == writing_mode_horizontal_tb &&
+			self_size.render_block_size().type != containing_block_context::cbc_value_type_auto &&
+			css().get_flex_wrap() == flex_wrap_nowrap &&
+			el->src_el()->is_ratio_only_replaced() &&
+			el->css().get_width().is_predefined() && el->css().get_width().predef() > 0 &&
+			el->css().get_height().is_predefined() && el->css().get_height().predef() == 0)
+		{
+			flex_align_items item_align = css().get_flex_align_items();
+			if(el->css().get_flex_align_self() != flex_align_items_auto)
+			{
+				item_align = el->css().get_flex_align_self();
+			}
+			if((item_align & 0xFF) == flex_align_items_stretch || (item_align & 0xFF) == flex_align_items_normal)
+			{
+				litehtml::size sz;
+				el->src_el()->get_content_size(sz, 0);
+				if(sz.width > 0 && sz.height > 0)
+				{
+					const pixel_t cross = std::max<pixel_t>(0, (pixel_t)self_size.render_block_size() - el->content_offset_height());
+					const pixel_t transferred = cross * sz.width / sz.height + el->render_offset_width();
+					item->flex_base_size = transferred;
+					if(item->min_main_size > transferred)
+					{
+						item->min_main_size = transferred;
+						item->min_content_contribution = std::min(item->min_content_contribution, transferred);
+					}
+					item->hypothetical_main_size = transferred;
+					if(item->hypothetical_main_size < item->min_main_size)
+					{
+						item->hypothetical_main_size = item->min_main_size;
+					} else if(!item->max_main_size.is_default() && item->hypothetical_main_size > item->max_main_size)
+					{
+						item->hypothetical_main_size = item->max_main_size;
+					}
+					item->main_size = item->hypothetical_main_size;
+				}
+			}
+		}
 
 		if(prev_order.is_default())
 		{
