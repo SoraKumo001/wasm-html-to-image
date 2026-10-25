@@ -4727,3 +4727,24 @@ describe("minmax(auto, <length>) column next to an fr column", () => {
     expect(at(145, 2)).toEqual([255, 0, 0]);
   });
 });
+
+describe("input placeholder", () => {
+  it("is centred in a tall field like typed text (the span wrapper has no box of its own)", async () => {
+    const { img } = await renderPng(
+      '<input type="search" placeholder="Abc def gjpq" style="display:block;box-sizing:border-box;border:0;margin:0;height:30px;width:200px;padding:0 16px;font:13.5px sans-serif">',
+      220, 40,
+    );
+    const rows: number[] = [];
+    for (let y = 0; y < img.height; y++) {
+      for (let x = 0; x < 200; x++) {
+        if (img.data[(img.width * y + x) * 4] < 200) {
+          rows.push(y);
+          break;
+        }
+      }
+    }
+    // Chromium puts the ink at y 8..21; it used to land at 17..29
+    expect(rows[0]).toBeLessThanOrEqual(10);
+    expect(rows[rows.length - 1]).toBeLessThanOrEqual(24);
+  });
+});

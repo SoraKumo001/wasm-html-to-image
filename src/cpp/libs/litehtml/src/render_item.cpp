@@ -190,9 +190,20 @@ void litehtml::render_item::place(pixel_t x, pixel_t y,
         (!strcmp(tag, "input") || !strcmp(tag, "button") || !strcmp(tag, "select")) && !m_children.empty()) {
         satoru::WritingModeContext wm = get_wm_context();
         pixel_t content_end = 0;
+        // An inline wrapper (the placeholder's span) has no box of its own: its end is its text's.
+        std::function<pixel_t(const std::shared_ptr<render_item>&)> end_of =
+            [&](const std::shared_ptr<render_item>& el) {
+                pixel_t end = el->block_end_pos(wm);
+                if (el->src_el()->css().get_display() == display_inline) {
+                    for (const auto& child : el->m_children) {
+                        if (child->src_el()->css().get_display() != display_none) end = std::max(end, end_of(child));
+                    }
+                }
+                return end;
+            };
         for (const auto& el : m_children) {
             if (el->src_el()->css().get_display() != display_none) {
-                content_end = std::max(content_end, el->block_end_pos(wm));
+                content_end = std::max(content_end, end_of(el));
             }
         }
         const pixel_t shift = (m_pos.height - content_end) / 2;
