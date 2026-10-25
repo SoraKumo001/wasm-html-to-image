@@ -3,7 +3,7 @@
  *
  * The WASM engine never runs scripts. With `javascript` enabled the page is first loaded into jsdom,
  * its scripts run, and the resulting DOM is handed to the renderer as plain HTML. jsdom is an optional
- * peer dependency (imported on demand), so the edge / browser entry points never touch it.
+ * dependency (imported on demand), so the edge / browser entry points never touch it.
  *
  * jsdom has no layout: scripts that measure the page (getBoundingClientRect, ResizeObserver, ...) see
  * zeros, and `type="module"` scripts are not executed. Scripts run with `runScripts: "dangerously"`, and
@@ -34,13 +34,13 @@ export interface ScriptedPage {
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-// (typed loosely: the optional peer's typings vary between versions)
+// (typed loosely: the package's typings vary between versions)
 async function loadJsdom(): Promise<any> {
   try {
     return await import("jsdom");
   } catch (cause) {
     throw new Error(
-      "The `javascript` option needs the optional peer dependency `jsdom`. Install it with `npm i jsdom`, or with npx: `npx -p jsdom -p wasm-html-to-image wasm-html-to-image ... --js`.",
+      "The `javascript` option needs the optional dependency `jsdom`. Install it with `npm i jsdom`, or with npx: `npx -p jsdom -p wasm-html-to-image wasm-html-to-image ... --js`.",
       { cause },
     );
   }

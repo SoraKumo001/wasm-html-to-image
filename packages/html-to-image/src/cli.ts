@@ -94,7 +94,7 @@ program
   )
   .option(
     "--js",
-    "run the page's scripts in jsdom before rendering (needs the optional peer dependency jsdom; trusted pages only)",
+    "run the page's scripts in jsdom before rendering (needs the optional dependency jsdom; trusted pages only)",
   )
   .option(
     "--js-wait <ms|selector>",

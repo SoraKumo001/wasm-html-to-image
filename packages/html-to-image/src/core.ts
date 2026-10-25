@@ -129,7 +129,7 @@ export interface LayoutBox {
 export interface HtmlToImageOptions extends RenderOptions {
   /**
    * Run the page's scripts before rendering (Node only; `single` entry point and the CLI's `--js`).
-   * The page is loaded into jsdom (optional peer dependency `jsdom`), its scripts run, and the resulting
+   * The page is loaded into jsdom (optional dependency `jsdom`), its scripts run, and the resulting
    * DOM is rendered. `true` waits for `load` plus 1 s; pass `{ timeout, settleMs, waitFor }` to tune it.
    * jsdom has no layout and is not a security sandbox: only use it with pages you trust.
    */

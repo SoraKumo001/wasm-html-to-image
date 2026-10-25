@@ -119,7 +119,7 @@ npx wasm-html-to-image card.html --font './fonts/*.woff2' -w 1200 -h 630 -o og.w
 # Stand in for a system font the page asks for (the engine cannot see system fonts)
 npx wasm-html-to-image https://go.dev/ --font "Segoe UI=C:/Windows/Fonts/segoeui.ttf" -w 1600 -o go.png
 
-# Run the page's scripts first (Node only; needs `npm i jsdom`, trusted pages only)
+# Run the page's scripts first (Node only; jsdom is an optional dependency, trusted pages only)
 npx wasm-html-to-image https://go.dev/ --js -w 1600 -o go.png
 npx wasm-html-to-image https://example.com/ --js --js-wait '#app .ready' -o app.png   # or --js-wait 2000 (ms)
 
@@ -182,7 +182,7 @@ interface RenderResult {
 <summary><b>0. Pages that build themselves with JavaScript (jsdom, Node only)</b></summary>
 
 The engine never runs scripts. The `javascript` option loads the page into [jsdom](https://github.com/jsdom/jsdom)
-(optional peer dependency: `npm i jsdom`), lets its scripts run, and renders the resulting DOM:
+(an optional dependency, installed with the package by default; `npm i --omit=optional` skips it), lets its scripts run, and renders the resulting DOM:
 
 ```typescript
 import { render } from "wasm-html-to-image/single";
