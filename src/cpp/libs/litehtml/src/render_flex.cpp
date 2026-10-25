@@ -127,6 +127,65 @@ litehtml::pixel_t litehtml::render_item_flex::_render_content(pixel_t x, pixel_t
 				}
 			}
 			ln.init(container_main_size, fit_container, is_main_inline, self_size, fmt_ctx);
+			// A column container sized from its content has an indefinite inline size, so a percentage
+			// inline size on an item is cyclic and behaves as auto: it contributes the item's content
+			// size. flex_line::init measured the item against the available inline size the query
+			// happens to run at, which would make a `width:30%` item (and the shrink-to-fit container
+			// around it) a share of that space instead of as wide as its own content. Re-measure those
+			// items with an auto inline size so the line is as wide as the items around them.
+			if (!is_main_inline && self_size.mode == writing_mode_horizontal_tb &&
+				(self_size.size_mode & containing_block_context::size_mode_content) &&
+				!(self_size.size_mode & containing_block_context::size_mode_min_content) &&
+				self_size.render_inline_size().type == containing_block_context::cbc_value_type_auto)
+			{
+				auto cyclic_inline_size = [](const std::shared_ptr<render_item>& el)
+				{
+					const css_length& w = el->css().get_width();
+					return !w.is_predefined() &&
+						(w.units() == css_units_percentage || (w.is_calc() && w.calc_percent() != 0));
+				};
+				bool has_cyclic = false;
+				for(auto& fi : ln.items)
+				{
+					if(cyclic_inline_size(fi->el))
+					{
+						has_cyclic = true;
+						break;
+					}
+				}
+				if(has_cyclic)
+				{
+					satoru::WritingModeContext wm(self_size.mode, self_size.width, self_size.height);
+					pixel_t max_cross = 0;
+					for(auto& fi : ln.items)
+					{
+						if(cyclic_inline_size(fi->el))
+						{
+							containing_block_context cb = self_size;
+							cb.width.type = containing_block_context::cbc_value_type_auto;
+							cb.render_width.type = containing_block_context::cbc_value_type_auto;
+							pixel_t block_size = fi->main_size - fi->el->content_offset_block(wm);
+							if(fi->el->css().get_box_sizing() == box_sizing_border_box)
+							{
+								block_size = fi->main_size - (wm.block_start(fi->el->get_margins()) +
+															  wm.block_end(fi->el->get_margins()));
+							}
+							cb.block_size() = block_size;
+							cb.render_block_size() = block_size;
+							cb.size_mode = containing_block_context::size_mode_exact_height |
+										   containing_block_context::size_mode_measure |
+										   containing_block_context::size_mode_content;
+							if(self_size.render_block_size().type == containing_block_context::cbc_value_type_auto)
+							{
+								cb.size_mode |= containing_block_context::size_mode_cyclic_height;
+							}
+							fi->el->measure(cb, fmt_ctx);
+						}
+						max_cross = std::max(max_cross, fi->get_el_cross_size());
+					}
+					ln.cross_size = max_cross;
+				}
+			}
 			// A block-level column container with an auto width is as wide as the space it is given,
 			// not as wide as its widest item (that is what makes it shrink-to-fit, which the content /
 			// min-content modes ask for): the one line is the container's width, so stretched items
