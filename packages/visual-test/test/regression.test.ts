@@ -4802,6 +4802,18 @@ describe("grid auto column over a narrow grid, scroll container with min-width",
   });
 });
 
+describe("baseline of an empty block item inside a nested inline-flex", () => {
+  it("is the border-box bottom, not the margin-box bottom", async () => {
+    const { at } = await renderPng(
+      '<div style="display:flex;align-items:baseline;width:20px;height:12px;background:#fff"><div><div style="display:inline-flex"><div style="margin:4px"></div></div></div><div style="width:6px;height:4px;background:#f00"></div></div>',
+      30, 16,
+    );
+    // Chromium: the empty item's baseline is 4px down, so the red box sits at y 4..8 (it used to sit at 8..12)
+    expect(at(10, 5)).toEqual([255, 0, 0]);
+    expect(at(10, 10)).toEqual([255, 255, 255]);
+  });
+});
+
 describe("inline-block input", () => {
   it("aligns on its centred text, not on the top of the field", async () => {
     const { height } = await render({

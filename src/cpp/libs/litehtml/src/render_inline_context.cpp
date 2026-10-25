@@ -924,7 +924,7 @@ litehtml::pixel_t litehtml::render_item_inline_context::get_last_baseline()
         }
 	} else
 	{
-		bl = get_wm_context().is_vertical() ? default_baseline() : (m_has_measured_baseline ? m_measured_last_baseline : height());
+		bl = get_wm_context().is_vertical() ? default_baseline() : (m_has_measured_baseline ? m_measured_last_baseline : (css().get_display() == display_inline_block ? height() : default_baseline()));
 	}
 	return bl;
 }
