@@ -4535,3 +4535,15 @@ describe("a wrapper of an empty flex container", () => {
     expect(r.height).toBe(4);
   });
 });
+
+describe("baseline of a padded column flex container", () => {
+  it("includes the container's padding", async () => {
+    const { at } = await renderPng(
+      '<div style="display:flex;align-items:baseline;background:#fff"><div style="display:flex;flex-direction:column;padding:6px"><div></div></div><div style="width:10px;height:4px;background:#f00"></div></div>',
+      60, 20,
+    );
+    // the column's first baseline is the bottom of its padding-top (y 6): the 4px box sits at y 2..6
+    expect(at(14, 4)).toEqual([255, 0, 0]);
+    expect(at(14, 8)).toEqual([255, 255, 255]);
+  });
+});
