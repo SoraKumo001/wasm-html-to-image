@@ -59,6 +59,17 @@ litehtml::pixel_t litehtml::render_item_flex::_render_content(pixel_t x, pixel_t
 		}
 	}
 
+	// The max-content size of a wrapping row container is its items on one line: the lines are broken at the
+	// real width later, when the container is laid out at the width this query leads to.
+	const bool wrap_max_content_query = is_main_inline && !single_line && self_size.mode == writing_mode_horizontal_tb &&
+		(self_size.size_mode & containing_block_context::size_mode_content) &&
+		!(self_size.size_mode & containing_block_context::size_mode_min_content);
+	const pixel_t wrap_available = container_main_size;
+	if (wrap_max_content_query)
+	{
+		container_main_size = 1000000;
+	}
+
 	pixel_t main_gap = (pixel_t)(is_main_inline ? css().get_column_gap().calc_percent(container_main_size) : css().get_row_gap().calc_percent(container_main_size));
 	pixel_t cross_gap = (pixel_t)(is_main_inline ? css().get_row_gap().calc_percent(self_size.render_block_size()) : css().get_column_gap().calc_percent(self_size.render_inline_size()));
 
@@ -139,6 +150,14 @@ litehtml::pixel_t litehtml::render_item_flex::_render_content(pixel_t x, pixel_t
 	};
 
 	resolve_lines();
+	// (the width of the items on one line is known now: lay them out at the real width for everything else)
+	pixel_t wrap_one_line_width = 0;
+	if (wrap_max_content_query)
+	{
+		wrap_one_line_width = max_inline_size;
+		container_main_size = wrap_available;
+		resolve_lines();
+	}
 
 	// Column container with auto block size: clamp the content-sized main size by
 	// min/max block size, then redo flexible length resolution against that size
@@ -477,6 +496,15 @@ litehtml::pixel_t litehtml::render_item_flex::_render_content(pixel_t x, pixel_t
 				widest = std::max(widest, (pixel_t)fi->el->measure(cb, fmt_ctx));
 			}
 		return widest;
+	}
+	if (wrap_max_content_query)
+	{
+		// shrink-to-fit: the items on one line, but no wider than the space on offer (never below the widest item)
+		pixel_t widest = 0;
+		for (auto& ln : m_lines)
+			for (auto& fi : ln.items) widest = std::max(widest, fi->min_content_contribution);
+		max_inline_size = wrap_one_line_width;
+		if (wrap_available > 0) max_inline_size = std::min(max_inline_size, std::max(wrap_available, widest));
 	}
 	return min_content_query ? min_content_main : max_inline_size;
 }

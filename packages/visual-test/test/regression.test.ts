@@ -4632,3 +4632,15 @@ describe("max-content width of a wrapping flex container", () => {
     expect(await boxWidth('<div style="width:10px;flex:0 0 40px"></div><div style="width:10px;flex:0 0 40px"></div>')).toBe(80);
   });
 });
+
+describe("shrink-to-fit width of a wrapping flex container", () => {
+  it("takes the space on offer when the items on one line are wider", async () => {
+    const { at } = await renderPng(
+      '<div style="width:100px;background:#fff"><div style="display:inline-flex;flex-wrap:wrap;background:#f00"><div style="width:60px;height:4px"></div><div style="width:60px;height:4px"></div></div></div>',
+      140, 12,
+    );
+    // 100px wide (not the 60px widest item), the items on two lines
+    expect(at(95, 6)).toEqual([255, 0, 0]);
+    expect(at(105, 6)).toEqual([255, 255, 255]);
+  });
+});
