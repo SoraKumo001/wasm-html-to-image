@@ -1377,10 +1377,19 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                 if (c >= num_columns || !kinds[c]) continue;
                 if (kinds[c] == 4)
                 {
-                    containing_block_context mcb = self_size;
-                    mcb.size_mode &= ~(containing_block_context::size_mode_exact_width | containing_block_context::size_mode_exact_height);
-                    mcb.size_mode |= containing_block_context::size_mode_content | containing_block_context::size_mode_min_content;
-                    fit_floor[c] = std::max(fit_floor[c], (pixel_t)ceil_layout_unit(item.el->measure(mcb, fmt_ctx)));
+                    const css_length& fmw = item.el->src_el()->css().get_min_width();
+                    if (!fmw.is_predefined() && !fmw.is_calc() && fmw.units() != css_units_percentage)
+                    {
+                        // An explicit min-width is the item's minimum contribution (it replaces the content-based one).
+                        fit_floor[c] = std::max<pixel_t>(fit_floor[c], std::max<pixel_t>(0, fmw.calc_percent(render_inline) - item.el->box_sizing_width()) + item.el->content_offset_width());
+                    }
+                    else
+                    {
+                        containing_block_context mcb = self_size;
+                        mcb.size_mode &= ~(containing_block_context::size_mode_exact_width | containing_block_context::size_mode_exact_height);
+                        mcb.size_mode |= containing_block_context::size_mode_content | containing_block_context::size_mode_min_content;
+                        fit_floor[c] = std::max(fit_floor[c], (pixel_t)ceil_layout_unit(item.el->measure(mcb, fmt_ctx)));
+                    }
                 }
                 containing_block_context cb = self_size;
                 // The grid's own exact size describes its box, not the intrinsic size of an item.

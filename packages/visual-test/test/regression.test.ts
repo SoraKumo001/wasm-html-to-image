@@ -4590,3 +4590,15 @@ describe("minmax(<length>, auto) rows in a grid of definite height", () => {
     expect(at(10, 32)).toEqual([255, 0, 0]);
   });
 });
+
+describe("fit-content() grid track and an item with an explicit min-width", () => {
+  it("the min-width replaces the content-based minimum, so the limit caps the track", async () => {
+    const { at } = await renderPng(
+      '<div style="display:grid;grid-template-columns:fit-content(80px) 1fr;width:300px;background:#fff"><div style="min-width:40px;background:#f00;height:5px"><div style="min-width:100px"></div></div><div style="background:#00f;height:5px"></div></div>',
+      300, 10,
+    );
+    // the first track is 80px (not 100px): the blue item starts at x 80
+    expect(at(70, 2)).toEqual([255, 0, 0]);
+    expect(at(90, 2)).toEqual([0, 0, 255]);
+  });
+});
