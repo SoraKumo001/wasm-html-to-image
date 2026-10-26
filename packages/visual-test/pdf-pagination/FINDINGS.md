@@ -302,8 +302,17 @@ P1/P2/P3 の「Layout-once + Slice」を土台に、**表 (table) の行単位�
    頁より高い行は分割許容 (進捗優先)。
 2. **rowspan>1 は次頁送り優先**: 1 つのセルが覆う行 (rowspan) を 1 つの atomic ボックスへ
    併合する。セル内 block 分割は対象外 (行ボックスがセルを丸ごと含むため構造的に分割されない)。
-3. **thead 繰返し**: 継続頁では thead 帯 (行の union 矩形) を頁内容の先頭に再描画し、
-   その高さを頁内容領域から**予約**する。本文は予約分だけ下へシフトし、ヘッダ帯と重ならない。
+3. **thead 繰返し (2 パス描画)**: 継続頁では thead 帯 (行の union 矩形, 高さ `h`) を頁内容の
+   先頭に再描画し、`h` を頁内容領域から**予約**する。本文は「全体を h 下へシフト」ではなく、
+   **「表バンド」と「表以降バンド」の 2 回に分けて描く** (48cc86f):
+   - **表バンド**: `clipRect(0, h, W, ...)` 内に、継続している表の部分だけを h 下へシフトして
+     描く (`doc->draw(..., -(offset - h))`)。残りの行が再描画ヘッダに潜り込まない。
+   - **表以降バンド**: 表の下端 (`table_bottom`) から頁末尾までを**シフトせず**描く
+     (`doc->draw(..., -offset)`)。同頁の表以外の内容 (後続見出し・段落・画像など) は元の
+     位置に留まる。
+   - 帯の境界は `table_bottom` (継続表が複数なら `max(table_bottom)`)。表以降の内容がある
+     場合のみ、表の閉じボーダーを残すため 2px 重ねる。両帯は頁を分割しているので
+     `position:fixed` も自身のビューポート位置を含む帯で 1 回だけ描かれる (P1 の性質を維持)。
 4. **flex / grid は atomic 送りのみ維持** (P3 のまま)。table だけを行単位へ切り替える。
 
 **差分の記録 (重要):**
@@ -317,14 +326,21 @@ P1/P2/P3 の「Layout-once + Slice」を土台に、**表 (table) の行単位�
     (rowspan で覆われる行は併合)。`element::get_placement` 依存を回避。
   - `render_item::get_table_header_boundary(position&)` (P4 override) … 各行の `<tr>` 要素の
     親を遡り `display:table-header-group` または `<thead>` タグを持つ行の union を返す。
-- **カット計画 (`plan_page_cuts`) は `PageCut{offset, header_top, header_height}` を返す**。
-  ヘッダ予約は「その頁が始まる位置 `pos`」で判定し (`table_top < pos < table_bottom`)、
-  頁スライスのクリップ/シフトに反映する (予約は頁の開始位置に紐付く)。
+- **カット計画 (`plan_page_cuts`) は `PageCut{offset, header_top, header_height, table_bottom}`
+  を返す**。ヘッダ予約は「その頁が始まる位置 `pos`」で判定し (`table_top < pos < table_bottom`)、
+  頁スライスのクリップ/シフトに反映する (予約は頁の開始位置に紐付く)。`table_bottom` は
+  その頁で継続している表の下端 (`max`、予約なしなら `INT_MAX`) で、表バンドが描ける範囲の
+  終端になる。
 - **ヘッダ再描画は「ドキュメントをヘッダ帯へクリップして再 draw」**: 継続頁で
   `doc->draw(0,0,-header_top)` を `clipRect(0,0,W,header_height)` で描く。本文は
-  `doc->draw(0,0,-(offset-header_height))` を `clipRect(0,header_height,W,slice)` で描く。
-  これによりヘッダ帯と本文が重ならない。`position:fixed` は draw オフセットを無視するため、
-  ビューポート位置がどちらか一方のクリップ帯に入り、**二重描画されない** (P1 の性質を維持)。
+  **表バンド** (`draw_band(h, table_end_rel, offset - h)`) と **表以降バンド**
+  (`draw_band(table_end_rel, slice_height, offset)`) に分けて描く。これによりヘッダ帯と
+  本文、および表と後続内容が重ならない。`position:fixed` は draw オフセットを無視するため、
+  ビューポート位置を含むクリップ帯 1 つにだけ入り、**二重描画されない** (P1 の性質を維持)。
+- **表以降の内容の有無はフロー内容で判定** (`content_starts_in`): `break_units` / 行頭
+  (`line_groups`) / `float_boxes` の top が `[table_bottom, slice_end)` に入るかで見る。
+  表後の body マージンだけの場合は「後続内容なし」とし、表バンドを `table_end_rel + h` まで
+  広げて最終行を切らない。
 - **P3 の「table は atomic float」は撤去**し、table を検出したら行ボックス収集へ切り替えた
   (`collect_line_groups`)。flex/grid の atomic 送りはそのまま。
 
@@ -332,15 +348,22 @@ P1/P2/P3 の「Layout-once + Slice」を土台に、**表 (table) の行単位�
 
 - litehtml: `render_item.h` (`get_table_row_boundaries` / `get_table_header_boundary` virtual),
   `render_table.h` / `render_table.cpp` (`render_item_table` override 2 種)。
-- `src/cpp/renderers/pdf_renderer.cpp`: `RepeatHeader` / `PageCut`、`collect_table_rows` /
-  `collect_repeat_headers`、`collect_line_groups` の table 分岐、`plan_page_cuts` の戻り値と
-  ヘッダ予約、`renderHtmlToPdf` の頁スライス (ヘッダ帯再描画 + 本文シフト)。
+- `src/cpp/renderers/pdf_renderer.cpp`: `RepeatHeader` / `PageCut` (`table_bottom`)、
+  `collect_table_rows` / `collect_repeat_headers`、`collect_line_groups` の table 分岐、
+  `plan_page_cuts` の戻り値とヘッダ予約 (継続表の `max(table_bottom)`)、
+  `renderHtmlToPdf` の頁スライス (`draw_band` ラムダ + `content_starts_in` による
+  ヘッダ帯/表バンド/表以降バンドの 2 パス描画)。
 
 ### 非回帰の要点
 
 表を含まない文書では `repeat_headers` が空・行ボックスが空となり、`header_height = 0`、
 `limit = pos + area_height` で P1/P2/P3 と同一のカット列になる (`long` のスライスが
 P1 記録値と文字列一致することを assert)。
+
+2 パス化 (48cc86f) は `header_height > 0` かつ `table_bottom < INT_MAX` の頁だけの分岐で、
+それ以外は従来どおり単一バンド (`draw_band(0, slice_h, offset)`) で描く。表が頁途中で
+終わる初回頁 (予約なし) と、継続頁に表以降のフロー内容が無い文書は、旧「全体 h シフト」
+と同じ画になる (`table_bottom` 未記録時の防御分岐も旧挙動を維持)。
 
 ## 検証 (`verify.mts` に P4 ケース追加)
 
@@ -361,6 +384,10 @@ npx tsx pdf-pagination/verify.mts
 - p4rowspan: rowspan=2 のセルが覆う行 (0-1) を 1 atomic ボックスに併合した結果、
   境界を跨ぐグループが丸ごと次頁 (p2) へ送られ、`XA`/`XB` が同一頁に留まる
   (併合なしなら p1/p2 に割れる)。`SPAN` は 1 頁のみでセルは分割されない。
+- **2 パス化 (48cc86f) の検証範囲**: 上表の 2 ケースは `p4table` = 表のみ (表以降の内容なし)、
+  `p4rowspan` = thead 無し (繰返しヘッダ無し) のため、**「表以降バンド」を通らない**。
+  したがって 2 パス化は上表の結果に影響しない経路であり、表バンド/表以降バンドの
+  画素比較ケースは未追加 (下記「P4 の制限」の限界は実装からの帰結として記録)。
 
 ### P1/P2/P3 回帰 (同スクリプト)
 
@@ -387,10 +414,34 @@ npx tsx pdf-pagination/verify.mts
   → 後続対応で解消: 原因は `fix_tables_layout` の `table-row` 分岐が header/footer group 直下の
   行まで匿名 row-group (+匿名 table) で包んでいたこと。header/footer group を直接の子として
   受け入れ、行を header → 本文 → footer の順で grid へ登録するよう修正済み。
-- **thead 繰返しは「予約 + 下シフト」方式**: 継続頁では本文全体をヘッダ高だけ下へシフトする
-  (表以外の要素も同頁内で一緒に下がる)。表だけを押し下げる厳密再レイアウトはしない。
-- **1 頁に複数の「繰返しヘッダ表」が同時継続する場合は最大高の 1 表のみ予約・再描画**
-  (稀なケース。他表のヘッダは繰り返さない)。
+- **thead 繰返しは「予約 + 2 パス描画」方式**: 継続頁は「ヘッダ帯 h」+「表バンド」+
+  「表以降バンド」の 3 帯で構成する。ヘッダ帯は元文書の表先頭 h px をオフセット 0 で、
+  表バンドは文書 `[offset, min(offset+slice, table_bottom)]` を **h 下へシフト**して、表以降
+  バンドは `[table_bottom, offset+slice]` を**非シフト**で描く。表だけを押し下げるので
+  **同頁の表以外の内容は下がらない** (旧「本文全体を h 下へシフト」は 48cc86f で廃止)。
+  ただし 1 回のレイアウトの斷片をずらして 2 回描いているだけなので、layout-once 由来の
+  次の限界が残る (表以降の内容がある頁では、2 帯が重ならないよう表バンドの高さが h 分
+  短くなる → 次項):
+  - **表の最終行の下端 h px が欠ける**: 表が頁途中で終わり、かつ同頁に表以降のフロー内容が
+    ある場合、表バンドは `table_end_rel` で止め、後続内容は非シフトで描く (重なり回避)。
+    表は h 下へずれているため、表バンドが実際に描ける文書範囲は `table_bottom - h` までに
+    なり、**表本体の最後の h px (行の下端・閉じボーダーを含み得る) はどの帯にも描かれない**。
+    (その頁に残る表の高さが h 未満なら、表バンドは空になり残り行が丸ごと欠ける。)
+    「表の残り + 後続内容」を素直に縦積みし直すレイアウト (Chromium) では生じない欠け。
+  - **頁下端に余白が残る**: ヘッダ帯 h は頁全体の内容領域から予約されるため、カット計画は
+    `limit = pos + area - h`、スライスは `avail = area - h` になる。**表以降の非シフト内容も
+    頁下端 h px を使えない**。加えて表の行は atomic で行境界へ吸着するので、行が入らない
+    分の余白に h が上乗せされ、継続頁の頁下端の空きが大きくなりやすい。「表が終わった後の
+    残り領域へ後続内容を詰め直す」再レイアウトはしない。
+  - **背景画像・グラデーションの継ぎ目**: ヘッダ帯 (表先頭 h px) と表バンド (cut 以降) は
+    別 draw で、それぞれ異なる文書オフセットで描かれる。表やセルに `background-image`
+    を敷くと、頁先頭 h px の下端で模様が (表先頭 → cut) に飛び、**連続しない継ぎ目**に
+    なる。また表終端で表以降バンドへ切り替わる際は閉じボーダーを残すため 2px 重ねるので、
+    その 2px は半透明背景が二重に合成される (不透明ならほぼ不可視)。
+  - これらの限界は**継続頁だけ**に生じる。表が始まる頁 (予約なし) は単一バンドのまま。
+- **1 頁に複数の「繰返しヘッダ表」が同時継続する場合は、最大高の 1 表のヘッダだけを再描画**
+  し、シフト帯は継続する全表の `max(table_bottom)` まで広げる (他表のヘッダは繰り返さないが、
+  残り行が再描画ヘッダに潜り込まないよう全表を h 下へずらす)。
 - **行ボックスは `table_grid` の行高** に基づく。行頭が頁先頭 (`pos`) 以前の行は移動できず
   分割許容 (進捗優先)。rowspan 併合ボックスが頁より高い場合も同様に分割許容。
 - **セル内 block 分割は対象外** (行がセルを丸ごと含む)。ネスト表は外側の行ボックスに含まれる。
