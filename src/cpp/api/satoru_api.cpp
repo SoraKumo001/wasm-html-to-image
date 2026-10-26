@@ -139,10 +139,13 @@ bool SatoruInstance::document_ready_for(const std::string& html, int width, int 
                                        int mediaType) const {
     litehtml::media_type mt =
         (mediaType == 1) ? litehtml::media_type_print : litehtml::media_type_screen;
+    // collect_resources() stores the normalised width, so normalise here too: a raw-width
+    // caller (e.g. width 0 straight into the wasm API) would otherwise never hit the cache.
+    const int layout_width = normalize_viewport_width(width);
     return doc && render_container && html == last_parsed_html &&
            context.getCssVersion() == last_css_version &&
            context.getFontVersion() == last_font_version && (int)mt == last_media_type &&
-           width == last_width && height == last_height && !context.needsRelayout;
+           layout_width == last_width && height == last_height && !context.needsRelayout;
 }
 
 void SatoruInstance::collect_resources(const std::string& html, int width, int height,
