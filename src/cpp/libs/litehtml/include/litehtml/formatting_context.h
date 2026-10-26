@@ -2,6 +2,7 @@
 #define LITEHTML_FLOATS_HOLDER_H
 
 #include <list>
+#include <vector>
 #include "types.h"
 
 namespace litehtml
@@ -11,6 +12,17 @@ namespace litehtml
 	private:
 		std::list<floated_box> m_floats_left;
 		std::list<floated_box> m_floats_right;
+		// Floats of a measure pass, which are not registered in the ledger: their final inline size is
+		// not known yet. Only their extent is kept, so that a later float that does not fit beside an
+		// earlier one is known to sit below it (see place_measured_float).
+		struct measured_float
+		{
+			pixel_t top = 0;
+			pixel_t bottom = 0;
+			pixel_t left = 0;
+			pixel_t right = 0;
+		};
+		std::vector<measured_float> m_measure_floats;
 		pixel_pixel_cache m_cache_line_left;
 		pixel_pixel_cache m_cache_line_right;
 		pixel_t m_current_block_pos;
@@ -56,6 +68,11 @@ namespace litehtml
 		// contains its floats (a flow root) still grows to them.
 		void note_measured_float_bottom(pixel_t bottom) { if (bottom > m_measured_float_bottom) m_measured_float_bottom = bottom; }
 		pixel_t measured_float_bottom() const { return m_measured_float_bottom; }
+		// Where a float measured in a measure pass would sit: as high as it fits beside the floats
+		// measured before it, which is below them when the container is too narrow for both on one
+		// line (as in the place pass, Blink's float placement). Records the float's extent.
+		pixel_t place_measured_float(pixel_t top, pixel_t inline_size, pixel_t block_size,
+									 element_float side, pixel_t container_inline_size);
 		pixel_t get_left_floats_height() const;
 		pixel_t get_right_floats_height() const;
 		pixel_t get_line_left( pixel_t y );

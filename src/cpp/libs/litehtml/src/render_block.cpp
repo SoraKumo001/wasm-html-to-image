@@ -84,7 +84,12 @@ litehtml::pixel_t litehtml::render_item_block::place_float(const std::shared_ptr
 		if(skip_ledger)
 		{
 			ret_inline_size = min_rendered_inline_size;
-			fmt_ctx->note_measured_float_bottom(line_block_start + el->height());
+			// A float that does not fit beside the earlier ones sits below them, so the box that
+			// contains the floats has to reach that bottom, not just this float's own height.
+			const pixel_t measured_top = fmt_ctx->place_measured_float(line_block_start, el->inline_size(),
+																	 el->height(), float_left,
+																	 self_size.render_inline_size());
+			fmt_ctx->note_measured_float_bottom(measured_top + el->height());
 		} else
 		{
 			fmt_ctx->add_float(el, min_rendered_inline_size, self_size.context_idx);
@@ -111,7 +116,10 @@ litehtml::pixel_t litehtml::render_item_block::place_float(const std::shared_ptr
 		if(skip_ledger)
 		{
 			ret_inline_size = min_rendered_inline_size;
-			fmt_ctx->note_measured_float_bottom(line_block_start + el->height());
+			const pixel_t measured_top = fmt_ctx->place_measured_float(line_block_start, el->inline_size(),
+																	 el->height(), float_right,
+																	 self_size.render_inline_size());
+			fmt_ctx->note_measured_float_bottom(measured_top + el->height());
 		} else
 		{
 			fmt_ctx->add_float(el, min_rendered_inline_size, self_size.context_idx);

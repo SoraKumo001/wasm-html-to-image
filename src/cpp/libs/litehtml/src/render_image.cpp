@@ -105,11 +105,32 @@ litehtml::pixel_t litehtml::render_item_image::_measure(
         };
         // A ratio-only box inside a float / inline-block / absolutely positioned / fit-content ancestor
         // (through auto-width blocks) has no width of its own to contribute: it is 0 wide, as in Chromium.
+        const render_item* child_under = this;
         auto in_shrink_to_fit = [&]() {
-            for (auto p = parent(); p; p = p->parent()) {
+            for (auto p = parent(); p; child_under = p.get(), p = p->parent()) {
                 const auto& pc = p->css();
                 const auto disp = pc.get_display();
                 if (p == parent() && (disp == display_grid || disp == display_inline_grid)) return true;  // a grid sizes its tracks from the item's contribution
+                if ((disp == display_flex || disp == display_inline_flex) && p != parent()) {
+                    // A column item with an auto inline size that is not stretched is fit-content: the
+                    // box this one fills is its own content, so a percentage width inside it is cyclic
+                    // (Blink treats it as auto while that item is sized from its content).
+                    const auto dir = pc.get_flex_direction();
+                    const bool column = dir == flex_direction_column || dir == flex_direction_column_reverse;
+                    const css_length& item_width = child_under->css().get_width();
+                    if (column && item_width.is_predefined() && item_width.predef() == 0) {
+                        const auto align = pc.get_flex_align_items();
+                        const bool stretched = align == flex_align_items_stretch || align == flex_align_items_normal;
+                        if (!stretched) return true;
+                        // A stretched item takes the container's cross size, so the container's own
+                        // width decides whether the percentage is indefinite.
+                        if (!pc.get_width().is_predefined()) {
+                            if (cyclic_percent_width(pc.get_width())) continue;
+                            return false;
+                        }
+                        continue;
+                    }
+                }
                 // (a flex / grid item is blockified: its float computes to none)
                 const auto* pp = p->parent().get();
                 const bool floated = pc.get_float() != float_none &&

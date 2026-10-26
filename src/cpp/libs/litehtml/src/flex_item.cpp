@@ -584,6 +584,11 @@ void litehtml::flex_item_column_direction::direction_specific_init(const litehtm
 		self_size.render_width.value > 0;
 	const bool specified_cross = !m_container_wm.is_vertical() && !cross_size.is_predefined() &&
 		!cross_size.is_calc() && definite_inline && self_size.render_width.value > 0;
+	// A percentage cross size also resolves when the content width is 0 (a border-box flex container
+	// with padding wider than its width): it is definite, and only 0, which still transfers to the
+	// main size (a 300x90 image in a 0-wide column is 0 tall, not 90).
+	const bool percent_cross_definite = !m_container_wm.is_vertical() && !cross_size.is_predefined() &&
+		!cross_size.is_calc() && definite_inline;
 	// A multi-line column container also breaks lines in the inline axis: each line's cross size is
 	// the largest hypothetical (fit-content) inline size of its items (CSS Flexbox 9.4.8), so an item
 	// whose content does not fit the container's content width is laid out wider than the container.
@@ -668,6 +673,35 @@ void litehtml::flex_item_column_direction::direction_specific_init(const litehtm
 		}
 		return std::max(width, (pixel_t) fit_inline_size);
 	};
+	// An auto inline size in a column that does not stretch is fit-content: min(max-content,
+	// max(min-content, available)). The content measures below answer with max-content (a ratio-only
+	// svg with a percentage width contributes the 300px default object width, so a 72px column's item
+	// is 300 wide there), so the block size has to be measured at the fitted width: the percentage svg
+	// then lays out at 30% of 72 and the item is 4.31 tall, not 60.
+	const bool fit_content_cross = !m_container_wm.is_vertical() && cross_size.is_predefined() &&
+		cross_size.predef() == 0 && !stretch_cross && definite_inline && self_size.render_width.value > 0;
+	auto clamp_fit_content_width = [&](const containing_block_context& measured_cb, formatting_context* ctx)
+	{
+		if (!fit_content_cross) return;
+		const pixel_t available = self_size.render_width.value - el->content_offset_width() + el->box_sizing_width();
+		auto current_inline = [&]()
+		{
+			return el->inline_size(m_container_wm) - el->content_offset_inline(m_container_wm) +
+				   el->box_sizing_inline(m_container_wm);
+		};
+		if (current_inline() <= available) return;
+		containing_block_context min_cb = measured_cb;
+		min_cb.size_mode |= containing_block_context::size_mode_min_content;
+		el->measure(min_cb, ctx);
+		const pixel_t fit = std::max((pixel_t) current_inline(), available);
+		containing_block_context fit_cb = measured_cb;
+		fit_cb.width = fit;
+		fit_cb.render_width = fit;
+		fit_cb.size_mode |= containing_block_context::size_mode_exact_width;
+		fit_cb.size_mode &= ~(containing_block_context::size_mode_content |
+							  containing_block_context::size_mode_min_content);
+		el->measure(fit_cb, ctx);
+	};
 	auto apply_stretch_width = [&](containing_block_context& cb)
 	{
 		if (specified_cross)
@@ -720,6 +754,7 @@ void litehtml::flex_item_column_direction::direction_specific_init(const litehtm
             apply_stretch_width(measure_cb);
 
 			el->measure(measure_cb, fmt_ctx ? &fmt_ctx_copy : nullptr);
+			clamp_fit_content_width(measure_cb, fmt_ctx ? &fmt_ctx_copy : nullptr);
 			min_main_size = get_el_main_size();
 			// Automatic minimum size: the smaller of the content size and a definite specified
 			// size. The measured size already honours the item's own height, so take the content
@@ -813,6 +848,7 @@ void litehtml::flex_item_column_direction::direction_specific_init(const litehtm
 					formatting_context fmt_ctx_copy;
 					if(fmt_ctx) fmt_ctx_copy = *fmt_ctx;
 					el->measure(measure_size, fmt_ctx ? &fmt_ctx_copy : nullptr);
+					clamp_fit_content_width(measure_size, fmt_ctx ? &fmt_ctx_copy : nullptr);
 					flex_base_size = get_el_main_size();
 				}
 				break;
@@ -834,16 +870,16 @@ void litehtml::flex_item_column_direction::direction_specific_init(const litehtm
 	if (!m_container_wm.is_vertical() && size_prop.is_predefined() && el->src_el()->is_replaced())
 	{
 		pixel_t used_cross = 0;
-		if (specified_cross)
+		if (cross_size.is_predefined())
+		{
+			if (stretch_cross) used_cross = stretched_inline_size();
+		} else if (percent_cross_definite)
 		{
 			used_cross = cross_size.calc_percent(self_size.render_inline_size().value);
-		} else if (stretch_cross)
-		{
-			used_cross = stretched_inline_size();
 		}
 		litehtml::size sz;
 		el->src_el()->get_content_size(sz, 0);
-		if (used_cross > 0 && sz.width > 0 && sz.height > 0)
+		if ((stretch_cross || percent_cross_definite) && sz.width > 0 && sz.height > 0)
 		{
 			const pixel_t transferred = used_cross * sz.height / sz.width + el->render_offset_height();
 			flex_base_size = transferred;
@@ -942,8 +978,11 @@ void litehtml::flex_item_column_direction::layout_item(litehtml::flex_line &ln,
 	el->measure(child_cb, fmt_ctx);
 	// A fit-content item is min(max-content, max(min-content, available)): the content measure above
 	// answers with max-content, so a 300px max-content inside an 80px column still has to come down
-	// to 80 (and its percentage-width svg then lays out at 8, not 30).
-	if (!m_container_wm.is_vertical() && cross_prop.is_predefined() && cross_prop.predef() == 1)
+	// to 80 (and its percentage-width svg then lays out at 8, not 30). An auto inline size in a column
+	// that does not stretch is the same fit-content size (CSS Flexbox 9.4: an item with no cross-size
+	// stretch is sized from its content), so it is clamped the same way.
+	const int cross_predef = cross_prop.is_predefined() ? (int) cross_prop.predef() : -1;
+	if (!m_container_wm.is_vertical() && (cross_predef == 1 || (cross_predef == 0 && !stretch)))
 	{
 		const pixel_t available = self_size.render_width.value - el->content_offset_width() + el->box_sizing_width();
 		auto current_inline = [&]()

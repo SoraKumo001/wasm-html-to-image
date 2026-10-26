@@ -5218,3 +5218,69 @@ describe("P0-6: intrinsic widths of column flex items and float percentages", ()
     expect(at(b, "0.1").h).toBe(16); // body
   });
 });
+
+// P0-7: fuzz seeds 94/156/189. A measure pass has to know that a float which does not fit beside
+// the earlier ones sits below them (the box containing it reaches that stacked bottom); an auto
+// inline size on a non-stretched column item is fit-content, so a percentage width inside it is
+// cyclic during the item's own sizing; and a replaced item whose definite cross size is 0 still
+// transfers it to its main size (a 300x90 image in a 0-wide column is 0 tall, not 90).
+describe("P0-7: stacked floats in a measure pass and zero-width flex cross sizes", () => {
+  type Box = { p: string; t: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(body: string, boxSizing = "content-box"): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:${boxSizing}}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const at = (b: Box[], p: string) => b.find((x) => x.p === p)!;
+  const IMG_120_90 =
+    "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22120%22%20height%3D%2290%22%20viewBox%3D%220%200%20120%2090%22%3E%3Crect%20width%3D%22120%22%20height%3D%2290%22%20fill%3D%22%2369c%22%2F%3E%3C%2Fsvg%3E";
+
+  it("grows a flow root in a measure pass to a float that had to stack below another (seed 94)", async () => {
+    // The 16px-wide flow root leaves no room beside the 16px float, so the 50% (8px) float goes
+    // below it: the flow root is 76 tall, not just the 60 of the second float.
+    const b = await boxes(
+      `<div style="display:flex"><div><div style="float:right;padding:8px"></div><div style="float:left;width:50%;height:60px"></div></div></div>`,
+    );
+    expect(at(b, "0.1.0.0").w).toBe(16); // flex item, as wide as its first float
+    expect(at(b, "0.1.0.0").h).toBe(76);
+    expect(at(b, "0.1.0.0.1").y).toBe(16); // stacked below the right float
+    expect(at(b, "0.1.0.0.1").w).toBe(8);
+    expect(at(b, "0.1.0.0.1").h).toBe(60);
+    expect(at(b, "0.1").h).toBe(76); // body
+  });
+
+  it("sizes a non-stretched column item's percentage svg against its fit-content width (seed 156)", async () => {
+    // The wrapper's max-content is 300 (the svg's default object width), clamped to the 80px column:
+    // the svg is 30% of 80 = 24 wide, so the item is 4.8 tall instead of 60 (the 300px trial width).
+    const b = await boxes(
+      `<div style="display:flex;flex-direction:column;align-items:center;width:80px"><div><svg viewBox="0 0 100 20" style="width:30%"></svg></div></div>`,
+    );
+    expect(at(b, "0.1.0.0").w).toBe(80);
+    expect(at(b, "0.1.0.0").h).toBeCloseTo(4.8, 2);
+    expect(at(b, "0.1.0.0.0").w).toBeCloseTo(24, 2);
+    expect(at(b, "0.1.0.0.0").h).toBeCloseTo(4.8, 2);
+    expect(at(b, "0.1").h).toBeCloseTo(4.8, 2); // body
+  });
+
+  it("transfers a zero cross size to the main size of a replaced item (seed 189)", async () => {
+    // 25% of 20px is 5, and 4px padding on each side (border-box) leaves no content: the 25% image
+    // is 0 wide, so its ratio makes it 0 tall instead of keeping its 90px natural height.
+    const b = await boxes(
+      `<div style="width:20px"><div style="display:flex;flex-direction:column;width:25%;padding:4px"><img src="${IMG_120_90}" style="width:25%"></div></div>`,
+      "border-box",
+    );
+    expect(at(b, "0.1.0.0").w).toBe(8); // border box: 8 padding, no content
+    expect(at(b, "0.1.0.0").h).toBe(8);
+    expect(at(b, "0.1.0.0.0").w).toBe(0);
+    expect(at(b, "0.1.0.0.0").h).toBe(0);
+    expect(at(b, "0.1").h).toBe(8); // body
+  });
+});

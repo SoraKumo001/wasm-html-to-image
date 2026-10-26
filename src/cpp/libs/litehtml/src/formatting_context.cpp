@@ -76,6 +76,35 @@ void litehtml::formatting_context::add_float(const std::shared_ptr<render_item> 
 	}
 }
 
+litehtml::pixel_t litehtml::formatting_context::place_measured_float(pixel_t top, pixel_t inline_size,
+																 pixel_t block_size, element_float side,
+																 pixel_t container_inline_size)
+{
+	// A float is placed as high as it fits beside the floats already on that line; one that does not
+	// fit is pushed below them (Blink's LayoutBlockFlow::positionNewFloats does the same with the
+	// real ledger). In a measure pass the floats are not in the ledger, so their extent is tracked
+	// here instead: without it a float below another one was reported as tall as itself only.
+	const pixel_t left = side == float_right ? container_inline_size - inline_size : 0;
+	const pixel_t right = left + inline_size;
+	bool moved = true;
+	while (moved)
+	{
+		moved = false;
+		for(const auto& fb : m_measure_floats)
+		{
+			if (top >= fb.bottom || top + block_size <= fb.top) continue;
+			if (right <= fb.left || fb.right <= left) continue;
+			top = fb.bottom;
+			moved = true;
+			break;
+		}
+	}
+	measured_float fb{ top, top + block_size, left, right };
+	m_measure_floats.push_back(fb);
+	if (fb.bottom > m_measured_float_bottom) m_measured_float_bottom = fb.bottom;
+	return top;
+}
+
 litehtml::pixel_t litehtml::formatting_context::get_floats_height(element_float el_float) const
 {
 	pixel_t h = m_current_block_pos;
