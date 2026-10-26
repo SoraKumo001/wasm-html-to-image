@@ -91,10 +91,27 @@ int measure_template_height(const std::string& html, int width, int probe_height
 // ---- P2: CSS fragmentation (atomic-break) page-cut planning -------------------
 //
 // After the single layout pass, plan page start offsets ("cuts") in document
-// coordinates. An atomic unit is a direct block-level child of the flow root
-// (<body>) or a replaced element (img / whole table) sitting at that level. The
-// pass never descends into nested content: break decisions are taken outside
-// render_block_context, at the top level only (oracle: "atomic break").
+// coordinates. An atomic unit is a block-level child of the flow root (<body>) or a
+// replaced element (img / whole table) sitting at that level. break decisions are
+// taken outside render_block_context, never inside it (oracle: "atomic break").
+//
+// Nested wrappers: units are resolved top-down from <body>, but a body-level block
+// box that is merely a *grouping wrapper* -- its in-flow content consists of block
+// children only and it declares no break-* of its own -- is transparent: it is not
+// a unit, its block children are resolved instead (so `break-inside:avoid` on a
+// card nested in a plain <div> wrapper is honoured, as in Chromium). A box stays
+// atomic when it has inline content of its own, a non-block formatting context
+// (flex / grid / table / list-item), is replaced, or declares break-before/after/
+// inside itself.
+//
+// Parent/child rule (innermost wins): at most one of a wrapper and its descendants
+// is emitted as a unit -- when a wrapper is transparent only its inner boxes become
+// units, and when a box is atomic its subtree is never inspected. A box is therefore
+// never counted twice, and an outer avoid on the wrapper is never widened to the
+// inner boxes (or vice versa).
+//
+// The unit list only feeds break-* handling in plan_page_cuts, so a document without
+// fragmentation CSS keeps P1's fixed pixel cuts exactly (byte-identical output).
 struct BreakUnit {
     int top = 0;
     int bottom = 0;
@@ -102,6 +119,62 @@ struct BreakUnit {
     litehtml::break_flow after = litehtml::break_flow_auto;
     litehtml::break_inside inside = litehtml::break_inside_auto;
 };
+
+// Does this box own a fragmentation decision (explicit break-*)? Such a box is
+// always a unit, even when it only groups block children.
+bool has_break_constraint(const litehtml::element* el) {
+    const litehtml::css_properties& css = el->css();
+    return css.get_break_before() != litehtml::break_flow_auto ||
+           css.get_break_after() != litehtml::break_flow_auto ||
+           css.get_break_inside() != litehtml::break_inside_auto;
+}
+
+// A grouping wrapper contributes no content of its own: only in-flow block-level
+// children, no line boxes (no text / inline siblings) and no break-* of its own.
+bool is_grouping_wrapper(const litehtml::element* el) {
+    if (!el || el->is_replaced()) return false;
+    // display:block only: flex/grid/table/list-item boxes lay their children out
+    // with their own engine and stay atomic for pagination.
+    if (el->css().get_display() != litehtml::display_block) return false;
+    if (!el->in_normal_flow() || el->is_float()) return false;
+    if (has_break_constraint(el)) return false;
+
+    litehtml::position::vector lines;
+    el->get_line_boundaries(lines);  // only this element's own inline context
+    if (!lines.empty()) return false;
+
+    bool has_block_child = false;
+    for (const auto& child : el->children()) {
+        if (!child) continue;
+        if (!child->in_normal_flow()) continue;  // absolute/fixed/none: not content
+        if (!(child->is_block_box() || child->is_replaced())) return false;
+        has_block_child = true;
+    }
+    return has_block_child;
+}
+
+// Resolve one in-flow flow-root child into units (innermost-wins, see above).
+void append_break_units(const litehtml::element* el, std::vector<BreakUnit>& units) {
+    if (!el) return;
+    if (!el->in_normal_flow()) return;
+    // Block boxes, plus replaced elements (img / whole table).
+    if (!(el->is_block_box() || el->is_replaced())) return;
+
+    if (is_grouping_wrapper(el)) {
+        for (const auto& child : el->children()) append_break_units(child.get(), units);
+        return;
+    }
+
+    litehtml::position p = el->get_placement();
+    if (p.height <= 0) return;
+    BreakUnit u;
+    u.top = (int)p.y;
+    u.bottom = (int)(p.y + p.height);
+    u.before = el->css().get_break_before();
+    u.after = el->css().get_break_after();
+    u.inside = el->css().get_break_inside();
+    units.push_back(u);
+}
 
 std::vector<BreakUnit> collect_break_units(const litehtml::element* root) {
     std::vector<BreakUnit> units;
@@ -115,21 +188,7 @@ std::vector<BreakUnit> collect_break_units(const litehtml::element* root) {
         }
     }
 
-    for (const auto& child : flow->children()) {
-        if (!child) continue;
-        if (!child->in_normal_flow()) continue;
-        // Top-level block boxes, plus replaced elements (img / whole table).
-        if (!(child->is_block_box() || child->is_replaced())) continue;
-        litehtml::position p = child->get_placement();
-        if (p.height <= 0) continue;
-        BreakUnit u;
-        u.top = (int)p.y;
-        u.bottom = (int)(p.y + p.height);
-        u.before = child->css().get_break_before();
-        u.after = child->css().get_break_after();
-        u.inside = child->css().get_break_inside();
-        units.push_back(u);
-    }
+    for (const auto& child : flow->children()) append_break_units(child.get(), units);
 
     std::sort(units.begin(), units.end(),
               [](const BreakUnit& a, const BreakUnit& b) { return a.top < b.top; });
