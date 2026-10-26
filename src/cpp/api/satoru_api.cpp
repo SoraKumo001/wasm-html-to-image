@@ -535,6 +535,8 @@ std::string SatoruInstance::get_collect_profile_json() const {
        << ",\"cppTextAnalyzeCount\":" << context.layoutProfile.text_analyze_count
        << ",\"cppTextShapeCount\":" << context.layoutProfile.text_shape_count
        << ",\"cppTextShapePreparedCount\":" << context.layoutProfile.text_shape_prepared_count
+       << ",\"cppTextShapeCacheableCount\":" << context.layoutProfile.text_shape_cacheable_count
+       << ",\"cppTextShapeCacheHitCount\":" << context.layoutProfile.text_shape_cache_hit_count
        << "}";
     return ss.str();
 }

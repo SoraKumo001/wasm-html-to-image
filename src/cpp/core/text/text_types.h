@@ -5,7 +5,9 @@
 // P2b: types 担当 (text/ 共有型のみ。ロジック禁止)。
 
 #include <algorithm>
+#include <bit>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -15,29 +17,30 @@
 
 namespace satoru {
 
-// Stable signature of the resolved OpenType features, used in shaping/measure cache keys.
-inline std::string fontFeatureSignature(const litehtml::font_description& desc) {
-    std::string sig;
-    for (const auto& f : desc.features) {
-        sig += std::to_string(f.tag);
-        sig += '=';
-        sig += std::to_string(f.value);
-        sig += ',';
-    }
-    return sig;
+// One-round mix (Knuth multiplicative + shift). Keys stay POD-sized instead of
+// building per-call signature strings (Blink NGShapeCache-style: hash once, keep
+// the integer).
+inline uint64_t textCacheMix(uint64_t h, uint64_t value) {
+    return h ^ (value + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2));
 }
 
-// Stable signature of the resolved variable font axes and font-stretch, used in
-// shaping/measure cache keys.
-inline std::string fontVariationSignature(const litehtml::font_description& desc) {
-    std::string sig = std::to_string(desc.stretch);
-    for (const auto& v : desc.variations) {
-        sig += ',';
-        sig += std::to_string(v.tag);
-        sig += '=';
-        sig += std::to_string(v.value);
+// Stable hash of the shaping-affecting font attributes: font-stretch, the
+// resolved OpenType features and the variable-font axes. The family is *not*
+// included (it is interned to a small integer, see SatoruContext::getFontFamilyId).
+// Collisions only cause an extra/mistaken cache hit at 2^-64; the previous
+// implementation compared strings with exactly the same value set.
+inline uint64_t fontAttributeHash(const litehtml::font_description& desc) {
+    uint64_t h = 0xcbf29ce484222325ull;
+    h = textCacheMix(h, (uint64_t)(uint32_t)desc.stretch);
+    h = textCacheMix(h, (uint64_t)desc.features.size());
+    for (const auto& f : desc.features) {
+        h = textCacheMix(h, ((uint64_t)f.tag << 32) | (uint64_t)f.value);
     }
-    return sig;
+    h = textCacheMix(h, (uint64_t)desc.variations.size());
+    for (const auto& v : desc.variations) {
+        h = textCacheMix(h, ((uint64_t)v.tag << 32) | (uint64_t)std::bit_cast<uint32_t>(v.value));
+    }
+    return h;
 }
 
 struct CharFont {
@@ -106,7 +109,8 @@ class SatoruFontRunIterator : public SkShaper::FontRunIterator {
 
 struct MeasureKey {
     std::string text;
-    std::string font_family;
+    // Interned fi->desc.family (SatoruContext::getFontFamilyId). 0 = unset.
+    uint32_t font_family_id = 0;
     float font_size;
     int font_weight;
     bool italic;
@@ -116,25 +120,23 @@ struct MeasureKey {
     litehtml::text_combine_upright textCombineUpright;
     float letterSpacing;
     float wordSpacing;
-    std::string features;
-    std::string variations;
-    uint64_t fontVersion;
+    uint64_t fontAttributes = 0;  // fontAttributeHash(): features + variations + stretch
+    uint64_t fontVersion = 0;
 
     bool operator==(const MeasureKey& other) const {
         return font_size == other.font_size && font_weight == other.font_weight &&
                italic == other.italic && maxWidth == other.maxWidth &&
-               font_family == other.font_family && text == other.text && mode == other.mode &&
+               font_family_id == other.font_family_id && text == other.text && mode == other.mode &&
                orientation == other.orientation && textCombineUpright == other.textCombineUpright &&
                letterSpacing == other.letterSpacing && wordSpacing == other.wordSpacing &&
-               features == other.features && variations == other.variations &&
-               fontVersion == other.fontVersion;
+               fontAttributes == other.fontAttributes && fontVersion == other.fontVersion;
     }
 };
 
 struct MeasureKeyHash {
     std::size_t operator()(const MeasureKey& k) const {
         std::size_t h = std::hash<std::string>{}(k.text);
-        h ^= std::hash<std::string>{}(k.font_family) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        h ^= std::hash<uint32_t>{}(k.font_family_id) + 0x9e3779b9 + (h << 6) + (h >> 2);
         h ^= std::hash<float>{}(k.font_size) + 0x9e3779b9 + (h << 6) + (h >> 2);
         h ^= std::hash<int>{}(k.font_weight) + 0x9e3779b9 + (h << 6) + (h >> 2);
         h ^= std::hash<bool>{}(k.italic) + 0x9e3779b9 + (h << 6) + (h >> 2);
@@ -144,8 +146,7 @@ struct MeasureKeyHash {
         h ^= std::hash<int>{}(k.textCombineUpright) + 0x9e3779b9 + (h << 6) + (h >> 2);
         h ^= std::hash<float>{}(k.letterSpacing) + 0x9e3779b9 + (h << 6) + (h >> 2);
         h ^= std::hash<float>{}(k.wordSpacing) + 0x9e3779b9 + (h << 6) + (h >> 2);
-        h ^= std::hash<std::string>{}(k.features) + 0x9e3779b9 + (h << 6) + (h >> 2);
-        h ^= std::hash<std::string>{}(k.variations) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        h ^= std::hash<uint64_t>{}(k.fontAttributes) + 0x9e3779b9 + (h << 6) + (h >> 2);
         h ^= std::hash<uint64_t>{}(k.fontVersion) + 0x9e3779b9 + (h << 6) + (h >> 2);
         return h;
     }
@@ -155,11 +156,16 @@ struct ShapedResult {
     double width;
     sk_sp<SkTextBlob> blob;
     bool is_emoji;
+    // Sorted/unique codepoints of the shaped run, so a cache hit can replay them
+    // instead of re-running analyzeText just to collect usedCodepoints. Shared so
+    // a hit copies a pointer, not the list.
+    std::shared_ptr<const std::vector<char32_t>> usedCodepoints;
 };
 
 struct ShapingKey {
     std::string text;
-    std::string font_family;
+    // Interned fi->desc.family (SatoruContext::getFontFamilyId). 0 = unset.
+    uint32_t font_family_id = 0;
     float font_size;
     int font_weight;
     bool italic;
@@ -169,23 +175,25 @@ struct ShapingKey {
     litehtml::text_combine_upright textCombineUpright;
     float letterSpacing;
     float wordSpacing;
-    std::string features;
-    std::string variations;
+    uint64_t fontAttributes = 0;  // fontAttributeHash(): features + variations + stretch
+    // Font generation. Ids in font_family_id are never reused, so a font change
+    // only has to bump this version to make every pre-change entry unreachable.
+    uint64_t fontVersion = 0;
 
     bool operator==(const ShapingKey& other) const {
         return font_size == other.font_size && font_weight == other.font_weight &&
                italic == other.italic && is_rtl == other.is_rtl &&
-               font_family == other.font_family && text == other.text && mode == other.mode &&
+               font_family_id == other.font_family_id && text == other.text && mode == other.mode &&
                orientation == other.orientation && textCombineUpright == other.textCombineUpright &&
                letterSpacing == other.letterSpacing && wordSpacing == other.wordSpacing &&
-               features == other.features && variations == other.variations;
+               fontAttributes == other.fontAttributes && fontVersion == other.fontVersion;
     }
 };
 
 struct ShapingKeyHash {
     std::size_t operator()(const ShapingKey& k) const {
         std::size_t h = std::hash<std::string>{}(k.text);
-        h ^= std::hash<std::string>{}(k.font_family) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        h ^= std::hash<uint32_t>{}(k.font_family_id) + 0x9e3779b9 + (h << 6) + (h >> 2);
         h ^= std::hash<float>{}(k.font_size) + 0x9e3779b9 + (h << 6) + (h >> 2);
         h ^= std::hash<int>{}(k.font_weight) + 0x9e3779b9 + (h << 6) + (h >> 2);
         h ^= std::hash<bool>{}(k.italic) + 0x9e3779b9 + (h << 6) + (h >> 2);
@@ -195,8 +203,8 @@ struct ShapingKeyHash {
         h ^= std::hash<int>{}(k.textCombineUpright) + 0x9e3779b9 + (h << 6) + (h >> 2);
         h ^= std::hash<float>{}(k.letterSpacing) + 0x9e3779b9 + (h << 6) + (h >> 2);
         h ^= std::hash<float>{}(k.wordSpacing) + 0x9e3779b9 + (h << 6) + (h >> 2);
-        h ^= std::hash<std::string>{}(k.features) + 0x9e3779b9 + (h << 6) + (h >> 2);
-        h ^= std::hash<std::string>{}(k.variations) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        h ^= std::hash<uint64_t>{}(k.fontAttributes) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        h ^= std::hash<uint64_t>{}(k.fontVersion) + 0x9e3779b9 + (h << 6) + (h >> 2);
         return h;
     }
 };

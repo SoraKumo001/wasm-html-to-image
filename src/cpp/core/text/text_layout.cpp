@@ -66,6 +66,70 @@ void captureUsedCodepoints(MeasureResult& result, const TextAnalysis& analysis) 
         result.usedCodepoints.end());
 }
 
+// Same replay for the shaping cache: the hit no longer needs to re-run analyzeText
+// just to learn which codepoints were used for font-subset collection.
+void replayUsedCodepoints(const ShapedResult& result, std::set<char32_t>* usedCodepoints) {
+    if (!usedCodepoints || !result.usedCodepoints) return;
+    for (char32_t codepoint : *result.usedCodepoints) {
+        usedCodepoints->insert(codepoint);
+    }
+}
+
+void captureUsedCodepoints(ShapedResult& result, const TextAnalysis& analysis) {
+    auto codepoints = std::make_shared<std::vector<char32_t>>();
+    codepoints->reserve(analysis.chars.size());
+    for (const auto& ca : analysis.chars) {
+        codepoints->push_back(ca.codepoint);
+    }
+    std::sort(codepoints->begin(), codepoints->end());
+    codepoints->erase(std::unique(codepoints->begin(), codepoints->end()), codepoints->end());
+    result.usedCodepoints = std::move(codepoints);
+}
+
+// Cache keys are built from cheap integer material: an interned family id, a
+// precomputed attribute hash and the font generation. No per-call signature
+// strings and no family-string copy (see text_types.h / SatoruContext).
+void fillMeasureKey(SatoruContext* ctx, const char* text, font_info* fi,
+                    litehtml::writing_mode mode, double maxWidth, MeasureKey& key) {
+    key.text = text;
+    key.font_family_id = ctx->getFontFamilyId(fi->desc.family);
+    key.font_size = (float)fi->desc.size;
+    key.font_weight = fi->desc.weight;
+    key.italic = (fi->desc.style == litehtml::font_style_italic);
+    key.maxWidth = maxWidth;
+    key.mode = mode;
+    key.orientation = fi->desc.orientation;
+    key.textCombineUpright = fi->desc.text_combine_upright_;
+    key.letterSpacing = (float)fi->desc.letter_spacing;
+    key.wordSpacing = (float)fi->desc.word_spacing;
+    key.fontAttributes = fontAttributeHash(fi->desc);
+    key.fontVersion = ctx->getFontVersion();
+}
+
+void fillShapingKey(SatoruContext* ctx, const char* text, size_t len, font_info* fi,
+                    litehtml::writing_mode mode, ShapingKey& key) {
+    key.text.assign(text, len);
+    key.font_family_id = ctx->getFontFamilyId(fi->desc.family);
+    key.font_size = (float)fi->desc.size;
+    key.font_weight = fi->desc.weight;
+    key.italic = (fi->desc.style == litehtml::font_style_italic);
+    key.is_rtl = fi->is_rtl;
+    key.mode = mode;
+    key.orientation = fi->desc.orientation;
+    key.textCombineUpright = fi->desc.text_combine_upright_;
+    key.letterSpacing = (float)fi->desc.letter_spacing;
+    key.wordSpacing = (float)fi->desc.word_spacing;
+    key.fontAttributes = fontAttributeHash(fi->desc);
+    key.fontVersion = ctx->getFontVersion();
+}
+
+ShapedResult* lookupShapingCache(SatoruContext* ctx, const ShapingKey& key) {
+    if (ctx->layoutProfile.enabled) ctx->layoutProfile.text_shape_cacheable_count++;
+    ShapedResult* cached = ctx->cacheManager.shapingCache.get(key);
+    if (cached && ctx->layoutProfile.enabled) ctx->layoutProfile.text_shape_cache_hit_count++;
+    return cached;
+}
+
 bool isCjkFastMeasureCodepoint(char32_t u) {
     return (u >= 0x3040 && u <= 0x30FF) ||  // Hiragana, Katakana
            (u >= 0x3400 && u <= 0x4DBF) ||  // CJK Extension A
@@ -347,20 +411,7 @@ MeasureResult TextLayout::measureText(SatoruContext* ctx, const char* text, font
     bool canCache = true;
     if (canCache) {
         if (ctx->layoutProfile.enabled) ctx->layoutProfile.text_measure_cacheable_count++;
-        key.text = text;
-        key.font_family = fi->desc.family;
-        key.font_size = (float)fi->desc.size;
-        key.font_weight = fi->desc.weight;
-        key.italic = (fi->desc.style == litehtml::font_style_italic);
-        key.maxWidth = maxWidth;
-        key.mode = mode;
-        key.orientation = fi->desc.orientation;
-        key.textCombineUpright = fi->desc.text_combine_upright_;
-        key.letterSpacing = (float)fi->desc.letter_spacing;
-        key.wordSpacing = (float)fi->desc.word_spacing;
-        key.features = fontFeatureSignature(fi->desc);
-        key.variations = fontVariationSignature(fi->desc);
-        key.fontVersion = ctx->getFontVersion();
+        fillMeasureKey(ctx, text, fi, mode, maxWidth, key);
 
         if (MeasureResult* cached = ctx->cacheManager.measureCache.get(key)) {
             if (ctx->layoutProfile.enabled) ctx->layoutProfile.text_measure_cache_hit_count++;
@@ -649,24 +700,10 @@ ShapedResult TextLayout::shapeText(SatoruContext* ctx, const char* text, size_t 
                                      &SatoruContext::LayoutProfile::text_shape_count);
 
     ShapingKey key;
-    key.text.assign(text, len);
-    key.font_family = fi->desc.family;
-    key.font_size = (float)fi->desc.size;
-    key.font_weight = fi->desc.weight;
-    key.italic = (fi->desc.style == litehtml::font_style_italic);
-    key.is_rtl = fi->is_rtl;
-    key.mode = mode;
-    key.orientation = fi->desc.orientation;
-    key.textCombineUpright = fi->desc.text_combine_upright_;
-    key.letterSpacing = (float)fi->desc.letter_spacing;
-    key.wordSpacing = (float)fi->desc.word_spacing;
-    key.features = fontFeatureSignature(fi->desc);
-    key.variations = fontVariationSignature(fi->desc);
+    fillShapingKey(ctx, text, len, fi, mode, key);
 
-    if (ShapedResult* cached = ctx->cacheManager.shapingCache.get(key)) {
-        if (usedCodepoints) {
-            analyzeText(ctx, text, len, fi, mode, usedCodepoints, false);
-        }
+    if (ShapedResult* cached = lookupShapingCache(ctx, key)) {
+        replayUsedCodepoints(*cached, usedCodepoints);
         return *cached;
     }
 
@@ -691,21 +728,9 @@ ShapedResult TextLayout::shapePreparedText(SatoruContext* ctx, const char* cache
                                      &SatoruContext::LayoutProfile::text_shape_prepared_count);
 
     ShapingKey key;
-    key.text.assign(cacheText, cacheLen);
-    key.font_family = fi->desc.family;
-    key.font_size = (float)fi->desc.size;
-    key.font_weight = fi->desc.weight;
-    key.italic = (fi->desc.style == litehtml::font_style_italic);
-    key.is_rtl = fi->is_rtl;
-    key.mode = mode;
-    key.orientation = fi->desc.orientation;
-    key.textCombineUpright = fi->desc.text_combine_upright_;
-    key.letterSpacing = (float)fi->desc.letter_spacing;
-    key.wordSpacing = (float)fi->desc.word_spacing;
-    key.features = fontFeatureSignature(fi->desc);
-    key.variations = fontVariationSignature(fi->desc);
+    fillShapingKey(ctx, cacheText, cacheLen, fi, mode, key);
 
-    if (ShapedResult* cached = ctx->cacheManager.shapingCache.get(key)) {
+    if (ShapedResult* cached = lookupShapingCache(ctx, key)) {
         return *cached;
     }
 
@@ -758,6 +783,9 @@ ShapedResult TextLayout::shapePreparedText(SatoruContext* ctx, const char* cache
             break;
         }
     }
+    // Ship the used codepoints with the cached blob so a shaping-cache hit can
+    // replay them instead of re-running analyzeText for font-subset collection.
+    captureUsedCodepoints(result, analysis);
 
     ctx->cacheManager.shapingCache.put(key, result);
     return result;

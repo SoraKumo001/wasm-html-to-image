@@ -5,6 +5,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -90,6 +91,9 @@ class SatoruContext {
     std::string m_pageCss;
     std::unordered_set<std::string> m_extraCssBlocks;
     std::map<std::string, std::string> m_fontMap;
+    // Interned font family names for text cache keys (see getFontFamilyId).
+    std::map<std::string, uint32_t, std::less<>> m_fontFamilyIds;
+    uint32_t m_fontFamilyIdCounter = 0;
     uint64_t m_cssVersion = 0;
     uint64_t m_userCssVersion = 0;
     uint64_t m_externalCssVersion = 0;
@@ -132,6 +136,8 @@ class SatoruContext {
         int text_shape_prepared_count = 0;
         int text_measure_cacheable_count = 0;
         int text_measure_cache_hit_count = 0;
+        int text_shape_cacheable_count = 0;
+        int text_shape_cache_hit_count = 0;
         std::unordered_set<std::string> container_text_width_keys;
 
         void reset() {
@@ -155,6 +161,8 @@ class SatoruContext {
             text_shape_prepared_count = 0;
             text_measure_cacheable_count = 0;
             text_measure_cache_hit_count = 0;
+            text_shape_cacheable_count = 0;
+            text_shape_cache_hit_count = 0;
             container_text_width_keys.clear();
         }
     };
@@ -213,6 +221,17 @@ class SatoruContext {
     uint64_t getFontAliasCssVersion() const { return m_fontAliasCssVersion; }
     uint64_t getGeneratedFontFaceCssVersion() const { return m_generatedFontFaceCssVersion; }
     uint64_t getFontVersion() const { return m_fontVersion; }
+    // Text cache keys refer to the resolved family by a small interned id instead
+    // of copying the family string into every key (Blink NGShapeCache-style).
+    // Ids are never reused, so a font change only has to bump m_fontVersion (which
+    // every text cache key carries) to make all pre-change entries unreachable.
+    uint32_t getFontFamilyId(std::string_view family) {
+        auto it = m_fontFamilyIds.find(family);
+        if (it != m_fontFamilyIds.end()) return it->second;
+        const uint32_t id = ++m_fontFamilyIdCounter;
+        m_fontFamilyIds.emplace(family, id);
+        return id;
+    }
     uint64_t getImageVersion() const { return m_imageVersion; }
     uint64_t getFontResourceNamedLoadCount() const { return m_fontResourceNamedLoadCount; }
     uint64_t getFontResourceFallbackLoadCount() const { return m_fontResourceFallbackLoadCount; }
