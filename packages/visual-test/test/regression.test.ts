@@ -4986,3 +4986,54 @@ describe("P0-3: grid last line-box baseline", () => {
     expect(b.find((x) => x.p === "0.1.0.1")!.y).toBe(0);
   });
 });
+
+// P0-4: a percentage width is cyclic while its containing block is being sized from its
+// content, so CSS treats it as auto there (Blink: LayoutBox::ComputeLogicalWidth and
+// LayoutReplaced::ComputeReplacedSize). A ratio-only svg's `width:100%` then contributes
+// the 300px default object width to the shrink-to-fit ancestor, not the available width.
+describe("P0-4: percentage widths inside a shrink-to-fit ancestor", () => {
+  type Box = { p: string; t: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(body: string): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:content-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const SVG = `<svg viewBox="0 0 40 20" style="width:100%"></svg>`;
+
+  it("sizes a percentage block wrapper from the svg's 300px default width (seed 45)", async () => {
+    // fit-content = 300 (max-content), the 25% block = 75, the svg keeps its 2:1 ratio.
+    const b = await boxes(`<div><div style="width:fit-content"><div style="width:25%">${SVG}</div></div></div>`);
+    expect(b.find((x) => x.p === "0.1.0.0")!.w).toBe(300); // fit-content
+    expect(b.find((x) => x.p === "0.1.0.0.0")!.w).toBe(75); // 25% block
+    expect(b.find((x) => x.p === "0.1.0.0.0.0")!.w).toBe(75); // svg
+    expect(b.find((x) => x.p === "0.1.0.0.0.0")!.h).toBeCloseTo(37.5, 1);
+    expect(b.find((x) => x.p === "0.1")!.h).toBeCloseTo(37.5, 1); // body
+  });
+
+  it("treats a percentage inline-block wrapper as shrink-to-fit too (seed 45)", async () => {
+    const b = await boxes(
+      `<div><div style="width:fit-content"><div style="display:inline-block;width:25%">${SVG}</div></div></div>`,
+    );
+    expect(b.find((x) => x.p === "0.1.0.0")!.w).toBe(300); // fit-content
+    expect(b.find((x) => x.p === "0.1.0.0.0")!.w).toBe(75); // inline-block at 25%
+    expect(b.find((x) => x.p === "0.1.0.0.0.0")!.w).toBe(75); // svg
+    expect(b.find((x) => x.p === "0.1")!.h).toBeCloseTo(37.5, 1); // body
+  });
+
+  it("keeps the walk going through nested percentage wrappers", async () => {
+    const b = await boxes(
+      `<div><div style="width:fit-content"><div style="width:25%"><div style="width:25%">${SVG}</div></div></div></div>`,
+    );
+    expect(b.find((x) => x.p === "0.1.0.0")!.w).toBe(300); // fit-content
+    expect(b.find((x) => x.p === "0.1.0.0.0.0")!.w).toBe(18.75); // 25% of 25% of 300
+    expect(b.find((x) => x.p === "0.1")!.h).toBeCloseTo(9.38, 1); // body
+  });
+});

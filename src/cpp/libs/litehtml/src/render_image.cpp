@@ -97,6 +97,12 @@ litehtml::pixel_t litehtml::render_item_image::_measure(
         // fill: the document root is measured in that mode, so it cannot tell a float from a block.
         const bool positioned = css().get_position() == element_position_absolute ||
                                 css().get_position() == element_position_fixed;
+        // A percentage width is cyclic while the box it belongs to is sized from its content (CSS
+        // treats it as auto during intrinsic sizing), so such a box shrink-to-fits like an auto one.
+        const auto cyclic_percent_width = [](const css_length& len) {
+            return !len.is_predefined() &&
+                   (len.units() == css_units_percentage || (len.is_calc() && len.calc_percent() != 0));
+        };
         // A ratio-only box inside a float / inline-block / absolutely positioned / fit-content ancestor
         // (through auto-width blocks) has no width of its own to contribute: it is 0 wide, as in Chromium.
         auto in_shrink_to_fit = [&]() {
@@ -111,11 +117,17 @@ litehtml::pixel_t litehtml::render_item_image::_measure(
                              pp->css().get_display() == display_grid || pp->css().get_display() == display_inline_grid));
                 if (floated || disp == display_inline_block || disp == display_inline_flex ||
                     disp == display_inline_grid || disp == display_inline_table)
-                    return pc.get_width().is_predefined();  // a definite width is a width to fill
+                    // a definite width is a width to fill; a cyclic percentage one is auto
+                    return pc.get_width().is_predefined() || cyclic_percent_width(pc.get_width());
                 if (pc.get_position() == element_position_absolute || pc.get_position() == element_position_fixed)
-                    return pc.get_width().is_predefined();
+                    return pc.get_width().is_predefined() || cyclic_percent_width(pc.get_width());
                 if (pc.get_width().is_predefined() && pc.get_width().predef() > 0) return true;  // fit-content / max-content / min-content
-                if (!pc.get_width().is_predefined()) return false;
+                if (!pc.get_width().is_predefined()) {
+                    // The ancestor is auto-width in this query (see above): keep walking to whatever
+                    // gives it its size (a fit-content / float box).
+                    if (cyclic_percent_width(pc.get_width())) continue;
+                    return false;
+                }
                 if (disp != display_block && disp != display_inline && disp != display_flex) return false;  // grid / table: not handled here
             }
             return false;
