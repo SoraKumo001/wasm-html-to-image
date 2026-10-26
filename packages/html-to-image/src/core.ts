@@ -97,7 +97,8 @@ export interface RenderOptions {
   value?: string | string[] | Uint8Array | ArrayBuffer;
   url?: string;
   baseUrl?: string;
-  width: number;
+  /** Layout viewport width in CSS px (HTML) or target width (image resize). Defaults to 800. */
+  width?: number;
   height?: number;
   format?: OutputFormat;
 }

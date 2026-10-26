@@ -37,7 +37,7 @@ Returns a `string` for `svg` format, and `Uint8Array` for all other formats (`pn
 | `value`   | `string \| string[] \| Uint8Array \| ArrayBuffer` |      -       | Input data (HTML string, HTML array for multi-page PDF, or image buffer) |
 | `url`     | `string`                                          |      -       | URL to fetch and render when `value` is omitted                          |
 | `baseUrl` | `string`                                          |      -       | Base URL for resolving relative assets                                   |
-| `width`   | `number`                                          | **Required** | Viewport width (HTML) or target output width (image)                     |
+| `width`   | `number`                                          |    `800`     | Viewport width (HTML) or target output width (image)                     |
 | `height`  | `number`                                          |    `auto`    | Viewport height (HTML) or target output height (image)                   |
 | `format`  | `OutputFormat`                                    |   `"png"`    | Target output format (`png`, `jpeg`, `webp`, `apng`, `gif`, `tiff`, `avif`, `jxl`, `raw`, `thumbhash`, `svg`, `pdf`) |
 | `scale` | `number` | `1` | Pixel density of raster output from HTML input (0-16). `width` stays in CSS px and the page is drawn `scale` times larger (`scale: 3.125` turns an 800px layout into a 2500px image, with text and shapes re-rasterized rather than stretched). Ignored for `svg` / `pdf` and for image input. |

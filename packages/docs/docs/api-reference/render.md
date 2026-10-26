@@ -67,7 +67,7 @@ export interface RenderResult<T = Uint8Array | string> {
 | `value`    | `string \| string[] \| Uint8Array \| ArrayBuffer` |    -     | 入力データ。HTML 文字列、複数ページ PDF 用 HTML 配列、または画像バイナリ   |
 | `url`      | `string`                                          |    -     | 取得して描画する Web ページの URL（`value` が未指定の場合に使用）          |
 | `baseUrl`  | `string`                                          |    -     | 相対パスのリソース解決に使用するベース URL                                 |
-| `width`    | `number`                                          | **必須** | ビューポート幅（HTML 時）、または出力幅（画像リサイズ時）                  |
+| `width`    | `number`                                          |  `800`   | ビューポート幅（HTML 時）、または出力幅（画像リサイズ時）。省略時は 800 |
 | `height`   | `number`                                          |  `auto`  | ビューポート高さ（HTML 時）、または出力高さ（画像リサイズ時）              |
 | `format`   | `OutputFormat`                                    | `"png"`  | 出力形式 (`png`, `jpeg`, `webp`, `apng`, `gif`, `tiff`, `avif`, `jxl`, `raw`, `thumbhash`, `svg`, `pdf`) |
 | `scale` | `number` | `1` | HTML 入力のラスタ出力の画素密度（0〜16）。`width` は CSS px のまま、ページを `scale` 倍で描画します（例: `scale: 3.125` で 800px のレイアウトが 2500px の画像になり、文字や図形は拡大ではなく再ラスタライズされます）。`svg` / `pdf` と画像入力では無視されます |

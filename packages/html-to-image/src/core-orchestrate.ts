@@ -78,6 +78,8 @@ export interface Orchestration {
    */
   animationLoop: number;
   width: number;
+  /** The caller's explicit `width` (image input skips resize when width/height are both omitted). */
+  widthOption: number | undefined;
   height: number | undefined;
   crop: HtmlToImageOptions["crop"];
   fit: HtmlToImageOptions["fit"];
@@ -152,7 +154,6 @@ export function createOrchestration(
     format = "png",
     quality = 85,
     speed: speedOption,
-    width,
     height,
     crop,
     fit,
@@ -196,6 +197,12 @@ export function createOrchestration(
   const animationLoop = Math.max(0, Math.trunc(animationFrames?.loop ?? 0));
   const speed = speedOption ?? defaultSpeed(format);
   const colorSpace = options.colorSpace === "cmyk" ? "cmyk" : "srgb";
+  const width = options.width ?? 800;
+  if (!Number.isFinite(width) || width <= 0) {
+    throw new Error(
+      `wasm-html-to-image: width must be a positive finite number, got ${String(options.width)}`,
+    );
+  }
   const scale = options.scale ?? 1;
   if (!Number.isFinite(scale) || scale <= 0 || scale > 16) {
     throw new Error(
@@ -309,6 +316,7 @@ export function createOrchestration(
     animationFrames,
     animationLoop,
     width,
+    widthOption: options.width,
     height,
     crop,
     fit,
@@ -433,7 +441,7 @@ export async function runImageInput(
     speed,
     animation,
     animationLoop,
-    width,
+    widthOption,
     height,
     crop,
     fit,
@@ -485,16 +493,16 @@ export async function runImageInput(
     if (crop) {
       module.converter_crop(inst, crop.x, crop.y, crop.width, crop.height);
     }
-    if (width !== undefined || height !== undefined) {
+    if (widthOption !== undefined || height !== undefined) {
       module.converter_resize(
         inst,
-        width ?? 0,
+        widthOption ?? 0,
         height ?? 0,
         FIT_INT[fit ?? "contain"],
       );
     }
     const outWidth =
-      module.converter_get_width?.(inst) ?? width ?? originalWidth;
+      module.converter_get_width?.(inst) ?? widthOption ?? originalWidth;
     const outHeight =
       module.converter_get_height?.(inst) ?? height ?? originalHeight;
     const outAnimation = module.converter_is_animation?.(inst) ?? animation;
