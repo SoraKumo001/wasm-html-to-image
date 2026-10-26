@@ -65,6 +65,66 @@ void render_template(const std::string& html, int width, int height, SkCanvas* c
     }
 }
 
+// Reusable layout for a header/footer template. A template without
+// {{pageNumber}}/{{totalPages}} interpolates to the same HTML on every page, so its
+// document is created + laid out once and only re-drawn (canvas swap) per page.
+// A template that does interpolate page numbers produces a distinct string per page;
+// its text is part of the layout, so it still lays out once per page -- the cache
+// simply keeps the latest one instead of accumulating documents.
+class TemplateDocumentCache {
+   public:
+    // Lay the template out if the cached document does not match html/width/height.
+    int measure(const std::string& html, int width, int height, SatoruContext& context,
+                const char* master_css, const char* user_css, litehtml::media_type media_type) {
+        if (!ensure_layout(html, width, height, context, master_css, user_css, media_type))
+            return 0;
+        int measured = (int)document_->height();
+        return measured > 0 ? measured : 0;
+    }
+
+    void draw(const std::string& html, int width, int height, SkCanvas* canvas,
+              SatoruContext& context, const char* master_css, const char* user_css,
+              litehtml::media_type media_type) {
+        if (html.empty()) return;
+        if (!ensure_layout(html, width, height, context, master_css, user_css, media_type)) return;
+        container_->reset();
+        container_->set_canvas(canvas);
+        container_->set_height(height);
+        container_->set_tagging(false);
+        document_->draw(0, 0, 0, nullptr);
+        container_->flush();
+    }
+
+   private:
+    bool ensure_layout(const std::string& html, int width, int height, SatoruContext& context,
+                       const char* master_css, const char* user_css,
+                       litehtml::media_type media_type) {
+        if (html.empty()) return false;
+        if (document_ && html == html_ && width == width_ && height == height_) return true;
+        // The document owns the fonts it registered with the container, and its
+        // destructor calls container->delete_font(), so drop it before the container.
+        document_.reset();
+        container_.reset();
+        container_ = std::make_unique<container_skia>(width, height, nullptr, context, nullptr,
+                                                      false, media_type);
+        auto doc = litehtml::document::createFromString(html.c_str(), container_.get(), master_css,
+                                                        user_css, context.getPageCss());
+        if (!doc) return false;
+        doc->render(width);
+        document_ = std::move(doc);
+        html_ = html;
+        width_ = width;
+        height_ = height;
+        return true;
+    }
+
+    std::unique_ptr<container_skia> container_;
+    litehtml::document::ptr document_;
+    std::string html_;
+    int width_ = -1;
+    int height_ = -1;
+};
+
 // Footer band height. The footer has always been drawn inside pdfMarginBottom (top edge at
 // pageHeight - marginBottom), so a footer taller than the margin was clipped and, with the
 // default pdfMarginBottom = 0, it landed at y = pageHeight (off-page, invisible).
@@ -75,10 +135,15 @@ void render_template(const std::string& html, int width, int height, SkCanvas* c
 // resolve exactly as before and cannot trigger an unbounded reservation.
 int measure_template_height(const std::string& html, int width, int probe_height,
                             SatoruContext& context, const char* master_css, const char* user_css,
-                            litehtml::media_type media_type) {
+                            litehtml::media_type media_type,
+                            TemplateDocumentCache* cache = nullptr) {
     if (html.empty()) return 0;
     if (width < 1) width = 1;
     if (probe_height < 1) probe_height = 1;
+    if (cache) {
+        return cache->measure(html, width, probe_height, context, master_css, user_css,
+                              media_type);
+    }
     container_skia container(width, probe_height, nullptr, context, nullptr, false, media_type);
     auto doc = litehtml::document::createFromString(html.c_str(), &container, master_css, user_css,
                                                     context.getPageCss());
@@ -1023,6 +1088,13 @@ sk_sp<SkData> renderHtmlToPdf(const std::string& html, int width, int height,
     litehtml::media_type media_type =
         (options.mediaType == 1) ? litehtml::media_type_print : litehtml::media_type_screen;
 
+    // Header/footer layout caches. A template without page-number placeholders renders
+    // the same HTML on all pages, so it is laid out once and re-drawn per page. The probe
+    // seeds the footer cache: when the footer fits the bottom margin, footer_band equals
+    // the probe viewport and the first page's draw reuses the measured document.
+    TemplateDocumentCache header_cache;
+    TemplateDocumentCache footer_cache;
+
     // Footer band: only a footer taller than the bottom margin grows the band (the content
     // area shrinks accordingly); otherwise the historical layout and page count are kept.
     // Measured with page 1 / total 1, which is enough for a height estimate.
@@ -1030,7 +1102,8 @@ sk_sp<SkData> renderHtmlToPdf(const std::string& html, int width, int height,
     if (!options.pdfFooter.empty()) {
         std::string footer_probe = replace_template_vars(options.pdfFooter, 1, 1);
         int footer_height = measure_template_height(footer_probe, content_width, margin_bottom,
-                                                    context, css.c_str(), user_css, media_type);
+                                                    context, css.c_str(), user_css, media_type,
+                                                    &footer_cache);
         if (footer_height > footer_band) footer_band = footer_height;
     }
     if (footer_band > page_height) footer_band = page_height;
@@ -1107,13 +1180,14 @@ sk_sp<SkData> renderHtmlToPdf(const std::string& html, int width, int height,
             canvas->drawRect(SkRect::MakeWH((SkScalar)page_width, (SkScalar)page_height), paint);
         }
 
-        // Header / footer: re-rendered per page (same as renderHtmlsToPdf).
+        // Header / footer: the document is cached per distinct template HTML, so a
+        // template without page-number placeholders is laid out once and only re-drawn.
         if (!options.pdfHeader.empty()) {
             std::string headerHtml = replace_template_vars(options.pdfHeader, page_num, page_count);
             canvas->save();
             canvas->translate((SkScalar)margin_left, 0);
-            render_template(headerHtml, content_width, margin_top, canvas, context, css.c_str(),
-                            user_css, media_type);
+            header_cache.draw(headerHtml, content_width, margin_top, canvas, context, css.c_str(),
+                              user_css, media_type);
             canvas->restore();
         }
 
@@ -1121,8 +1195,8 @@ sk_sp<SkData> renderHtmlToPdf(const std::string& html, int width, int height,
             std::string footerHtml = replace_template_vars(options.pdfFooter, page_num, page_count);
             canvas->save();
             canvas->translate((SkScalar)margin_left, (SkScalar)(page_height - footer_band));
-            render_template(footerHtml, content_width, footer_band, canvas, context, css.c_str(),
-                            user_css, media_type);
+            footer_cache.draw(footerHtml, content_width, footer_band, canvas, context, css.c_str(),
+                              user_css, media_type);
             canvas->restore();
         }
 
