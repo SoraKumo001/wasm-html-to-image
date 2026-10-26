@@ -237,6 +237,35 @@ const p2: Record<string, { html: string; pages: number; p1Has?: string[]; p1Not?
     p1Not: ["HEAD", "PARA"],
     p2Has: ["HEAD", "PARA"],
   },
+  // Grouping-wrapper transparency: a plain <div> with no break-* and only block
+  // children is not a unit, so `break-inside:avoid` on the nested card is honoured
+  // (the card straddles 1123 and moves to page 2 whole). If the wrapper were the
+  // unit (P2 top-level-only rule), the card would be split at 1123.
+  nestcard: {
+    html: `<html><body style="${style}"><div style="height:1000px">padding</div><div><div style="break-inside:avoid;height:300px">WRAPCARD</div></div><p style="margin:0">tail</p></body></html>`,
+    pages: 2,
+    p1Has: ["padding"],
+    p1Not: ["WRAPCARD"],
+    p2Has: ["WRAPCARD", "tail"],
+  },
+  // Two nested grouping wrappers: resolution must descend both levels and push the
+  // innermost box whole (transparency is not limited to one level).
+  nest2card: {
+    html: `<html><body style="${style}"><div style="height:900px">padding</div><div><div><div style="break-inside:avoid;height:350px">DEEPCARD</div></div></div></body></html>`,
+    pages: 2,
+    p1Has: ["padding"],
+    p1Not: ["DEEPCARD"],
+    p2Has: ["DEEPCARD"],
+  },
+  // break-before:page on a box nested in a grouping wrapper: the forced break is
+  // taken at the inner box's top (300), not at the wrapper or body level.
+  nestbreak: {
+    html: `<html><body style="${style}"><div style="height:300px">A</div><div><div style="break-before:page;height:300px">NESTB</div></div></body></html>`,
+    pages: 2,
+    p1Has: ["A"],
+    p1Not: ["NESTB"],
+    p2Has: ["NESTB"],
+  },
 };
 for (const [name, spec] of Object.entries(p2)) {
   const { eng, chrom, domText } = await engineVsChromium(name, spec.html);

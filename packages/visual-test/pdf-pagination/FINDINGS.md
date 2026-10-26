@@ -109,10 +109,17 @@ oracle 設計 (Atomic break) 準拠。**スコープ P2 のみ**・コミット�
 
 `src/cpp/renderers/pdf_renderer.cpp` の `renderHtmlToPdf` 内、**レイアウト後に一度だけ**計画:
 
-- `collect_break_units(doc->root())`: フロールート `<body>` の直下にある
-  **最上位 block child** と **置換要素 (`img` / `table` 全体)** を atomic unit として収集。
+- `collect_break_units(doc->root())`: フロールート `<body>` の子から
+  **block box** と **置換要素 (`img` / `table` 全体)** を atomic unit として収集。
   - `display:none` / `position:absolute|fixed` は除外 (`in_normal_flow()`)。
-  - **ネスト内へは立入禁止** (直下のみ。孫以降は親 unit に丸ごと含める)。
+  - **グループ化ラッパーは透過** (c9ea82a): `display:block`・通常フロー (非 float)・
+    自身の `break-*` 無し・自身の行 box 無し (テキスト/インライン内容なし)・
+    子がすべて通常フローの block box / 置換要素、の box は unit にせず子を再帰解決する。
+    これにより素の `<div>` で包んだカード内の `break-inside:avoid` 等が Chromium 同様に効く。
+  - **内側優先**: ラッパーが透過なら内側の box だけが unit になり、box が atomic なら
+    その subtree は走査しない。親子が二重に unit 化されることはない。
+  - atomic のまま残る条件: 自身のインライン内容を持つ / flex・grid・table・list-item など
+    独自の整形コンテキスト / 置換要素 / 自身が `break-*` を宣言。
   - unit の `top/bottom` は `element::get_placement()` (文書座標)。
 - `plan_page_cuts(units, contentAreaHeight, docHeight)` が頁開始オフセット列を作る:
   1. **自然切断 = P1 と同じ固定ピクセル切断** (`pos + H`)。`break-*` 無しなら P1 と完全一致。
@@ -150,6 +157,13 @@ npx tsx pdf-pagination/verify.mts
 | breakpage  | `break-before:page` (doc 高 600 < H)            | 2 | 2 | p1=A / p2=B |
 | legacybreak| `page-break-before:always` (レガシー同値)        | 2 | 2 | p1=A / p2=B |
 | avoidhead  | `break-after:avoid` 見出し (bottom = 頁境界)     | 2 | 2 | p1=padding / p2=HEAD+PARA |
+| nestcard   | 素の `<div>` ラッパー内の `break-inside:avoid` カード (1000..1300) | 2 | 2 | p1=padding / p2=WRAPCARD+tail |
+| nest2card  | 2 段ラッパー内の avoid カード (900..1250)        | 2 | 2 | p1=padding / p2=DEEPCARD (unit は 1 回のみ) |
+| nestbreak  | ラッパー内 `break-before:page` (doc 高 600 < H)  | 2 | 2 | p1=A / p2=NESTB |
+
+- **ネストケース (c9ea82a)**: グループ化ラッパーが透過し、内側の `break-*` が単位として
+  解決されることを確認。`nest2card` は 2 段透過後も内側 unit が頁 2 へ送られること
+  (透過が 1 段で止まらないこと) を確認する。
 
 - **リグレッションゲート**: avoid 無し文書 (`short`/`long`/`image`) は P1 と同一 (頁数・頁スライス)。
   `long` のスライスは P1 記録値と文字列一致を assert。
@@ -162,8 +176,13 @@ npx tsx pdf-pagination/verify.mts
 
 ## P2 の制限 (スコープ内で記録)
 
-- atomic unit は **最上位のみ**。1 つの巨大な直下 `div` に中身を全部入れた文書では unit が 1 つに
-  なり、`break-*` は効かない (ネスト内立入禁止の設計どおり)。
+- atomic unit の解決は **グループ化ラッパー透過 + 内側優先** (c9ea82a)。透過するのは
+  自身の行 box を持たず、通常フローの block 子だけをまとめる `display:block` かつ
+  自身の `break-*` 無しの box のみ。テキスト/インライン内容を持つ box、flex/grid/table/
+  list-item、置換要素、自身が `break-*` を宣言した box は atomic のままで、**その内側の
+  `break-*` は効かない** (中身を 1 つのテキスト入り `div` に詰めた文書では、その div 全体が
+  1 unit のまま)。`break-*` が解釈されるのは **その box 自身が unit のとき**だけで、
+  atomic box の内側に書いても無視される。
 - `break-inside:avoid` は頁より高い unit では分割される (進捗優先)。
 - `break-before/after:avoid` が効くのは切断が単位間ギャップに落ちる場合のみ。切断が次 unit の
   内部に落ちる場合は「その unit の途中で切れる」だけで、前方 unit との break ではないため対象外。
