@@ -17,12 +17,31 @@ litehtml::pixel_t litehtml::render_item_block::place_float(const std::shared_ptr
 
 	// A width:auto float is as wide as its content: measure it in content mode so that a child held
 	// up only by min-width (no content of its own) still counts.
+	const bool auto_inline = el->src_el()->css().get_width().is_predefined();
 	int float_mode = self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content);
-	if(el->src_el()->css().get_width().is_predefined()) float_mode |= containing_block_context::size_mode_content;
-	pixel_t min_rendered_inline_size = el->measure(self_size.new_inline_size(line_inline_end, float_mode), fmt_ctx);
+	if(auto_inline) float_mode |= containing_block_context::size_mode_content;
+	// A percentage width is resolved against the containing block, not against the space that is left
+	// on the line: a `width:50%` float beside another float is half the block (Blink resolves the
+	// percentage before floats take their room), so measuring it at `line_inline_end` makes it too narrow
+	// or, when the line is full, zero.
+	const pixel_t float_cb_inline = auto_inline ? line_inline_end : self_size.render_inline_size();
+	pixel_t min_rendered_inline_size = el->measure(self_size.new_inline_size(float_cb_inline, float_mode), fmt_ctx);
+	// A width:auto float is shrink-to-fit: min(max-content, max(min-content, available)). The content
+	// measure answers with the max-content width, so a float whose content cannot fit the space on the
+	// line has to fall back to its min-content width instead of overflowing at the max-content width.
+	if (auto_inline && min_rendered_inline_size > line_inline_end)
+	{
+		pixel_t min_content_size = el->measure(self_size.new_inline_size(line_inline_end, float_mode | containing_block_context::size_mode_min_content), fmt_ctx);
+		pixel_t fit_inline_size = std::max(min_content_size, line_inline_end);
+		if (fit_inline_size < min_rendered_inline_size)
+		{
+			el->measure(self_size.new_inline_size(fit_inline_size, self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content)), fmt_ctx);
+			min_rendered_inline_size = fit_inline_size;
+		}
+	}
 	if (!(self_size.size_mode & containing_block_context::size_mode_measure))
 	{
-		el->place_logical(line_inline_start, line_block_start, self_size.new_inline_size(line_inline_end, self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content)), fmt_ctx);
+		el->place_logical(line_inline_start, line_block_start, self_size.new_inline_size(float_cb_inline, self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content)), fmt_ctx);
 	}
 
 	// In measure mode the float is not placed (see the guards above), so its position is
@@ -59,7 +78,7 @@ litehtml::pixel_t litehtml::render_item_block::place_float(const std::shared_ptr
 			line_block_start = fmt_ctx->find_next_line_top(line_block_start, el->inline_size(), self_size.render_inline_size());
 			if (!(self_size.size_mode & containing_block_context::size_mode_measure))
 			{
-				el->place_logical(fmt_ctx->get_line_left(line_block_start), line_block_start, self_size.new_inline_size(shrunk_to_fit ? min_rendered_inline_size : line_inline_end, self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content)), fmt_ctx);
+				el->place_logical(fmt_ctx->get_line_left(line_block_start), line_block_start, self_size.new_inline_size(shrunk_to_fit ? min_rendered_inline_size : float_cb_inline, self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content)), fmt_ctx);
 			}
         }
 		if(skip_ledger)
@@ -548,7 +567,14 @@ void litehtml::render_item_block::_place(pixel_t inline_pos, pixel_t block_pos, 
             m_pos.width = m_pos.height * ar.width / ar.height;
 	} else if (src_el()->is_block_formatting_context())
 	{
-		pixel_t floats_block_size = std::max(fmt_ctx->get_floats_height(), fmt_ctx->measured_float_bottom());
+		// In the place pass every float of this formatting context has been registered here, so the
+		// measure pass's estimate (which only saw the trial widths) must not win over them: a float
+		// that shrank after that estimate (a percentage-width svg) left it too tall.
+		pixel_t floats_block_size = fmt_ctx->get_floats_height();
+		if (self_size.size_mode & containing_block_context::size_mode_measure)
+		{
+			floats_block_size = std::max(floats_block_size, fmt_ctx->measured_float_bottom());
+		}
         pixel_t& physical_block_size = (self_size.mode == writing_mode_horizontal_tb) ? m_pos.height : m_pos.width;
 		if (floats_block_size > physical_block_size)
 		{

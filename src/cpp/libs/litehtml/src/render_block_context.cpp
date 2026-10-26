@@ -186,11 +186,14 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
 					rw = el->measure(self_size.new_inline_size(inline_available_size, content_mode), fmt_ctx);
 					if(kw == 1 && rw >= inline_available_size)
 					{
-						// fit-content never goes below the min-content width: min(max-content, max(min-content, available))
+						// fit-content never goes below the min-content width and never above max-content:
+						// min(max-content, max(min-content, available)). Using max-content when the
+						// min-content width fits makes a fit-content block as wide as its widest word
+						// instead of the space on offer.
 						const pixel_t min_rw = el->measure(self_size.new_inline_size(inline_available_size, content_mode | containing_block_context::size_mode_min_content), fmt_ctx);
-						if(min_rw > inline_available_size) rw = min_rw;
+						rw = std::max(min_rw, inline_available_size);
 					}
-					if(rw < inline_available_size || kw == 3 || (kw == 1 && rw > inline_available_size))
+					if(rw < inline_available_size || kw == 3 || kw == 1)
 					{
 						el->measure(self_size.new_inline_size(rw, self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content)), fmt_ctx);
 						inline_available_size = rw;
@@ -216,7 +219,9 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
 				   el->src_el()->is_block_formatting_context() ||
 				   el->src_el()->css().get_display() == display_table)
 				{
-					if(el->inline_size() > line_right)
+					// The room left on the line is measured from the box's own start, not from the
+					// content edge: a 5px flow root next to a 12px-wide float has 8px, not 20px.
+					if(el->inline_size() > line_right - inline_offset)
 					{
                         pixel_t ln_left  = 0;
                         pixel_t ln_right = el->inline_size();

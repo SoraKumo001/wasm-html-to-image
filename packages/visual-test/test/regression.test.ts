@@ -5089,3 +5089,132 @@ describe("P0-5: flex-basis content is max-content", () => {
     expect(b.find((x) => x.p === "0.1")!.h).toBe(120); // body
   });
 });
+
+// P0-6: fuzz seeds 87/94/132/142/156/189. A column flex item is laid out at the inline size it
+// actually gets (its own fit-content / min-width content), not at the container's width; a float
+// resolves a percentage width against its containing block, not the space left on the line; and a
+// float inside a flex item or an inline-block grows that box to the bottom it really reaches.
+describe("P0-6: intrinsic widths of column flex items and float percentages", () => {
+  type Box = { p: string; t: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(body: string, boxSizing = "content-box"): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:${boxSizing}}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const at = (b: Box[], p: string) => b.find((x) => x.p === p)!;
+  const IMG_120_90 =
+    "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22120%22%20height%3D%2290%22%20viewBox%3D%220%200%20120%2090%22%3E%3Crect%20width%3D%22120%22%20height%3D%2290%22%20fill%3D%22%2369c%22%2F%3E%3C%2Fsvg%3E";
+
+  it("measures a fit-content column item at its content width (seed 87)", async () => {
+    // The wrapper is 90 wide (a 90px child) inside an 80px column, so the ratio svg is 135 tall.
+    const b = await boxes(
+      `<div style="display:flex;flex-direction:column;width:80px"><div style="width:fit-content"><div style="width:90px"></div><svg viewBox="0 0 40 60"></svg></div></div>`,
+    );
+    expect(at(b, "0.1.0").w).toBe(80); // column
+    expect(at(b, "0.1.0.0").w).toBe(90); // fit-content item, wider than the column
+    expect(at(b, "0.1.0.0").h).toBe(135);
+    expect(at(b, "0.1.0.0.1").h).toBe(135); // svg at 90 wide
+    expect(at(b, "0.1").h).toBe(135); // body
+  });
+
+  it("measures a min-width column item at its min-width (seed 142)", async () => {
+    const b = await boxes(
+      `<div style="display:flex;flex-direction:column;width:40px"><div style="min-width:100px"><svg viewBox="0 0 100 60"></svg></div></div>`,
+    );
+    expect(at(b, "0.1.0.0").w).toBe(100); // min-width over the 40px column
+    expect(at(b, "0.1.0.0").h).toBe(60);
+    expect(at(b, "0.1").h).toBe(60); // body
+  });
+
+  it("resolves fit-content width on a column container itself (seed 132)", async () => {
+    const b = await boxes(
+      `<div style="display:flex;flex-direction:column;width:fit-content"><img src="${IMG_120_90}"></div>`,
+      "border-box",
+    );
+    expect(at(b, "0.1.0").w).toBe(120); // not the 600px line
+    expect(at(b, "0.1.0").h).toBe(90);
+    expect(at(b, "0.1.0.0").w).toBe(120);
+    expect(at(b, "0.1").h).toBe(90); // body
+  });
+
+  it("grows a flow root to a float that shrank from its trial width (seed 156)", async () => {
+    // The float is 300 wide (the svg's default), the 30% svg inside is 90x18, so the page is 18 tall.
+    const b = await boxes(`<div style="float:left"><svg viewBox="0 0 100 20" style="width:30%"></svg></div>`);
+    expect(at(b, "0").h).toBe(18); // html
+    expect(at(b, "0.1").h).toBe(0); // body (does not contain the float)
+    expect(at(b, "0.1.0").w).toBe(300);
+    expect(at(b, "0.1.0").h).toBe(18);
+    expect(at(b, "0.1.0.0").w).toBe(90);
+  });
+
+  it("clamps a shrink-to-fit float to its min-content width inside a narrow box (seed 189)", async () => {
+    // The 20px inline-block makes the float shrink-to-fit: min(max-content 260, max(min-content
+    // 140, available 20)) = 140, so the grid is 136 and its svg 120; the ratio svg below is 140 wide.
+    const b = await boxes(
+      `<div style="display:inline-block;width:20px"><div style="float:left"><div style="display:grid;grid-template-columns:1fr fit-content(80px) max-content 1fr;padding:8px;margin:2px"><svg viewBox="0 0 40 20" style="width:120px"></svg></div><svg viewBox="0 0 40 60"></svg></div></div>`,
+    );
+    expect(at(b, "0.1.0.0").w).toBe(140); // float
+    expect(at(b, "0.1.0.0").h).toBe(290);
+    expect(at(b, "0.1.0.0.0").w).toBe(136); // grid at the float's content width
+    expect(at(b, "0.1.0.0.0.0").w).toBe(120);
+    expect(at(b, "0.1.0.0.1").w).toBe(140); // ratio svg fills the float
+    expect(at(b, "0.1.0.0.1").h).toBe(210);
+    expect(at(b, "0.1").h).toBe(290); // body
+  });
+
+  it("clamps a fit-content flex item to the column width (seed 87)", async () => {
+    // max-content is 300 (the svg's default width), but the item is a fit-content item in an 80px
+    // column: min(300, max(0, 80)) = 80, and the 10% svg inside is 8 wide.
+    const b = await boxes(
+      `<div style="display:flex;flex-direction:column;width:80px"><div style="width:fit-content"><svg viewBox="0 0 40 60" style="width:10%;"></svg></div></div>`,
+    );
+    expect(at(b, "0.1.0.0").w).toBe(80);
+    expect(at(b, "0.1.0.0").h).toBe(12);
+    expect(at(b, "0.1.0.0.0").w).toBe(8);
+    expect(at(b, "0.1.0.0.0").h).toBe(12);
+    expect(at(b, "0.1").h).toBe(12); // body
+  });
+
+  it("keeps a fit-content block inside the available width (seed 87)", async () => {
+    // The outer block is 60 wide (10% of 600); the fit-content wrapper is min(300, max(0, 60)) = 60,
+    // so the 10% svg is 6x9 instead of 30x45.
+    const b = await boxes(
+      `<div style="width:10%"><div style="width:fit-content"><svg viewBox="0 0 40 60" style="width:10%;"></svg></div></div>`,
+    );
+    expect(at(b, "0.1.0").w).toBe(60);
+    expect(at(b, "0.1.0.0").w).toBe(60);
+    expect(at(b, "0.1.0.0.0").w).toBe(6);
+    expect(at(b, "0.1.0.0.0").h).toBe(9);
+    expect(at(b, "0.1").h).toBe(9); // body
+  });
+
+  it("counts padding when a min-width sizes a column item (seed 142)", async () => {
+    // min-width:100px with 8px padding is a 116px border box; the svg gets the 100px content width.
+    const b = await boxes(
+      `<div style="display:flex;flex-direction:column;width:40px"><div style="min-width:100px;padding:8px"><svg viewBox="0 0 100 60"></svg></div></div>`,
+    );
+    expect(at(b, "0.1.0.0").w).toBe(116);
+    expect(at(b, "0.1.0.0").h).toBe(76);
+    expect(at(b, "0.1.0.0.0").w).toBe(100);
+    expect(at(b, "0.1").h).toBe(76); // body
+  });
+
+  it("moves a flow root below a float it does not fit beside (seed 189)", async () => {
+    // 20px block, 16px float: the 5px flex container has only 4px left, so it starts at y=16.
+    const b = await boxes(
+      `<div style="width:20px"><div style="float:left;padding:8px"></div><div style="display:flex;width:25%"></div></div>`,
+    );
+    expect(at(b, "0.1.0").h).toBe(16); // the in-flow flow root reaches y=16
+    expect(at(b, "0.1.0.1").w).toBe(5);
+    expect(at(b, "0.1.0.1").y).toBe(16);
+    expect(at(b, "0.1").h).toBe(16); // body
+  });
+});

@@ -563,16 +563,27 @@ void litehtml::flex_item_column_direction::direction_specific_init(const litehtm
     if(m_container_wm.inline_start(margins).is_predefined()) auto_margin_cross_start = true;
     if(m_container_wm.inline_end(margins).is_predefined()) auto_margin_cross_end = true;
 	
+	// A specified width (e.g. `width:100%` on an svg/img) is just as definite: its block size depends on it.
+	const css_length& cross_size = m_container_wm.get_inline_size(el->css());
+	// `fit-content` / `max-content` / `min-content` are not a stretch: the item's used inline size comes
+	// from its content, so it can end up wider than the container (a 90px child in an 80px column).
+	// Measuring the block size at the container width freezes it too small for that box.
+	const bool intrinsic_cross = cross_size.is_predefined() && cross_size.predef() > 0;
+	// An indefinite inline size in an intrinsic-size query (an auto-width container measured from its
+	// content) is the trial width, not a cross size to stretch to: the item contributes its own content
+	// width to the line instead. In a normal layout the parent has already resolved that width, so it
+	// is the used cross size.
+	const bool definite_inline = self_size.render_inline_size().type != containing_block_context::cbc_value_type_auto ||
+		!(self_size.size_mode & containing_block_context::size_mode_content);
 	// A stretched item's block size is measured at its stretched cross size (the container's width),
 	// not as shrink-to-fit content: its percentage-based descendants need that definite width.
 	const bool stretch_cross = ((align & 0xFF) == flex_align_items_stretch || (align & 0xFF) == flex_align_items_normal) &&
 		!auto_margin_cross_start && !auto_margin_cross_end && !m_container_wm.is_vertical() &&
-		m_container_wm.get_inline_size(el->css()).is_predefined() &&
+		!intrinsic_cross && definite_inline &&
+		cross_size.is_predefined() &&
 		self_size.render_width.value > 0;
-	// A specified width (e.g. `width:100%` on an svg/img) is just as definite: its block size depends on it.
-	const css_length& cross_size = m_container_wm.get_inline_size(el->css());
 	const bool specified_cross = !m_container_wm.is_vertical() && !cross_size.is_predefined() &&
-		!cross_size.is_calc() && self_size.render_width.value > 0;
+		!cross_size.is_calc() && definite_inline && self_size.render_width.value > 0;
 	// A multi-line column container also breaks lines in the inline axis: each line's cross size is
 	// the largest hypothetical (fit-content) inline size of its items (CSS Flexbox 9.4.8), so an item
 	// whose content does not fit the container's content width is laid out wider than the container.
@@ -581,9 +592,62 @@ void litehtml::flex_item_column_direction::direction_specific_init(const litehtm
 	// auto-width wrapper). Only raise the width, never lower it, so ordinary stretching is unchanged.
 	const bool multiline_cross = el->parent() && el->parent()->css().get_flex_wrap() != flex_wrap_nowrap;
 	def_value<pixel_t> fit_inline_size(0);
+	def_value<pixel_t> intrinsic_inline_size(0);
+	// An intrinsic keyword (`width:fit-content`, max-content, min-content) sizes the item from its
+	// content, which can be wider than the container. Its block size then has to be measured at that
+	// inline size: at the container's width the content is laid out narrower and the height is frozen
+	// too small (a ratio-sized svg inside a fit-content wrapper). The content measure answers that
+	// width; measure the block size at it.
+	auto intrinsic_inline = [&]() -> pixel_t
+	{
+		if (intrinsic_inline_size.is_default())
+		{
+			formatting_context fmt_ctx_copy;
+			if (fmt_ctx) fmt_ctx_copy = *fmt_ctx;
+			containing_block_context fit_cb = self_size;
+			fit_cb.width.type = containing_block_context::cbc_value_type_auto;
+			fit_cb.render_width.type = containing_block_context::cbc_value_type_auto;
+			fit_cb.height.type = containing_block_context::cbc_value_type_auto;
+			fit_cb.render_height.type = containing_block_context::cbc_value_type_auto;
+			fit_cb.size_mode &= ~(containing_block_context::size_mode_exact_width |
+								  containing_block_context::size_mode_exact_height);
+			fit_cb.size_mode |= containing_block_context::size_mode_measure |
+								containing_block_context::size_mode_content;
+			if (cross_size.predef() == 3)
+			{
+				fit_cb.size_mode |= containing_block_context::size_mode_min_content;
+			}
+			el->measure(fit_cb, fmt_ctx ? &fmt_ctx_copy : nullptr);
+			pixel_t measured = std::max<pixel_t>(0, el->inline_size(m_container_wm) -
+														el->content_offset_inline(m_container_wm) +
+														el->box_sizing_inline(m_container_wm));
+			// fit-content = min(max-content, max(min-content, available)), so a 300px max-content
+			// inside an 80px column is 80 wide, not 300.
+			const pixel_t available = self_size.render_width.value - el->content_offset_width() + el->box_sizing_width();
+			if (cross_size.predef() == 1 && measured > available)
+			{
+				fit_cb.size_mode |= containing_block_context::size_mode_min_content;
+				el->measure(fit_cb, fmt_ctx ? &fmt_ctx_copy : nullptr);
+				const pixel_t min_measured = std::max<pixel_t>(0, el->inline_size(m_container_wm) -
+																	  el->content_offset_inline(m_container_wm) +
+																	  el->box_sizing_inline(m_container_wm));
+				measured = std::max(min_measured, available);
+			}
+			intrinsic_inline_size = measured;
+		}
+		return intrinsic_inline_size;
+	};
 	auto stretched_inline_size = [&]() -> pixel_t
 	{
 		pixel_t width = self_size.render_width.value - el->content_offset_width() + el->box_sizing_width();
+		// A definite min-width can make the item wider than the container (a column does not shrink an
+		// item below it), so its block size has to be measured at that width, not at the container's.
+		const css_length& min_inline = el->css().get_min_width();
+		if (!min_inline.is_predefined() && definite_inline)
+		{
+			width = std::max(width, min_inline.calc_percent(self_size.render_inline_size().value) -
+									   el->box_sizing_width());
+		}
 		if (!multiline_cross || !cross_size.is_predefined() || width <= 0) return width;
 		if (fit_inline_size.is_default())
 		{
@@ -615,8 +679,8 @@ void litehtml::flex_item_column_direction::direction_specific_init(const litehtm
 			cb.size_mode &= ~(containing_block_context::size_mode_content | containing_block_context::size_mode_min_content);
 			return;
 		}
-		if (!stretch_cross) return;
-		cb.width = stretched_inline_size();
+		if (!stretch_cross && !intrinsic_cross) return;
+		cb.width = intrinsic_cross ? intrinsic_inline() : stretched_inline_size();
 		cb.width.type = containing_block_context::cbc_value_type_absolute;
 		cb.render_width = cb.width;
 		cb.size_mode |= containing_block_context::size_mode_exact_width;
@@ -764,6 +828,31 @@ void litehtml::flex_item_column_direction::direction_specific_init(const litehtm
 	}
 
 	scaled_flex_shrink_factor = (flex_base_size - render_offset) * shrink;
+	// A replaced item with an intrinsic ratio and an auto block size takes its main size from its
+	// cross size (the transferred size suggestion, CSS Flexbox 9.2): a `width:30%` svg in a 600px
+	// column is 180 wide and 36 tall, whatever trial width the content measure ran at.
+	if (!m_container_wm.is_vertical() && size_prop.is_predefined() && el->src_el()->is_replaced())
+	{
+		pixel_t used_cross = 0;
+		if (specified_cross)
+		{
+			used_cross = cross_size.calc_percent(self_size.render_inline_size().value);
+		} else if (stretch_cross)
+		{
+			used_cross = stretched_inline_size();
+		}
+		litehtml::size sz;
+		el->src_el()->get_content_size(sz, 0);
+		if (used_cross > 0 && sz.width > 0 && sz.height > 0)
+		{
+			const pixel_t transferred = used_cross * sz.height / sz.width + el->render_offset_height();
+			flex_base_size = transferred;
+			if (min_size_prop.is_predefined() && min_main_size > transferred)
+			{
+				min_main_size = transferred;
+			}
+		}
+	}
 }
 
 void litehtml::flex_item_column_direction::apply_main_auto_margins()
@@ -851,6 +940,32 @@ void litehtml::flex_item_column_direction::layout_item(litehtml::flex_line &ln,
 	}
 
 	el->measure(child_cb, fmt_ctx);
+	// A fit-content item is min(max-content, max(min-content, available)): the content measure above
+	// answers with max-content, so a 300px max-content inside an 80px column still has to come down
+	// to 80 (and its percentage-width svg then lays out at 8, not 30).
+	if (!m_container_wm.is_vertical() && cross_prop.is_predefined() && cross_prop.predef() == 1)
+	{
+		const pixel_t available = self_size.render_width.value - el->content_offset_width() + el->box_sizing_width();
+		auto current_inline = [&]()
+		{
+			return el->inline_size(m_container_wm) - el->content_offset_inline(m_container_wm) +
+				   el->box_sizing_inline(m_container_wm);
+		};
+		if (current_inline() > available)
+		{
+			containing_block_context min_cb = child_cb;
+			min_cb.size_mode |= containing_block_context::size_mode_min_content;
+			el->measure(min_cb, fmt_ctx);
+			const pixel_t fit = std::max((pixel_t) current_inline(), available);
+			containing_block_context fit_cb = child_cb;
+			fit_cb.width = fit;
+			fit_cb.render_width = fit;
+			fit_cb.size_mode |= containing_block_context::size_mode_exact_width;
+			fit_cb.size_mode &= ~(containing_block_context::size_mode_content |
+								  containing_block_context::size_mode_min_content);
+			el->measure(fit_cb, fmt_ctx);
+		}
+	}
 	if (!(self_size.size_mode & containing_block_context::size_mode_measure))
 	{
 		// A shrink-to-fit item has its width by now: place it with that width as an exact one, or the
