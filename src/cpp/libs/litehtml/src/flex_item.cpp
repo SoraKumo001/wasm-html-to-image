@@ -285,6 +285,18 @@ void litehtml::flex_item_row_direction::direction_specific_init(const litehtml::
 					if(fmt_ctx) fmt_ctx_copy = *fmt_ctx;
                     
                     pixel_t logical_is_val = m_container_wm.to_logical(self_size.width, self_size.height).inline_size + content_offset;
+                    // flex-basis: content is the item's max-content size, which does not depend on the
+                    // inline size on offer: a wrapping row container inside the item would otherwise be
+                    // capped by the outer container's width (see render_flex.cpp), wrap its items where
+                    // the max-content size keeps them on one line, and report a taller item. fit-content
+                    // is that same query capped by the space on offer, so it keeps the available size,
+                    // and so does an explicit fit-content / max-content / min-content width.
+                    const bool width_is_intrinsic_keyword = size_prop.is_predefined() && size_prop.predef() > 0;
+                    if (predef == flex_basis_content && !width_is_intrinsic_keyword && !el->src_el()->is_replaced())
+                    {
+                        // (no inline size on offer, the same "unbounded" query render_grid.cpp uses)
+                        logical_is_val = 100000;
+                    }
                     containing_block_context::typed_pixel tp_logical_is(logical_is_val, containing_block_context::cbc_value_type_auto);
                     
                     containing_block_context measure_cb = m_container_wm.update_logical(self_size, tp_logical_is, std::nullopt);

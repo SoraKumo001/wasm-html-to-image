@@ -5037,3 +5037,37 @@ describe("P0-4: percentage widths inside a shrink-to-fit ancestor", () => {
     expect(b.find((x) => x.p === "0.1")!.h).toBeCloseTo(9.38, 1); // body
   });
 });
+
+// P0-5: a flex item's flex-basis:content size is its max-content size, which does not depend on
+// the space on offer (Blink: FlexItem::ComputeFlexBaseSize takes the item's max-content
+// contribution). A wrapping flex container inside such an item therefore breaks its line at its
+// own max-content width, not at the outer container's width.
+describe("P0-5: flex-basis content is max-content", () => {
+  type Box = { p: string; t: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(body: string): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:content-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+
+  it("does not wrap an inline-flex by the narrower outer flex width (seed 65)", async () => {
+    // The flex:none item is 84 wide (80 svg + 2px margins), so the inline-flex keeps both of its
+    // items on one line and is 120 tall; at the outer 40px it would wrap the 4px margin box and be
+    // 124 tall (Chromium: 84 x 120).
+    const b = await boxes(
+      `<div style="display:flex;width:40px"><div style="flex:none"><div style="display:inline-flex;flex-wrap:wrap"><svg viewBox="0 0 40 60" style="width:80px"></svg><div style="margin:2px"></div></div></div></div>`,
+    );
+    expect(b.find((x) => x.p === "0.1.0.0")!.w).toBe(84); // flex:none item
+    expect(b.find((x) => x.p === "0.1.0.0.0")!.w).toBe(84); // inline-flex
+    expect(b.find((x) => x.p === "0.1.0.0.0")!.h).toBe(120); // one line
+    expect(b.find((x) => x.p === "0.1")!.h).toBe(120); // body
+  });
+});
