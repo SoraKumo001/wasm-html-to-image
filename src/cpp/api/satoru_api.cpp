@@ -147,6 +147,8 @@ bool SatoruInstance::document_ready_for(const std::string& html, int width, int 
 
 void SatoruInstance::collect_resources(const std::string& html, int width, int height,
                                        int mediaType) {
+    // Non-TS callers can reach this with width 0 (the TS layer defaults it to 800).
+    width = normalize_viewport_width(width);
     auto elapsed_ms = [](const auto& start, const auto& end) {
         return std::chrono::duration<double, std::milli>(end - start).count();
     };
@@ -606,6 +608,7 @@ std::string satoru_api_html_to_svg(SatoruInstance* inst, const char* html, int w
     // Deliberately no document reuse here (unlike the bitmap path): the collect-phase
     // container draws a different SVG (embedded @font-face etc.), so reusing it
     // would change the output.
+    width = normalize_viewport_width(width);
     return renderHtmlToSvg(html, width, height, inst->context, inst->get_full_master_css().c_str(),
                            inst->context.getExtraCss().c_str(), options);
 }
@@ -613,6 +616,7 @@ std::string satoru_api_html_to_svg(SatoruInstance* inst, const char* html, int w
 bool satoru_api_html_to_bitmap(SatoruInstance* inst, const char* html, int width, int height,
                                const SatoruRenderOptions& options, SkBitmap& out) {
     if (!inst) return false;
+    width = normalize_viewport_width(width);
     // Reuse the document collect_resources already built when it is current.
     if (inst->document_ready_for(html, width, height, options.mediaType)) {
         return renderDocumentToBitmap(inst, width, height, options, out);
@@ -624,6 +628,7 @@ bool satoru_api_html_to_bitmap(SatoruInstance* inst, const char* html, int width
 
 const uint8_t* satoru_api_html_to_png(SatoruInstance* inst, const char* html, int width, int height,
                                const SatoruRenderOptions& options, int& out_size) {
+    width = normalize_viewport_width(width);
     return render_and_store(
         inst,
         [&]() {
@@ -636,6 +641,7 @@ const uint8_t* satoru_api_html_to_png(SatoruInstance* inst, const char* html, in
 
 const uint8_t* satoru_api_html_to_webp(SatoruInstance* inst, const char* html, int width, int height,
                                 const SatoruRenderOptions& options, int& out_size) {
+    width = normalize_viewport_width(width);
     return render_and_store(
         inst,
         [&]() {
@@ -648,6 +654,7 @@ const uint8_t* satoru_api_html_to_webp(SatoruInstance* inst, const char* html, i
 
 const uint8_t* satoru_api_html_to_pdf(SatoruInstance* inst, const char* html, int width, int height,
                                const SatoruRenderOptions& options, int& out_size) {
+    width = normalize_viewport_width(width);
     return render_and_store(
         inst,
         [&]() {
@@ -665,6 +672,7 @@ const uint8_t* satoru_api_html_to_pdf(SatoruInstance* inst, const char* html, in
 const uint8_t* satoru_api_htmls_to_pdf(SatoruInstance* inst, const std::vector<std::string>& htmls,
                                 int width, int height, const SatoruRenderOptions& options,
                                 int& out_size) {
+    width = normalize_viewport_width(width);
     return render_and_store(
         inst,
         [&]() {
@@ -688,6 +696,7 @@ const uint8_t* satoru_api_render(SatoruInstance* inst, const std::vector<std::st
         out_size = 0;
         return nullptr;
     }
+    width = normalize_viewport_width(width);
 
     switch (format) {
         case RenderFormat::SVG: {
@@ -723,13 +732,14 @@ int satoru_api_get_last_svg_size(SatoruInstance* inst) { return (int)inst->conte
 
 void satoru_api_collect_resources(SatoruInstance* inst, const std::string& html, int width, int height,
                            int mediaType) {
-    inst->collect_resources(html, width, height, mediaType);
+    inst->collect_resources(html, normalize_viewport_width(width), height, mediaType);
 }
 
 void satoru_api_collect_resources_pages(SatoruInstance* inst, const std::vector<std::string>& htmls,
                                         int width, int height, int mediaType) {
+    int layout_width = normalize_viewport_width(width);
     for (const auto& html : htmls) {
-        inst->collect_resources(html, width, height, mediaType);
+        inst->collect_resources(html, layout_width, height, mediaType);
     }
 }
 

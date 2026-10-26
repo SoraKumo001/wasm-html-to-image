@@ -1693,6 +1693,7 @@ static std::string finalizeSvg(std::string_view svg, SatoruContext& context,
 std::string renderDocumentToSvg(SatoruInstance* inst, int width, int height,
                                 const SatoruRenderOptions& options) {
     if (!inst->doc || !inst->render_container) return "";
+    width = normalize_viewport_width(width);
 
     int content_width = width;
     int content_height = (height > 0) ? height : (int)inst->doc->height();
@@ -1762,6 +1763,7 @@ std::string renderDocumentToSvg(SatoruInstance* inst, int width, int height,
 std::string renderHtmlToSvg(const char* html, int width, int height, SatoruContext& context,
                             const char* master_css, const char* user_css,
                             const SatoruRenderOptions& options) {
+    width = normalize_viewport_width(width);
     int initial_height = (height > 0) ? height : k_default_viewport_height;
     litehtml::media_type media_type =
         (options.mediaType == 1) ? litehtml::media_type_print : litehtml::media_type_screen;

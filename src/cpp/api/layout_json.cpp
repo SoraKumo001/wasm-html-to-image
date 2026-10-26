@@ -120,6 +120,7 @@ void walk(const std::shared_ptr<litehtml::render_item>& ri, path_index& paths, s
 std::string satoru_api_layout_json(SatoruInstance* inst, const std::string& html, int width,
                                    int height, int mediaType) {
     if (!inst) return "[]";
+    width = normalize_viewport_width(width);
     if (!inst->document_ready_for(html, width, height, mediaType)) {
         inst->collect_resources(html, width, height, mediaType);
     }

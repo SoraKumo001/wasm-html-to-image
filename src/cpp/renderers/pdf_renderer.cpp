@@ -661,6 +661,7 @@ sk_sp<SkData> renderDocumentToPdf(SatoruInstance* inst, int width, int height,
         SATORU_LOG_ERROR("[Satoru] renderDocumentToPdf FAILED: null doc/container");
         return nullptr;
     }
+    width = normalize_viewport_width(width);
 
     int content_width = width;
     int content_height = (height > 0) ? height : (int)inst->doc->height();
@@ -721,6 +722,7 @@ sk_sp<SkData> renderHtmlsToPdf(const std::vector<std::string>& htmls, int width,
                                SatoruContext& context, const char* master_css, const char* user_css,
                                const SatoruRenderOptions& options) {
     if (htmls.empty()) return nullptr;
+    width = normalize_viewport_width(width);
 
     SkDynamicMemoryWStream stream;
     SkPDF::Metadata metadata;
@@ -862,6 +864,7 @@ sk_sp<SkData> renderHtmlToPdf(const std::string& html, int width, int height,
                               SatoruContext& context, const char* master_css, const char* user_css,
                               const SatoruRenderOptions& options) {
     if (html.empty()) return nullptr;
+    width = normalize_viewport_width(width);
 
     std::string css = master_css ? master_css : litehtml::master_css;
     css += "\nbr { display: -litehtml-br !important; }\n";

@@ -27,6 +27,19 @@
 // e.g. `padding-top:25vh` must be 0.25*800 = 200px, not 0.25*3000 = 750px.
 inline constexpr int k_default_viewport_height = 800;
 
+// Default viewport width (px) used for layout when the caller omits `width`.
+// Mirrors the TS API default (RenderOptions.width defaults to 800) and Chromium's
+// no-JS viewport (1000x800), so the CSS viewport is never 0.
+inline constexpr int k_default_viewport_width = 800;
+
+// Non-positive width -> default viewport width. Applied at every C++ API / renderer
+// entry: a caller that reaches the wasm module directly (bypassing the TS layer)
+// with width 0/negative must still lay out in a real viewport, otherwise
+// container_skia::get_viewport / get_media_features report width 0.
+inline int normalize_viewport_width(int width) {
+    return width > 0 ? width : k_default_viewport_width;
+}
+
 class container_skia : public litehtml::document_container {
     // ── P2a: 共有状態の責務別分離 ──
     // 5分割ファイルと対応: paint→container_skia.cpp (draw_*系)+helpers(無状態純粋関数),
