@@ -33,3 +33,24 @@ const pdf = await render({
 
 await fs.writeFile("report.pdf", Buffer.from(pdf));
 ```
+
+## Header / Footer
+
+Pass HTML templates through `pdfHeader` / `pdfFooter` to redraw them on every page.
+`{{pageNumber}}` and `{{totalPages}}` in the template are replaced per page.
+
+```typescript
+const pdf = await render({
+  value: html,
+  format: "pdf",
+  pdfFooter: `<div style="text-align:center">{{pageNumber}} / {{totalPages}}</div>`,
+  pdfMargin: { top: 24, bottom: 32, left: 24, right: 24 },
+});
+```
+
+The footer is normally drawn inside the `pdfMargin.bottom` band. If the measured footer
+height exceeds `pdfMargin.bottom` (including the default `0`), the band is widened to the
+footer height and the content area shrinks by the same amount, which can increase the
+page count. A footer that fits inside the margin keeps the previous placement and page
+count.
+

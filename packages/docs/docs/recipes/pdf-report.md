@@ -52,3 +52,24 @@ const { data: pdfBuffer } = await render({
 
 await fs.writeFile("monthly-report.pdf", Buffer.from(pdfBuffer));
 ```
+
+## ヘッダー / フッター
+
+`pdfHeader` / `pdfFooter` に HTML テンプレートを渡すと、各ページに再描画されます。
+テンプレート内の `{{pageNumber}}` と `{{totalPages}}` はページ番号に置換されます。
+
+```typescript
+const { data: pdfBuffer } = await render({
+  value: html,
+  width: 595,
+  format: "pdf",
+  pdfFooter: `<div style="text-align:center">{{pageNumber}} / {{totalPages}}</div>`,
+  pdfMargin: { top: 24, bottom: 32, left: 24, right: 24 },
+});
+```
+
+footer は通常 `pdfMargin.bottom` の帯の中に描画されます。footer の実測高が
+`pdfMargin.bottom` を超える場合（既定値 `0` を含む）は、帯を footer の高さまで自動で
+広げ、その分だけ本文領域を縮めます。本文が収まるページ数が増えることがあります。
+footer が margin に収まる場合は従来どおりの配置・ページ数です。
+

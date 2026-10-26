@@ -73,6 +73,7 @@ npx tsx pdf-pagination/verify.mts
   クリップ外も draw される。culling は canvas clip のみ)。
 - **footer の既定位置**: `pdfMarginBottom = 0` のとき footer は `y = pageHeight` に置かれ頁外
   (不可視)。配置式は現行 `renderHtmlsToPdf` を踏襲したもので、新規の制限ではない。
+  → P6 (footer 帯の自動確保) で、footer 高が bottom margin を超える場合のみ帯を確保して解消。
 
 ## スコープ外 (P1 対象外)
 
@@ -476,3 +477,45 @@ npx tsx pdf-pagination/verify.mts
 - 縦書きの頁進行方向。
 - 頁単位の再レイアウト最適化 (P1 からの「頁数分 draw + canvas clip」のまま)。
 - `@page` の他プロパティ (border / padding / marks / bleed / size の `auto` 合成)。
+
+---
+
+# PDF footer 帯の自動確保 (P6)
+
+`pdfFooter` 指定時に footer が頁外/クリップされる問題を修正した。対象は
+`src/cpp/renderers/pdf_renderer.cpp` のみ (レイアウト本体は不変)。
+
+## 背景
+
+footer は常に `pdfMarginBottom` の帯の中へ描画されていた (`y = pageHeight - marginBottom`)。
+
+- `pdfMarginBottom = 0` (既定): `y = pageHeight` となり頁外で不可視。
+- footer 高 > `pdfMarginBottom`: 帯の下側がクリップされる。
+
+## 実装
+
+- `measure_template_height()` を追加: footer テンプレートを幅 `contentWidth` で 1 回レイアウトし、
+  `document::height()` を帯高の測定値とする (probe viewport = `max(pdfMarginBottom, 1)`)。
+- 帯高 `footerBand = max(pdfMarginBottom, 測定した footer 高)`。
+- footer は `y = pageHeight - footerBand`、高さ `footerBand` で描画する。
+- **測定値が `pdfMarginBottom` を超える場合だけ**帯を拡張する:
+  - 単一 HTML 経路 (`renderHtmlToPdf`): `contentAreaHeight` を増分だけ縮小し、頁数・頁ボックスは維持。
+  - 配列入力経路 (`renderHtmlsToPdf`): 頁ボックス高を増分だけ拡張し、本文位置は不変。
+
+## 互換性 (重要)
+
+- footer 高が `pdfMarginBottom` 以下 (例: bottom=40 に 1 行 footer) の文書は**従来と完全に同じ**
+  配置・頁数。既存の `pdf:verify` の header/footer ケース (bottom=40) も不変。
+- footer 高が `pdfMarginBottom` を超える文書 (既定 bottom=0 を含む) は本文領域が
+  `footer高 - pdfMarginBottom` だけ減るため、**頁数が増えることがある**。
+  これは頁外 footer を可視化するための意図的な挙動変更。
+- 既存 API の追加・変更は無し (opt-in フラグも不要)。
+
+## 検証
+
+- `nomargin` (bottom=0, 単一 HTML): footer テキスト `FOOT` が 3 頁すべてに出現。
+- `margin40` (bottom=40, 単一 HTML): `FOOT` が 3 頁すべてに出現、頁数は従来どおり 3。
+- 配列入力 (bottom=0, 2 頁): 各頁に `FOOT` が出現し、頁数 2 のまま。
+- `pnpm --filter visual-test pdf:verify`: `ALL OK`。
+- `pnpm test:visual`: 344 passed / 8 skipped。
+

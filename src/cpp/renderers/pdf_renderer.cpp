@@ -65,6 +65,29 @@ void render_template(const std::string& html, int width, int height, SkCanvas* c
     }
 }
 
+// Footer band height. The footer has always been drawn inside pdfMarginBottom (top edge at
+// pageHeight - marginBottom), so a footer taller than the margin was clipped and, with the
+// default pdfMarginBottom = 0, it landed at y = pageHeight (off-page, invisible).
+// Measure the template and only when it is taller than the bottom margin reserve the extra
+// height (the array path grows the page box; the single-HTML path shrinks the content area).
+// A footer that fits the margin keeps the previous layout, so existing page counts are
+// unchanged. The probe viewport is the bottom margin (min 1) so percentage-height footers
+// resolve exactly as before and cannot trigger an unbounded reservation.
+int measure_template_height(const std::string& html, int width, int probe_height,
+                            SatoruContext& context, const char* master_css, const char* user_css,
+                            litehtml::media_type media_type) {
+    if (html.empty()) return 0;
+    if (width < 1) width = 1;
+    if (probe_height < 1) probe_height = 1;
+    container_skia container(width, probe_height, nullptr, context, nullptr, false, media_type);
+    auto doc = litehtml::document::createFromString(html.c_str(), &container, master_css, user_css,
+                                                    context.getPageCss());
+    if (!doc) return 0;
+    doc->render(width);
+    int measured = (int)doc->height();
+    return measured > 0 ? measured : 0;
+}
+
 // ---- P2: CSS fragmentation (atomic-break) page-cut planning -------------------
 //
 // After the single layout pass, plan page start offsets ("cuts") in document
@@ -757,6 +780,17 @@ sk_sp<SkData> renderHtmlsToPdf(const std::vector<std::string>& htmls, int width,
         int content_width = width - margin_left - margin_right;
         if (content_width < 1) content_width = 1;
 
+        // Footer band: reserve the measured footer height only when it exceeds the bottom
+        // margin; a footer that fits keeps the legacy geometry (page count unchanged).
+        int footer_band = margin_bottom;
+        std::string footer_html;
+        if (!options.pdfFooter.empty()) {
+            footer_html = replace_template_vars(options.pdfFooter, pageNum, totalPages);
+            int footer_height = measure_template_height(footer_html, content_width, margin_bottom,
+                                                        context, css.c_str(), user_css, media_type);
+            if (footer_height > footer_band) footer_band = footer_height;
+        }
+
         container_skia measure_container(content_width,
                                          height > 0 ? height : k_default_viewport_height, nullptr,
                                          context, nullptr, false, media_type);
@@ -768,7 +802,7 @@ sk_sp<SkData> renderHtmlsToPdf(const std::vector<std::string>& htmls, int width,
         measure_doc->render(content_width);
 
         int measured_height = (height > 0) ? height : (int)measure_doc->height();
-        int full_page_height = measured_height + margin_top + margin_bottom;
+        int full_page_height = measured_height + margin_top + footer_band;
         if (full_page_height < 1) full_page_height = 1;
 
         SkCanvas* canvas = pdf_doc->beginPage((SkScalar)width, (SkScalar)full_page_height);
@@ -792,10 +826,9 @@ sk_sp<SkData> renderHtmlsToPdf(const std::vector<std::string>& htmls, int width,
 
         // Render Footer
         if (!options.pdfFooter.empty()) {
-            std::string footerHtml = replace_template_vars(options.pdfFooter, pageNum, totalPages);
             canvas->save();
-            canvas->translate((SkScalar)margin_left, (SkScalar)(full_page_height - margin_bottom));
-            render_template(footerHtml, content_width, margin_bottom, canvas, context, css.c_str(),
+            canvas->translate((SkScalar)margin_left, (SkScalar)(full_page_height - footer_band));
+            render_template(footer_html, content_width, footer_band, canvas, context, css.c_str(),
                             user_css, media_type);
             canvas->restore();
         }
@@ -916,7 +949,22 @@ sk_sp<SkData> renderHtmlToPdf(const std::string& html, int width, int height,
     int content_width = page_width - margin_left - margin_right;
     if (content_width < 1) content_width = 1;
 
-    int content_area_height = page_height - margin_top - margin_bottom;
+    litehtml::media_type media_type =
+        (options.mediaType == 1) ? litehtml::media_type_print : litehtml::media_type_screen;
+
+    // Footer band: only a footer taller than the bottom margin grows the band (the content
+    // area shrinks accordingly); otherwise the historical layout and page count are kept.
+    // Measured with page 1 / total 1, which is enough for a height estimate.
+    int footer_band = margin_bottom;
+    if (!options.pdfFooter.empty()) {
+        std::string footer_probe = replace_template_vars(options.pdfFooter, 1, 1);
+        int footer_height = measure_template_height(footer_probe, content_width, margin_bottom,
+                                                    context, css.c_str(), user_css, media_type);
+        if (footer_height > footer_band) footer_band = footer_height;
+    }
+    if (footer_band > page_height) footer_band = page_height;
+
+    int content_area_height = page_height - margin_top - footer_band;
     if (content_area_height < 1) content_area_height = 1;
 
     // SkPDF writes the MediaBox in points, while the layout works in CSS px. When
@@ -928,9 +976,6 @@ sk_sp<SkData> renderHtmlToPdf(const std::string& html, int width, int height,
                                                      : (float)page_width;
     const float pdf_page_height = page_rule.has_size ? page_rule.height_px * kPtPerPx
                                                       : (float)page_height;
-
-    litehtml::media_type media_type =
-        (options.mediaType == 1) ? litehtml::media_type_print : litehtml::media_type_screen;
 
     // Layout once. The container is reused for every page (reset + set_canvas below), matching the
     // document-reuse pattern already used elsewhere in this file.
@@ -1004,8 +1049,8 @@ sk_sp<SkData> renderHtmlToPdf(const std::string& html, int width, int height,
         if (!options.pdfFooter.empty()) {
             std::string footerHtml = replace_template_vars(options.pdfFooter, page_num, page_count);
             canvas->save();
-            canvas->translate((SkScalar)margin_left, (SkScalar)(page_height - margin_bottom));
-            render_template(footerHtml, content_width, margin_bottom, canvas, context, css.c_str(),
+            canvas->translate((SkScalar)margin_left, (SkScalar)(page_height - footer_band));
+            render_template(footerHtml, content_width, footer_band, canvas, context, css.c_str(),
                             user_css, media_type);
             canvas->restore();
         }
