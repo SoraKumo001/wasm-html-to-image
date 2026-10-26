@@ -406,11 +406,15 @@ int snap_cut_to_content(int cut, int pos, const std::vector<LineGroup>& groups,
 }
 
 // One planned page: its document start offset plus the repeated-header band to
-// re-paint at the top (header_top < 0 / header_height == 0: none).
+// re-paint at the top (header_top < 0 / header_height == 0: none). table_bottom is
+// the document bottom of the table whose header repeats: the continuation page
+// offsets only that table's slice by the header height, so the band it may paint
+// in ends there (INT_MAX: no repeated header / table).
 struct PageCut {
     int offset = 0;
     int header_top = -1;
     int header_height = 0;
+    int table_bottom = INT_MAX;
 };
 
 // Plan page-start offsets. With no break-* in the document this reproduces P1's
@@ -437,14 +441,22 @@ std::vector<PageCut> plan_page_cuts(const std::vector<BreakUnit>& units,
         // starts at `pos` (pages.back()), not to the page starting at `cut`.
         int header_top = -1;
         int header_height = 0;
+        int table_bottom = 0;
         for (const auto& rh : repeat_headers) {
-            if (rh.table_top < pos && rh.table_bottom > pos && rh.header_height > header_height) {
-                header_height = rh.header_height;
-                header_top = rh.header_top;
+            if (rh.table_top < pos && rh.table_bottom > pos) {
+                // Repeat the tallest header; the offset band covers every table continuing
+                // from this page (nested tables included), so only content after all of
+                // them keeps its own position.
+                table_bottom = std::max(table_bottom, rh.table_bottom);
+                if (rh.header_height > header_height) {
+                    header_height = rh.header_height;
+                    header_top = rh.header_top;
+                }
             }
         }
         pages.back().header_top = header_top;
         pages.back().header_height = header_height;
+        pages.back().table_bottom = header_height > 0 ? table_bottom : INT_MAX;
         int limit = pos + area_height - header_height;
         if (limit <= pos) limit = pos + area_height;  // header taller than page: no reserve
 
@@ -1118,11 +1130,14 @@ sk_sp<SkData> renderHtmlToPdf(const std::string& html, int width, int height,
         // which ignore it, stay at their viewport position); the canvas clip bounds the page.
         // The clip height is the distance to the next cut (a fragmentation-shortened page must
         // not paint content that starts the following page), capped at the page content area.
-        // P4: when a repeated header is reserved, the body is shifted down by the header
-        // height and clipped below it so the two bands never overlap.
+        // P4: a repeated header reserves the top band of a continuation page. Only the table
+        // whose header repeats is offset down by the header height (its remaining rows must
+        // clear the re-painted header); the rest of the slice keeps its document position, so
+        // non-table content on the same page is not displaced.
         const int page_offset = (page < (int)pages.size()) ? pages[page].offset : 0;
         const int header_top = (page < (int)pages.size()) ? pages[page].header_top : -1;
         const int header_height = (page < (int)pages.size()) ? pages[page].header_height : 0;
+        const int table_bottom = (page < (int)pages.size()) ? pages[page].table_bottom : INT_MAX;
 
         int avail = content_area_height - header_height;
         if (avail < 1) avail = 1;
@@ -1131,15 +1146,24 @@ sk_sp<SkData> renderHtmlToPdf(const std::string& html, int width, int height,
         if (slice_height < 1) slice_height = 1;
         if (slice_height > avail) slice_height = avail;
 
-        canvas->save();
-        canvas->translate((SkScalar)margin_left, (SkScalar)margin_top);
-        canvas->clipRect(
-            SkRect::MakeXYWH(0, (SkScalar)header_height, (SkScalar)content_width, (SkScalar)slice_height));
+        // Draw one clip band of the document with a page offset. The bands partition the page
+        // (a 2px overlap at the table's closing border aside), so no pixel is painted twice —
+        // fixed elements included: they land in the band that covers their viewport position.
+        auto draw_band = [&](int top, int bottom, int doc_offset) {
+            if (bottom <= top) return;
+            canvas->save();
+            canvas->translate((SkScalar)margin_left, (SkScalar)margin_top);
+            canvas->clipRect(
+                SkRect::MakeXYWH(0, (SkScalar)top, (SkScalar)content_width, (SkScalar)(bottom - top)));
+            container.reset();
+            container.set_canvas(canvas);
+            container.set_height(content_area_height);
+            container.set_tagging(false);
+            doc->draw(0, 0, -(litehtml::pixel_t)doc_offset, nullptr);
+            container.flush();
+            canvas->restore();
+        };
 
-        container.reset();
-        container.set_canvas(canvas);
-        container.set_height(content_area_height);
-        container.set_tagging(false);
         // box-decoration-break: clone — paint complete boxes for the fragments on this page.
         doc->clear_fragment_bands();
         for (const CloneBox& b : clone_boxes) {
@@ -1151,30 +1175,54 @@ sk_sp<SkData> renderHtmlToPdf(const std::string& html, int width, int height,
             if (band_top == 0 && band_bottom == b.bottom - b.top) continue;  // not fragmented
             doc->set_fragment_band(b.el, (litehtml::pixel_t)band_top, (litehtml::pixel_t)band_bottom);
         }
-        doc->draw(0, 0, -(litehtml::pixel_t)(page_offset - header_height), nullptr);
-        container.flush();
-        doc->clear_fragment_bands();
 
-        canvas->restore();
+        if (header_height > 0 && table_bottom < INT_MAX) {
+            const int slice_end = page_offset + slice_height;
+            const int table_end_doc = std::min(slice_end, table_bottom);
+            const int table_end_rel = table_end_doc - page_offset;
+            // Content that follows the table on this page is drawn at its own position, so the
+            // offset table band stops where it starts (otherwise the two bands would overlap).
+            // Only real flow content counts here: a trailing body margin after the table must
+            // not cut the table's last row.
+            auto content_starts_in = [&](int from, int to) {
+                for (const auto& u : break_units)
+                    if (u.top >= from && u.top < to) return true;
+                for (const auto& g : line_groups)
+                    for (int top : g.tops)
+                        if (top >= from && top < to) return true;
+                for (const auto& f : float_boxes)
+                    if (f.top >= from && f.top < to) return true;
+                return false;
+            };
+            const bool has_after =
+                table_end_doc < slice_end && content_starts_in(table_bottom, slice_end);
+            // A small overlap keeps the table's closing border (drawn just above its bottom
+            // edge, i.e. in the following band) from being cut away.
+            int table_band_bottom = table_end_rel + header_height;
+            int after_band_top = table_end_rel;
+            if (has_after) {
+                table_band_bottom = table_end_rel;
+                after_band_top = std::max(0, table_end_rel - 2);
+            }
+            if (table_band_bottom > slice_height + header_height)
+                table_band_bottom = slice_height + header_height;
+
+            // The continuing table: same document slice, shifted down by the header height.
+            draw_band(header_height, table_band_bottom, page_offset - header_height);
+            // The rest of the slice (content after the table): unshifted document position.
+            draw_band(after_band_top, slice_height, page_offset);
+        } else if (header_height > 0) {
+            // No table extent recorded (defensive): keep the historical whole-slice shift.
+            draw_band(header_height, header_height + slice_height, page_offset - header_height);
+        } else {
+            draw_band(0, slice_height, page_offset);
+        }
+        doc->clear_fragment_bands();
 
         // P4: repeated table header. Re-paint the document clipped to the header band
         // (its document-space rect) at the top of the page, so the thead appears on
         // every continuation page.
-        if (header_height > 0 && header_top >= 0) {
-            canvas->save();
-            canvas->translate((SkScalar)margin_left, (SkScalar)margin_top);
-            canvas->clipRect(
-                SkRect::MakeXYWH(0, 0, (SkScalar)content_width, (SkScalar)header_height));
-
-            container.reset();
-            container.set_canvas(canvas);
-            container.set_height(content_area_height);
-            container.set_tagging(false);
-            doc->draw(0, 0, -(litehtml::pixel_t)header_top, nullptr);
-            container.flush();
-
-            canvas->restore();
-        }
+        if (header_height > 0 && header_top >= 0) draw_band(0, header_height, header_top);
 
         pdf_doc->endPage();
     }
