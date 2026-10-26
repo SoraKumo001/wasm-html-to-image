@@ -1,5 +1,12 @@
 // P1 verification (extended): per-page slice distinctness, header/footer per-page redraw,
 // fixed redraw per page, and still page-count/text parity vs Chromium.
+//
+// Chromium resolution: the reference renderer is launched through Playwright, so its own
+// downloaded Chromium is used by default (`pnpm exec playwright install chromium` if missing).
+// `CHROMIUM_PATH` is an optional override for a specific executable; no absolute path is
+// hard-coded here, so the script is portable across machines and CI.
+//
+// Exit code: 0 when every check passes, 1 on any mismatch (CI gate).
 import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
@@ -116,7 +123,9 @@ const cases: Record<string, string> = {
   image: `<html><body style="${style}"><h1 style="margin:0">Image Mixed</h1><img src="${dataUri}" style="width:300px;height:600px"><div style="height:900px">after image</div><p style="margin:0">Tail after image</p></body></html>`,
 };
 
-const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH ?? "C:/Users/oikawa/AppData/Local/ms-playwright/chromium-1248/chrome-win64/chrome.exe" });
+const browser = await chromium.launch(
+  process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {},
+);
 let ok = true;
 
 async function engineVsChromium(name: string, html: string) {
@@ -457,3 +466,4 @@ console.log("\nP5 @page rule:");
 
 await browser.close();
 console.log(ok ? "ALL OK" : "FAILURES PRESENT");
+process.exit(ok ? 0 : 1);

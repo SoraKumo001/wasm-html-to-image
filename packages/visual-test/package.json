@@ -11,7 +11,8 @@
     "real:reduce": "tsx tools/real/reduce.mts",
     "real:score": "tsx tools/real/score.mts",
     "real:fuzz": "tsx tools/real/fuzz.mts",
-    "real:fuzz-reduce": "tsx tools/real/fuzz-reduce.mts"
+    "real:fuzz-reduce": "tsx tools/real/fuzz-reduce.mts",
+    "pdf:verify": "tsx pdf-pagination/verify.mts"
   },
   "devDependencies": {
     "@types/node": "26.6.5",
