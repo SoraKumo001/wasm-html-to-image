@@ -2192,9 +2192,36 @@ void litehtml::render_item_grid::place_grid_items(pixel_t x, pixel_t y, const co
         const bool j_stretch = ((j_normal && !replaced_start_x) && !intrinsic_width) || jst == flex_justify_content_stretch;
         const bool intrinsic_height = item.el->src_el()->css().get_height().is_predefined() && item.el->src_el()->css().get_height().predef() > 0;
         const bool a_stretch = !intrinsic_height && ((a_normal && !replaced_item) || (aln & 0xFF) == flex_align_items_stretch);
+        // A replaced item with an aspect ratio does not stretch in both axes: when its block
+        // size resolves (a definite height, or an align stretch to the grid area) the auto
+        // inline size transfers through the ratio instead of stretching to the track too
+        // (CSS Sizing / Align stretch sizing). The width is then measured the way a
+        // non-stretched one is, which is what runs the transfer in the replaced sizing.
+        // (The reverse does not hold: a stretched block size wins over a transfer from a
+        // definite inline size, so an auto height under align stretch stays stretched.)
+        // An explicit justify stretch is the exception for a ratio-only box (a viewBox-only
+        // <svg>): it has no intrinsic inline size to transfer to, so it fills its track; a
+        // box with a natural size transfers under an explicit stretch too.
+        bool ratio_w_from_h = false;
+        if (!vert && replaced_item &&
+            !(jst == flex_justify_content_stretch && item.el->src_el()->is_ratio_only_replaced()))
+        {
+            const css_length& ratio_w = item.el->src_el()->css().get_width();
+            const css_length& ratio_h = item.el->src_el()->css().get_height();
+            const bool width_auto_kw = ratio_w.is_predefined() && ratio_w.predef() == 0;
+            if (width_auto_kw && (!ratio_h.is_predefined() || a_stretch))
+            {
+                litehtml::size ratio_sz;
+                item.el->src_el()->get_content_size(ratio_sz, cell_w);
+                const aspect_ratio item_ar = item.el->src_el()->css().get_aspect_ratio();
+                const bool has_ratio = (ratio_sz.width > 0 && ratio_sz.height > 0) ||
+                                       (!item_ar.is_auto() && item_ar.width > 0 && item_ar.height > 0);
+                if (has_ratio) ratio_w_from_h = true;
+            }
+        }
         if (!vert)
         {
-            if (!j_stretch && item.el->src_el()->css().get_width().is_predefined())
+            if ((!j_stretch || ratio_w_from_h) && item.el->src_el()->css().get_width().is_predefined())
             {
                 cb.size_mode &= ~containing_block_context::size_mode_exact_width;
                 cb.size_mode |= containing_block_context::size_mode_content;

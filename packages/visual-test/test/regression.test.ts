@@ -5367,3 +5367,83 @@ describe("intrinsic size of an inline-flex with a zero flex-basis (seed 185)", (
     expect(at(b, "0.1").h).toBe(20); // body: the overflowing line below does not add height
   });
 });
+
+// P0-9: fuzz replaced seed 43. A replaced item with an aspect ratio does not stretch in both
+// axes: the block axis resolves against the grid area (a stretched row, or a definite height)
+// and the inline size transfers through the ratio instead of taking the track width. The
+// reverse does not hold (a stretched height wins over a definite width), and a ratio-only
+// box under an explicit justify stretch fills its track instead of transferring.
+describe("P0-9: grid item aspect-ratio transfer under stretch", () => {
+  type Box = { p: string; t: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(body: string): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const at = (b: Box[], p: string) => b.find((x) => x.p === p)!;
+  const SVG = `<svg viewBox="0 0 40 20"></svg>`;
+
+  it("transfers the stretched row height to the width of a viewBox-only svg (seed 43)", async () => {
+    const b = await boxes(
+      `<div style="display:grid;grid-template-columns:repeat(3,1fr);width:25%"><div style="display:grid;grid-template-columns:repeat(3,1fr);align-items:stretch;height:20px">${SVG}</div></div>`,
+    );
+    expect(at(b, "0.1.0.0.0").w).toBe(40); // 20 x (40 / 20), not the 16.67px track
+    expect(at(b, "0.1.0.0.0").h).toBe(20);
+  });
+
+  it("transfers in a wide cell too: the block axis wins over the inline stretch", async () => {
+    const b = await boxes(
+      `<div style="display:grid;grid-template-columns:100px;height:20px;width:150px;align-items:stretch">${SVG}</div>`,
+    );
+    expect(at(b, "0.1.0.0").w).toBe(40); // not the 100px track
+    expect(at(b, "0.1.0.0").h).toBe(20);
+  });
+
+  it("lets the transferred width overflow a narrow track", async () => {
+    const b = await boxes(
+      `<div style="display:grid;grid-template-columns:repeat(3,1fr);height:100px;width:150px;align-items:stretch">${SVG}</div>`,
+    );
+    expect(at(b, "0.1.0.0").w).toBe(200); // 100 x (40 / 20), past the 50px track
+    expect(at(b, "0.1.0.0").h).toBe(100);
+  });
+
+  it("transfers from a definite height even when the inline axis stretches", async () => {
+    const b = await boxes(
+      `<div style="display:grid;grid-template-columns:repeat(3,1fr);align-items:stretch;height:20px;width:150px"><svg viewBox="0 0 40 20" style="height:20px"></svg></div>`,
+    );
+    expect(at(b, "0.1.0.0").w).toBe(40); // not the 50px track
+    expect(at(b, "0.1.0.0").h).toBe(20);
+  });
+
+  it("fills the track for a ratio-only svg under an explicit justify stretch", async () => {
+    const b = await boxes(
+      `<div style="display:grid;grid-template-columns:100px;height:20px;width:150px;align-items:stretch;justify-items:stretch">${SVG}</div>`,
+    );
+    expect(at(b, "0.1.0.0").w).toBe(100); // no intrinsic inline size to transfer to: it fills
+    expect(at(b, "0.1.0.0").h).toBe(20);
+  });
+
+  it("keeps a stretched height over a transfer from a definite width", async () => {
+    const b = await boxes(
+      `<div style="display:grid;grid-template-columns:repeat(3,1fr);height:100px;width:150px;align-items:stretch"><svg viewBox="0 0 40 20" style="width:40px"></svg></div>`,
+    );
+    expect(at(b, "0.1.0.0").w).toBe(40);
+    expect(at(b, "0.1.0.0").h).toBe(100); // the stretch, not 40 / (40 / 20)
+  });
+
+  it("keeps the unstretched size when neither axis stretches", async () => {
+    const b = await boxes(
+      `<div style="display:grid;grid-template-columns:repeat(3,1fr);height:20px;width:150px;align-items:start">${SVG}</div>`,
+    );
+    expect(at(b, "0.1.0.0").w).toBe(50); // the track width, height from the ratio
+    expect(at(b, "0.1.0.0").h).toBe(25);
+  });
+});
