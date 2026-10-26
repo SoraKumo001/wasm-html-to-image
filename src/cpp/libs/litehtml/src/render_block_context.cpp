@@ -345,8 +345,11 @@ litehtml::pixel_t litehtml::render_item_block_context::get_first_baseline()
 		// Out-of-flow boxes (floats, absolutely positioned boxes) are not part of the normal flow,
 		// so an in-flow box with no line box of its own takes the synthesized bottom-margin-edge
 		// baseline below instead of borrowing theirs (same filter as render_item_block).
+		// `position:relative` stays in the flow: the baseline of its line boxes still counts, only
+		// absolute/fixed leave it (is_positioned() also covers relative, z-index, filters...).
 		const auto& css = item->src_el()->css();
-		if(css.get_display() == display_none || css.get_float() != float_none || item->src_el()->is_positioned()) continue;
+		if(css.get_display() == display_none || css.get_float() != float_none ||
+		   css.get_position() >= element_position_absolute) continue;
 		if(item->has_baseline())
 		{
 			// The item sits inside this box's *content* box, so the baseline offset needs this box's
@@ -371,7 +374,8 @@ litehtml::pixel_t litehtml::render_item_block_context::get_last_baseline()
 	for(auto it = m_children.rbegin(); it != m_children.rend(); ++it)
 	{
 		const auto& css = (*it)->src_el()->css();
-		if(css.get_display() == display_none || css.get_float() != float_none || (*it)->src_el()->is_positioned()) continue;
+		if(css.get_display() == display_none || css.get_float() != float_none ||
+		   css.get_position() >= element_position_absolute) continue;
 		if((*it)->has_baseline())
 		{
 			// Same block-start-only offset as get_first_baseline().

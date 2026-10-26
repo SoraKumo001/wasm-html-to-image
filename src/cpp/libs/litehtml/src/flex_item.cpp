@@ -288,15 +288,15 @@ void litehtml::flex_item_row_direction::direction_specific_init(const litehtml::
                     // flex-basis: content is the item's max-content size, which does not depend on the
                     // inline size on offer: a wrapping row container inside the item would otherwise be
                     // capped by the outer container's width (see render_flex.cpp), wrap its items where
-                    // the max-content size keeps them on one line, and report a taller item. fit-content
-                    // is that same query capped by the space on offer, so it keeps the available size,
+                    // the max-content size keeps them on one line, and report a taller item. The content
+                    // measure below answers min(max-content, space on offer), so while the content fits
+                    // that space it already is the max-content size; only a measure that comes back at
+                    // the space on offer was capped and has to be repeated unbounded. fit-content is
+                    // that same query capped by the space on offer, so it keeps the available size,
                     // and so does an explicit fit-content / max-content / min-content width.
                     const bool width_is_intrinsic_keyword = size_prop.is_predefined() && size_prop.predef() > 0;
-                    if (predef == flex_basis_content && !width_is_intrinsic_keyword && !el->src_el()->is_replaced())
-                    {
-                        // (no inline size on offer, the same "unbounded" query render_grid.cpp uses)
-                        logical_is_val = 100000;
-                    }
+                    const bool reload_unbounded = predef == flex_basis_content && !width_is_intrinsic_keyword &&
+                        !el->src_el()->is_replaced() && logical_is_val < 100000;
                     containing_block_context::typed_pixel tp_logical_is(logical_is_val, containing_block_context::cbc_value_type_auto);
                     
                     containing_block_context measure_cb = m_container_wm.update_logical(self_size, tp_logical_is, std::nullopt);
@@ -304,6 +304,15 @@ void litehtml::flex_item_row_direction::direction_specific_init(const litehtml::
                     
 					el->measure(measure_cb, fmt_ctx ? &fmt_ctx_copy : nullptr);
 					flex_base_size = get_el_main_size();
+					if (reload_unbounded && flex_base_size >= logical_is_val)
+					{
+						// (no inline size on offer, the same "unbounded" query render_grid.cpp uses)
+						containing_block_context::typed_pixel tp_unbounded(100000, containing_block_context::cbc_value_type_auto);
+						containing_block_context unbounded_cb = m_container_wm.update_logical(self_size, tp_unbounded, std::nullopt);
+						unbounded_cb.size_mode = containing_block_context::size_mode_measure | containing_block_context::size_mode_content;
+						el->measure(unbounded_cb, fmt_ctx ? &fmt_ctx_copy : nullptr);
+						flex_base_size = get_el_main_size();
+					}
 				}
 				break;
 			case flex_basis_min_content:
@@ -572,9 +581,18 @@ void litehtml::flex_item_column_direction::direction_specific_init(const litehtm
 	// An indefinite inline size in an intrinsic-size query (an auto-width container measured from its
 	// content) is the trial width, not a cross size to stretch to: the item contributes its own content
 	// width to the line instead. In a normal layout the parent has already resolved that width, so it
-	// is the used cross size.
+	// is the used cross size. The exception is a container whose own width comes from its content
+	// (`width:fit-content` / max-content / min-content): there the trial width is the only width
+	// there is, and stretching to it hands the item a width the container may never be that wide at.
+	const bool container_width_from_content = [&]()
+	{
+		auto par = el->parent();
+		if (!par) return false;
+		const css_length& par_width = par->src_el()->css().get_width();
+		return par_width.is_predefined() && par_width.predef() > 0;
+	}();
 	const bool definite_inline = self_size.render_inline_size().type != containing_block_context::cbc_value_type_auto ||
-		!(self_size.size_mode & containing_block_context::size_mode_content);
+		!(self_size.size_mode & containing_block_context::size_mode_content) || !container_width_from_content;
 	// A stretched item's block size is measured at its stretched cross size (the container's width),
 	// not as shrink-to-fit content: its percentage-based descendants need that definite width.
 	const bool stretch_cross = ((align & 0xFF) == flex_align_items_stretch || (align & 0xFF) == flex_align_items_normal) &&
