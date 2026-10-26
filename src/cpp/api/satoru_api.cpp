@@ -179,7 +179,10 @@ void SatoruInstance::collect_resources(const std::string& html, int width, int h
     profile_layout_size_count = 0;
     profile_layout_relayout_count = 0;
     context.layoutProfile.enabled = collect_profile_enabled;
-    context.layoutProfile.reset();
+    // reset() once per instance, not once per discovery round: several rounds lay the document out
+    // (and measure text) before the last, resource-free round; resetting each time would report
+    // only that idle round. The JS layer builds one instance per render, so this is per render.
+    if (!doc) context.layoutProfile.reset();
 
     try {
         litehtml::media_type mt =
@@ -532,6 +535,13 @@ std::string SatoruInstance::get_collect_profile_json() const {
        << ",\"cppTextMeasureCount\":" << context.layoutProfile.text_measure_count
        << ",\"cppTextMeasureCacheableCount\":" << context.layoutProfile.text_measure_cacheable_count
        << ",\"cppTextMeasureCacheHitCount\":" << context.layoutProfile.text_measure_cache_hit_count
+       << ",\"cppTextMeasureMissCount\":" << context.layoutProfile.text_measure_miss_count
+       << ",\"cppTextMeasureMissColdCount\":" << context.layoutProfile.text_measure_miss_cold_count
+       << ",\"cppTextMeasureMissWidthCount\":" << context.layoutProfile.text_measure_miss_width_count
+       << ",\"cppTextMeasureMissVersionCount\":"
+       << context.layoutProfile.text_measure_miss_version_count
+       << ",\"cppTextMeasureMissEvictedCount\":"
+       << context.layoutProfile.text_measure_miss_evicted_count
        << ",\"cppTextAnalyzeCount\":" << context.layoutProfile.text_analyze_count
        << ",\"cppTextShapeCount\":" << context.layoutProfile.text_shape_count
        << ",\"cppTextShapePreparedCount\":" << context.layoutProfile.text_shape_prepared_count

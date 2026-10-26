@@ -106,6 +106,38 @@ void fillMeasureKey(SatoruContext* ctx, const char* text, font_info* fi,
     key.fontVersion = ctx->getFontVersion();
 }
 
+// Classify a measure-cache miss against the last probe of the same text in the same font, with the
+// width and the font generation stripped from the identity. This separates the misses a layout
+// cache can remove (the same text probed at many maxWidths) from the ones it cannot (a new font
+// generation makes every pre-change entry unreachable). Profiling only.
+void noteMeasureMiss(SatoruContext* ctx, const MeasureKey& key) {
+    SatoruContext::LayoutProfile& profile = ctx->layoutProfile;
+    profile.text_measure_miss_count++;
+    MeasureKey probe = key;
+    probe.maxWidth = 0;
+    probe.fontVersion = 0;
+    auto it = profile.text_measure_probe.find(probe);
+    if (it == profile.text_measure_probe.end()) {
+        profile.text_measure_miss_cold_count++;
+        // Diagnostics-only, so keep the probe map from growing without bound on a huge page.
+        constexpr size_t kProbeLimit = 8192;
+        if (profile.text_measure_probe.size() < kProbeLimit) {
+            profile.text_measure_probe.emplace(std::move(probe),
+                                               std::make_pair(key.maxWidth, key.fontVersion));
+        }
+        return;
+    }
+    if (it->second.second != key.fontVersion) {
+        profile.text_measure_miss_version_count++;
+    } else if (it->second.first != key.maxWidth) {
+        profile.text_measure_miss_width_count++;
+    } else {
+        // Same text, width and generation, yet not in the cache: the entry was evicted.
+        profile.text_measure_miss_evicted_count++;
+    }
+    it->second = std::make_pair(key.maxWidth, key.fontVersion);
+}
+
 void fillShapingKey(SatoruContext* ctx, const char* text, size_t len, font_info* fi,
                     litehtml::writing_mode mode, ShapingKey& key) {
     key.text.assign(text, len);
@@ -420,6 +452,7 @@ MeasureResult TextLayout::measureText(SatoruContext* ctx, const char* text, font
             replayUsedCodepoints(res, usedCodepoints);
             return res;
         }
+        if (ctx->layoutProfile.enabled) noteMeasureMiss(ctx, key);
     }
 
     size_t total_len = strlen(text);

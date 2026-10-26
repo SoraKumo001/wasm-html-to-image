@@ -60,6 +60,20 @@ litehtml::pixel_t litehtml::render_item::measure(
     // Intrinsic-size queries are answered from a per-pass memo. The subtree is not touched, so the
     // measured state stays consistent with m_cached_cb_context; m_is_measured is cleared because
     // m_pos now holds another context's size and a real measure must run before it is trusted.
+    //
+    // Versioning of the memo (layout_epoch / fontVersion / cssVersion):
+    //  - layout_epoch is bumped by reset_measure_budget() for every layout pass and by
+    //    invalidate_measure_memos() when a container query restyles mid-pass. That is the only
+    //    invalidation a per-pass row needs.
+    //  - fontVersion and cssVersion are deliberately not in the key: a font or stylesheet change
+    //    rebuilds the render tree in the resource loop, so the render items (and these rows) are
+    //    recreated. A memo made to outlive a pass would have to key on both of them (and on
+    //    layout_epoch) instead.
+    // A row is reused only for the exact (element, cb) pair. Widening it to other cb inline sizes
+    // is sound only for width-independent queries: min-content (content is laid out at 1px,
+    // percentage inline sizes are cyclic) and the explicit 100000 "unbounded" probe (no line can
+    // be capped by it). A definite-width measure resolves percentages and descendant sizes
+    // against the cb inline size, so its rows must stay per-pass per-cb.
     document* memo_doc = src_el()->get_document().get();
     const bool memoizable = css().get_writing_mode() == writing_mode_horizontal_tb &&
                             (containing_block_size.size_mode & containing_block_context::size_mode_measure) &&

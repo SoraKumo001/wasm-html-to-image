@@ -136,9 +136,23 @@ class SatoruContext {
         int text_shape_prepared_count = 0;
         int text_measure_cacheable_count = 0;
         int text_measure_cache_hit_count = 0;
+        // Miss breakdown (cacheable but not a hit), so a cache change can be aimed at the reason
+        // the cache misses: a new text/font combination (cold), the same text measured at another
+        // maxWidth (width), an entry that only differs by the font generation (version), or the
+        // exact key having been evicted from the LRU (evicted).
+        int text_measure_miss_count = 0;
+        int text_measure_miss_cold_count = 0;
+        int text_measure_miss_width_count = 0;
+        int text_measure_miss_version_count = 0;
+        int text_measure_miss_evicted_count = 0;
         int text_shape_cacheable_count = 0;
         int text_shape_cache_hit_count = 0;
         std::unordered_set<std::string> container_text_width_keys;
+        // Last (maxWidth, fontVersion) seen per width/version-independent measure identity. A miss
+        // can then be classified against the previous probe of the same text in the same font.
+        std::unordered_map<satoru::MeasureKey, std::pair<double, uint64_t>,
+                           satoru::MeasureKeyHash>
+            text_measure_probe;
 
         void reset() {
             container_create_font_ms = 0.0;
@@ -161,9 +175,15 @@ class SatoruContext {
             text_shape_prepared_count = 0;
             text_measure_cacheable_count = 0;
             text_measure_cache_hit_count = 0;
+            text_measure_miss_count = 0;
+            text_measure_miss_cold_count = 0;
+            text_measure_miss_width_count = 0;
+            text_measure_miss_version_count = 0;
+            text_measure_miss_evicted_count = 0;
             text_shape_cacheable_count = 0;
             text_shape_cache_hit_count = 0;
             container_text_width_keys.clear();
+            text_measure_probe.clear();
         }
     };
 
