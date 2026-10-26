@@ -10,6 +10,8 @@
  * DOM differently.
  */
 import crypto from "node:crypto";
+import http from "node:http";
+import net from "node:net";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -51,8 +53,78 @@ export function chromiumPath(): string | undefined {
   return undefined;
 }
 
+/**
+ * Some environments reach the internet only through the proxy named by the standard env vars,
+ * and that proxy wants its credentials preemptively on CONNECT \u2014 something Chromium will not do
+ * (its CONNECT is refused: ERR_TUNNEL_CONNECTION_FAILED), and the tunnel it could get presents a
+ * CA Chromium does not trust. So when an env proxy is set, Chromium is pointed at a tiny
+ * in-process bridge on localhost: the bridge issues the authenticated CONNECT upstream, and
+ * Chromium only has to reach the bridge (plain HTTP) and ignore the upstream CA. Without an env
+ * proxy, Chromium launches exactly as before.
+ */
+let bridgePort: Promise<number | undefined> | undefined;
+
+function envProxy(): URL | undefined {
+  const raw =
+    process.env.https_proxy ?? process.env.HTTPS_PROXY ?? process.env.all_proxy ?? process.env.ALL_PROXY ?? process.env.http_proxy ?? process.env.HTTP_PROXY;
+  if (!raw) return undefined;
+  try {
+    return new URL(raw);
+  } catch {
+    return undefined;
+  }
+}
+
+function startBridge(up: URL): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const auth = up.username
+      ? "Basic " + Buffer.from(`${decodeURIComponent(up.username)}:${decodeURIComponent(up.password)}`).toString("base64")
+      : undefined;
+    const server = http.createServer();
+    server.on("connect", (req, client, head) => {
+      const upstream = net.connect(Number(up.port) || 3128, up.hostname, () => {
+        upstream.write(`CONNECT ${req.url} HTTP/1.1\r\nHost: ${req.url}\r\n${auth ? `Proxy-Authorization: ${auth}\r\n` : ""}\r\n`);
+      });
+      let buf = Buffer.alloc(0);
+      const onData = (chunk: Buffer) => {
+        buf = Buffer.concat([buf, chunk]);
+        const idx = buf.indexOf("\r\n\r\n");
+        if (idx === -1) return;
+        upstream.off("data", onData);
+        const ok = /^HTTP\/1\.[01] 200/.test(buf.subarray(0, buf.indexOf("\r\n")).toString());
+        if (!ok) {
+          client.end("HTTP/1.1 502 Bad Gateway\r\n\r\n");
+          upstream.destroy();
+          return;
+        }
+        client.write("HTTP/1.1 200 Connection Established\r\n\r\n");
+        const rest = buf.subarray(idx + 4);
+        if (rest.length) client.write(rest);
+        if (head.length) upstream.write(head);
+        upstream.pipe(client);
+        client.pipe(upstream);
+      };
+      upstream.on("data", onData);
+      upstream.on("error", () => client.destroy());
+      client.on("error", () => upstream.destroy());
+    });
+    server.on("error", reject);
+    server.listen(0, "127.0.0.1", () => resolve((server.address() as net.AddressInfo).port));
+    server.unref();
+  });
+}
+
 export async function launchChromium(): Promise<Browser> {
-  return chromium.launch({ executablePath: chromiumPath() });
+  const up = envProxy();
+  if (!up) return chromium.launch({ executablePath: chromiumPath() });
+  bridgePort ??= startBridge(up).catch(() => undefined);
+  const port = await bridgePort;
+  if (!port) return chromium.launch({ executablePath: chromiumPath() });
+  return chromium.launch({
+    executablePath: chromiumPath(),
+    proxy: { server: `http://127.0.0.1:${port}`, bypass: "localhost,127.0.0.1,<-loopback>" },
+    args: ["--ignore-certificate-errors"],
+  });
 }
 
 // ---------------------------------------------------------------------------------------------
