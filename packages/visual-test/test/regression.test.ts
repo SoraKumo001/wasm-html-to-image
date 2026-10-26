@@ -4940,3 +4940,49 @@ describe("P0-2: ratio-only replaced sizing and empty baselines", () => {
     expect(isWhite(at(60, 70))).toBe(true); // the item is 50px tall (10 + 40)
   });
 });
+
+// P0-3: a grid has no line boxes of its own. Its last line-box baseline, which an
+// inline-block ancestor looks for, is the first row's baseline (Blink:
+// core/layout/grid/layout_grid.cc and core/layout/inline/inline_layout_algorithm.cc).
+// Taking the last item's baseline instead let an overflowing item grow the inline box.
+describe("P0-3: grid last line-box baseline", () => {
+  type Box = { p: string; t: string; x: number; y: number; w: number; h: number };
+  const IMG = `<img src="data:image/svg+xml,${encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="50" viewBox="0 0 20 50"><rect width="20" height="50" fill="#69c"/></svg>',
+  )}">`;
+
+  async function boxes(body: string): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:content-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+
+  it("an overflowing item does not stretch the inline-flex that wraps the grid (seed 3)", async () => {
+    // The grid is 2 x 40px rows; the 50px image overflows the second row. Its bottom is 90,
+    // but the inline-flex is 80 tall and so is the body (Chromium).
+    const b = await boxes(
+      `<div style="display:inline-flex"><div style="display:grid;grid-auto-rows:40px"><div></div>${IMG}</div></div>`,
+    );
+    expect(b.find((x) => x.p === "0.1.0")!.h).toBe(80); // inline-flex
+    expect(b.find((x) => x.p === "0.1.0.0")!.h).toBe(80); // grid
+    expect(b.find((x) => x.p === "0.1")!.h).toBe(80); // body
+  });
+
+  it("positions a following inline-block from the first row's baseline", async () => {
+    // First row baseline: the 5px box's synthesized bottom. The 50px image is in the second
+    // row, so it must not move the 10px marker: Chromium puts the inline-block at y=5 and
+    // the marker at y=0.
+    const b = await boxes(
+      `<div><div style="display:inline-block"><div style="display:grid;grid-auto-rows:10px"><div style="height:5px"></div>${IMG}</div></div><div style="display:inline-block;width:10px;height:10px;background:#f00"></div></div>`,
+    );
+    expect(b.find((x) => x.p === "0.1.0.0")!.y).toBe(5);
+    expect(b.find((x) => x.p === "0.1.0.1")!.y).toBe(0);
+  });
+});

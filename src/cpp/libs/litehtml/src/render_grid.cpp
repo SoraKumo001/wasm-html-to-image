@@ -2414,10 +2414,13 @@ litehtml::pixel_t litehtml::render_item_grid::get_first_baseline()
 
 litehtml::pixel_t litehtml::render_item_grid::get_last_baseline()
 {
-    if (src_el()->css().get_display() == display_inline_grid && !m_grid_layout.items.empty())
+    if (css().get_writing_mode() == writing_mode_horizontal_tb && !m_grid_layout.items.empty())
     {
-        // Inline-axis (vertical-align) alignment of an inline grid also uses the
-        // first row's baseline (Chromium parity).
+        // A grid has line boxes in neither direction: its last line-box baseline is the
+        // first row's baseline, the same value used for vertical-align of an inline grid.
+        // Descending into the last item instead would let an overflowing item's bottom reach
+        // an inline-block ancestor (Blink: core/layout/grid/layout_grid.cc, the grid's
+        // first/last line-box baseline and core/layout/inline/inline_layout_algorithm.cc).
         return get_first_baseline();
     }
     return render_item_block::get_last_baseline();
