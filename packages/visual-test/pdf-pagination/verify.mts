@@ -64,7 +64,8 @@ function parseCMap(s: string) {
     }
   return { map, codeLen };
 }
-function extractPdf(pdf: Buffer): { pages: string[] } {
+type TextRun = { text: string; x: number; y: number; band: number };
+function extractPdf(pdf: Buffer): { pages: string[]; runs: TextRun[][] } {
   const objs = parseObjects(pdf);
   const refs = (dict: string, key: string): number[] => {
     const m = dict.match(new RegExp(`/${key}\\s*(\\[[^\\]]*\\]|\\d+\\s+0\\s+R)`));
@@ -72,6 +73,7 @@ function extractPdf(pdf: Buffer): { pages: string[] } {
   };
   const pageObjs = [...objs.values()].filter((o) => /\/Type\s*\/Page[^s]/.test(o.dict));
   const pages: string[] = [];
+  const runs: TextRun[][] = [];
   for (const page of pageObjs) {
     const fontM = page.dict.match(/\/Font\s*<<([\s\S]*?)>>/);
     const fonts = new Map<string, { map: Map<number, string>; codeLen: number }>();
@@ -81,19 +83,40 @@ function extractPdf(pdf: Buffer): { pages: string[] } {
       const co = objs.get(+tu[1]); if (co?.stream) fonts.set(f[1], parseCMap(co.stream));
     }
     let text = "";
+    const pageRuns: TextRun[] = [];
     for (const cRef of refs(page.dict, "Contents")) {
       const content = objs.get(cRef)?.stream ?? "";
       let cur: { map: Map<number, string>; codeLen: number } | null = null;
+      // Text origin within the page, in top-down px (the page stream flips with
+      // `1 0 0 -1 0 <pageH> cm`, so `re`/`Td` y values are already top-down).
+      let tx = 0, ty = 0;
+      let band = 0;
+      let pendingBand: number | null = null;
       for (const line of content.split("\n")) {
-        const tf = line.match(/\/([A-Za-z0-9]+)\s+[\d.]+\s+Tf/);
+        const l = line.trim();
+        const re = l.match(/^(-?[\d.]+) (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) re\b/);
+        if (re) pendingBand = +re[2];
+        if (pendingBand !== null && l === "W* n") { band = pendingBand; pendingBand = null; }
+        const tm = l.match(/^(-?[\d.]+) (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) Tm\b/);
+        if (tm) { tx = +tm[5]; ty = +tm[6]; }
+        const td = l.match(/^(-?[\d.]+) (-?[\d.]+) (?:Td|TD)\b/);
+        if (td) { tx += +td[1]; ty -= +td[2]; }
+        const tf = l.match(/\/([A-Za-z0-9]+)\s+[\d.]+\s+Tf/);
         if (tf) cur = fonts.get(tf[1]) ?? null;
-        const tj = line.match(/<([0-9A-Fa-f]+)>\s*Tj/);
-        if (tj && cur) { const hx = tj[1]; for (let i = 0; i + cur.codeLen * 2 <= hx.length; i += cur.codeLen * 2) text += cur.map.get(parseInt(hx.slice(i, i + cur.codeLen * 2), 16)) ?? ""; }
+        const tj = l.match(/<([0-9A-Fa-f]+)>\s*Tj/);
+        if (tj && cur) {
+          const hx = tj[1];
+          let glyphs = "";
+          for (let i = 0; i + cur.codeLen * 2 <= hx.length; i += cur.codeLen * 2) glyphs += cur.map.get(parseInt(hx.slice(i, i + cur.codeLen * 2), 16)) ?? "";
+          text += glyphs;
+          if (glyphs) pageRuns.push({ text: glyphs, x: tx, y: ty, band });
+        }
       }
     }
     pages.push(text);
+    runs.push(pageRuns);
   }
-  return { pages };
+  return { pages, runs };
 }
 const strip = (s: string) => s.replace(/\s/g, "");
 const norm = (s: string) => s.replace(/\s+/g, " ").trim();
@@ -411,6 +434,73 @@ const p4Span =
     `p4rowspan pages=${pages.length} SPAN on ${spanPages} page(s) XA@p${pA + 1} XB@p${pB + 1} ${spanOk ? "OK" : "BAD"}`,
   );
   pages.forEach((t, i) => console.log(`   p${i + 1}: ${JSON.stringify(t)}`));
+}
+
+// ---------------------------------------------------------------------------
+// P4 regression (48cc86f): the has_after=true path. FILLER + thead table + AFTER:
+// page 1 holds the table start, page 2 continues it with the thead re-painted and
+// the table ends mid-page, so the page is drawn as two bands (shifted table band +
+// unshifted after-table band) instead of the table-only single band. Asserts:
+// page count, row/text conservation, and AFTER's position (same page as the table
+// tail, below the last row, above the page bottom, outside the header band).
+// Known limit pinned by this case: the table's last h px are not painted in the
+// two-band mode (FINDINGS P4), so only text/position (not pixels) are asserted.
+const p4TailRows = 5;
+const p4After =
+  `<html><body style="${style}"><div style="height:500px">FILLER</div>` +
+  `<table style="width:400px;border-collapse:collapse">` +
+  `<thead><tr><td>HEAD</td></tr></thead><tbody>` +
+  Array.from({ length: p4TailRows }, () => `<tr><td style="height:250px">RMK</td></tr>`).join("") +
+  `</tbody></table><p style="margin:0">AFTER</p></body></html>`;
+{
+  const { eng, chrom, domText } = await engineVsChromium("p4after", p4After);
+  const engPages = eng.pages.map(norm);
+  const engRows = countOf(eng.pages.join(""), "RMK");
+  const chromRows = countOf(chrom.pages.join(""), "RMK");
+  const domRows = countOf(domText, "RMK");
+  const headOk = engPages.length === 2 && engPages.every((t) => t.includes("HEAD"));
+  const pagesOk = eng.pages.length === 2 && chrom.pages.length === 2;
+  const textOk =
+    engRows === p4TailRows && engRows === domRows && chromRows === p4TailRows &&
+    countOf(eng.pages.join(""), "AFTER") === 1 &&
+    countOf(eng.pages.join(""), "FILLER") === 1;
+  // Group glyph runs into visual lines (same clip band + baseline). Skia emits one
+  // Tj per glyph, so words have to be reassembled per line.
+  const lines = (i: number) => {
+    const byLine = new Map<string, { text: string; y: number; band: number }>();
+    for (const r of eng.runs[i] ?? []) {
+      const k = `${r.band}:${r.y}`;
+      const line = byLine.get(k) ?? { text: "", y: r.y, band: r.band };
+      line.text += r.text;
+      byLine.set(k, line);
+    }
+    return [...byLine.values()];
+  };
+  const p1Lines = lines(0);
+  const p2Lines = lines(1);
+  const afterLine = p2Lines.find((l) => l.text === "AFTER");
+  const afterOnP1 = p1Lines.some((l) => l.text.includes("AFTER"));
+  // The table tail is on the AFTER page and is only a fragment of the rows: the
+  // table ends mid-page (the condition that selects the two-band drawing).
+  const tailLines = p2Lines.filter((l) => l.text === "RMK");
+  const headLine = p2Lines.find((l) => l.text === "HEAD");
+  const splitOk = !afterOnP1 && tailLines.length > 0 && tailLines.length < p4TailRows;
+  // AFTER must sit below every table row on that page and inside the page box, and
+  // the repeated thead must stay in the reserved top band.
+  const afterBelow = !!afterLine && tailLines.every((l) => afterLine.y > l.y);
+  const headerTop = !!headLine && headLine.y < 40;
+  // The two-band drawing itself: the table rows live in the shifted table band,
+  // AFTER in the separate unshifted after-table band that starts at the table
+  // bottom. A single whole-slice shift (pre-48cc86f) would put both in one band.
+  const rowBand = tailLines.length > 0 ? Math.max(...tailLines.map((l) => l.band)) : -1;
+  const bandOk = !!afterLine && afterLine.band > rowBand;
+  const posOk = !!afterLine && afterBelow && afterLine.y < PAGE_H && headerTop && bandOk;
+  if (!pagesOk || !headOk || !textOk || !splitOk || !posOk) ok = false;
+  console.log(
+    `p4after pages eng=${eng.pages.length} chrom=${chrom.pages.length} ${pagesOk ? "OK" : "BAD"} | rows eng=${engRows} dom=${domRows} chrom=${chromRows} ${textOk ? "OK" : "BAD"} | thead eng=${engPages.filter((t) => t.includes("HEAD")).length}/${eng.pages.length} ${headOk ? "OK" : "BAD"} | tail rows p2=${tailLines.length}/${p4TailRows} AFTER@p${afterLine ? "2" : afterOnP1 ? "1" : "?"} ${splitOk ? "OK" : "BAD"} | AFTER y=${afterLine ? afterLine.y.toFixed(1) : "?"} belowTable=${afterBelow ? "OK" : "BAD"} headTop=${headLine ? headLine.y.toFixed(1) : "?"} bands table=${rowBand} after=${afterLine ? afterLine.band : "?"} ${bandOk ? "OK" : "BAD"}`,
+  );
+  engPages.forEach((t, i) => console.log(`   eng p${i + 1}: ${JSON.stringify(t)}`));
+  p2Lines.forEach((l) => console.log(`   p2 line y=${l.y.toFixed(1)} band=${l.band}: ${JSON.stringify(l.text)}`));
 }
 
 // ---------------------------------------------------------------------------
