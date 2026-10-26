@@ -337,9 +337,17 @@ litehtml::pixel_t litehtml::render_item_block_context::get_first_baseline()
 	}
 	for(const auto &item : m_children)
 	{
+		// Out-of-flow boxes (floats, absolutely positioned boxes) are not part of the normal flow,
+		// so an in-flow box with no line box of its own takes the synthesized bottom-margin-edge
+		// baseline below instead of borrowing theirs (same filter as render_item_block).
+		const auto& css = item->src_el()->css();
+		if(css.get_display() == display_none || css.get_float() != float_none || item->src_el()->is_positioned()) continue;
 		if(item->has_baseline())
 		{
-			return content_offset_block(wm) + item->block_start_pos(wm) - (item->margin_block_start() + item->padding_block_start() + item->border_block_start()) + item->get_first_baseline();
+			// The item sits inside this box's *content* box, so the baseline offset needs this box's
+			// block-start edge only (margin + border + padding start). `content_offset_block()`
+			// sums both edges, which would add the end margins as well.
+			return content_block_start() + item->block_start_pos(wm) - (item->margin_block_start() + item->padding_block_start() + item->border_block_start()) + item->get_first_baseline();
 		}
 	}
 	if(src_el()->css().get_display() == display_inline_block && !wm.is_vertical()) return block_size(wm);
@@ -357,9 +365,12 @@ litehtml::pixel_t litehtml::render_item_block_context::get_last_baseline()
 	}
 	for(auto it = m_children.rbegin(); it != m_children.rend(); ++it)
 	{
+		const auto& css = (*it)->src_el()->css();
+		if(css.get_display() == display_none || css.get_float() != float_none || (*it)->src_el()->is_positioned()) continue;
 		if((*it)->has_baseline())
 		{
-			return content_offset_block(wm) + (*it)->block_start_pos(wm) - ((*it)->margin_block_start() + (*it)->padding_block_start() + (*it)->border_block_start()) + (*it)->get_last_baseline();
+			// Same block-start-only offset as get_first_baseline().
+			return content_block_start() + (*it)->block_start_pos(wm) - ((*it)->margin_block_start() + (*it)->padding_block_start() + (*it)->border_block_start()) + (*it)->get_last_baseline();
 		}
 	}
 	if(src_el()->css().get_display() == display_inline_block && !wm.is_vertical()) return block_size(wm);

@@ -3976,6 +3976,24 @@ describe("baseline of a nested flex container with a padded empty item", () => {
   });
 });
 
+describe("baseline of a flex item with a block-level child and margins on both edges", () => {
+  it("offsets by the block-start margin only, not by the block-end one", async () => {
+    const { at } = await renderPng(
+      '<div style="display:flex;align-items:baseline;width:60px">' +
+        '<div style="width:10px;height:36px;background:#00f"></div>' +
+        '<div style="margin:4px;width:10px;background:#f00"><div style="display:flex"><div style="height:20px"></div></div></div>' +
+        "</div>",
+      80, 60,
+    );
+    // The item's baseline is 20px above its border-box bottom, so the line's baseline (36px, from
+    // the blue item) puts its border box at y=16..36: its 4px margins sit outside that, they are
+    // not added twice (which would lift the box to y=12).
+    expect(at(20, 34)).toEqual([255, 0, 0]);
+    expect(at(20, 14)).toEqual([255, 255, 255]);
+    expect(at(20, 38)).toEqual([255, 255, 255]);
+  });
+});
+
 describe("width: fit-content below the min-content width", () => {
   it("a block does not shrink under its min-content width", async () => {
     const { at } = await renderPng(
