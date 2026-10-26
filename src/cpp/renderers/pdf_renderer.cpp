@@ -1223,7 +1223,15 @@ sk_sp<SkData> renderHtmlToPdf(const std::string& html, int width, int height,
         // Draw one clip band of the document with a page offset. The bands partition the page
         // (a 2px overlap at the table's closing border aside), so no pixel is painted twice —
         // fixed elements included: they land in the band that covers their viewport position.
-        auto draw_band = [&](int top, int bottom, int doc_offset) {
+        //
+        // `cull` hands litehtml the band as its draw clip, so it can skip backgrounds /
+        // borders / text and whole subtrees outside it instead of recording the full document
+        // for every page. The canvas clip below stays authoritative (litehtml's clip only
+        // culls; it never replaces the canvas clip), so the band is padded: a box or an image
+        // background that straddles the band edge (the 2px table/after overlap, anti-aliased
+        // edges) is still drawn and the neighbouring bands stay seam-free.
+        constexpr int kCullPad = 2;
+        auto draw_band = [&](int top, int bottom, int doc_offset, bool cull) {
             if (bottom <= top) return;
             canvas->save();
             canvas->translate((SkScalar)margin_left, (SkScalar)margin_top);
@@ -1233,13 +1241,19 @@ sk_sp<SkData> renderHtmlToPdf(const std::string& html, int width, int height,
             container.set_canvas(canvas);
             container.set_height(content_area_height);
             container.set_tagging(false);
-            doc->draw(0, 0, -(litehtml::pixel_t)doc_offset, nullptr);
+            litehtml::position clip(-kCullPad, (litehtml::pixel_t)(top - kCullPad),
+                                    content_width + 2 * kCullPad,
+                                    (bottom - top) + 2 * kCullPad);
+            doc->draw(0, 0, -(litehtml::pixel_t)doc_offset, cull ? &clip : nullptr);
             container.flush();
             canvas->restore();
         };
 
         // box-decoration-break: clone — paint complete boxes for the fragments on this page.
+        // A split clone fragment is re-painted per band, so those pages keep the full
+        // traversal (the fragment bands are not cut by the page clip).
         doc->clear_fragment_bands();
+        bool clone_fragmented = false;
         for (const CloneBox& b : clone_boxes) {
             const int slice_top = page_offset;
             const int slice_bottom = page_offset + slice_height;
@@ -1248,7 +1262,13 @@ sk_sp<SkData> renderHtmlToPdf(const std::string& html, int width, int height,
             const int band_bottom = std::min(b.bottom - b.top, slice_bottom - b.top);
             if (band_top == 0 && band_bottom == b.bottom - b.top) continue;  // not fragmented
             doc->set_fragment_band(b.el, (litehtml::pixel_t)band_top, (litehtml::pixel_t)band_bottom);
+            clone_fragmented = true;
         }
+        // A band that ends past the document box must not be handed to litehtml as its clip:
+        // for the root element the clip also bounds the (body-propagated) document background,
+        // so a partially filled last page would paint background where the full traversal
+        // leaves it empty. That page keeps the full traversal (one band only).
+        const bool cull = !clone_fragmented && page_offset + slice_height <= doc_height;
 
         if (header_height > 0 && table_bottom < INT_MAX) {
             const int slice_end = page_offset + slice_height;
@@ -1282,21 +1302,24 @@ sk_sp<SkData> renderHtmlToPdf(const std::string& html, int width, int height,
                 table_band_bottom = slice_height + header_height;
 
             // The continuing table: same document slice, shifted down by the header height.
-            draw_band(header_height, table_band_bottom, page_offset - header_height);
+            draw_band(header_height, table_band_bottom, page_offset - header_height, cull);
             // The rest of the slice (content after the table): unshifted document position.
-            draw_band(after_band_top, slice_height, page_offset);
+            draw_band(after_band_top, slice_height, page_offset, cull);
         } else if (header_height > 0) {
             // No table extent recorded (defensive): keep the historical whole-slice shift.
-            draw_band(header_height, header_height + slice_height, page_offset - header_height);
+            draw_band(header_height, header_height + slice_height, page_offset - header_height,
+                      cull);
         } else {
-            draw_band(0, slice_height, page_offset);
+            draw_band(0, slice_height, page_offset, cull);
         }
         doc->clear_fragment_bands();
 
         // P4: repeated table header. Re-paint the document clipped to the header band
         // (its document-space rect) at the top of the page, so the thead appears on
-        // every continuation page.
-        if (header_height > 0 && header_top >= 0) draw_band(0, header_height, header_top);
+        // every continuation page. The repaint band is not culled: it re-paints a
+        // document region that is not the page slice (header_top), so a page-relative
+        // cull would be the wrong test.
+        if (header_height > 0 && header_top >= 0) draw_band(0, header_height, header_top, false);
 
         pdf_doc->endPage();
     }

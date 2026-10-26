@@ -13,6 +13,10 @@ bool subtree_paint_bounds(const std::shared_ptr<litehtml::render_item>& ri, lite
                           litehtml::pixel_t oy, bool is_root, litehtml::pixel_t& left,
                           litehtml::pixel_t& top, litehtml::pixel_t& right,
                           litehtml::pixel_t& bottom, int depth);
+// Page-band cull used by draw_children: true only when the subtree provably paints nothing
+// into `clip` (drawing coordinates). Defined next to subtree_paint_bounds below.
+bool subtree_outside_clip(const std::shared_ptr<litehtml::render_item>& ri, litehtml::pixel_t ox,
+                          litehtml::pixel_t oy, const litehtml::position* clip);
 }  // namespace
 
 
@@ -1167,6 +1171,14 @@ void litehtml::render_item::draw_children(uint_ptr hdc, pixel_t x, pixel_t y, co
 
     for (const auto& el : m_children) {
         if (el->is_visible()) {
+            // Page-band cull: when the caller draws one visible slice of the document (PDF
+            // page bands, cropped raster/SVG exports) the `clip` is that slice in drawing
+            // coordinates, so a child whose whole subtree paints outside it is skipped
+            // instead of walked. nullptr (full-document draw) never culls. Positioned /
+            // fixed boxes, box-decoration-break: clone, transforms, tables, grid and
+            // list-item subtrees are rejected by the bounds helper and keep drawing, so
+            // fragmentation extras (fixed, repeated <thead>, clone fragments) are safe.
+            if (subtree_outside_clip(el, pos.x, pos.y, clip)) continue;
             bool is_positioned = el->src_el()->is_positioned();
             int el_z_index = 0;
             if (el->src_el()->css().get_position() != element_position_static) {
@@ -1726,6 +1738,24 @@ void litehtml::render_item::dump(litehtml::dumper& cout) {
 
 namespace {
 
+// Area a box paints outside its border box: shadows, plus a margin for outlines / glyph
+// overhang / strokes. Shared by subtree_paint_bounds and the page-band cull.
+litehtml::pixel_t paint_growth(const litehtml::css_properties& css) {
+    using namespace litehtml;
+    auto shadow_extent = [](const shadow_vector& shadows) {
+        pixel_t e = 0;
+        for (const auto& s : shadows) {
+            if (s.inset) continue;
+            pixel_t reach = std::abs(s.x.val()) + std::abs(s.y.val()) + s.blur.val() * 1.5f +
+                            std::max<pixel_t>(0, s.spread.val());
+            e = std::max(e, reach);
+        }
+        return e;
+    };
+    return 24 + css.get_font_metrics().height * 0.5f +
+           std::max(shadow_extent(css.get_box_shadow()), shadow_extent(css.get_text_shadow()));
+}
+
 // Conservative area the subtree of `ri` paints to (absolute coordinates of the drawing pass),
 // or false when that cannot be bounded safely (transforms / filters / masks / clip-paths /
 // offset paths / blend modes below the root, positioned or table / grid / list-item boxes).
@@ -1772,18 +1802,7 @@ bool subtree_paint_bounds(const std::shared_ptr<litehtml::render_item>& ri, lite
     box += ri->get_borders();
 
     // Painted outside the box: shadows, plus a margin for outlines / glyph overhang / strokes.
-    pixel_t grow = 24 + css.get_font_metrics().height * 0.5f;
-    auto shadow_extent = [](const shadow_vector& shadows) {
-        pixel_t e = 0;
-        for (const auto& s : shadows) {
-            if (s.inset) continue;
-            pixel_t reach = std::abs(s.x.val()) + std::abs(s.y.val()) + s.blur.val() * 1.5f +
-                            std::max<pixel_t>(0, s.spread.val());
-            e = std::max(e, reach);
-        }
-        return e;
-    };
-    grow += std::max(shadow_extent(css.get_box_shadow()), shadow_extent(css.get_text_shadow()));
+    const pixel_t grow = paint_growth(css);
 
     left = std::min(left, box.x - grow);
     top = std::min(top, box.y - grow);
@@ -1798,6 +1817,39 @@ bool subtree_paint_bounds(const std::shared_ptr<litehtml::render_item>& ri, lite
             return false;
     }
     return true;
+}
+
+// Page-band cull (draw_children): the child itself is cheap to reject, and only a box that
+// cannot reach the band pays for the recursive subtree bounds. Both tests over-approximate
+// the painted area (shadows / glyph overhang included), so a false "outside" is the only
+// thing that could drop paint -- and the bounds helper refuses the cases that cannot be
+// bounded (positioned / fixed / transforms / filters / masks / tables / grid / list-item).
+bool subtree_outside_clip(const std::shared_ptr<litehtml::render_item>& ri, litehtml::pixel_t ox,
+                          litehtml::pixel_t oy, const litehtml::position* clip) {
+    using namespace litehtml;
+    if (!clip) return false;
+    const auto& css = ri->src_el()->css();
+    // Fixed / positioned content is drawn against its own containing block (the viewport for
+    // fixed) and is re-painted by the page fragmentation passes: never cull it.
+    if (css.get_position() == element_position_fixed) return false;
+    // box-decoration-break: clone re-paints a complete box per page fragment.
+    if (css.get_box_decoration_break() == box_decoration_break_clone) return false;
+
+    position box = ri->pos();
+    box.x += ox;
+    box.y += oy;
+    box += ri->get_paddings();
+    box += ri->get_borders();
+    const pixel_t grow = paint_growth(css);
+    box.x -= grow;
+    box.y -= grow;
+    box.width += grow * 2;
+    box.height += grow * 2;
+    if (box.does_intersect(clip)) return false;
+
+    pixel_t left = 1e9f, top = 1e9f, right = -1e9f, bottom = -1e9f;
+    if (!subtree_paint_bounds(ri, ox, oy, false, left, top, right, bottom, 0)) return false;
+    return !position(left, top, right - left, bottom - top).does_intersect(clip);
 }
 
 }  // namespace
