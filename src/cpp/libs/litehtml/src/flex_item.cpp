@@ -885,19 +885,26 @@ void litehtml::flex_item_column_direction::direction_specific_init(const litehtm
 	// A replaced item with an intrinsic ratio and an auto block size takes its main size from its
 	// cross size (the transferred size suggestion, CSS Flexbox 9.2): a `width:30%` svg in a 600px
 	// column is 180 wide and 36 tall, whatever trial width the content measure ran at.
+	// A stretched cross size is only definite up front in a single-line container: a wrapping column
+	// breaks its lines in the inline axis, so the line cross size a multi-line item stretches to is
+	// resolved after the items are sized (Blink's flexible box computes those line cross sizes from
+	// the items themselves, and a stretched item therefore has nothing to transfer from while its
+	// flex base size is being computed). Such an item keeps its intrinsic main size and is only
+	// widened by the stretch (a 120x30 image in a 600px `wrap` column is 600x30, not 600x150).
+	const bool stretch_transfers = stretch_cross && !multiline_cross;
 	if (!m_container_wm.is_vertical() && size_prop.is_predefined() && el->src_el()->is_replaced())
 	{
 		pixel_t used_cross = 0;
 		if (cross_size.is_predefined())
 		{
-			if (stretch_cross) used_cross = stretched_inline_size();
+			if (stretch_transfers) used_cross = stretched_inline_size();
 		} else if (percent_cross_definite)
 		{
 			used_cross = cross_size.calc_percent(self_size.render_inline_size().value);
 		}
 		litehtml::size sz;
 		el->src_el()->get_content_size(sz, 0);
-		if ((stretch_cross || percent_cross_definite) && sz.width > 0 && sz.height > 0)
+		if ((stretch_transfers || percent_cross_definite) && sz.width > 0 && sz.height > 0)
 		{
 			const pixel_t transferred = used_cross * sz.height / sz.width + el->render_offset_height();
 			flex_base_size = transferred;

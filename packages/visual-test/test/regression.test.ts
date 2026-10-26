@@ -5284,3 +5284,42 @@ describe("P0-7: stacked floats in a measure pass and zero-width flex cross sizes
     expect(at(b, "0.1").h).toBe(8); // body
   });
 });
+
+// P0-8: fuzz seed 60. A wrapping column has no line cross size to transfer from while its items are
+// sized: the lines are broken in the inline axis after that, so a stretched image keeps its intrinsic
+// block size and is only widened by the stretch (600x30, not the 600x150 its ratio would give). The
+// single-line column, whose cross size is the container's width from the start, still transfers.
+describe("P0-8: stretched replaced item in a wrapping column", () => {
+  type Box = { p: string; t: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(body: string): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const at = (b: Box[], p: string) => b.find((x) => x.p === p)!;
+  const IMG_120_30 =
+    "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22120%22%20height%3D%2230%22%20viewBox%3D%220%200%20120%2030%22%3E%3Crect%20width%3D%22120%22%20height%3D%2230%22%20fill%3D%22%2369c%22%2F%3E%3C%2Fsvg%3E";
+
+  it("does not transfer a wrapping column's line cross size to an image's main size (seed 60)", async () => {
+    const b = await boxes(`<div style="display:flex;flex-direction:column;flex-wrap:wrap"><img src="${IMG_120_30}"></div>`);
+    expect(at(b, "0.1.0.0").w).toBe(600); // stretched to the container's width
+    expect(at(b, "0.1.0.0").h).toBe(30); // its intrinsic height, not 600 / 4
+    expect(at(b, "0.1.0").h).toBe(30);
+    expect(at(b, "0.1").h).toBe(30); // body
+  });
+
+  it("keeps the transfer in a single-line column", async () => {
+    const b = await boxes(`<div style="display:flex;flex-direction:column"><img src="${IMG_120_30}"></div>`);
+    expect(at(b, "0.1.0.0").w).toBe(600);
+    expect(at(b, "0.1.0.0").h).toBe(150); // 600 / 4: the cross size is definite up front
+    expect(at(b, "0.1").h).toBe(150); // body
+  });
+});
