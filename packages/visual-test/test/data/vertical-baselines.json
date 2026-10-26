@@ -58,5 +58,59 @@
     "outline": 0.48340707964601765,
     "width": 800,
     "height": 226
+  },
+  "06-tcy.html": {
+    "fill": 0.32823426573426573,
+    "outline": 0.2714160839160839,
+    "width": 800,
+    "height": 286
+  },
+  "57-tcy-two-digits.html": {
+    "fill": 0.11946902654867257,
+    "outline": 0.11780973451327433,
+    "width": 800,
+    "height": 226
+  },
+  "94-tcy-lens.html": {
+    "fill": 0.5625,
+    "outline": 0.8865030674846626,
+    "width": 800,
+    "height": 326
+  },
+  "55-inline-block-nofixed.html": {
+    "fill": 0.0752212389380531,
+    "outline": 0.021017699115044246,
+    "width": 800,
+    "height": 226
+  },
+  "85-ib-valign-top.html": {
+    "fill": 0.0752212389380531,
+    "outline": 0.021017699115044246,
+    "width": 800,
+    "height": 226
+  },
+  "51-deco-linethrough-only.html": {
+    "fill": 0.23064159292035397,
+    "outline": 0.12112831858407079,
+    "width": 800,
+    "height": 226
+  },
+  "70-very-long-latin.html": {
+    "fill": 0.14314928425357873,
+    "outline": 0.06978527607361963,
+    "width": 800,
+    "height": 489
+  },
+  "25-flex-center.html": {
+    "fill": 0.11232517482517483,
+    "outline": 0.10795454545454546,
+    "width": 800,
+    "height": 286
+  },
+  "19-images.html": {
+    "fill": 0.6184440559440559,
+    "outline": 0.5878496503496503,
+    "width": 800,
+    "height": 286
   }
 }

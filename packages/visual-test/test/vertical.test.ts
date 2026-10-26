@@ -31,6 +31,57 @@ const CASES = [
   "34-transform.html",
   "50-deco-underline-only.html",
   "81-deco-overline.html",
+  // Added because the Chromium reference PNGs are stable (low residual diff and
+  // identical page size in a full compare.ts sweep): tate-chu-yoko at several
+  // digit counts, inline-block inside vertical text (baseline/alignment), the
+  // remaining decoration lines, long unbreakable Latin, flex centering and images.
+  "06-tcy.html",
+  "57-tcy-two-digits.html",
+  "94-tcy-lens.html",
+  "55-inline-block-nofixed.html",
+  "85-ib-valign-top.html",
+  "51-deco-linethrough-only.html",
+  "70-very-long-latin.html",
+  "25-flex-center.html",
+  "19-images.html",
+];
+
+// Cases that must stay out of the numeric regression suite until the underlying
+// feature is fixed. Do not record their current output as an expectation: that
+// would lock in the known-bad rendering.
+const KNOWN_LIMITATIONS: Array<{ file: string; reason: string }> = [
+  {
+    file: "63-grid.html",
+    reason: "inline-grid only supports fixed tracks + a single implicit auto column (auto/fr shrink unsupported)",
+  },
+  {
+    file: "79b-ruby-compound-h.html",
+    reason: "compound ruby: annotations are centered over the base instead of distributed per base char",
+  },
+  {
+    file: "79c-ruby-compound-v.html",
+    reason: "compound ruby: annotations are centered over the base instead of distributed per base char",
+  },
+  {
+    file: "79d-ruby-rtc.html",
+    reason: "compound ruby: <rtc> falls back to inline in Chromium while we still treat it as ruby",
+  },
+  {
+    file: "79e-ruby-jukugo-2char.html",
+    reason: "compound ruby: per-base distribution of the jukugo annotation is not implemented",
+  },
+  {
+    file: "62-pseudo.html",
+    reason: "::first-letter does not yet expand through the whole first-letter sequence; punctuation-only leading text is unverified",
+  },
+  {
+    file: "03-punct.html",
+    reason: "text-spacing-trim (punctuation trimming) is a deliberate spec difference, not a regression",
+  },
+  {
+    file: "17-kinsoku.html",
+    reason: "text-spacing-trim (punctuation trimming) is a deliberate spec difference, not a regression",
+  },
 ];
 
 describe("Vertical writing regression (vs Chromium)", () => {
@@ -68,5 +119,18 @@ describe("Vertical writing regression (vs Chromium)", () => {
       // The page size must not drift away from the recorded one by more than a few pixels.
       expect(Math.abs(cur.height - base.height)).toBeLessThanOrEqual(2);
     });
+  }
+
+  // Keep the opt-out list honest: the files and their Chromium references must
+  // still exist, so a removed/renamed case cannot silently stay skipped.
+  it("known-limitation cases still exist", () => {
+    for (const { file } of KNOWN_LIMITATIONS) {
+      expect(fs.existsSync(path.join(CASES_DIR, file)), file).toBe(true);
+      expect(fs.existsSync(path.join(REFERENCE_DIR, file.replace(".html", ".png"))), file).toBe(true);
+    }
+  });
+
+  for (const { file, reason } of KNOWN_LIMITATIONS) {
+    it.skip(`vertical (known limitation): ${file.replace(".html", "")} - ${reason}`, () => {});
   }
 });
