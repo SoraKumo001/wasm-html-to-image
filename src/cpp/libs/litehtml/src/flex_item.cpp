@@ -217,6 +217,9 @@ void litehtml::flex_item_row_direction::direction_specific_init(const litehtml::
 	int predef = flex_basis_auto;
 	if(flex_basis_predefined) predef = el->css().get_flex_basis().predef();
 	else if(el->css().get_flex_basis().val() < 0) flex_basis_predefined = true;
+	// The basis is rewritten to "content" below only because this is an intrinsic-size query; the
+	// item's own inline size still contributes to that query (see the content case).
+	bool flex_basis_from_query = false;
 
 	// Fix: If we are measuring the container (intrinsic sizes), we should treat
 	// flex-basis as content for growable items or if basis is 0/percentage.
@@ -254,6 +257,7 @@ void litehtml::flex_item_row_direction::direction_specific_init(const litehtml::
 			el->css().get_flex_basis().val() == 0)) {
 			flex_basis_predefined = true;
 			predef = flex_basis_content;
+			flex_basis_from_query = true;
 		}
 	}
 
@@ -312,6 +316,16 @@ void litehtml::flex_item_row_direction::direction_specific_init(const litehtml::
 						unbounded_cb.size_mode = containing_block_context::size_mode_measure | containing_block_context::size_mode_content;
 						el->measure(unbounded_cb, fmt_ctx ? &fmt_ctx_copy : nullptr);
 						flex_base_size = get_el_main_size();
+					}
+					// A zero/percentage basis only became a content measure for this intrinsic-size query;
+					// the item's flex-basis still overrode its own definite width in that measure (see
+					// calculate_containing_block_context), so an empty box would contribute nothing. Its
+					// outer max-content size is the specified inline size (CSS Flexbox 9.9.1: Blink gives
+					// `width:90px; flex:1 1 0%` a contribution of 90, padding included).
+					if (flex_basis_from_query && !m_container_wm.is_vertical() && !size_prop.is_predefined() &&
+						size_prop.units() == css_units_px)
+					{
+						flex_base_size = size_prop.val() + render_offset - el->box_sizing_inline(m_container_wm);
 					}
 				}
 				break;

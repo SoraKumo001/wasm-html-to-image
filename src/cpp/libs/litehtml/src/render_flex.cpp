@@ -937,7 +937,12 @@ litehtml::pixel_t litehtml::render_item_flex::get_last_baseline()
 				// cross_pos is horizontal here; the baseline is measured down the block axis.
 				return item_el->pos().y - item_el->content_offset_top() + item_el->get_last_baseline() + content_offset_top();
 			}
-			return m_lines.front().items.front()->cross_pos + item_el->get_last_baseline() + content_offset_top();
+			// A single-line row container's baseline comes from the first item's first baseline: an
+			// item that begins with a block (no line of its own) takes that block's baseline, even when
+			// a later line of the item overflows below its box (Blink's FirstLineBoxBaseline, which a
+			// flex container's baseline is built on). Reading the last baseline here added the overflow
+			// of that line to the line box the container sits in.
+			return m_lines.front().items.front()->cross_pos + item_el->get_first_baseline() + content_offset_top();
 		}
 	}
 	// Same synthesized baseline as get_first_baseline(): the border-box bottom for an empty container.

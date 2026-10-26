@@ -5323,3 +5323,47 @@ describe("P0-8: stretched replaced item in a wrapping column", () => {
     expect(at(b, "0.1").h).toBe(150); // body
   });
 });
+
+// A zero/percentage flex-basis only becomes "content" while the container is sized from its content;
+// the item's own definite width still contributes to that size (Blink: 90, not 0), and an inline-flex
+// box takes its baseline from the first item's first line, so a later overflowing line does not grow
+// the line box around it (seed 185).
+describe("intrinsic size of an inline-flex with a zero flex-basis (seed 185)", () => {
+  type Box = { p: string; t: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(body: string): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const at = (b: Box[], p: string) => b.find((x) => x.p === p)!;
+
+  it("contributes the item's specified width, not the zero basis", async () => {
+    const b = await boxes('<div style="display:inline-flex"><div style="width:90px;flex:1 1 0%"></div></div>');
+    expect(at(b, "0.1.0").w).toBe(90); // the shrink-to-fit container
+    expect(at(b, "0.1.0.0").w).toBe(90); // the item
+  });
+
+  it("contributes padding on top of a content-box width", async () => {
+    const b = await boxes('<div style="display:inline-flex"><div style="box-sizing:content-box;width:90px;padding:5px;flex:1 1 0%"></div></div>');
+    expect(at(b, "0.1.0").w).toBe(100);
+  });
+
+  it("is no wider than the item's definite width when its content overflows", async () => {
+    const b = await boxes('<div style="display:inline-flex"><div style="width:90px;flex:1 1 0%"><div style="width:200px;height:10px"></div></div></div>');
+    expect(at(b, "0.1.0").w).toBe(90);
+  });
+
+  it("takes the first item's first baseline for the line box it sits in", async () => {
+    const b = await boxes('<div style="display:inline-flex"><div style="height:20px"><div style="display:flex;width:80px"><div></div></div><svg viewBox="0 0 40 20"></svg></div></div>');
+    expect(at(b, "0.1.0").h).toBe(20);
+    expect(at(b, "0.1").h).toBe(20); // body: the overflowing line below does not add height
+  });
+});
