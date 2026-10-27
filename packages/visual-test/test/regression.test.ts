@@ -6435,9 +6435,10 @@ describe("P0-22: a replaced flex item's percentage max size resolves against the
 // constraints now resolve in the CSS sequence: clamp the width, re-derive an
 // auto height, clamp the height, re-derive and re-clamp an auto width; a
 // definite axis is never re-derived, and on a same-axis conflict the min wins.
-// (The images carry no width/height attributes: litehtml maps those to
-// definite sizes as presentational hints, so an attributed axis is definite
-// here even though the HTML spec maps the pair to an aspect ratio instead.)
+// (The images carry no width/height attributes on purpose: the attributes
+// map to definite sizes as presentational hints -- Chromium sizes an
+// attributed axis the same way -- so they would make the axes definite
+// instead of exercising the intrinsic path.)
 describe("P0-23: replaced element min/max constraints resolve per axis", () => {
   type Box = { p: string; t: string; c?: string; x: number; y: number; w: number; h: number };
 
