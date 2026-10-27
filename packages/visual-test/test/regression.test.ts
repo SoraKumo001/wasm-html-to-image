@@ -5649,3 +5649,77 @@ describe("P0-12: table row and row-group boxes are the union of their cells/rows
     expect(byTag(b, "tbody")[0].y).toBe(10);
   });
 });
+
+// P0-13: real page www.rust-lang.org scored 74% boxes-off: every card in its
+// two-column rows was laid out at min-content width (~110px instead of 488px),
+// wrapping its text into a tall narrow column. A shrink-to-fit box (flex item,
+// float, inline-block) with max-width was measured by laying its content out AT
+// the max-width and reporting the widest wrapped line as the intrinsic size --
+// and a percentage max-width was then re-resolved against that already-clamped
+// width on the exact-size re-measure, halving it again (488 -> 244 -> 122).
+// Intrinsic queries now measure the content without the box's own max-width cap,
+// and an exact-inline-size context no longer re-derives percentage min/max
+// widths from the box's own assigned size. Expected sizes are Chromium's.
+describe("P0-13: shrink-to-fit boxes honor max-width once, against the containing block", () => {
+  type Box = { p: string; t: string; x: number; y: number; w: number; h: number };
+  const T = "We love documentation! Take a look at the books available online, as well as key blog posts and user guides.";
+
+  async function boxes(body: string, width = 1200): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0}</style></head><body>${body}</body></html>`,
+      width,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const at = (b: Box[], p: string) => b.find((x) => x.p === p)!;
+  const in976 = (inner: string) => `<div style="width:976px">${inner}</div>`;
+
+  it("flex item with max-width:50% takes half the container, not min-content", async () => {
+    const b = await boxes(in976(`<div style="display:flex"><div style="max-width:50%"><p style="margin:0">${T}</p></div></div>`));
+    const item = at(b, "0.1.0.0.0");
+    expect(item.w).toBe(488);
+    expect(item.h).toBe(36); // two lines at the clamped width
+  });
+
+  it("flex item with max-width in px clamps its max-content at the px value", async () => {
+    const b = await boxes(in976(`<div style="display:flex"><div style="max-width:488px"><p style="margin:0">${T}</p></div></div>`));
+    expect(at(b, "0.1.0.0.0").w).toBe(488);
+  });
+
+  it("a row-flex card with max-width:50% in a row flex", async () => {
+    const b = await boxes(in976(
+      `<div style="display:flex"><div style="max-width:50%;display:flex"><p style="margin:0">${T}</p></div></div>`));
+    const card = at(b, "0.1.0.0.0");
+    expect(card.w).toBe(488);
+    expect(card.h).toBe(36);
+  });
+
+  it("float with max-width:50%", async () => {
+    const b = await boxes(in976(`<div style="float:left;max-width:50%"><p style="margin:0">${T}</p></div>`));
+    expect(at(b, "0.1.0.0").w).toBe(488);
+  });
+
+  it("inline-block with max-width:50%, and with max-width:25%", async () => {
+    const b50 = await boxes(in976(`<div><span style="display:inline-block;max-width:50%"><p style="margin:0">${T}</p></span></div>`));
+    expect(at(b50, "0.1.0.0.0").w).toBe(488);
+    const b25 = await boxes(in976(`<div><span style="display:inline-block;max-width:25%"><p style="margin:0">${T}</p></span></div>`));
+    expect(at(b25, "0.1.0.0.0").w).toBe(244);
+  });
+
+  it("a percentage max-width resolves against the container (500px container)", async () => {
+    const b = await boxes(`<div style="width:500px"><div style="display:flex"><div style="max-width:50%"><p style="margin:0">${T}</p></div></div></div>`);
+    expect(at(b, "0.1.0.0.0").w).toBe(250);
+  });
+
+  it("a plain block with max-width:50% still fills then clamps (no regression)", async () => {
+    const b = await boxes(in976(`<div style="max-width:50%"><p style="margin:0">${T}</p></div>`));
+    const block = at(b, "0.1.0.0");
+    expect(block.w).toBe(488);
+    expect(block.h).toBe(36);
+  });
+});

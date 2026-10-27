@@ -2071,8 +2071,27 @@ litehtml::containing_block_context litehtml::render_item::calculate_containing_b
     ret.render_height = ret.height;
 
     // Min/Max widths (physical width = inline-size in horizontal-tb)
-    calc_cb_length(src_el()->css().get_min_width(), cb_context.width, ret.min_width);
-    calc_cb_length(src_el()->css().get_max_width(), cb_context.width, ret.max_width);
+    // An exact-inline-size context hands this box its own used inline size as the
+    // containing block width (a flex/grid/line consumer re-measuring the box at the
+    // size it assigned). A percentage min/max-width resolved against it would apply
+    // the percentage to the box itself: a shrink-to-fit box with max-width:50% is
+    // measured at the clamped 488, re-measured exactly there, and clamped again to
+    // 244. The consumer's size already went through its own min/max clamping, so a
+    // percentage limit is not re-derived in that case (absolute limits still are).
+    const bool exact_inline = ret.mode == writing_mode_horizontal_tb
+        ? (cb_context.size_mode & containing_block_context::size_mode_exact_width) != 0
+        : (cb_context.size_mode & containing_block_context::size_mode_exact_height) != 0;
+    auto percent_based = [](const css_length& len) {
+        return len.units() == css_units_percentage || (len.is_calc() && len.calc_percent() != 0);
+    };
+    if (exact_inline && percent_based(src_el()->css().get_min_width()))
+        ret.min_width.type = containing_block_context::cbc_value_type_none;
+    else
+        calc_cb_length(src_el()->css().get_min_width(), cb_context.width, ret.min_width);
+    if (exact_inline && percent_based(src_el()->css().get_max_width()))
+        ret.max_width.type = containing_block_context::cbc_value_type_none;
+    else
+        calc_cb_length(src_el()->css().get_max_width(), cb_context.width, ret.max_width);
 
     // Min/Max heights (physical height = block-size in horizontal-tb)
     if (!percent_height_is_indefinite(src_el()->css().get_min_height(), cb_context))

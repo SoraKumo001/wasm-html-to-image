@@ -298,10 +298,13 @@ litehtml::pixel_t litehtml::render_item_block::_measure(const containing_block_c
 	containing_block_context self_size = m_self_size;
 	
 	// If the block has max-inline-size, we should restrict the available inline-size for children
+	bool capped_by_max_inline = false;
+	const pixel_t offered_inline_size = self_size.render_inline_size();
 	if (self_size.max_inline_size().type != containing_block_context::cbc_value_type_none)
 	{
 		if (self_size.render_inline_size() > self_size.max_inline_size())
 		{
+			capped_by_max_inline = true;
 			// Only the value: copying the typed_pixel would turn an auto inline size into an absolute
 			// one, and a shrink-to-fit block would then take max-width as its width.
 			self_size.render_inline_size() = (pixel_t)self_size.max_inline_size();
@@ -376,6 +379,42 @@ litehtml::pixel_t litehtml::render_item_block::_measure(const containing_block_c
 
 
 	ret_inline_size = std::min(ret_inline_size, current_inline_size);
+
+	// When the max-inline-size cap bounded this measure, the content was laid out
+	// at the cap and wrapped there, so the size it reports is the widest wrapped
+	// line -- below the cap, and far below the content's true max-content, which
+	// by construction exceeds the cap (that is why it wrapped). For a max-content
+	// query the box's intrinsic size is the cap itself: a shrink-to-fit box with
+	// max-width (flex item, float, inline-block) takes its max-width, not the
+	// widest line that happened to fit under it.
+	if (capped_by_max_inline &&
+	    (containing_block_size.size_mode & containing_block_context::size_mode_content) &&
+	    !(containing_block_size.size_mode & containing_block_context::size_mode_min_content))
+	{
+		const pixel_t cap_value = (pixel_t)self_size.max_inline_size();
+		if (ret_inline_size < cap_value)
+		{
+			// The offer exceeded the cap, but the content may not: short content
+			// laid out at the cap already reports its true max-content. Only when
+			// the content also exceeds the cap at the offered size was the capped
+			// result a wrapped line, and only then is the intrinsic size the cap.
+			containing_block_context uncapped_size = measure_size;
+			uncapped_size.render_inline_size() = offered_inline_size;
+			uncapped_size.inline_size() = offered_inline_size;
+			const position keep_pos = m_pos;
+			const pixel_t uncapped_ret = _render_content(0, 0, false, uncapped_size, fmt_ctx);
+			m_pos = keep_pos;
+			if (uncapped_ret > cap_value)
+			{
+				ret_inline_size = cap_value;
+				// Consumers read the measured size off the box itself (flex_base_size
+				// comes from get_el_main_size(), the cross size of a column flex item
+				// from its measured width), so the box must carry the same size.
+				pixel_t& measured_inline_size = (self_size.mode == writing_mode_horizontal_tb) ? m_pos.width : m_pos.height;
+				measured_inline_size = std::max(measured_inline_size, cap_value);
+			}
+		}
+	}
 
 	// Fix inline-size with min-inline-size attribute
 	if(self_size.min_inline_size().type != containing_block_context::cbc_value_type_none)
