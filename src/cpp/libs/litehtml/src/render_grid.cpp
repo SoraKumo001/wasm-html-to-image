@@ -1433,6 +1433,19 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                     item.el->src_el()->css().get_width().is_predefined() && item.el->src_el()->css().get_width().predef() == 0 &&
                     item.el->src_el()->css().get_min_width().is_predefined())
                     w = item.el->content_offset_width();
+                // A ratio-only replaced item with a percentage width contributes the
+                // default object width (300) to a content-sized track, not the size the
+                // percentage would give against the space on offer: the percentage is
+                // cyclic here, and with no intrinsic width the replaced sizing falls
+                // back to the default width and transfers the ratio from it. A definite
+                // height still drives the contribution through the ratio, uncapped.
+                if (!vert && item.el->src_el()->is_ratio_only_replaced() &&
+                    item.el->src_el()->css().get_width().units() == css_units_percentage &&
+                    item.el->src_el()->css().get_height().is_predefined() &&
+                    item.el->src_el()->css().get_height().predef() == 0)
+                {
+                    w = std::min(w, (pixel_t)300 + item.el->content_offset_width());
+                }
                 // Round up: a track a fraction of a pixel too narrow makes the item's text wrap.
                 contrib[c] = std::max(contrib[c], (pixel_t)ceil_layout_unit(w));
             }
@@ -1719,13 +1732,21 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             }
             else if (remaining > 0 && !content_inline)
             {
-                // No fr tracks: auto tracks stretch to fill the free space (justify-content: normal), unless
-                // the grid is being sized from its content: it then is as wide as its tracks.
-                int autos = (int)std::count(kinds.begin(), kinds.end(), 1);
-                if (autos > 0)
+                // No fr tracks: auto tracks stretch to fill the free space only under
+                // justify-content: normal (or stretch); any other value positions the
+                // tracks at their content size and takes the free space itself (the
+                // offsets below), e.g. place-content: center must center the tracks,
+                // not grow them. The grid being sized from its content is as wide as
+                // its tracks either way.
+                auto jc0 = css().get_flex_justify_content();
+                if (jc0 == flex_justify_content_normal || jc0 == flex_justify_content_stretch || jc0 == flex_justify_content_auto)
                 {
-                    for (int i = 0; i < num_columns; i++)
-                        if (kinds[i] == 1) m_grid_layout.column_widths[i] += remaining / autos;
+                    int autos = (int)std::count(kinds.begin(), kinds.end(), 1);
+                    if (autos > 0)
+                    {
+                        for (int i = 0; i < num_columns; i++)
+                            if (kinds[i] == 1) m_grid_layout.column_widths[i] += remaining / autos;
+                    }
                 }
             }
         }
@@ -2010,8 +2031,10 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                     leftover -= add;
                 }
             }
-            // 2. stretch: what is left goes to the auto rows equally
-            if (leftover > 0.01f)
+            // 2. stretch: what is left goes to the auto rows equally, but only under
+            // align-content: stretch (the unset value); any other value positions the
+            // rows at their content size and takes the free space itself.
+            if (leftover > 0.01f && css().get_flex_align_content() == flex_align_content_stretch)
             {
                 for (int i = 0; i < num_rows; i++)
                     if (row_auto[i]) m_grid_layout.row_heights[i] += leftover / autos;

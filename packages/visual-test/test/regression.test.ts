@@ -5447,3 +5447,82 @@ describe("P0-9: grid item aspect-ratio transfer under stretch", () => {
     expect(at(b, "0.1.0.0").h).toBe(25);
   });
 });
+
+// P0-10: real page tailwindcss.com. Sponsor logos are viewBox-only svgs with width:100%
+// inside single-column grids with place-content:center. The auto track must stay at the
+// item's contribution and be centered by the free space, not stretched to the container:
+// justify-content's initial value is normal (only normal/stretch grow auto tracks), and a
+// ratio-only replaced item with a percentage width contributes the default object width
+// (300) to the track, its height transferred through the ratio.
+describe("P0-10: content-sized grid tracks under justify/align-content", () => {
+  type Box = { p: string; t: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(body: string, width = 600): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0;font-size:0;line-height:0}svg{display:block}</style></head><body>${body}</body></html>`,
+      width,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const at = (b: Box[], p: string) => b.find((x) => x.p === p)!;
+  const LOGO = `<svg viewBox="0 0 320 96" style="width:100%;max-width:320px"></svg>`;
+  const CENTER = (inner: string) =>
+    `<div style="width:456px"><a style="display:grid;place-content:center;padding:16px 8px">${inner}</a></div>`;
+
+  it("sizes the track by the default object width and centers it (tailwind logo)", async () => {
+    const b = await boxes(CENTER(LOGO));
+    const svg = at(b, "0.1.0.0.0");
+    expect(svg.w).toBe(300); // default object width, not the 320 max-width or the 440 track
+    expect(svg.h).toBe(90); // 300 x (96 / 320)
+    expect(svg.x).toBe(78); // 8 padding + (440 - 300) / 2
+    expect(at(b, "0.1.0.0").h).toBe(122);
+  });
+
+  it("centers an intrinsically sized replaced item by its contribution", async () => {
+    const b = await boxes(CENTER(`<svg viewBox="0 0 320 96" width="320" height="96" style="width:100%;max-width:320px"></svg>`));
+    const svg = at(b, "0.1.0.0.0");
+    expect(svg.w).toBe(320);
+    expect(svg.x).toBe(68); // 8 + (440 - 320) / 2
+  });
+
+  it("resolves a percentage width against the contribution-sized track", async () => {
+    const b = await boxes(CENTER(`<svg viewBox="0 0 320 96" width="320" height="96" style="width:50%"></svg>`));
+    const svg = at(b, "0.1.0.0.0");
+    expect(svg.w).toBe(160); // 50% of the 320 track, not of the 440 container
+    expect(svg.x).toBe(68);
+  });
+
+  it("centers the capped track of a max-width item", async () => {
+    const b = await boxes(CENTER(`<svg viewBox="0 0 320 96" style="width:100%;max-width:200px"></svg>`));
+    const svg = at(b, "0.1.0.0.0");
+    expect(svg.w).toBe(200);
+    expect(svg.h).toBe(60);
+    expect(svg.x).toBe(128); // 8 + (440 - 200) / 2
+  });
+
+  it("still stretches the auto track of a plain grid (justify-content normal)", async () => {
+    const b = await boxes(`<div style="display:grid;width:456px"><div style="height:10px"></div></div>`);
+    expect(at(b, "0.1.0.0").w).toBe(456);
+  });
+
+  it("does not stretch auto tracks under an explicit justify-content: flex-start", async () => {
+    const b = await boxes(
+      `<div style="display:grid;justify-content:flex-start;width:456px"><div style="width:200px;height:10px"></div></div>`,
+    );
+    expect(at(b, "0.1.0.0").w).toBe(200);
+  });
+
+  it("centers content-sized rows under align-content: center", async () => {
+    const b = await boxes(
+      `<div style="display:grid;align-content:center;width:200px;height:200px"><div style="height:50px"></div></div>`,
+    );
+    const item = at(b, "0.1.0.0");
+    expect(item.h).toBe(50);
+    expect(item.y).toBe(75); // (200 - 50) / 2, the row is not stretched to 200
+  });
+});

@@ -1657,8 +1657,10 @@ void litehtml::css_properties::compute_grid(const element* el, const document::p
 
         snap_border_width(m_column_rule.width, doc);
 
+        // justify-content's initial value is normal (its auto tracks stretch);
+        // flex_start here would conflate "not set" with an explicit start.
         m_flex_justify_content = (flex_justify_content)el->get_property<int>(
-            _justify_content_, false, flex_justify_content_flex_start,
+            _justify_content_, false, flex_justify_content_normal,
             offset(m_flex_justify_content));
         m_flex_align_items = (flex_align_items)el->get_property<int>(
             _align_items_, false, flex_align_items_normal, offset(m_flex_align_items));
