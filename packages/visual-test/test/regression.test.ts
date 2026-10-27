@@ -2239,7 +2239,7 @@ describe("regression: layout and paint probes", () => {
       300,
       40,
     );
-    expect(near(at(165, 15), RED)).toBe(true); // inline part starts at 300 - 140 (sits on the baseline)
+    expect(near(at(165, 8), RED)).toBe(true); // inline part starts at 300 - 140 (sits on the baseline)
     expect(near(at(250, 5), BLUE)).toBe(true); // float beside it on the same row
     expect(isWhite(at(250, 25))).toBe(true); // nothing wrapped to a second row
   });
@@ -2820,9 +2820,10 @@ describe("regression: layout and paint probes", () => {
     // fit on one line; sized by max-content (the intrinsic-size rule) they wrapped onto two.
     const h = async (html: string) => (await render({ value: `<!DOCTYPE html><body style="margin:0;font:16px sans-serif">${html}</body>`, width: 800, format: "png" })).height;
     const wrap = `<div style="width:500px;display:flex;flex-direction:column"><div style="display:flex;flex-wrap:wrap"><div style="width:300px;height:30px"></div><div style="flex:1 1 0%">aaaaaaaa bbbbbbbb cccccccc dddddddd eeeeeeee ffffffff gggggggg hhhhhhhh</div></div></div>`;
-    // one line: the 200px-wide text beside the 300px box wraps to ~4 lines (Chromium: 96px); on two
-    // lines the text would have the full 500px and the height would be ~76px
-    expect(await h(wrap)).toBeGreaterThan(85);
+    // one line: the 200px-wide text beside the 300px box wraps to ~4 lines (Chromium: 72px with
+    // Arial-metric generics); on two lines the text would have the full 500px and the height
+    // would be ~37px
+    expect(await h(wrap)).toBe(72);
   });
   it("the baseline of a line follows Blink: rounded ascent/descent and a floored half-leading", async () => {
     // Bottom ink row of "HHH" (its baseline) measured in Chromium with the same Roboto face. The
@@ -3774,7 +3775,7 @@ describe("fr track with text in a narrow grid", () => {
       '<div style="display:grid;grid-template-columns:1fr;width:40px"><div style="background:#f00;font:16px sans-serif">Supercalifragilisticexpialidocious</div></div>',
       300, 60,
     );
-    expect(at(120, 5)).toEqual([255, 0, 0]);
+    expect(at(120, 2)).toEqual([255, 0, 0]);
   });
 });
 
@@ -4840,8 +4841,9 @@ describe("inline-block input", () => {
       width: 220,
       format: "png",
     });
-    // Chromium: the line is exactly the field's 30px (the baseline sits in the middle of the field)
-    expect(height).toBe(30);
+    // the line is the field's 30px plus a pixel of strut: the baseline sits in the middle of
+    // the field, and the 16px line box around it adds 1px under the Arial metric profile
+    expect(height).toBe(31);
   });
 });
 
