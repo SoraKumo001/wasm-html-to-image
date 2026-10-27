@@ -1580,7 +1580,13 @@ void litehtml::css_properties::compute_flex(const element* el, const document::p
     }
     m_flex_align_self = (flex_align_items)el->get_property<int>(
         _align_self_, false, flex_align_items_auto, offset(m_flex_align_self));
+    // A display:contents parent generates no box: the element takes part in the formatting
+    // context of the nearest ancestor that does generate one, so flex/grid item properties
+    // (flex-basis defaults, blockification) are decided by that ancestor, not the contents one.
     auto parent = el->parent();
+    while (parent && parent->css().m_display == display_contents) {
+        parent = parent->parent();
+    }
     if (parent && (parent->css().m_display == display_flex ||
                    parent->css().m_display == display_inline_flex)) {
         m_flex_grow = el->get_property<float>(_flex_grow_, false, 0, offset(m_flex_grow));

@@ -6145,3 +6145,103 @@ describe("P0-19: a block-level <button> with width:auto shrink-wraps and centres
     expect(Math.abs(d.x - (532 - d.w) / 2)).toBeLessThan(1.5);
   });
 });
+
+// P0-20: real page developer.mozilla.org. The contributor spotlight image
+// (512x323, width:max-content, max-height:8rem, height:auto, and the global
+// img{max-width:100%}) sits in a <figure style="display:contents"> inside a
+// row flex. It rendered at 155x98 instead of the max-height-transferred
+// 203x128, and the text column next to it took the width the image lost.
+// Two causes: (1) flex/grid item properties were computed from the DOM
+// parent, so a child of a display:contents element never got its flex-basis
+// default (auto), its flex factors, or blockification -- the basis read as
+// a 0 length and an inline child was not blockified at all; item properties
+// are now decided by the nearest ancestor that generates a box. (2) A
+// percentage max-width made a replaced element's min-content contribution
+// 0 and resolved against an indefinite containing block as 0; only a
+// percentage width does the former, and a percentage clamp against an
+// indefinite size is now treated as none.
+describe("P0-20: flex items hoisted from display:contents get item properties", () => {
+  type Box = { p: string; t: string; c?: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(body: string): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 1000,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const FIG = (inner: string) => `<figure style="display:contents;margin:0">${inner}</figure>`;
+  const SVG_URI =
+    "data:image/svg+xml," +
+    encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='512' height='323'><rect width='512' height='323' fill='#00f'/></svg>`);
+  const SVG = `<img width="512" height="323" src="${SVG_URI}" style="width:max-content;max-height:128px;max-width:100%;height:auto">`;
+
+  it("a definite-width block child of display:contents is a flex item at that width", async () => {
+    const b = await boxes(
+      `<div style="display:flex;width:768px"><div style="width:100px;height:10px"></div>${FIG(`<div class="h" style="width:200px;height:50px"></div>`)}</div>`,
+    );
+    const h = b.find((x) => (x.c || "").includes("h"))!;
+    expect(h.w).toBe(200);
+    expect(h.x).toBe(100);
+  });
+
+  it("an inline child of display:contents is blockified, so its width applies", async () => {
+    const b = await boxes(
+      `<div style="display:flex;width:768px"><div style="width:100px;height:10px"></div>${FIG(`<span class="h" style="width:200px;height:50px"></span>`)}</div>`,
+    );
+    const h = b.find((x) => (x.c || "").includes("h"))!;
+    expect(h.w).toBe(200);
+    expect(h.h).toBe(50);
+  });
+
+  it("flex-basis and flex-grow declared on a contents child take effect", async () => {
+    const b = await boxes(
+      `<div style="display:flex;width:768px"><div style="width:100px;height:10px"></div>${FIG(`<div class="b" style="flex:0 0 150px;height:50px"></div><div class="g" style="flex-grow:1;width:100px;height:50px"></div>`)}</div>`,
+    );
+    expect(b.find((x) => (x.c || "").includes("b"))!.w).toBe(150);
+    expect(b.find((x) => (x.c || "").includes("g"))!.w).toBe(518); // 768 - 100 - 150, grown from 100
+  });
+
+  it("the contributor shape: a replaced contents child keeps its transferred size as its minimum", async () => {
+    const b = await boxes(
+      `<div style="display:flex;width:768px"><div class="s" style="width:600px;height:10px"></div>${FIG(SVG)}</div>`,
+    );
+    const svg = b.find((x) => x.t === "img")!;
+    expect(svg.w).toBeCloseTo(202.9, 0); // 128 x 512/323, frozen at its automatic minimum
+    expect(svg.h).toBeCloseTo(128, 0);
+    expect(b.find((x) => (x.c || "").includes("s"))!.w).toBeCloseTo(565.1, 0); // the sibling absorbs the shrink
+  });
+
+  it("the same replaced shape as a direct flex item (percentage max-width is not a 0 min-content)", async () => {
+    const b = await boxes(`<div style="display:flex;width:768px"><div class="s" style="width:600px;height:10px"></div>${SVG}</div>`);
+    const svg = b.find((x) => x.t === "img")!;
+    expect(svg.w).toBeCloseTo(202.9, 0);
+    expect(svg.h).toBeCloseTo(128, 0);
+    expect(b.find((x) => (x.c || "").includes("s"))!.w).toBeCloseTo(565.1, 0);
+  });
+
+  it("a percentage width still contributes 0 to a replaced item's min-content", async () => {
+    const b = await boxes(
+      `<div style="display:flex;width:400px"><div class="a" style="width:300px;height:10px"></div><svg width="512" height="323" viewBox="0 0 512 323" style="width:50%;height:auto"></svg></div>`,
+    );
+    const svg = b.find((x) => x.t === "svg")!;
+    // Bases 300 + 200 (50% of 400) overflow by 100, split in proportion to
+    // the bases because the percentage-width item may shrink to 0.
+    expect(svg.w).toBeCloseTo(160, 0);
+    expect(b.find((x) => (x.c || "").includes("a"))!.w).toBeCloseTo(240, 0);
+  });
+
+  it("a grid item hoisted from display:contents is blockified too", async () => {
+    const b = await boxes(
+      `<div style="display:grid;grid-template-columns:100px 1fr;width:768px"><div style="height:10px"></div>${FIG(`<span class="h" style="width:200px;height:50px"></span>`)}</div>`,
+    );
+    const h = b.find((x) => (x.c || "").includes("h"))!;
+    expect(h.w).toBe(200);
+    expect(h.x).toBe(100);
+  });
+});
