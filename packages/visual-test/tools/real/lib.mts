@@ -114,14 +114,26 @@ function startBridge(up: URL): Promise<number> {
   });
 }
 
+// The reference must render named families with the same metrics on every machine:
+// fonts.conf (next to this file) pins Arial / Times New Roman / Courier New and the
+// generic families to the metric-compatible Liberation fonts via fontconfig.
+// fontconfig is a Linux/Unix mechanism; elsewhere the env var is simply not set.
+const FONTCONFIG = path.resolve(import.meta.dirname, "fonts.conf");
+function launchEnv(): Record<string, string> | undefined {
+  if (process.platform === "win32") return undefined;
+  return { ...process.env, FONTCONFIG_FILE: FONTCONFIG } as Record<string, string>;
+}
+
 export async function launchChromium(): Promise<Browser> {
+  const env = launchEnv();
   const up = envProxy();
-  if (!up) return chromium.launch({ executablePath: chromiumPath() });
+  if (!up) return chromium.launch({ executablePath: chromiumPath(), env });
   bridgePort ??= startBridge(up).catch(() => undefined);
   const port = await bridgePort;
-  if (!port) return chromium.launch({ executablePath: chromiumPath() });
+  if (!port) return chromium.launch({ executablePath: chromiumPath(), env });
   return chromium.launch({
     executablePath: chromiumPath(),
+    env,
     proxy: { server: `http://127.0.0.1:${port}`, bypass: "localhost,127.0.0.1,<-loopback>" },
     args: ["--ignore-certificate-errors"],
   });
