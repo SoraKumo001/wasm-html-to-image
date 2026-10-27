@@ -139,6 +139,42 @@ export async function launchChromium(): Promise<Browser> {
   });
 }
 
+// Generic font families for the reference. Which physical font the generic
+// keywords (sans-serif, serif, monospace) and the default family resolve to is
+// part of the comparison, so it must not depend on the machine: the families are
+// pinned per page with CDP's Page.setFontFamilies -- the one mechanism that
+// reaches the generic keywords on every platform (fontconfig exists only on
+// Linux and does not move Chromium's generic resolution there either, and
+// Chrome for Testing does not honour a seeded profile's webprefs.fonts). The
+// named families are the ones whose metrics the engine's generic profiles model;
+// on Linux fontconfig maps them to the Liberation fonts (see fonts.conf), on
+// Windows the named fonts are used as they are. REAL_FONT_FAMILIES (a JSON
+// object) overrides individual families, for probing.
+const FONT_FAMILIES: Record<string, string> = {
+  standard: "Times New Roman",
+  serif: "Times New Roman",
+  sansSerif: "Arial",
+  fixed: "Courier New",
+  ...(process.env.REAL_FONT_FAMILIES ? JSON.parse(process.env.REAL_FONT_FAMILIES) : {}),
+};
+
+/** A page in a fresh JS-disabled context, with the reference font families applied. */
+export async function openPage(
+  browser: Browser,
+  width: number,
+  height: number = VIEWPORT_HEIGHT,
+): Promise<{ context: BrowserContext; page: Page }> {
+  const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width, height } });
+  const page = await context.newPage();
+  const session = await context.newCDPSession(page);
+  try {
+    await session.send("Page.setFontFamilies", { fontFamilies: FONT_FAMILIES } as never);
+  } finally {
+    await session.detach().catch(() => {});
+  }
+  return { context, page };
+}
+
 // ---------------------------------------------------------------------------------------------
 // Snapshot store
 // ---------------------------------------------------------------------------------------------
@@ -247,8 +283,7 @@ export async function snapshot(url: string, opts: { width?: number; refresh?: bo
 
   const browser = await launchChromium();
   try {
-    const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width, height: VIEWPORT_HEIGHT } });
-    const page = await context.newPage();
+    const { page } = await openPage(browser, width);
     const pending: Promise<void>[] = [];
     page.on("response", (r) => {
       pending.push(
@@ -428,10 +463,9 @@ export async function measureChrome(
   width: number,
   opts: { screenshot?: boolean } = {},
 ): Promise<Measure> {
-  const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width, height: VIEWPORT_HEIGHT } });
+  const { context, page } = await openPage(browser, width);
   try {
     await store.attach(context);
-    const page: Page = await context.newPage();
     if (input.html !== undefined) {
       const base = input.baseUrl ?? store.finalUrl;
       const withBase = input.html.includes("<base ") ? input.html : input.html.replace(/<head[^>]*>/i, (m) => `${m}<base href="${base}">`);
