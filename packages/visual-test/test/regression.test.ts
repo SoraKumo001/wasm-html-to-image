@@ -6939,3 +6939,60 @@ describe("P0-29: flex base/cross sizing and replaced percentage max-width", () =
     expect(at(b, "0.1.0.1").w).toBeCloseTo(478.2, 0);
   });
 });
+
+// P0-30: a non-stretched grid item is sized fit-content against its grid
+// area: the content measure answers with its max-content, which the area
+// bounds, so an item whose text is wider than its area wraps inside it
+// instead of overflowing at its single-line width (MDN's footer legal
+// paragraph, grid-area spanning both columns with justify-items:start).
+// width:max-content is exempt: it overflows by definition.
+describe("P0-30: non-stretched grid item clamped to its area (fit-content)", () => {
+  type Box = { p: string; t: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(body: string, width = 1000): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0}</style></head><body>${body}</body></html>`,
+      width,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const at = (b: Box[], p: string) => b.find((x) => x.p === p)!;
+  const T = "Portions of this content are by individual mozilla.org contributors. Content available under a Creative Commons license.";
+
+  it("a justify-items:start item spanning both columns takes the area width", async () => {
+    const b = await boxes(
+      `<div style="display:grid;width:400px;grid-template-columns:min-content 1fr;column-gap:24px;justify-items:start"><div style="width:128px;height:10px"></div><div></div><p style="grid-column:1/3;margin:0">${T}</p></div>`,
+      400,
+    );
+    expect(at(b, "0.1.0.2").w).toBeCloseTo(400, 0);
+  });
+
+  it("a single-column start item is clamped the same way", async () => {
+    const b = await boxes(
+      `<div style="display:grid;width:400px;grid-template-columns:1fr;justify-items:start"><p style="margin:0">${T}</p></div>`,
+      400,
+    );
+    expect(at(b, "0.1.0.0").w).toBeCloseTo(400, 0);
+  });
+
+  it("width:max-content still overflows its area", async () => {
+    const b = await boxes(
+      `<div style="display:grid;width:400px;grid-template-columns:1fr;justify-items:start"><p style="margin:0;width:max-content">${T}</p></div>`,
+      400,
+    );
+    expect(at(b, "0.1.0.0").w).toBeGreaterThan(400);
+  });
+
+  it("a stretched item is unchanged (area width)", async () => {
+    const b = await boxes(
+      `<div style="display:grid;width:400px;grid-template-columns:1fr"><p style="margin:0">${T}</p></div>`,
+      400,
+    );
+    expect(at(b, "0.1.0.0").w).toBeCloseTo(400, 0);
+  });
+});
