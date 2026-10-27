@@ -315,7 +315,11 @@ void litehtml::flex_line::init(pixel_t container_main_size, bool fit_container,
         def_value<pixel_t> last_baseline_bottom = 0;
         pixel_t non_baseline_height = 0;
 
-        // Calculate maximum cross size
+        // Calculate maximum cross size. The line's cross size is bounded by the
+        // container's used cross size: the definite size property and the max
+        // property each bound it (so they combine with min, not max), and the
+        // used (render) size -- e.g. one assigned by an outer flex container --
+        // bounds it directly when it is definite.
         def_value<pixel_t> max_cross_size(0);
         if (self_size.mode == writing_mode_horizontal_tb) {
             if (self_size.height.type != containing_block_context::cbc_value_type_auto) {
@@ -325,7 +329,14 @@ void litehtml::flex_line::init(pixel_t container_main_size, bool fit_container,
                 if (max_cross_size.is_default()) {
                     max_cross_size = self_size.max_height;
                 } else {
-                    max_cross_size = std::max((pixel_t)max_cross_size, (pixel_t)self_size.max_height);
+                    max_cross_size = std::min((pixel_t)max_cross_size, (pixel_t)self_size.max_height);
+                }
+            }
+            if (self_size.render_height.type != containing_block_context::cbc_value_type_auto) {
+                if (max_cross_size.is_default()) {
+                    max_cross_size = self_size.render_height;
+                } else {
+                    max_cross_size = std::min((pixel_t)max_cross_size, (pixel_t)self_size.render_height);
                 }
             }
         } else {
@@ -336,7 +347,14 @@ void litehtml::flex_line::init(pixel_t container_main_size, bool fit_container,
                 if (max_cross_size.is_default()) {
                     max_cross_size = self_size.max_width;
                 } else {
-                    max_cross_size = std::max((pixel_t)max_cross_size, (pixel_t)self_size.max_width);
+                    max_cross_size = std::min((pixel_t)max_cross_size, (pixel_t)self_size.max_width);
+                }
+            }
+            if (self_size.render_width.type != containing_block_context::cbc_value_type_auto) {
+                if (max_cross_size.is_default()) {
+                    max_cross_size = self_size.render_width;
+                } else {
+                    max_cross_size = std::min((pixel_t)max_cross_size, (pixel_t)self_size.render_width);
                 }
             }
         }
@@ -420,7 +438,12 @@ void litehtml::flex_line::init(pixel_t container_main_size, bool fit_container,
         first_baseline.calc(first_baseline_top, first_baseline_bottom);
         last_baseline.calc(last_baseline_top, last_baseline_bottom);
     } else {
-        // Calculate maximum cross size (inline axis in column direction)
+        // Calculate maximum cross size (inline axis in column direction). As in
+        // the row branch, the bound is the container's used cross size: the
+        // definite size and max properties combine with min, and a definite
+        // used (render) inline size bounds the line directly -- a column flex
+        // item whose width was assigned by an outer flex container (with a
+        // larger max-width of its own) must not let its items overflow it.
         def_value<pixel_t> max_cross_size(0);
         if (self_size.mode == writing_mode_horizontal_tb) {
             if (self_size.width.type != containing_block_context::cbc_value_type_auto) {
@@ -430,7 +453,14 @@ void litehtml::flex_line::init(pixel_t container_main_size, bool fit_container,
                 if (max_cross_size.is_default()) {
                     max_cross_size = self_size.max_width;
                 } else {
-                    max_cross_size = std::max((pixel_t)max_cross_size, (pixel_t)self_size.max_width);
+                    max_cross_size = std::min((pixel_t)max_cross_size, (pixel_t)self_size.max_width);
+                }
+            }
+            if (self_size.render_width.type != containing_block_context::cbc_value_type_auto) {
+                if (max_cross_size.is_default()) {
+                    max_cross_size = self_size.render_width;
+                } else {
+                    max_cross_size = std::min((pixel_t)max_cross_size, (pixel_t)self_size.render_width);
                 }
             }
         } else {
@@ -441,7 +471,14 @@ void litehtml::flex_line::init(pixel_t container_main_size, bool fit_container,
                 if (max_cross_size.is_default()) {
                     max_cross_size = self_size.max_height;
                 } else {
-                    max_cross_size = std::max((pixel_t)max_cross_size, (pixel_t)self_size.max_height);
+                    max_cross_size = std::min((pixel_t)max_cross_size, (pixel_t)self_size.max_height);
+                }
+            }
+            if (self_size.render_height.type != containing_block_context::cbc_value_type_auto) {
+                if (max_cross_size.is_default()) {
+                    max_cross_size = self_size.render_height;
+                } else {
+                    max_cross_size = std::min((pixel_t)max_cross_size, (pixel_t)self_size.render_height);
                 }
             }
         }
