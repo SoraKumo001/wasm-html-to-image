@@ -5526,3 +5526,58 @@ describe("P0-10: content-sized grid tracks under justify/align-content", () => {
     expect(item.y).toBe(75); // (200 - 50) / 2, the row is not stretched to 200
   });
 });
+
+// P0-11: real page en.wikipedia.org. Text in generic families (the Vector skin's body
+// font is plain `sans-serif`) rendered with the substitute font's own vertical
+// metrics (Noto Sans JP: 1.448em), so every line-height: normal line was ~4-6px
+// taller than in Chromium and the offsets accumulated down the whole page.
+// Generic families now take the metric profile of their canonical concrete family
+// (Arial for sans-serif, Times New Roman for serif, Courier New for monospace).
+describe("P0-11: generic font families take canonical metric profiles", () => {
+  type Box = { p: string; t: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(body: string): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const at = (b: Box[], p: string) => b.find((x) => x.p === p)!;
+
+  it("sizes a sans-serif line by the Arial profile, not the substitute's metrics", async () => {
+    const b = await boxes(`<div style="font-family:sans-serif;font-size:16px">Text</div>`);
+    expect(at(b, "0.1.0").h).toBe(18); // 16 x 1.15, not 16 x 1.448 = 24
+  });
+
+  it("sizes a serif line by the Times New Roman profile", async () => {
+    const b = await boxes(`<div style="font-family:serif;font-size:16px">Text</div>`);
+    expect(at(b, "0.1.0").h).toBe(18);
+  });
+
+  it("sizes a ui-sans-serif line like sans-serif", async () => {
+    const b = await boxes(`<div style="font-family:ui-sans-serif;font-size:16px">Text</div>`);
+    expect(at(b, "0.1.0").h).toBe(18);
+  });
+
+  it("does not accumulate extra height over stacked generic-font lines", async () => {
+    const line = `<div style="font-family:sans-serif;font-size:14px">Line</div>`;
+    const b = await boxes(line.repeat(5));
+    expect(at(b, "0.1").h).toBe(80); // 5 x 16 (14 x 1.15 = 16.1 -> 16), not 5 x 20
+  });
+
+  it("keeps an explicit line-height authoritative over the profile", async () => {
+    const b = await boxes(`<div style="font-family:sans-serif;font-size:16px;line-height:2">Text</div>`);
+    expect(at(b, "0.1.0").h).toBe(32);
+  });
+
+  it("leaves a loaded named font's own metrics alone", async () => {
+    const b = await boxes(`<div style="font-family:Arial;font-size:16px">Text</div>`);
+    expect(at(b, "0.1.0").h).toBe(18);
+  });
+});

@@ -75,6 +75,10 @@ class SatoruFontManager : public satoru::IFontManager {
     std::vector<sk_sp<SkTypeface>> matchMetricFallbackFonts(const std::string& family, int weight,
                                                             SkFontStyle::Slant slant, int stretch = 100);
 
+    // 汎用 family (sans-serif / serif / monospace と ui- 接頭辞つき) か。汎用 family の
+    // 実体は代替書体そのものなので、登録済みでも縦メトリクスはプロファイルに合わせる。
+    bool isGenericMetricFamily(const std::string& family) const;
+
    private:
     sk_sp<SkFontMgr> m_fontMgr;
 

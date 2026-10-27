@@ -296,6 +296,16 @@ constexpr MetricFamilyAlias kMetricFamilyAliases[] = {
     {"constantia", 26},
     {"cascadiacode", 27},
     {"cascadiamono", 27},
+    // Generic families resolve to a concrete font on every platform (Arial/Helvetica
+    // for sans, Times for serif, Courier for mono on the desktop platforms these
+    // profiles model); without an entry they kept the substitute font's own metrics
+    // (Noto Sans JP is 1.448em), which inflates every line-height: normal line.
+    {"sans-serif", 2},
+    {"ui-sans-serif", 2},
+    {"serif", 3},
+    {"ui-serif", 3},
+    {"monospace", 4},
+    {"ui-monospace", 4},
 };
 
 int find_metric_profile(const std::string& clean_family) {
@@ -303,6 +313,12 @@ int find_metric_profile(const std::string& clean_family) {
         if (clean_family == alias.family) return alias.profile;
     }
     return -1;
+}
+
+bool is_generic_metric_family(const std::string& clean_family) {
+    return clean_family == "sans-serif" || clean_family == "ui-sans-serif" ||
+           clean_family == "serif" || clean_family == "ui-serif" ||
+           clean_family == "monospace" || clean_family == "ui-monospace";
 }
 
 // 実書体の scaler context を包み、縦メトリクスだけを差し替える。
@@ -833,6 +849,10 @@ std::vector<sk_sp<SkTypeface>> SatoruFontManager::matchFonts(const std::string& 
     return {};
 }
 
+bool SatoruFontManager::isGenericMetricFamily(const std::string& family) const {
+    return is_generic_metric_family(cleanName(family));
+}
+
 std::vector<sk_sp<SkTypeface>> SatoruFontManager::matchMetricFallbackFonts(
     const std::string& family, int weight, SkFontStyle::Slant slant, int stretch) {
     const std::string clean_family = cleanName(family);
@@ -842,15 +862,24 @@ std::vector<sk_sp<SkTypeface>> SatoruFontManager::matchMetricFallbackFonts(
     // ページの @font-face が同名 family を持つ場合は、まだ読み込み中でも
     // 本来の書体を優先する (代替メトリクスで先に確定させない)。
     // font_request は family が第一キーなので、family の先頭だけ見ればよい。
-    font_request probe;
-    probe.family = clean_family;
-    probe.weight = -1;
-    probe.slant = SkFontStyle::kUpright_Slant;
-    auto face_it = m_fontFaces.lower_bound(probe);
-    if (face_it != m_fontFaces.end() && face_it->first.family == clean_family) return {};
+    // 汎用 family は対象外: @font-face の family 名に汎用名は使えず、登録されている
+    // のはエンジン自身が汎用名で読み込んだ代替書体だけである。
+    if (!is_generic_metric_family(clean_family)) {
+        font_request probe;
+        probe.family = clean_family;
+        probe.weight = -1;
+        probe.slant = SkFontStyle::kUpright_Slant;
+        auto face_it = m_fontFaces.lower_bound(probe);
+        if (face_it != m_fontFaces.end() && face_it->first.family == clean_family) return {};
+    }
 
-    // 既に実体が読み込まれている family は通常の matchFonts が返している。
-    if (m_typefaceCache.find(clean_family) != m_typefaceCache.end()) return {};
+    // 既に実体が読み込まれている family は通常の matchFonts が返している。ただし
+    // 汎用 family 自身の実体は代替書体であり、その縦メトリクス (Noto Sans JP では
+    // 1.448em) が line-height: normal にそのまま漏れるため、汎用 family はここで
+    // 止めず、登録済みの実体を代替として差し替え対象にする。
+    if (m_typefaceCache.find(clean_family) != m_typefaceCache.end() &&
+        !is_generic_metric_family(clean_family))
+        return {};
 
     const FontMetricProfile& profile = kMetricProfiles[profile_index];
     const bool sans = profile.generic == FontMetricProfile::Generic::Sans;

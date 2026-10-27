@@ -112,10 +112,13 @@ std::vector<sk_sp<SkTypeface>> SatoruContext::get_typefaces(const std::string &f
     out_fake_bold = false;
     auto result = fontManager.matchFonts(family, weight, slant, stretch);
 
-    if (result.empty()) {
+    if (result.empty() || fontManager.isGenericMetricFamily(family)) {
         // システムフォント非依存のため、Verdana / Arial 等は代替書体で描かれる。
-        // 行の高さ (line-height: normal) だけは要求 family に合わせる。
-        result = fontManager.matchMetricFallbackFonts(family, weight, slant, stretch);
+        // 行の高さ (line-height: normal) だけは要求 family に合わせる。汎用 family は
+        // 実体 (代替書体) が登録済みでも同じ差し替えが要る: その縦メトリクスは
+        // 汎用プロファイルのものではないため。
+        auto adjusted = fontManager.matchMetricFallbackFonts(family, weight, slant, stretch);
+        if (!adjusted.empty()) result = adjusted;
     }
 
     if (!result.empty()) {
