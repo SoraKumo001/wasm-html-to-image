@@ -721,7 +721,32 @@ void litehtml::flex_item_column_direction::direction_specific_init(const litehtm
 			return el->inline_size(m_container_wm) - el->content_offset_inline(m_container_wm) +
 				   el->box_sizing_inline(m_container_wm);
 		};
-		if (current_inline() <= available) return;
+		if (current_inline() <= available)
+		{
+			// The content measure laid the item's inline content out at its max-content width,
+			// so the main size it reported belongs to that wider layout. When the item's
+			// resolved inline size is smaller -- its own max-width caps it below the available
+			// width, e.g. a max-width:768 paragraph in an align-items:flex-start column of
+			// 1000 -- re-measure at the resolved inline size, so the main size matches the
+			// box the item ends up with (the paragraph is 3 lines tall at 768, not the single
+			// line of its max-content measure).
+			if ((measured_cb.size_mode & containing_block_context::size_mode_content) &&
+				!(measured_cb.size_mode & containing_block_context::size_mode_min_content))
+			{
+				const pixel_t resolved = current_inline();
+				if (resolved > 0)
+				{
+					containing_block_context fit_cb = measured_cb;
+					fit_cb.width = resolved;
+					fit_cb.render_width = resolved;
+					fit_cb.size_mode |= containing_block_context::size_mode_exact_width;
+					fit_cb.size_mode &= ~(containing_block_context::size_mode_content |
+										  containing_block_context::size_mode_min_content);
+					el->measure(fit_cb, ctx);
+				}
+			}
+			return;
+		}
 		containing_block_context min_cb = measured_cb;
 		min_cb.size_mode |= containing_block_context::size_mode_min_content;
 		el->measure(min_cb, ctx);

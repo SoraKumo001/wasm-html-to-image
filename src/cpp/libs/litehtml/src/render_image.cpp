@@ -26,9 +26,10 @@ litehtml::pixel_t litehtml::render_item_image::_measure(
     // (shrink-to-fit / min-content): it contributes 0 to the min-content size instead of falling
     // back to the intrinsic size. This is what lets a flex item shrink below its image's natural
     // width (Chromium: the min-content contribution of a percentage-width replaced element is 0).
-    // (a replaced element with a percentage max-width is compressible too: CSS Sizing 5.2.2)
-    if (is_min_content && (css().get_width().units() == css_units_percentage ||
-                           (css().get_max_width().units() == css_units_percentage && css().get_width().is_predefined()))) {
+    // A percentage max-width does NOT do this: the element's min-content stays its (clamped)
+    // intrinsic size, so e.g. an image with width:max-content, max-height and max-width:100%
+    // keeps its transferred size as a flex item's automatic minimum instead of shrinking to 0.
+    if (is_min_content && css().get_width().units() == css_units_percentage) {
         m_pos.width = 0;
         m_pos.height = 0;
         src_el()->css_w().line_height_w().computed_value = height();
@@ -203,8 +204,17 @@ litehtml::pixel_t litehtml::render_item_image::_measure(
         }
     }
 
-    // Constraints (preserve the used ratio when it is known)
-    if (!css().get_max_width().is_predefined()) {
+    // Constraints (preserve the used ratio when it is known). A percentage resolves against
+    // the containing block's size. While that size is indefinite (an intrinsic-size query
+    // passes 0), a block-flow query treats the percentage as 0 -- a replaced element with a
+    // percentage max-width is compressible there. But when flex code measures the item
+    // itself (size_mode_measure survives only on that direct query; a container strips it
+    // from the contexts it hands to its children), the flex container's inline size is
+    // definite, so the percentage is not cyclic: treat it as none instead of letting the
+    // item's automatic minimum collapse to 0.
+    if (!css().get_max_width().is_predefined() &&
+        !(css().get_max_width().units() == css_units_percentage && containing_block_size.width <= 0 &&
+          (containing_block_size.size_mode & containing_block_context::size_mode_measure))) {
         pixel_t max_width = src_el()->get_document()->to_pixels(
             css().get_max_width(), css().get_font_metrics(), containing_block_size.width);
         if (m_pos.width > max_width) {
@@ -216,7 +226,9 @@ litehtml::pixel_t litehtml::render_item_image::_measure(
             }
         }
     }
-    if (!css().get_max_height().is_predefined()) {
+    if (!css().get_max_height().is_predefined() &&
+        !(css().get_max_height().units() == css_units_percentage && containing_block_size.height <= 0 &&
+          (containing_block_size.size_mode & containing_block_context::size_mode_measure))) {
         pixel_t max_height = src_el()->get_document()->to_pixels(
             css().get_max_height(), css().get_font_metrics(), containing_block_size.height);
         if (m_pos.height > max_height) {

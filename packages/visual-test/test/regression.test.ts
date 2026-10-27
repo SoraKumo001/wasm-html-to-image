@@ -6145,3 +6145,210 @@ describe("P0-19: a block-level <button> with width:auto shrink-wraps and centres
     expect(Math.abs(d.x - (532 - d.w) / 2)).toBeLessThan(1.5);
   });
 });
+
+// P0-20: real page developer.mozilla.org. The contributor spotlight image
+// (512x323, width:max-content, max-height:8rem, height:auto, and the global
+// img{max-width:100%}) sits in a <figure style="display:contents"> inside a
+// row flex. It rendered at 155x98 instead of the max-height-transferred
+// 203x128, and the text column next to it took the width the image lost.
+// Two causes: (1) flex/grid item properties were computed from the DOM
+// parent, so a child of a display:contents element never got its flex-basis
+// default (auto), its flex factors, or blockification -- the basis read as
+// a 0 length and an inline child was not blockified at all; item properties
+// are now decided by the nearest ancestor that generates a box. (2) A
+// percentage max-width made a replaced element's min-content contribution
+// 0 and resolved against an indefinite containing block as 0; only a
+// percentage width does the former, and a percentage clamp against an
+// indefinite size is now treated as none.
+describe("P0-20: flex items hoisted from display:contents get item properties", () => {
+  type Box = { p: string; t: string; c?: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(body: string): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 1000,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const FIG = (inner: string) => `<figure style="display:contents;margin:0">${inner}</figure>`;
+  const SVG_URI =
+    "data:image/svg+xml," +
+    encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='512' height='323'><rect width='512' height='323' fill='#00f'/></svg>`);
+  const SVG = `<img width="512" height="323" src="${SVG_URI}" style="width:max-content;max-height:128px;max-width:100%;height:auto">`;
+
+  it("a definite-width block child of display:contents is a flex item at that width", async () => {
+    const b = await boxes(
+      `<div style="display:flex;width:768px"><div style="width:100px;height:10px"></div>${FIG(`<div class="h" style="width:200px;height:50px"></div>`)}</div>`,
+    );
+    const h = b.find((x) => (x.c || "").includes("h"))!;
+    expect(h.w).toBe(200);
+    expect(h.x).toBe(100);
+  });
+
+  it("an inline child of display:contents is blockified, so its width applies", async () => {
+    const b = await boxes(
+      `<div style="display:flex;width:768px"><div style="width:100px;height:10px"></div>${FIG(`<span class="h" style="width:200px;height:50px"></span>`)}</div>`,
+    );
+    const h = b.find((x) => (x.c || "").includes("h"))!;
+    expect(h.w).toBe(200);
+    expect(h.h).toBe(50);
+  });
+
+  it("flex-basis and flex-grow declared on a contents child take effect", async () => {
+    const b = await boxes(
+      `<div style="display:flex;width:768px"><div style="width:100px;height:10px"></div>${FIG(`<div class="b" style="flex:0 0 150px;height:50px"></div><div class="g" style="flex-grow:1;width:100px;height:50px"></div>`)}</div>`,
+    );
+    expect(b.find((x) => (x.c || "").includes("b"))!.w).toBe(150);
+    expect(b.find((x) => (x.c || "").includes("g"))!.w).toBe(518); // 768 - 100 - 150, grown from 100
+  });
+
+  it("the contributor shape: a replaced contents child keeps its transferred size as its minimum", async () => {
+    const b = await boxes(
+      `<div style="display:flex;width:768px"><div class="s" style="width:600px;height:10px"></div>${FIG(SVG)}</div>`,
+    );
+    const svg = b.find((x) => x.t === "img")!;
+    expect(svg.w).toBeCloseTo(202.9, 0); // 128 x 512/323, frozen at its automatic minimum
+    expect(svg.h).toBeCloseTo(128, 0);
+    expect(b.find((x) => (x.c || "").includes("s"))!.w).toBeCloseTo(565.1, 0); // the sibling absorbs the shrink
+  });
+
+  it("the same replaced shape as a direct flex item (percentage max-width is not a 0 min-content)", async () => {
+    const b = await boxes(`<div style="display:flex;width:768px"><div class="s" style="width:600px;height:10px"></div>${SVG}</div>`);
+    const svg = b.find((x) => x.t === "img")!;
+    expect(svg.w).toBeCloseTo(202.9, 0);
+    expect(svg.h).toBeCloseTo(128, 0);
+    expect(b.find((x) => (x.c || "").includes("s"))!.w).toBeCloseTo(565.1, 0);
+  });
+
+  it("a percentage width still contributes 0 to a replaced item's min-content", async () => {
+    const b = await boxes(
+      `<div style="display:flex;width:400px"><div class="a" style="width:300px;height:10px"></div><svg width="512" height="323" viewBox="0 0 512 323" style="width:50%;height:auto"></svg></div>`,
+    );
+    const svg = b.find((x) => x.t === "svg")!;
+    // Bases 300 + 200 (50% of 400) overflow by 100, split in proportion to
+    // the bases because the percentage-width item may shrink to 0.
+    expect(svg.w).toBeCloseTo(160, 0);
+    expect(b.find((x) => (x.c || "").includes("a"))!.w).toBeCloseTo(240, 0);
+  });
+
+  it("a grid item hoisted from display:contents is blockified too", async () => {
+    const b = await boxes(
+      `<div style="display:grid;grid-template-columns:100px 1fr;width:768px"><div style="height:10px"></div>${FIG(`<span class="h" style="width:200px;height:50px"></span>`)}</div>`,
+    );
+    const h = b.find((x) => (x.c || "").includes("h"))!;
+    expect(h.w).toBe(200);
+    expect(h.x).toBe(100);
+  });
+});
+
+// P0-21: a max-content measure laid the inline content out at the width on
+// offer and reported the widest WRAPPED line, so every shrink-to-fit
+// consumer under-sized: a fit-content block with overflowing text came back
+// at 525px in a 532px container (the last line's slack), a width:max-content
+// block wrapped instead of overflowing, a width:auto float and a column
+// flex item's fit-content cross size shrank the same way (MDN's contributor
+// name link 341 vs 533 and blockquote 503 vs 533). A max-content query now
+// lays the inline content out unbounded in render_inline_context (block
+// children keep the caller's context, so a nested grid's fr tracks still
+// resolve against the area on offer), an auto/fit-content atomic inline is
+// clamped to its fit-content size when placed, a max-content block wider
+// than its container is placed at its content width, and a column flex
+// item measured as content is re-measured at its resolved inline size so
+// its main size belongs to the box it ends up with (react.dev's max-w-3xl
+// paragraphs in align-items:flex-start columns). (Real pages
+// developer.mozilla.org contributor section and react.dev.)
+describe("P0-21: max-content measures do not wrap at the offered width", () => {
+  type Box = { p: string; t: string; c?: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(body: string): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 1000,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const T =
+    "MDN Web Docs is a learning platform for Web technologies and the software that powers the Web, including CSS, HTML, and JavaScript for websites and Web applications, and it also sets the standards.";
+  const F = (x: Box[], cls: string) => x.find((b) => (b.c || "").includes(cls))!;
+
+  it("a fit-content block with overflowing text takes the full available width", async () => {
+    const b = await boxes(
+      `<div style="width:532px"><div class="f" style="width:fit-content;font-size:16px;line-height:18px">${T}</div></div>`,
+    );
+    expect(F(b, "f").w).toBe(532);
+    expect(F(b, "f").h).toBe(54); // still wrapped into 3 lines at its used width
+  });
+
+  it("a max-content block overflows its container on one line", async () => {
+    const b = await boxes(
+      `<div style="width:532px"><div class="f" style="width:max-content;font-size:16px;line-height:18px">${T}</div></div>`,
+    );
+    expect(F(b, "f").w).toBeGreaterThan(1000);
+    expect(F(b, "f").h).toBe(18);
+  });
+
+  it("a fit-content block with short text takes its max-content width", async () => {
+    const b = await boxes(
+      `<div style="width:532px"><div class="f" style="width:fit-content;font-size:16px;line-height:18px">Hello world</div></div>`,
+    );
+    expect(F(b, "f").w).toBeLessThan(200);
+    expect(F(b, "f").h).toBe(18);
+  });
+
+  it("a min-content block still measures its longest word", async () => {
+    const b = await boxes(
+      `<div style="width:532px"><div class="f" style="width:min-content;font-size:16px;line-height:18px">${T}</div></div>`,
+    );
+    expect(F(b, "f").w).toBeLessThan(200);
+    expect(F(b, "f").h).toBeGreaterThan(150);
+  });
+
+  it("a width:auto float with overflowing text takes the full available width", async () => {
+    const b = await boxes(`<div style="width:532px"><div class="f" style="float:left;font-size:16px;line-height:18px">${T}</div></div>`);
+    expect(F(b, "f").w).toBe(532);
+    expect(F(b, "f").h).toBe(54);
+  });
+
+  it("a column flex item's fit-content cross size fills the column when the text overflows", async () => {
+    const b = await boxes(
+      `<div style="display:flex;flex-direction:column;align-items:start;width:533px"><a class="f" style="width:fit-content;font-size:16px;line-height:18px">${T}</a></div>`,
+    );
+    expect(F(b, "f").w).toBe(533);
+    expect(F(b, "f").h).toBe(54);
+  });
+
+  it("a plain block flex item sizes through a nested block child", async () => {
+    const b = await boxes(
+      `<div style="display:flex;flex-direction:column;align-items:start;width:533px"><blockquote class="f" style="margin:0"><p style="margin:0;font-size:16px;line-height:18px">${T}</p></blockquote></div>`,
+    );
+    expect(F(b, "f").w).toBe(533);
+  });
+
+  it("a max-width still caps a shrink-to-fit float at the cap", async () => {
+    const b = await boxes(
+      `<div style="width:1000px"><div class="f" style="float:left;max-width:488px;font-size:16px;line-height:18px">${T}</div></div>`,
+    );
+    expect(F(b, "f").w).toBe(488);
+  });
+
+  it("a column flex item capped by max-width keeps the height of its capped width", async () => {
+    const item = `<p class="f" style="max-width:768px;font-size:16px;line-height:18px;margin:0">${T}</p>`;
+    const flex = await boxes(
+      `<div style="display:flex;flex-direction:column;align-items:flex-start;width:1000px">${item}</div>`,
+    );
+    const block = await boxes(`<div style="width:1000px">${item}</div>`);
+    expect(F(flex, "f").w).toBe(768);
+    expect(F(flex, "f").h).toBe(F(block, "f").h);
+    expect(F(flex, "f").h).toBeGreaterThan(18); // wrapped at 768, not the max-content measure's one line
+  });
+});

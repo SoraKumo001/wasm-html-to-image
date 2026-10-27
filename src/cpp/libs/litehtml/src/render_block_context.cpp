@@ -207,8 +207,10 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
 						const pixel_t min_rw = el->measure(self_size.new_inline_size(inline_available_size, content_mode | containing_block_context::size_mode_min_content), fmt_ctx);
 						rw = std::max(min_rw, inline_available_size);
 					}
-					if(rw < inline_available_size || kw == 3 || kw == 1)
+					if(rw < inline_available_size || kw == 3 || kw == 1 || (kw == 2 && rw > inline_available_size))
 					{
+						// (kw == 2 wider than the space on offer is a max-content box overflowing
+						// its container: it is placed at its content width, not clamped to it)
 						el->measure(self_size.new_inline_size(rw, self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content)), fmt_ctx);
 						inline_available_size = rw;
 					}

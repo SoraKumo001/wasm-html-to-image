@@ -231,11 +231,26 @@ litehtml::pixel_t litehtml::render_item_inline_context::_render_content(pixel_t 
 {
     // min-content size of inline content: every break opportunity breaks, so the widest line is the
     // widest unbreakable run (a word, an atomic inline). Lay it out in a 1px line to get that.
+    // Max-content is the mirror image: lay it out unbounded, so nothing wraps and the widest
+    // line is the content's true max-content size. (At the width on offer the widest WRAPPED
+    // line came back instead -- a few px short of the space, and far short of the max-content --
+    // so every shrink-to-fit consumer under-sized.) Only the inline layout is unbounded: the
+    // context the caller gave still governs block-level children, whose formatting contexts
+    // resolve against the space on offer on purpose (an fr track's share, a flex line's break).
     if ((self_size.size_mode & containing_block_context::size_mode_min_content) &&
         (self_size.size_mode & containing_block_context::size_mode_content) &&
         self_size.mode == writing_mode_horizontal_tb)
     {
         layout_lines(self_size.new_inline_size(1, self_size.size_mode), fmt_ctx);
+    } else if ((self_size.size_mode & containing_block_context::size_mode_content) &&
+               self_size.mode == writing_mode_horizontal_tb &&
+               self_size.render_inline_size().type == containing_block_context::cbc_value_type_auto)
+    {
+        // (only when the inline size on offer is indefinite: a query that already carries a
+        // definite inline size -- a column flex item's height measured at its capped width,
+        // react.dev's max-w-3xl paragraphs -- wants the wrapped height at that size, and
+        // laying the lines out unbounded would report a single-line height for it)
+        layout_lines(self_size.new_inline_size(100000, self_size.size_mode), fmt_ctx);
     } else
     {
         layout_lines(self_size, fmt_ctx);
@@ -631,6 +646,26 @@ void litehtml::render_item_inline_context::place_inline(std::unique_ptr<line_box
         ? (pixel_t)self_size.render_inline_size() : line_ctx.right);
     auto cb = self_size.new_inline_size(cb_inline, cb_size_mode);
     pixel_t min_rendered_width = item->get_el()->measure(cb, fmt_ctx);
+    // An auto-width (or fit-content) atomic inline is shrink-to-fit against the space on
+    // offer: min(max-content, max(min-content, available)). The content measure answers
+    // with the true max-content, which can be wider than the line (an inline-block whose
+    // padding alone exceeds the column): fit it here, or it is placed at its max-content
+    // width and its content never wraps inside it.
+    const css_length& atomic_width = item->get_el()->css().get_width();
+    if (!ruby_atomic && atomic_width.is_predefined() && (atomic_width.predef() == 0 || atomic_width.predef() == 1) &&
+        !item->get_el()->src_el()->is_replaced() && self_size.mode == writing_mode_horizontal_tb &&
+        min_rendered_width > cb_inline)
+    {
+        auto cb_min = self_size.new_inline_size(cb_inline, cb_size_mode | containing_block_context::size_mode_min_content);
+        const pixel_t min_content_width = item->get_el()->measure(cb_min, fmt_ctx);
+        const pixel_t fit_width = std::min(min_rendered_width, std::max(min_content_width, cb_inline));
+        if (fit_width < min_rendered_width)
+        {
+            auto cb_fit = self_size.new_inline_size(fit_width, containing_block_context::size_mode_exact_width);
+            item->get_el()->measure(cb_fit, fmt_ctx);
+            min_rendered_width = fit_width;
+        }
+    }
     if (!(self_size.size_mode & containing_block_context::size_mode_measure))
             {
     // Lay the ruby out in a content-sized inline extent. A small slack keeps text that exactly
