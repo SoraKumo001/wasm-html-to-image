@@ -6996,3 +6996,51 @@ describe("P0-30: non-stretched grid item clamped to its area (fit-content)", () 
     expect(at(b, "0.1.0.0").w).toBeCloseTo(400, 0);
   });
 });
+
+// P0-31: a select's height comes from its font, not a fixed 19px: the UA
+// rule used to pin height:19px, so a select at any other font size kept a
+// 19px box (rust-lang.org's language selects: 19 vs Chromium's 23.25) and
+// authored padding could not grow it (font-size:20px + padding:10px gave
+// 22 vs 46). The height is now content-driven with a 1px block padding in
+// the UA rule modelling the native button's insets: at the default
+// 13.333px size the box is unchanged (19px), and it tracks Chromium
+// within a pixel at other sizes (15px -> 21, 20px -> 27 vs Chromium 26,
+// 20px + padding:10px -> 45 vs Chromium 46).
+describe("P0-31: select height follows its font size", () => {
+  type Box = { p: string; t: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(body: string): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const sel = (style: string) =>
+    `<select style="${style}"><option>English (en-US)</option><option>Français (fr)</option></select>`;
+
+  it("the default-size select keeps its 19px height", async () => {
+    const b = await boxes(sel(""));
+    expect(b.find((x) => x.t === "select")!.h).toBeCloseTo(19, 0);
+  });
+
+  it("font-size:15px gives 21px", async () => {
+    const b = await boxes(sel("font-size:15px"));
+    expect(b.find((x) => x.t === "select")!.h).toBeCloseTo(21, 0);
+  });
+
+  it("font-size:20px gives 27px", async () => {
+    const b = await boxes(sel("font-size:20px"));
+    expect(b.find((x) => x.t === "select")!.h).toBeCloseTo(27, 0);
+  });
+
+  it("authored padding grows the box", async () => {
+    const b = await boxes(sel("font-size:20px;padding:10px"));
+    expect(b.find((x) => x.t === "select")!.h).toBeCloseTo(45, 0);
+  });
+});
