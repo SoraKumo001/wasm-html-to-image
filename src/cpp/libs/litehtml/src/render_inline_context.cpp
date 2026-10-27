@@ -526,6 +526,10 @@ litehtml::pixel_t litehtml::render_item_inline_context::new_box(const std::uniqu
 	// Break text at the narrowed inline end while the line box keeps the full
 	// content width (text-wrap-style). Floats can narrow a line further.
 	m_line_boxes.back()->set_wrap_end(std::min(m_wrap_end, (pixel_t)line_ctx.right));
+	if (self_size.size_mode & containing_block_context::size_mode_min_content)
+	{
+		m_line_boxes.back()->set_min_content_measure(true);
+	}
 
 	// Add items returned by finish_last_box function into the new line
 	for(auto& it : items)

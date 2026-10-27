@@ -5780,3 +5780,82 @@ describe("P0-14: scrollbar-gutter: stable reserves the gutter on the root", () =
     expect(out.find((x) => x.t === "html")!.w).toBe(985);
   });
 });
+
+// P0-15: real page developer.mozilla.org. MDN's global stylesheet puts
+// `overflow-wrap: break-word` on the body, so every word on the page is split
+// into per-character boxes for layout. A min-content measure lays the text
+// out at 1px and takes the widest line; the splitter let the line break
+// between any two characters there, so min-content collapsed to the widest
+// single glyph (the hero <p>: 22px instead of its longest word ~145px) and
+// intrinsic sizing everywhere downstream (here: the hero grid's auto tracks,
+// distributed from their min-content bases) came out wrong. Soft wrap
+// opportunities that break-word / break-word introduce inside a word do not
+// count for min-content (CSS Text) -- only break-all and overflow-wrap:
+// anywhere create those -- so during a min-content measure the characters of
+// such a word now stay on the word's line.
+describe("P0-15: break-word words stay whole in a min-content measure", () => {
+  type Box = { p: string; t: string; x: number; y: number; w: number; h: number };
+
+  async function divBox(style: string, text = "Documenting JavaScript resources"): Promise<Box> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head></head><body style="margin:0"><div style="font-size:20px;font-family:Arial,sans-serif;${style}">${text}</div></body></html>`,
+      width: 1000,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out.find((x) => x.t === "div")!;
+  }
+
+  it("min-content of break-word text is the longest word, as without break-word", async () => {
+    const plain = await divBox("width:min-content");
+    const breakWord = await divBox("width:min-content;overflow-wrap:break-word");
+    const wordBreak = await divBox("width:min-content;word-break:break-word");
+    expect(breakWord.w).toBe(plain.w);
+    expect(wordBreak.w).toBe(plain.w);
+  });
+
+  it("break-all and overflow-wrap: anywhere still shrink min-content to a glyph", async () => {
+    const plain = await divBox("width:min-content");
+    const breakAll = await divBox("width:min-content;word-break:break-all");
+    const anywhere = await divBox("width:min-content;overflow-wrap:anywhere");
+    expect(breakAll.w).toBeLessThan(plain.w / 3);
+    expect(anywhere.w).toBeLessThan(plain.w / 3);
+  });
+
+  it("real layout still breaks a break-word word that exceeds the line", async () => {
+    const oneLine = await divBox("width:900px;overflow-wrap:break-word");
+    const narrow = await divBox("width:60px;overflow-wrap:break-word");
+    expect(narrow.h).toBeGreaterThan(oneLine.h);
+  });
+
+  it("auto grid tracks distribute from the word-based minimum under break-word", async () => {
+    // The grid's auto tracks are sized by growing equally from their
+    // min-content bases (maximize tracks). With break-word the text track's
+    // base must be its longest word -- with a glyph-sized base the text track
+    // would start ~110px lower and the equal growth would land elsewhere --
+    // so the distribution must be identical to the same grid without
+    // break-word, and fill the container.
+    async function tracks(extra: string): Promise<Box[]> {
+      let out: Box[] = [];
+      await render({
+        value: `<!doctype html><html><head></head><body style="margin:0"><div style="display:grid;grid-template-columns:auto auto;width:400px;${extra}"><div style="font-size:20px;font-family:Arial,sans-serif">Documenting JavaScript resources for developers everywhere</div><div><span style="display:inline-block;width:150px;height:10px"></span> <span style="display:inline-block;width:100px;height:10px"></span></div></div></body></html>`,
+        width: 1000,
+        format: "png",
+        onLayout: (b) => {
+          out = b as Box[];
+        },
+      });
+      return out.filter((x) => x.t === "div" && x.p.split(".").length === 4);
+    }
+    const plain = await tracks("");
+    const breakWord = await tracks("overflow-wrap:break-word");
+    expect(plain.length).toBe(2);
+    expect(breakWord.length).toBe(2);
+    expect(breakWord[0].w).toBe(plain[0].w);
+    expect(breakWord[1].w).toBe(plain[1].w);
+    expect(plain[0].w + plain[1].w).toBe(400);
+  });
+});

@@ -1228,6 +1228,21 @@ bool litehtml::line_box::can_hold(const std::unique_ptr<line_box_item>& item, wh
 					}
 				}
 			}
+			// In a min-content measure the characters of a break-word word stay on
+			// the word's line: the soft wrap opportunities break-word introduces
+			// inside a word do not count for min-content (only break-all and
+			// overflow-wrap: anywhere create those, and their characters are not
+			// marked as word members), so the line overflows to the whole word.
+			if (m_min_content_measure)
+			{
+				if (auto word = std::dynamic_pointer_cast<litehtml::el_text>(item->get_el()->src_el()))
+				{
+					if (word->is_word_break_part() && !word->is_word_break_start())
+					{
+						return true;
+					}
+				}
+			}
 			pixel_t item_inline_size = (m_writing_mode == writing_mode_horizontal_tb) ? item->width() : item->get_el()->height();
 			if (m_inline_pos + m_inline_size + item_inline_size > m_wrap_end + 0.01)
 			{

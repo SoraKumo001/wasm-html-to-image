@@ -164,6 +164,7 @@ namespace litehtml
         text_overflow			m_text_overflow;
         overflow				m_overflow;
 		pixel_t m_min_width;
+		bool m_min_content_measure = false;
 		writing_mode m_writing_mode;
 		bool m_inline_reverse;
 		std::list< std::unique_ptr<line_box_item> > m_items;
@@ -213,6 +214,13 @@ namespace litehtml
 
         // Narrower inline end used to decide where lines break (text-wrap-style).
         void				set_wrap_end(pixel_t end) { m_wrap_end = end; }
+
+        // This line is laid out by a min-content measure (at a 1px inline size):
+        // the soft wrap opportunities that overflow-wrap: break-word and
+        // word-break: break-word introduce inside a word do not count there,
+        // so the word's characters stay together in can_hold.
+        void				set_min_content_measure(bool val) { m_min_content_measure = val; }
+        bool				is_min_content_measure() const { return m_min_content_measure; }
 
         void				set_text_overflow(text_overflow overflow) { m_text_overflow = overflow; }
         void				set_overflow(overflow val) { m_overflow = val; }
