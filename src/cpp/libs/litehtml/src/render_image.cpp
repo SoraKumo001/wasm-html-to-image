@@ -256,6 +256,15 @@ litehtml::pixel_t litehtml::render_item_image::_measure(
         if (is_max && len.units() == css_units_percentage && basis <= 0 &&
             (containing_block_size.size_mode & containing_block_context::size_mode_measure))
             return none;
+        // A max-content query hands a descendant an indefinite (zero) basis once the
+        // direct measure bit has been stripped by the containers in between: the
+        // percentage is cyclic there and behaves as none (CSS Sizing: a percentage
+        // against an indefinite containing block does not resolve), so the element
+        // contributes its definite/intrinsic size. Resolving it as 0 instead let a
+        // percentage max-width erase e.g. a width:40px ratio-only img measured as a
+        // flex item's content (its wrapper collapsed to the img's padding).
+        if (is_max && percent_based(len) && basis <= 0 && is_content_size && !is_min_content)
+            return none;
         return src_el()->get_document()->to_pixels(len, css().get_font_metrics(), basis);
     };
     const pixel_t max_w = resolve_limit(css().get_max_width(), containing_block_size.width, exact_phys_width, true);
