@@ -324,7 +324,14 @@ void litehtml::flex_item_row_direction::direction_specific_init(const litehtml::
                     
 					el->measure(measure_cb, fmt_ctx ? &fmt_ctx_copy : nullptr);
 					flex_base_size = get_el_main_size();
-					if (reload_unbounded && flex_base_size >= logical_is_val)
+					// The measure can also come back capped by the item's own max main size
+					// (a percentage max-width resolves against the space on offer, margins
+					// included, inside the item's containing-block calculation): the flex base
+					// size is the unclamped max-content size -- the clamp belongs to the
+					// hypothetical main size -- so that case needs the unbounded reload too.
+					const bool hit_max_main = !max_main_size.is_default() &&
+						flex_base_size >= (pixel_t) max_main_size;
+					if (reload_unbounded && (flex_base_size >= logical_is_val || hit_max_main))
 					{
 						// (no inline size on offer, the same "unbounded" query render_grid.cpp uses)
 						containing_block_context::typed_pixel tp_unbounded(100000, containing_block_context::cbc_value_type_auto);
