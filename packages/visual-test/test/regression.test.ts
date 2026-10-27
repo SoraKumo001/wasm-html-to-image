@@ -6778,3 +6778,44 @@ describe("P0-26: grid end-line placement resolution", () => {
     expect(at(b, "0.1.0.1").y).toBe(20);
   });
 });
+
+// P0-27: a <select> is sized to its longest option label, measured with the
+// real text machinery plus a fixed allowance for the control chrome. The
+// longest label used to be estimated per character (0.55em per ASCII byte,
+// 1em per wide byte) plus 4.4em, which overshot Chromium by ~30px on a
+// three-option select and by 70px on rust-lang.org's language switcher.
+describe("P0-27: select width from the measured longest option", () => {
+  type Box = { p: string; t: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(body: string): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const sel = (b: Box[]) => b.find((x) => x.t === "select")!;
+
+  it("sizes to the longest option, selected or not", async () => {
+    const b = await boxes(
+      `<select><option selected>En</option><option>A very long language name</option><option>Fr</option></select>`,
+    );
+    expect(sel(b).w).toBeCloseTo(184.7, 0);
+    expect(sel(b).h).toBe(19);
+  });
+
+  it("sizes a short single option to the label plus chrome", async () => {
+    const b = await boxes(`<select><option>x</option></select>`);
+    expect(sel(b).w).toBeCloseTo(28.6, 0);
+  });
+
+  it("an empty option still gets the chrome width", async () => {
+    const b = await boxes(`<select><option></option></select>`);
+    expect(sel(b).w).toBeCloseTo(26, 0);
+  });
+});
