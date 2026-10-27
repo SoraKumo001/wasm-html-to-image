@@ -6784,6 +6784,9 @@ describe("P0-26: grid end-line placement resolution", () => {
 // longest label used to be estimated per character (0.55em per ASCII byte,
 // 1em per wide byte) plus 4.4em, which overshot Chromium by ~30px on a
 // three-option select and by 70px on rust-lang.org's language switcher.
+// The injected width is in em of the select's own (fractional, 13.33px)
+// font size; the expectations below are the post-P0-28 values, where em
+// resolves against the computed size instead of the rounded font's.
 describe("P0-27: select width from the measured longest option", () => {
   type Box = { p: string; t: string; x: number; y: number; w: number; h: number };
 
@@ -6805,17 +6808,69 @@ describe("P0-27: select width from the measured longest option", () => {
     const b = await boxes(
       `<select><option selected>En</option><option>A very long language name</option><option>Fr</option></select>`,
     );
-    expect(sel(b).w).toBeCloseTo(184.7, 0);
+    expect(sel(b).w).toBeCloseTo(189.5, 0);
     expect(sel(b).h).toBe(19);
   });
 
   it("sizes a short single option to the label plus chrome", async () => {
     const b = await boxes(`<select><option>x</option></select>`);
-    expect(sel(b).w).toBeCloseTo(28.6, 0);
+    expect(sel(b).w).toBeCloseTo(29.3, 0);
   });
 
   it("an empty option still gets the chrome width", async () => {
     const b = await boxes(`<select><option></option></select>`);
     expect(sel(b).w).toBeCloseTo(26, 0);
+  });
+});
+
+// P0-28: em lengths resolve against the element's computed font size, even
+// when it is fractional. The font is created at a whole-pixel size and the
+// metrics carried that rounded size, so 0.8rem (12.8px) resolved ems at
+// 13px: width:10em came out 130 instead of 128, and MDN's
+// min-height:calc(3em*1.2) summaries were 46.8 instead of 46.08.
+describe("P0-28: em resolves against the computed (fractional) font size", () => {
+  type Box = { p: string; t: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(body: string): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const at = (b: Box[], p: string) => b.find((x) => x.p === p)!;
+
+  it("width:10em at font-size 12.8px is 128, not 130", async () => {
+    const b = await boxes(`<div style="font-size:12.8px;width:10em;height:5px"></div>`);
+    expect(at(b, "0.1.0").w).toBeCloseTo(128, 0);
+  });
+
+  it("width:10em at font-size 12.5px is 125, not 130", async () => {
+    const b = await boxes(`<div style="font-size:12.5px;width:10em;height:5px"></div>`);
+    expect(at(b, "0.1.0").w).toBeCloseTo(125, 0);
+  });
+
+  it("min-height calc(3em * 1.2) at 0.8rem is 46.08", async () => {
+    const b = await boxes(
+      `<p style="font-size:0.8rem;min-height:calc(3em*1.2);max-height:calc(3em*1.2);margin:0">x</p>`,
+    );
+    expect(at(b, "0.1.0").h).toBeCloseTo(46.08, 0);
+  });
+
+  it("an inherited fractional size resolves ems on the child too", async () => {
+    const b = await boxes(
+      `<div style="font-size:12.8px"><div style="width:10em;height:5px"></div></div>`,
+    );
+    expect(at(b, "0.1.0.0").w).toBeCloseTo(128, 0);
+  });
+
+  it("whole-pixel sizes are unchanged", async () => {
+    const b = await boxes(`<div style="font-size:13px;width:10em;height:5px"></div>`);
+    expect(at(b, "0.1.0").w).toBe(130);
   });
 });
