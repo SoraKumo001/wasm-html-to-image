@@ -64,9 +64,18 @@ litehtml::pixel_t litehtml::render_item_image::_measure(
             return p->css().get_flex_wrap() != flex_wrap_nowrap;
         }();
 
+    // An exact inline size handed down by a consumer (flex layout re-measuring the item at
+    // the main size it assigned) is the used size even when the width property is a keyword:
+    // the intrinsic branches below would report the natural size instead and the item would
+    // outgrow its flex size (a width:max-content image with max-width:50% came back at its
+    // full 512 in a 384 main size). The provisional-flex path above is the exception: the
+    // width it hands over is a trial size the transfer must not use.
+    const bool exact_inline_size = self_size.mode == writing_mode_horizontal_tb
+        ? (containing_block_size.size_mode & containing_block_context::size_mode_exact_width) != 0
+        : (containing_block_size.size_mode & containing_block_context::size_mode_exact_height) != 0;
     const bool width_is_auto =
-        self_size.width.type == containing_block_context::cbc_value_type_auto ||
-        provisional_flex_width;
+        provisional_flex_width ||
+        (self_size.width.type == containing_block_context::cbc_value_type_auto && !exact_inline_size);
     const bool height_is_auto =
         self_size.height.type == containing_block_context::cbc_value_type_auto;
 
@@ -212,7 +221,24 @@ litehtml::pixel_t litehtml::render_item_image::_measure(
     // from the contexts it hands to its children), the flex container's inline size is
     // definite, so the percentage is not cyclic: treat it as none instead of letting the
     // item's automatic minimum collapse to 0.
+    // An exact-size context hands this box its own used size as the containing block size
+    // (flex layout re-measures the item at the size it assigned): a percentage limit
+    // resolved against it would apply the percentage to the box itself -- max-width:50%
+    // on a 202.89 flex item clamped it again to 101.45. The assigned size already went
+    // through the consumer's own clamping, so a percentage limit is not re-derived there
+    // (calculate_containing_block_context does the same for a block's min/max-width;
+    // absolute limits still apply).
+    auto percent_based = [](const css_length& len) {
+        return len.units() == css_units_percentage || (len.is_calc() && len.calc_percent() != 0);
+    };
+    const bool exact_phys_width = self_size.mode == writing_mode_horizontal_tb
+        ? (containing_block_size.size_mode & containing_block_context::size_mode_exact_width) != 0
+        : (containing_block_size.size_mode & containing_block_context::size_mode_exact_height) != 0;
+    const bool exact_phys_height = self_size.mode == writing_mode_horizontal_tb
+        ? (containing_block_size.size_mode & containing_block_context::size_mode_exact_height) != 0
+        : (containing_block_size.size_mode & containing_block_context::size_mode_exact_width) != 0;
     if (!css().get_max_width().is_predefined() &&
+        !(percent_based(css().get_max_width()) && exact_phys_width) &&
         !(css().get_max_width().units() == css_units_percentage && containing_block_size.width <= 0 &&
           (containing_block_size.size_mode & containing_block_context::size_mode_measure))) {
         pixel_t max_width = src_el()->get_document()->to_pixels(
@@ -227,6 +253,7 @@ litehtml::pixel_t litehtml::render_item_image::_measure(
         }
     }
     if (!css().get_max_height().is_predefined() &&
+        !(percent_based(css().get_max_height()) && exact_phys_height) &&
         !(css().get_max_height().units() == css_units_percentage && containing_block_size.height <= 0 &&
           (containing_block_size.size_mode & containing_block_context::size_mode_measure))) {
         pixel_t max_height = src_el()->get_document()->to_pixels(

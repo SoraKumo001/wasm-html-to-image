@@ -43,6 +43,22 @@ void litehtml::flex_item::init(const litehtml::containing_block_context &self_si
 	{
 		hypothetical_main_size = flex_base_size;
 	}
+	// An automatic minimum (the min-content size from the measure above, taken when the
+	// min-width property is automatic) is itself clamped by the max main size: a min-content
+	// size is resolved under the box's own min/max constraints, so a replaced item with
+	// width:max-content and max-width:50% in a 768 container has a 384 floor, not its 512
+	// intrinsic width -- the percentage in its min-content measure is treated as none there
+	// (its basis is indefinite in that query), which would otherwise let the floor override
+	// the cap here. An explicit min-width still wins over max-width, as in CSS.
+	{
+		const css_length& min_main_prop = m_container_wm.is_vertical() ? el->css().get_min_height() : el->css().get_min_width();
+		if (min_main_prop.is_predefined() && !max_main_size.is_default() &&
+			hypothetical_main_size > max_main_size)
+		{
+			hypothetical_main_size = max_main_size;
+			main_size = hypothetical_main_size;
+		}
+	}
 
 	main_size = hypothetical_main_size;
 	frozen = false;
