@@ -6245,3 +6245,110 @@ describe("P0-20: flex items hoisted from display:contents get item properties", 
     expect(h.x).toBe(100);
   });
 });
+
+// P0-21: a max-content measure laid the inline content out at the width on
+// offer and reported the widest WRAPPED line, so every shrink-to-fit
+// consumer under-sized: a fit-content block with overflowing text came back
+// at 525px in a 532px container (the last line's slack), a width:max-content
+// block wrapped instead of overflowing, a width:auto float and a column
+// flex item's fit-content cross size shrank the same way (MDN's contributor
+// name link 341 vs 533 and blockquote 503 vs 533). A max-content query now
+// lays the inline content out unbounded in render_inline_context (block
+// children keep the caller's context, so a nested grid's fr tracks still
+// resolve against the area on offer), an auto/fit-content atomic inline is
+// clamped to its fit-content size when placed, a max-content block wider
+// than its container is placed at its content width, and a column flex
+// item measured as content is re-measured at its resolved inline size so
+// its main size belongs to the box it ends up with (react.dev's max-w-3xl
+// paragraphs in align-items:flex-start columns). (Real pages
+// developer.mozilla.org contributor section and react.dev.)
+describe("P0-21: max-content measures do not wrap at the offered width", () => {
+  type Box = { p: string; t: string; c?: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(body: string): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 1000,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const T =
+    "MDN Web Docs is a learning platform for Web technologies and the software that powers the Web, including CSS, HTML, and JavaScript for websites and Web applications, and it also sets the standards.";
+  const F = (x: Box[], cls: string) => x.find((b) => (b.c || "").includes(cls))!;
+
+  it("a fit-content block with overflowing text takes the full available width", async () => {
+    const b = await boxes(
+      `<div style="width:532px"><div class="f" style="width:fit-content;font-size:16px;line-height:18px">${T}</div></div>`,
+    );
+    expect(F(b, "f").w).toBe(532);
+    expect(F(b, "f").h).toBe(54); // still wrapped into 3 lines at its used width
+  });
+
+  it("a max-content block overflows its container on one line", async () => {
+    const b = await boxes(
+      `<div style="width:532px"><div class="f" style="width:max-content;font-size:16px;line-height:18px">${T}</div></div>`,
+    );
+    expect(F(b, "f").w).toBeGreaterThan(1000);
+    expect(F(b, "f").h).toBe(18);
+  });
+
+  it("a fit-content block with short text takes its max-content width", async () => {
+    const b = await boxes(
+      `<div style="width:532px"><div class="f" style="width:fit-content;font-size:16px;line-height:18px">Hello world</div></div>`,
+    );
+    expect(F(b, "f").w).toBeLessThan(200);
+    expect(F(b, "f").h).toBe(18);
+  });
+
+  it("a min-content block still measures its longest word", async () => {
+    const b = await boxes(
+      `<div style="width:532px"><div class="f" style="width:min-content;font-size:16px;line-height:18px">${T}</div></div>`,
+    );
+    expect(F(b, "f").w).toBeLessThan(200);
+    expect(F(b, "f").h).toBeGreaterThan(150);
+  });
+
+  it("a width:auto float with overflowing text takes the full available width", async () => {
+    const b = await boxes(`<div style="width:532px"><div class="f" style="float:left;font-size:16px;line-height:18px">${T}</div></div>`);
+    expect(F(b, "f").w).toBe(532);
+    expect(F(b, "f").h).toBe(54);
+  });
+
+  it("a column flex item's fit-content cross size fills the column when the text overflows", async () => {
+    const b = await boxes(
+      `<div style="display:flex;flex-direction:column;align-items:start;width:533px"><a class="f" style="width:fit-content;font-size:16px;line-height:18px">${T}</a></div>`,
+    );
+    expect(F(b, "f").w).toBe(533);
+    expect(F(b, "f").h).toBe(54);
+  });
+
+  it("a plain block flex item sizes through a nested block child", async () => {
+    const b = await boxes(
+      `<div style="display:flex;flex-direction:column;align-items:start;width:533px"><blockquote class="f" style="margin:0"><p style="margin:0;font-size:16px;line-height:18px">${T}</p></blockquote></div>`,
+    );
+    expect(F(b, "f").w).toBe(533);
+  });
+
+  it("a max-width still caps a shrink-to-fit float at the cap", async () => {
+    const b = await boxes(
+      `<div style="width:1000px"><div class="f" style="float:left;max-width:488px;font-size:16px;line-height:18px">${T}</div></div>`,
+    );
+    expect(F(b, "f").w).toBe(488);
+  });
+
+  it("a column flex item capped by max-width keeps the height of its capped width", async () => {
+    const item = `<p class="f" style="max-width:768px;font-size:16px;line-height:18px;margin:0">${T}</p>`;
+    const flex = await boxes(
+      `<div style="display:flex;flex-direction:column;align-items:flex-start;width:1000px">${item}</div>`,
+    );
+    const block = await boxes(`<div style="width:1000px">${item}</div>`);
+    expect(F(flex, "f").w).toBe(768);
+    expect(F(flex, "f").h).toBe(F(block, "f").h);
+    expect(F(flex, "f").h).toBeGreaterThan(18); // wrapped at 768, not the max-content measure's one line
+  });
+});
