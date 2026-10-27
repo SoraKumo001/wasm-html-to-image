@@ -1418,6 +1418,23 @@ namespace litehtml
         add_property(start_id, tokens_list[0], baseurl, important, container, layer, specificity);
         if (tokens_list.size() >= 2)
           add_property(end_id, tokens_list[1], baseurl, important, container, layer, specificity);
+        else
+        {
+          // A lone <custom-ident> sets the end line to the same ident (which
+          // resolves to the <ident>-end line), per the grid-column/grid-row
+          // shorthand rules -- grid-column: extended-full must span to the
+          // extended-full-end line, not stop after one track. Any other
+          // single value (a number, span, auto) leaves the end auto.
+          css_token_vector single;
+          for (const auto& tok : tokens_list[0])
+            if (tok.type != WHITESPACE) single.push_back(tok);
+          if (single.size() == 1 && single[0].type == IDENT)
+          {
+            string id = lowcase(single[0].ident());
+            if (id != "auto" && id != "span")
+              add_property(end_id, tokens_list[0], baseurl, important, container, layer, specificity);
+          }
+        }
       }
       return;
     }

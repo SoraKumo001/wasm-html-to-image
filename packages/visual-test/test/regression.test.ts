@@ -5951,3 +5951,64 @@ describe("P0-16: negative margins collapse through the parent's edges", () => {
     expect(byClass(b, "child").y).toBe(wrap.y);
   });
 });
+
+// P0-17: real page developer.mozilla.org. The layout grid names its lines
+// [extended-full-start] ... [extended-full-end] around five tracks, and the
+// (empty) ad-slot element is placed with `grid-column: extended-full`. A
+// lone <custom-ident> in the grid-column/grid-row shorthand sets the end
+// line to the same ident, which resolves to the <ident>-end line -- the
+// shorthand handler only set the start, leaving the end auto (span 1), so
+// the element collapsed into the first 16px track and, sharing its row
+// with the body column, stretched to the row's full height (16 x 1241
+// instead of 985 x 0). One-track names like `content` were unaffected,
+// which is why the body column landed correctly.
+describe("P0-17: a lone custom-ident in grid-column/grid-row spans to the <ident>-end line", () => {
+  type Box = { p: string; t: string; c?: string; x: number; y: number; w: number; h: number };
+  const TPL =
+    "[ext-start] 16px [full-start] 1fr [content-start] 300px [content-end] 1fr [full-end] 16px [ext-end]";
+
+  async function boxes(bodyHtml: string): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head></head><body style="margin:0">${bodyHtml}</body></html>`,
+      width: 1000,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const byClass = (bs: Box[], cls: string) => bs.find((x) => (x.c || "").includes(cls))!;
+
+  it("grid-column: ext spans all five tracks; the next item wraps to a new row", async () => {
+    const b = await boxes(
+      `<div style="display:grid;width:632px;grid-template-columns:${TPL}"><div class="a" style="grid-column:ext;height:10px"></div><div class="bb" style="grid-column:content;height:20px"></div></div>`,
+    );
+    const a = byClass(b, "a");
+    const bb = byClass(b, "bb");
+    expect(a.x).toBe(0);
+    expect(a.w).toBe(632);
+    expect(bb.x).toBe(166);
+    expect(bb.w).toBe(300);
+    expect(bb.y).toBe(a.y + 10);
+  });
+
+  it("grid-row: <ident> spans multiple rows the same way", async () => {
+    const b = await boxes(
+      `<div style="display:grid;width:200px;grid-template-columns:100px 100px;grid-template-rows:[tall-start] 30px 40px [tall-end] 50px"><div class="a" style="grid-row:tall;grid-column:1"></div><div class="bb" style="grid-column:2;height:5px"></div></div>`,
+    );
+    const a = byClass(b, "a");
+    expect(a.h).toBe(70); // 30 + 40
+    expect(a.y).toBe(0);
+  });
+
+  it("a one-track name, a lone number and a lone span keep their old meaning", async () => {
+    const b = await boxes(
+      `<div style="display:grid;width:632px;grid-template-columns:${TPL}"><div class="a" style="grid-column:content;height:10px"></div><div class="bb" style="grid-column:2;height:10px"></div><div class="cc" style="grid-column:1 / span 2;height:10px"></div></div>`,
+    );
+    expect(byClass(b, "a").w).toBe(300);
+    expect(byClass(b, "bb").w).toBe(150); // track 2 is the 1fr before content
+    expect(byClass(b, "cc").w).toBe(166); // 16 + 150
+  });
+});
