@@ -23,6 +23,9 @@ struct image_info {
     int height;
     std::string data_url;
     sk_sp<SkImage> skImage;
+    // The source is an SVG with a viewBox but no intrinsic size: width/height
+    // are the default-object raster size and only the ratio is intrinsic.
+    bool ratio_only = false;
 };
 
 std::string clean_font_name(const char* name);

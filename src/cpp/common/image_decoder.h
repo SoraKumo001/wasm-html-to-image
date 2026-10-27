@@ -23,6 +23,9 @@ struct DecodeResult {
     int height = 0;
     std::string format = "unknown";  // png/jpeg/webp/gif/avif/bmp/svg
     bool animated = false;
+    // SVG with a viewBox but no absolute width/height: the only intrinsic
+    // property is the aspect ratio (width/height above are a raster size).
+    bool ratio_only = false;
 
     bool ok() const { return !frames.empty(); }
 };
@@ -41,12 +44,14 @@ class ImageDecoder {
     // satoru側 ImageDecoder::decode 互換の先頭フレームのみ返却。
     // out_width/out_height に先頭フレーム寸法を格納する。
     static sk_sp<SkImage> decode_first(const uint8_t* data, size_t size, int& out_width,
-                                       int& out_height, sk_sp<SkFontMgr> font_mgr = nullptr);
+                                       int& out_height, sk_sp<SkFontMgr> font_mgr = nullptr,
+                                       bool* out_ratio_only = nullptr);
 
    private:
     static bool decode_jxl(const uint8_t* data, size_t size, DecodeResult& result);
     static bool is_likely_svg(const uint8_t* data, size_t size);
-    static DecodeResult decode_svg(const sk_sp<SkData>& data, sk_sp<SkFontMgr> font_mgr);
+    static DecodeResult decode_svg(const sk_sp<SkData>& data, sk_sp<SkFontMgr> font_mgr,
+                                   bool default_object_raster = false);
 };
 
 }  // namespace html_to_image

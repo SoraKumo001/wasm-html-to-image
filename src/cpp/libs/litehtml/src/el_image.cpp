@@ -17,6 +17,13 @@ bool litehtml::el_image::is_replaced() const
 	return true;
 }
 
+bool litehtml::el_image::is_ratio_only_replaced() const
+{
+	// An <img> whose source is an SVG with a viewBox but no intrinsic size:
+	// only the ratio is intrinsic, exactly like an inline <svg> (el_svg).
+	return get_document()->container()->get_image_ratio_only(m_src.c_str(), nullptr);
+}
+
 void litehtml::el_image::parse_attributes()
 {
 	m_src = get_attr("src", "");

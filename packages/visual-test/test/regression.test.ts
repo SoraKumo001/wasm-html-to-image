@@ -6599,3 +6599,92 @@ describe("P0-24: ratio-only grid item placement size", () => {
     expect(at(b, "0.1.0.0").h).toBe(40);
   });
 });
+
+// P0-25: an <img> whose source is a viewBox-only SVG has an aspect ratio but no
+// intrinsic size: it is a ratio-only replaced box, like an inline <svg>. The
+// decoder used to report a 512x512 fallback size for it, so the box came out
+// square (512x512 in a block, 50x50 at width:50px). The ratio now travels from
+// the decoder through the image cache and the container to el_image, and the
+// layout-path raster is the default object size fitted to the ratio (300x150),
+// so the graphic fills its box instead of letterboxing.
+describe("P0-25: img of a viewBox-only SVG is ratio-only", () => {
+  type Box = { p: string; t: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(body: string): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const at = (b: Box[], p: string) => b.find((x) => x.p === p)!;
+  const URI = (attrs: string, vb = "0 0 200 100") =>
+    "data:image/svg+xml," +
+    encodeURIComponent(
+      `<svg xmlns='http://www.w3.org/2000/svg' ${attrs} viewBox='${vb}'><rect width='100%' height='100%' fill='#00f'/></svg>`,
+    );
+  const IMG = (style = "", attrs = "", vb?: string) =>
+    `<img src="${URI(attrs, vb)}" style="${style}">`;
+
+  it("fills its block and derives the height from the viewBox ratio", async () => {
+    const b = await boxes(`<div style="width:400px">${IMG()}</div>`);
+    expect(at(b, "0.1.0.0").w).toBe(400);
+    expect(at(b, "0.1.0.0").h).toBe(200);
+  });
+
+  it("derives the height from a definite width", async () => {
+    const b = await boxes(`<div style="width:400px">${IMG("width:50px")}</div>`);
+    expect(at(b, "0.1.0.0").w).toBe(50);
+    expect(at(b, "0.1.0.0").h).toBe(25);
+  });
+
+  it("derives the width from a definite height", async () => {
+    const b = await boxes(`<div style="width:400px">${IMG("height:50px")}</div>`);
+    expect(at(b, "0.1.0.0").w).toBe(100);
+    expect(at(b, "0.1.0.0").h).toBe(50);
+  });
+
+  it("keeps the ratio under a max-width clamp", async () => {
+    const b = await boxes(`<div style="width:400px">${IMG("max-width:100px")}</div>`);
+    expect(at(b, "0.1.0.0").w).toBe(100);
+    expect(at(b, "0.1.0.0").h).toBe(50);
+  });
+
+  it("fills its grid area under place-items:start", async () => {
+    const b = await boxes(
+      `<div style="display:grid;width:400px;height:200px;place-items:start">${IMG()}</div>`,
+    );
+    expect(at(b, "0.1.0.0").w).toBe(400);
+    expect(at(b, "0.1.0.0").h).toBe(200);
+  });
+
+  it("transfers in a grid from a definite height", async () => {
+    const b = await boxes(
+      `<div style="display:grid;width:400px;height:200px">${IMG("width:fit-content;height:40px")}</div>`,
+    );
+    expect(at(b, "0.1.0.0").w).toBe(80);
+    expect(at(b, "0.1.0.0").h).toBe(40);
+  });
+
+  it("uses the viewBox ratio of a square and a tall SVG", async () => {
+    const s = await boxes(`<div style="width:400px">${IMG("", "", "0 0 100 100")}</div>`);
+    expect(at(s, "0.1.0.0").w).toBe(400);
+    expect(at(s, "0.1.0.0").h).toBe(400);
+    const t = await boxes(`<div style="width:400px">${IMG("", "", "0 0 100 200")}</div>`);
+    expect(at(t, "0.1.0.0").w).toBe(400);
+    expect(at(t, "0.1.0.0").h).toBe(800);
+  });
+
+  it("an SVG with width/height attributes keeps its intrinsic size", async () => {
+    const b = await boxes(
+      `<div style="width:800px">${IMG("", "width='512' height='323'", "0 0 512 323")}</div>`,
+    );
+    expect(at(b, "0.1.0.0").w).toBe(512);
+    expect(at(b, "0.1.0.0").h).toBe(323);
+  });
+});
