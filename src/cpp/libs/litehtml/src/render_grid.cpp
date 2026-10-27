@@ -611,6 +611,45 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         if (it != names.lines.end()) gl.index = it->second;
     };
 
+    // Resolve one axis of a grid item into a 0-based start cell (-1 when the
+    // axis is auto-placed) and a span. A definite end line pins an item whose
+    // start is auto or a span keyword: the start is end - span, clamped to
+    // the first line with the span shrinking to fit (down to 0 when the end
+    // is line 1). Two definite lines are swapped when the end precedes the
+    // start; an end equal to the start is ignored (span 1). Callers resolve
+    // negative line numbers against the explicit grid before calling.
+    auto resolve_axis = [](const grid_line& s, const grid_line& e, int& start, int& span) {
+        start = -1;
+        span = 1;
+        const bool s_line = !s.is_span && s.index > 0;
+        const bool e_line = !e.is_span && e.index > 0;
+        if (s_line && e_line)
+        {
+            int lo = s.index, hi = e.index;
+            if (hi < lo) std::swap(lo, hi);
+            start = lo - 1;
+            span = std::max(1, hi - lo);
+        }
+        else if (s_line)
+        {
+            start = s.index - 1;
+            if (e.is_span) span = e.span;
+        }
+        else if (e_line)
+        {
+            if (s.is_span) span = s.span;
+            int start_line = e.index - span;
+            if (start_line < 1)
+            {
+                span = e.index - 1;
+                start_line = 1;
+            }
+            start = start_line - 1;
+        }
+        else if (s.is_span) span = s.span;
+        else if (e.is_span) span = e.span;
+    };
+
     // Flow axis for auto-placement. Row flow wraps at the column count; column
     // flow fills a column top-to-bottom, wraps at the row count and grows the
     // implicit columns instead.
@@ -634,12 +673,8 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             re.parse(el->src_el()->css().get_grid_row_end());
             resolve_named(rs, row_names, false);
             resolve_named(re, row_names, true);
-            int start = -1;
-            int span = 1;
-            if (rs.is_span) span = rs.span;
-            else if (rs.index > 0) start = rs.index - 1;
-            if (re.is_span) span = re.span;
-            else if (re.index > rs.index && rs.index > 0) span = re.index - rs.index;
+            int start, span;
+            resolve_axis(rs, re, start, span);
             flow_rows = std::max(flow_rows, start >= 0 ? start + span : span);
         }
     }
@@ -666,12 +701,8 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             ce.parse(el->src_el()->css().get_grid_column_end());
             resolve_named(cs, col_names, false);
             resolve_named(ce, col_names, true);
-            int start = -1;
-            int span = 1;
-            if (cs.is_span) span = cs.span;
-            else if (cs.index > 0) start = cs.index - 1;
-            if (ce.is_span) span = ce.span;
-            else if (ce.index > cs.index && cs.index > 0) span = ce.index - cs.index;
+            int start, span;
+            resolve_axis(cs, ce, start, span);
             if (start >= 0) required_cols = std::max(required_cols, start + span);
         }
         for (int i = template_cols; i < required_cols; i++)
@@ -765,14 +796,24 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
     // reached, ignoring its definite line.
     {
         auto placement_phase = [&](const std::shared_ptr<render_item>& el) {
-            grid_line pcs, prs;
+            grid_line pcs, pce, prs, pre;
             pcs.parse(el->src_el()->css().get_grid_column_start());
+            pce.parse(el->src_el()->css().get_grid_column_end());
             prs.parse(el->src_el()->css().get_grid_row_start());
+            pre.parse(el->src_el()->css().get_grid_row_end());
             resolve_named(pcs, col_names, false);
+            resolve_named(pce, col_names, true);
             resolve_named(prs, row_names, false);
+            resolve_named(pre, row_names, true);
             if (!pcs.is_span && pcs.index < 0) pcs.index = std::max(1, num_columns + 2 + pcs.index);
-            const bool col_def = !pcs.is_span && pcs.index > 0;
-            const bool row_def = !prs.is_span && prs.index > 0;
+            if (!pce.is_span && pce.index < 0) pce.index = std::max(1, num_columns + 2 + pce.index);
+            if (!prs.is_span && prs.index < 0) prs.index = std::max(1, (int)rows_template.size() + 2 + prs.index);
+            if (!pre.is_span && pre.index < 0) pre.index = std::max(1, (int)rows_template.size() + 2 + pre.index);
+            int start, span;
+            resolve_axis(pcs, pce, start, span);
+            const bool col_def = start >= 0;
+            resolve_axis(prs, pre, start, span);
+            const bool row_def = start >= 0;
             if (col_def && row_def) return 0;
             if (column_flow ? col_def : row_def) return 1;
             return 2;
@@ -798,53 +839,28 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         // Negative line numbers count from the end of the explicit grid (-1 is the last line).
         if (!cs.is_span && cs.index < 0) cs.index = std::max(1, num_columns + 2 + cs.index);
         if (!ce.is_span && ce.index < 0) ce.index = std::max(1, num_columns + 2 + ce.index);
+        if (!rs.is_span && rs.index < 0) rs.index = std::max(1, (int)rows_template.size() + 2 + rs.index);
+        if (!re.is_span && re.index < 0) re.index = std::max(1, (int)rows_template.size() + 2 + re.index);
 
         int item_col_start = 0;
         int item_col_span = 1;
         int item_row_start = 0;
         int item_row_span = 1;
 
-        // Resolve spans and fixed positions
-        if (cs.is_span)
-        {
-            item_col_span = cs.span;
-        }
-        else if (cs.index > 0)
-        {
-            item_col_start = cs.index - 1;
-        }
-
-        if (ce.is_span)
-        {
-            item_col_span = ce.span;
-        }
-        else if (ce.index > cs.index && cs.index > 0)
-        {
-            item_col_span = ce.index - cs.index;
-        }
-
-        if (rs.is_span)
-        {
-            item_row_span = rs.span;
-        }
-        else if (rs.index > 0)
-        {
-            item_row_start = rs.index - 1;
-        }
-
-        if (re.is_span)
-        {
-            item_row_span = re.span;
-        }
-        else if (re.index > rs.index && rs.index > 0)
-        {
-            item_row_span = re.index - rs.index;
-        }
+        // Resolve spans and fixed positions: a definite end line pins the
+        // item on that axis too (see resolve_axis).
+        int resolved_col_start, resolved_row_start;
+        resolve_axis(cs, ce, resolved_col_start, item_col_span);
+        resolve_axis(rs, re, resolved_row_start, item_row_span);
+        const bool col_def = resolved_col_start >= 0;
+        const bool row_def = resolved_row_start >= 0;
+        if (col_def) item_col_start = resolved_col_start;
+        if (row_def) item_row_start = resolved_row_start;
 
         // Auto placement
         if (column_flow)
         {
-            if (cs.index > 0 && rs.index <= 0)
+            if (col_def && !row_def)
             {
                 // Definite column, auto row: the locked-column phase. The item
                 // scans only its own column, from the top unless the previous
@@ -864,7 +880,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                 locked_col = item_col_start;
                 locked_scan_row = scan_row + item_row_span;
             }
-            else if (rs.index > 0 && cs.index <= 0)
+            else if (row_def && !col_def)
             {
                 // Definite row, auto column: moves to the next column when the row is
                 // behind the cursor, then right until the cells are free.
@@ -881,7 +897,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                 }
                 item_col_start = curr_col;
             }
-            else if (rs.index <= 0)
+            else if (!col_def && !row_def)
             {
                 // Both axes auto: fill the current column top-to-bottom, then wrap to
                 // the next (implicit) column. Dense restarts the search per item.
@@ -928,7 +944,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                 }
             }
         }
-        else if (rs.index > 0 && cs.index <= 0)
+        else if (row_def && !col_def)
         {
             // Definite row, auto column: the locked-row phase. The item scans
             // only its own row, from the first track unless the previous
@@ -949,7 +965,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             locked_row = item_row_start;
             locked_scan_col = scan_col + item_col_span;
         }
-        else if (cs.index <= 0 && !cs.is_span)
+        else if (!col_def && !row_def && !cs.is_span)
         {
             if (dense) { curr_row = 0; curr_col = 0; }
             bool found = false;
@@ -993,7 +1009,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                 }
             }
         }
-        else if (cs.is_span && cs.index <= 0)
+        else if (!col_def && !row_def && cs.is_span)
         {
             if (dense) { curr_row = 0; curr_col = 0; }
             bool found = false;
@@ -1038,7 +1054,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             }
         }
 
-        else if (cs.index > 0 && rs.index <= 0)
+        else if (col_def && !row_def)
         {
             // Definite column, auto row: sparse packing moves to the next row when the column is
             // behind the cursor, then down until the cells are free.

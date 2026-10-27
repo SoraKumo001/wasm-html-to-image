@@ -6688,3 +6688,93 @@ describe("P0-25: img of a viewBox-only SVG is ratio-only", () => {
     expect(at(b, "0.1.0.0").h).toBe(323);
   });
 });
+
+// P0-26: grid placement line resolution. A definite END line pins an item
+// whose start is auto or a span keyword (start = end - span, clamped to the
+// first line with the span shrinking, down to 0 for end line 1), on either
+// axis and in either flow; two definite lines are swapped when the end
+// precedes the start. The engine used to ignore an end line unless the
+// start was also a line number, so `grid-column: auto / 3` auto-placed.
+describe("P0-26: grid end-line placement resolution", () => {
+  type Box = { p: string; t: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(body: string): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const at = (b: Box[], p: string) => b.find((x) => x.p === p)!;
+  const D = (style = "") => `<div style="background:#ccc;height:20px;${style}"></div>`;
+  const G = (inner: string, extra = "") =>
+    `<div style="display:grid;grid-template-columns:100px 100px 100px;width:300px;${extra}">${inner}</div>`;
+
+  it("pins an auto-start item to its end line", async () => {
+    const b = await boxes(G(D("grid-column:auto/3") + D() + D()));
+    expect(at(b, "0.1.0.0").x).toBe(100);
+    expect(at(b, "0.1.0.1").x).toBe(200);
+    expect(at(b, "0.1.0.2").y).toBe(20);
+  });
+
+  it("keeps the column lock when the item comes last in DOM order", async () => {
+    const b = await boxes(G(D() + D() + D("grid-column:auto/3")));
+    expect(at(b, "0.1.0.2").x).toBe(100);
+    expect(at(b, "0.1.0.2").y).toBe(20);
+  });
+
+  it("derives the start from a span and an end line", async () => {
+    const b = await boxes(G(D("grid-column:span 2/4") + D()));
+    expect(at(b, "0.1.0.0").x).toBe(100);
+    expect(at(b, "0.1.0.0").w).toBe(200);
+  });
+
+  it("resolves a negative end line from the explicit grid end", async () => {
+    const b = await boxes(G(D("grid-column:auto/-1") + D()));
+    expect(at(b, "0.1.0.0").x).toBe(200);
+  });
+
+  it("locks the row for a row end line, ahead of auto items", async () => {
+    const b = await boxes(G(D() + D("grid-row:auto/2") + D()));
+    expect(at(b, "0.1.0.1").x).toBe(0);
+    expect(at(b, "0.1.0.1").y).toBe(0);
+    expect(at(b, "0.1.0.0").x).toBe(100);
+  });
+
+  it("applies an end-derived column inside a definite row", async () => {
+    const b = await boxes(G(D("grid-row:1;grid-column:auto/3") + D() + D()));
+    expect(at(b, "0.1.0.0").x).toBe(100);
+    expect(at(b, "0.1.0.0").y).toBe(0);
+  });
+
+  it("swaps two definite lines when the end precedes the start", async () => {
+    const b = await boxes(G(D("grid-column:4/2") + D()));
+    expect(at(b, "0.1.0.0").x).toBe(100);
+    expect(at(b, "0.1.0.0").w).toBe(200);
+    const r = await boxes(
+      `<div style="display:grid;grid-template-columns:100px 100px 100px;grid-template-rows:20px 20px 20px;width:300px"><div style="background:#ccc;grid-row:3/1"></div>${D()}</div>`,
+    );
+    expect(at(r, "0.1.0.0").y).toBe(0);
+    expect(at(r, "0.1.0.0").h).toBe(40);
+  });
+
+  it("clamps a derived start to line 1, shrinking the span", async () => {
+    const b = await boxes(G(D("grid-column:span 3/2") + D()));
+    expect(at(b, "0.1.0.0").x).toBe(0);
+    expect(at(b, "0.1.0.0").w).toBe(100);
+    const z = await boxes(G(D("grid-column:auto/1") + D()));
+    expect(at(z, "0.1.0.0").w).toBe(0);
+    expect(at(z, "0.1.0.1").x).toBe(0);
+  });
+
+  it("extends implicit columns for an end-derived start", async () => {
+    const b = await boxes(G(D("grid-column:auto/5") + D()));
+    expect(at(b, "0.1.0.0").x).toBe(300);
+    expect(at(b, "0.1.0.1").y).toBe(20);
+  });
+});
