@@ -2357,6 +2357,33 @@ void litehtml::render_item_grid::place_grid_items(pixel_t x, pixel_t y, const co
         const bool baseline_aligned = !vert && (aln & 0xFF) == flex_align_items_baseline;
         if (pass == 0 && !baseline_aligned) continue;
         item.el->measure(cb, fmt_ctx);
+        if (!vert && !j_stretch && !replaced_item && !ratio_fill &&
+            (cb.size_mode & containing_block_context::size_mode_content) &&
+            item.el->src_el()->css().get_width().is_predefined() &&
+            (item.el->src_el()->css().get_width().predef() == 0 ||
+             item.el->src_el()->css().get_width().predef() == 1) &&
+            item.el->width() > cell_w + 0.01f)
+        {
+            // A non-stretched item is sized fit-content: the content measure above
+            // answers with its max-content, which the grid area bounds -- the used
+            // width is max(min-content, min(max-content, area)), so an item whose
+            // text is wider than its area wraps inside it instead of overflowing
+            // at its single-line width. (width:max-content is not clamped: it
+            // overflows by definition.)
+            containing_block_context min_cb = cb;
+            min_cb.size_mode |= containing_block_context::size_mode_min_content;
+            item.el->measure(min_cb, fmt_ctx);
+            const pixel_t fit_w = std::max(item.el->width(), cell_w);
+            containing_block_context fit_cb = cb;
+            fit_cb.width = fit_w - item.el->content_offset_width() + item.el->box_sizing_width();
+            fit_cb.width.type = containing_block_context::cbc_value_type_absolute;
+            fit_cb.render_width = fit_cb.width;
+            fit_cb.size_mode |= containing_block_context::size_mode_exact_width;
+            fit_cb.size_mode &= ~(containing_block_context::size_mode_content |
+                                  containing_block_context::size_mode_min_content);
+            item.el->measure(fit_cb, fmt_ctx);
+            cb = fit_cb;
+        }
         if (pass == 0)
         {
             item.el->place(x + place_x, y + place_y, cb, fmt_ctx);
