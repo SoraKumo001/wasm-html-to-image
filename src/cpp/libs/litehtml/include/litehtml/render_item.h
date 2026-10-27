@@ -65,6 +65,13 @@ namespace litehtml
         std::weak_ptr<render_item>                  m_parent;
         std::list<std::shared_ptr<render_item>>     m_children;
         margins                                                         m_margins;
+        // m_margins as last derived from the element's own CSS (constructor /
+        // calc_outlines), before margin collapsing rewrote the block-axis
+        // values. Collapsing code must combine against this snapshot:
+        // _render_content runs several times per layout, and re-combining an
+        // already-collapsed margin with a child's margin is not idempotent
+        // when the two have opposite signs.
+        margins                                                         m_css_margins;
         margins                                                         m_padding;
         margins                                                         m_borders;
         position                                                        m_pos;
@@ -259,6 +266,7 @@ namespace litehtml
         void margin_block_start(pixel_t val);
         void margin_block_end(pixel_t val);
         pixel_t collapsed_out_margin() const { return m_collapsed_out_margin; }
+        const margins& css_margins() const { return m_css_margins; }
         // The last layout found the box collapsing through itself (its margins are one margin).
         bool collapsed_through() const { return m_collapsed_through; }
         void set_collapsed_through(bool v) { m_collapsed_through = v; }

@@ -5859,3 +5859,95 @@ describe("P0-15: break-word words stay whole in a min-content measure", () => {
     expect(plain[0].w + plain[1].w).toBe(400);
   });
 });
+
+// P0-16: real page developer.mozilla.org. The hero mandala svg is
+// height:35rem with margin-top:-8.75rem (-140px) inside a plain div inside
+// the (clipped) grid item. A first child's top margin collapses through a
+// parent with no border/padding of its own: the div should be shifted up
+// by 140 and stay 560 tall. The block context's collapse only propagated
+// POSITIVE margins, so the negative margin stayed inside the div: it sat
+// 140 lower and measured 420 (the child's margin box). The collapse now
+// combines the parent's own margin and the child's with the CSS 2.1 rule
+// (largest positive plus most negative) on both edges, combining against
+// a snapshot of the box's CSS margins -- _render_content runs several
+// times per layout, and re-combining an already-collapsed margin is not
+// idempotent for mixed signs.
+describe("P0-16: negative margins collapse through the parent's edges", () => {
+  type Box = { p: string; t: string; c?: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(bodyHtml: string): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head></head><body style="margin:0">${bodyHtml}</body></html>`,
+      width: 1000,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const byClass = (bs: Box[], cls: string) => bs.find((x) => (x.c || "").includes(cls))!;
+
+  function wrapCase(wrapStyle: string, childStyle: string): Promise<Box[]> {
+    return boxes(
+      `<div style="height:200px"></div><div><div class="wrap" style="${wrapStyle}"><div class="child" style="height:560px;${childStyle}"></div></div></div>`,
+    );
+  }
+
+  it("a negative first-child top margin shifts the parent up, height stays the border box", async () => {
+    const b = await wrapCase("", "margin-top:-140px");
+    const wrap = byClass(b, "wrap");
+    const child = byClass(b, "child");
+    expect(wrap.y).toBe(60); // 200 - 140
+    expect(wrap.h).toBe(560);
+    expect(child.y).toBe(60);
+  });
+
+  it("a positive first-child top margin still collapses as before", async () => {
+    const b = await wrapCase("", "margin-top:50px");
+    expect(byClass(b, "wrap").y).toBe(250);
+    expect(byClass(b, "wrap").h).toBe(560);
+    expect(byClass(b, "child").y).toBe(250);
+  });
+
+  it("mixed signs combine as largest positive plus most negative", async () => {
+    const b = await wrapCase("margin-top:30px", "margin-top:-140px");
+    expect(byClass(b, "wrap").y).toBe(90); // 200 + (30 - 140)
+    expect(byClass(b, "child").y).toBe(90);
+    const b2 = await wrapCase("margin-top:-20px", "margin-top:50px");
+    expect(byClass(b2, "wrap").y).toBe(230); // 200 + (50 - 20)
+    expect(byClass(b2, "child").y).toBe(230);
+  });
+
+  it("padding on the parent blocks the collapse: the margin stays inside", async () => {
+    const b = await wrapCase("padding-top:1px", "margin-top:-140px");
+    const wrap = byClass(b, "wrap");
+    expect(wrap.y).toBe(200);
+    expect(wrap.h).toBe(421); // 1px padding + the 420 margin box
+    expect(byClass(b, "child").y).toBe(61); // 200 + 1 - 140
+  });
+
+  it("a negative last-child bottom margin collapses out to the next sibling", async () => {
+    const b = await boxes(
+      `<div class="wrap"><div style="height:100px;margin-bottom:-60px"></div></div><div class="sib" style="height:10px"></div>`,
+    );
+    expect(byClass(b, "wrap").h).toBe(100);
+    expect(byClass(b, "sib").y).toBe(40);
+    const b2 = await boxes(
+      `<div class="wrap"><div style="height:100px;margin-bottom:50px"></div></div><div class="sib" style="height:10px"></div>`,
+    );
+    expect(byClass(b2, "sib").y).toBe(150);
+  });
+
+  it("inside a clipped grid item (the MDN shape) the inner div still shifts and keeps its height", async () => {
+    const b = await boxes(
+      `<div style="height:200px"></div><div style="display:grid;grid-template-columns:300px"><div class="item" style="overflow:hidden;max-height:320px"><div class="wrap"><div class="child" style="height:560px;margin-top:-140px"></div></div></div></div>`,
+    );
+    const item = byClass(b, "item");
+    const wrap = byClass(b, "wrap");
+    expect(wrap.y).toBe(item.y - 140);
+    expect(wrap.h).toBe(560);
+    expect(byClass(b, "child").y).toBe(wrap.y);
+  });
+});

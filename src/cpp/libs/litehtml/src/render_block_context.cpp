@@ -148,19 +148,23 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
 						: std::max<pixel_t>(0, std::max(last_block_margin, combined)) + std::min<pixel_t>(0, std::min(last_block_margin, combined));
 				}
 
-				// Collapse top margin. A negative margin overlaps the previous box (or pulls
-				// the first box above the parent's content edge) instead of adding space, so
-				// the margin box may not be pushed down by its own negative part.
+				// Collapse top margin: the first child's margin leaves through the
+				// parent's top edge and collapses with the parent's own (CSS 2.1 8.3.1:
+				// largest positive plus most negative). The child's margin edge is
+				// placed so its border box starts at the content edge -- block_offset
+				// moves by the full margin whatever its sign -- and the combined margin
+				// is what this box reports to its own parent. (This used to keep only
+				// positive margins: a negative first-child margin then stayed inside
+				// the parent, shrinking its height by the margin and never shifting
+				// the parent -- MDN's mandala svg, margin-top -140 inside a plain div.)
 				if(is_first && collapse_top_margin())
 				{
-					if (current_margin > 0)
-					{
-						block_offset -= current_margin;
-					}
-					if (current_margin > block_start_margin)
-					{
-						block_start_margin = current_margin;
-					}
+					block_offset -= current_margin;
+					// Combine against the margin this box was given by its own CSS,
+					// not the field a previous pass may already have collapsed.
+					const pixel_t own_margin = wm.block_start(css_margins());
+					block_start_margin = std::max<pixel_t>(0, std::max(own_margin, current_margin)) +
+					                     std::min<pixel_t>(0, std::min(own_margin, current_margin));
 				} else
 				{
 					// CSS 2.1 §8.3.1: adjoining margins collapse to the largest positive
@@ -301,10 +305,9 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
             if(collapse_bottom_margin())
             {
                 if(!margin_taken_through_top) physical_block_size -= last_block_margin;
-                if(margin_block_end() < last_block_margin)
-                {
-                    margin_block_end(last_block_margin);
-                }
+                // the collapsed margin is the largest positive plus the most negative,
+                // so a negative last-child margin propagates out of the parent too
+                margin_block_end(std::max<pixel_t>(0, std::max(wm.block_end(css_margins()), last_block_margin)) + std::min<pixel_t>(0, std::min(wm.block_end(css_margins()), last_block_margin)));
                 if(last_margin_el)
                 {
                     last_margin_el->collapse_margin_out();
@@ -317,10 +320,9 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
         if(collapse_bottom_margin())
         {
             if(!margin_taken_through_top) physical_block_size -= last_block_margin;
-            if(margin_block_end() < last_block_margin)
-            {
-                margin_block_end(last_block_margin);
-            }
+            // the collapsed margin is the largest positive plus the most negative,
+            // so a negative last-child margin propagates out of the parent too
+            margin_block_end(std::max<pixel_t>(0, std::max(wm.block_end(css_margins()), last_block_margin)) + std::min<pixel_t>(0, std::min(wm.block_end(css_margins()), last_block_margin)));
 			if(last_margin_el)
 			{
 				last_margin_el->collapse_margin_out();

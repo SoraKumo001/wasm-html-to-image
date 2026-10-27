@@ -34,6 +34,7 @@ litehtml::render_item::render_item(std::shared_ptr<element> _src_el)
     m_margins.right = doc->to_pixels(src_el()->css().get_margins().right, fm, 0);
     m_margins.top = doc->to_pixels(src_el()->css().get_margins().top, fm, 0);
     m_margins.bottom = doc->to_pixels(src_el()->css().get_margins().bottom, fm, 0);
+    m_css_margins = m_margins;
 
     m_padding.left = doc->to_pixels(src_el()->css().get_padding().left, fm, 0);
     m_padding.right = doc->to_pixels(src_el()->css().get_padding().right, fm, 0);
@@ -259,6 +260,7 @@ void litehtml::render_item::calc_outlines(pixel_t parent_width) {
 
     m_margins.top = m_element->css().get_margins().top.calc_percent(parent_width);
     m_margins.bottom = m_element->css().get_margins().bottom.calc_percent(parent_width);
+    m_css_margins = m_margins;
     m_collapsed_out_margin = 0;
 
     m_padding.top = m_element->css().get_padding().top.calc_percent(parent_width);
