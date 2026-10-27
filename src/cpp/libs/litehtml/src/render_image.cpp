@@ -213,21 +213,32 @@ litehtml::pixel_t litehtml::render_item_image::_measure(
         }
     }
 
-    // Constraints (preserve the used ratio when it is known). A percentage resolves against
-    // the containing block's size. While that size is indefinite (an intrinsic-size query
-    // passes 0), a block-flow query treats the percentage as 0 -- a replaced element with a
-    // percentage max-width is compressible there. But when flex code measures the item
-    // itself (size_mode_measure survives only on that direct query; a container strips it
-    // from the contexts it hands to its children), the flex container's inline size is
-    // definite, so the percentage is not cyclic: treat it as none instead of letting the
-    // item's automatic minimum collapse to 0.
-    // An exact-size context hands this box its own used size as the containing block size
-    // (flex layout re-measures the item at the size it assigned): a percentage limit
-    // resolved against it would apply the percentage to the box itself -- max-width:50%
-    // on a 202.89 flex item clamped it again to 101.45. The assigned size already went
-    // through the consumer's own clamping, so a percentage limit is not re-derived there
-    // (calculate_containing_block_context does the same for a block's min/max-width;
-    // absolute limits still apply).
+    // Constraints. The tentative size is clamped per axis, and an auto axis is
+    // re-derived from the other axis's clamped size -- but a definite axis is
+    // never re-derived (CSS 2.1 10.4 / CSS Sizing constraint resolution):
+    // width:400px with max-height:128px stays 400 wide with the height clamped
+    // alone, while an auto width follows a clamped height (the MDN contributor
+    // shape: max-height alone transfers to 202.89). Sequence: clamp the width,
+    // re-derive an auto height, clamp the height, then re-derive and re-clamp
+    // an auto width. On a same-axis conflict the min wins, as in CSS.
+    //
+    // A percentage resolves against the containing block's size. While that size
+    // is indefinite (an intrinsic-size query passes 0), a block-flow query treats
+    // a percentage max-width as 0 -- a replaced element with a percentage
+    // max-width is compressible there. But when flex code measures the item
+    // itself (size_mode_measure survives only on that direct query; a container
+    // strips it from the contexts it hands to its children), the flex container's
+    // inline size is definite, so the percentage is not cyclic: treat it as none
+    // instead of letting the item's automatic minimum collapse to 0.
+    // An exact-size context hands this box its own used size as the containing
+    // block size (flex layout re-measures the item at the size it assigned): a
+    // percentage limit resolved against it would apply the percentage to the box
+    // itself -- max-width:50% on a 202.89 flex item clamped it again to 101.45.
+    // The assigned size already went through the consumer's own clamping, so a
+    // percentage limit is not re-derived there (calculate_containing_block_context
+    // does the same for a block's min/max-width; absolute limits still apply).
+    // A percentage floor against an indefinite containing block resolves to 0
+    // and never binds, so the min pair needs no intrinsic-query guard.
     auto percent_based = [](const css_length& len) {
         return len.units() == css_units_percentage || (len.is_calc() && len.calc_percent() != 0);
     };
@@ -237,35 +248,48 @@ litehtml::pixel_t litehtml::render_item_image::_measure(
     const bool exact_phys_height = self_size.mode == writing_mode_horizontal_tb
         ? (containing_block_size.size_mode & containing_block_context::size_mode_exact_height) != 0
         : (containing_block_size.size_mode & containing_block_context::size_mode_exact_width) != 0;
-    if (!css().get_max_width().is_predefined() &&
-        !(percent_based(css().get_max_width()) && exact_phys_width) &&
-        !(css().get_max_width().units() == css_units_percentage && containing_block_size.width <= 0 &&
-          (containing_block_size.size_mode & containing_block_context::size_mode_measure))) {
-        pixel_t max_width = src_el()->get_document()->to_pixels(
-            css().get_max_width(), css().get_font_metrics(), containing_block_size.width);
-        if (m_pos.width > max_width) {
-            m_pos.width = max_width;
-            if (used_ratio > 0) {
-                m_pos.height = m_pos.width * used_ratio;
-            } else if (sz.width != 0) {
-                m_pos.height = m_pos.width * sz.height / sz.width;
-            }
+    auto resolve_limit = [&](const css_length& len, pixel_t basis, bool exact_axis,
+                             bool is_max) -> pixel_t {
+        const pixel_t none = is_max ? pixel_t(1e9) : pixel_t(0);
+        if (len.is_predefined()) return none;
+        if (percent_based(len) && exact_axis) return none;
+        if (is_max && len.units() == css_units_percentage && basis <= 0 &&
+            (containing_block_size.size_mode & containing_block_context::size_mode_measure))
+            return none;
+        return src_el()->get_document()->to_pixels(len, css().get_font_metrics(), basis);
+    };
+    const pixel_t max_w = resolve_limit(css().get_max_width(), containing_block_size.width, exact_phys_width, true);
+    const pixel_t min_w = resolve_limit(css().get_min_width(), containing_block_size.width, exact_phys_width, false);
+    const pixel_t max_h = resolve_limit(css().get_max_height(), containing_block_size.height, exact_phys_height, true);
+    const pixel_t min_h = resolve_limit(css().get_min_height(), containing_block_size.height, exact_phys_height, false);
+    auto clamp_width = [&]() {
+        if (m_pos.width > max_w) m_pos.width = max_w;
+        if (m_pos.width < min_w) m_pos.width = min_w;
+    };
+    auto clamp_height = [&]() {
+        if (m_pos.height > max_h) m_pos.height = max_h;
+        if (m_pos.height < min_h) m_pos.height = min_h;
+    };
+    auto derive_height = [&]() {
+        if (used_ratio > 0) {
+            m_pos.height = m_pos.width * used_ratio;
+        } else if (sz.width != 0) {
+            m_pos.height = m_pos.width * sz.height / sz.width;
         }
-    }
-    if (!css().get_max_height().is_predefined() &&
-        !(percent_based(css().get_max_height()) && exact_phys_height) &&
-        !(css().get_max_height().units() == css_units_percentage && containing_block_size.height <= 0 &&
-          (containing_block_size.size_mode & containing_block_context::size_mode_measure))) {
-        pixel_t max_height = src_el()->get_document()->to_pixels(
-            css().get_max_height(), css().get_font_metrics(), containing_block_size.height);
-        if (m_pos.height > max_height) {
-            m_pos.height = max_height;
-            if (used_ratio > 0) {
-                m_pos.width = m_pos.height / used_ratio;
-            } else if (sz.height != 0) {
-                m_pos.width = m_pos.height * sz.width / sz.height;
-            }
+    };
+    auto derive_width = [&]() {
+        if (used_ratio > 0) {
+            m_pos.width = m_pos.height / used_ratio;
+        } else if (sz.height != 0) {
+            m_pos.width = m_pos.height * sz.width / sz.height;
         }
+    };
+    clamp_width();
+    if (height_is_auto) derive_height();
+    clamp_height();
+    if (width_is_auto) {
+        derive_width();
+        clamp_width();
     }
 
     src_el()->css_w().line_height_w().computed_value = height();
