@@ -581,6 +581,9 @@ void container_skia::get_image_size(const char* src, const char* baseurl, liteht
         sz.height = 0;
     }
 }
+bool container_skia::get_image_ratio_only(const char* src, const char* baseurl) {
+    return src && m_context.get_image_ratio_only(src);
+}
 void container_skia::get_viewport(litehtml::position& viewport) const {
     viewport.x = 0;
     viewport.y = 0;

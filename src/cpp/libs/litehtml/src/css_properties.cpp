@@ -1435,6 +1435,13 @@ void litehtml::css_properties::compute_font(const element* el, const document::p
     append_font_variation_settings(descr.variations, m_font_variation_settings);
 
     m_font = doc->get_font(descr, &m_font_metrics);
+
+    // The font is created at a whole-pixel size (descr.size is rounded
+    // above), but em lengths and percentage line-heights resolve against
+    // the element's computed font size, which can be fractional (0.8rem is
+    // 12.8px, not 13px). Keep the metrics' font_size at the computed value;
+    // the ascent/descent and other glyph metrics stay the created font's.
+    m_font_metrics.font_size = get_font_size();
 }
 
 void litehtml::css_properties::compute_border_image(const element* el, const document::ptr& doc) {

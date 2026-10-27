@@ -418,9 +418,24 @@ void document::create_node(void* gnode, elements_list& elements, bool parseTextN
 				if (!strcmp(tag, "select"))
 				{
 					// Show the selected (or first) option's label and size the box to the longest option.
+					// The longest label is measured with the real text machinery (in em of
+					// the default font, so the injected width scales with the select's own
+					// font size); a per-character estimate is kept only as a fallback.
 					string label, first_label;
 					bool have_selected = false;
 					float widest = 0;
+					uint_ptr measure_font = 0;
+					float measure_size = 16;
+					if (m_container)
+					{
+						font_description descr;
+						descr.family = m_container->get_default_font_name();
+						measure_size = (float)m_container->get_default_font_size();
+						descr.size = (pixel_t)measure_size;
+						descr.weight = 400;
+						font_metrics fm;
+						measure_font = get_font(descr, &fm);
+					}
 					std::function<void(GumboNode*)> scan = [&](GumboNode* n) {
 						for (unsigned int i = 0; i < n->v.element.children.length; i++)
 						{
@@ -439,11 +454,18 @@ void document::create_node(void* gnode, elements_list& elements, bool parseTextN
 							while (b < t.size() && isspace((unsigned char)t[b])) b++;
 							t = t.substr(b);
 							float w = 0;
-							for (size_t k = 0; k < t.size(); k++)
+							if (measure_font && measure_size > 0)
 							{
-								unsigned char ch = (unsigned char)t[k];
-								if ((ch & 0xC0) == 0x80) continue;
-								w += ch >= 0xE0 ? 1.0f : 0.55f;
+								w = (float)m_container->text_width(t.c_str(), measure_font, direction_ltr) / measure_size;
+							}
+							else
+							{
+								for (size_t k = 0; k < t.size(); k++)
+								{
+									unsigned char ch = (unsigned char)t[k];
+									if ((ch & 0xC0) == 0x80) continue;
+									w += ch >= 0xE0 ? 1.0f : 0.55f;
+								}
 							}
 							widest = std::max(widest, w);
 							if (first_label.empty()) first_label = t;
@@ -461,7 +483,7 @@ void document::create_node(void* gnode, elements_list& elements, bool parseTextN
 					if (!st || !strstr(st, "width"))
 					{
 						char buf[64];
-						snprintf(buf, sizeof(buf), "width:%.2fem", widest + 2.6f + 1.8f);
+						snprintf(buf, sizeof(buf), "width:%.2fem", widest + 1.7f);
 						string ns = st ? string(st) + ";" : string();
 						ret->set_attr("style", (ns + buf).c_str());
 					}

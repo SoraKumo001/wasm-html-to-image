@@ -6435,9 +6435,10 @@ describe("P0-22: a replaced flex item's percentage max size resolves against the
 // constraints now resolve in the CSS sequence: clamp the width, re-derive an
 // auto height, clamp the height, re-derive and re-clamp an auto width; a
 // definite axis is never re-derived, and on a same-axis conflict the min wins.
-// (The images carry no width/height attributes: litehtml maps those to
-// definite sizes as presentational hints, so an attributed axis is definite
-// here even though the HTML spec maps the pair to an aspect ratio instead.)
+// (The images carry no width/height attributes on purpose: the attributes
+// map to definite sizes as presentational hints -- Chromium sizes an
+// attributed axis the same way -- so they would make the axes definite
+// instead of exercising the intrinsic path.)
 describe("P0-23: replaced element min/max constraints resolve per axis", () => {
   type Box = { p: string; t: string; c?: string; x: number; y: number; w: number; h: number };
 
@@ -6514,5 +6515,532 @@ describe("P0-23: replaced element min/max constraints resolve per axis", () => {
     const b = await boxes(B("width:100px;min-width:300px;max-width:200px"));
     expect(F(b).w).toBe(300);
     expect(F(b).h).toBeCloseTo(189.26, 1);
+  });
+});
+
+// P0-24: a ratio-only replaced item (a viewBox-only <svg>) in a grid. Its track-sizing
+// contribution is cyclic and counts as 0, but at placement its used size is the block-
+// level fill of its grid area: under start/center/end alignment it must not collapse
+// to the 0 contribution, and a keyword width must not stretch it to the area when a
+// definite height gives the width through the ratio transfer. With an auto height a
+// keyword width has nothing to transfer from and fills like auto.
+describe("P0-24: ratio-only grid item placement size", () => {
+  type Box = { p: string; t: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(body: string): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const at = (b: Box[], p: string) => b.find((x) => x.p === p)!;
+  const SVG = (style = "") => `<svg viewBox="0 0 200 100" style="${style}"></svg>`;
+  const grid = (gstyle: string, inner: string) =>
+    `<div style="display:grid;width:400px;height:200px;${gstyle}">${inner}</div>`;
+
+  it("fills its area under place-items:start instead of vanishing", async () => {
+    const b = await boxes(grid("place-items:start", SVG()));
+    expect(at(b, "0.1.0.0").w).toBe(400);
+    expect(at(b, "0.1.0.0").h).toBe(200);
+  });
+
+  it("fills its area under place-items:center and end", async () => {
+    const c = await boxes(grid("place-items:center", SVG()));
+    expect(at(c, "0.1.0.0").w).toBe(400);
+    expect(at(c, "0.1.0.0").h).toBe(200);
+    const e = await boxes(grid("place-items:end", SVG()));
+    expect(at(e, "0.1.0.0").w).toBe(400);
+    expect(at(e, "0.1.0.0").h).toBe(200);
+  });
+
+  it("fills each column under justify-items:start in a two-column grid", async () => {
+    const b = await boxes(
+      `<div style="display:grid;width:400px;height:200px;grid-template-columns:1fr 1fr;place-items:start">${SVG()}${SVG()}</div>`,
+    );
+    expect(at(b, "0.1.0.0").w).toBe(200);
+    expect(at(b, "0.1.0.0").h).toBe(100);
+    expect(at(b, "0.1.0.1").w).toBe(200);
+    expect(at(b, "0.1.0.1").h).toBe(100);
+  });
+
+  it("transfers from a definite height for a fit-content width", async () => {
+    const b = await boxes(grid("", SVG("width:fit-content;height:40px")));
+    expect(at(b, "0.1.0.0").w).toBe(80);
+    expect(at(b, "0.1.0.0").h).toBe(40);
+  });
+
+  it("transfers from a definite height for a max-content width", async () => {
+    const b = await boxes(grid("", SVG("width:max-content;height:40px")));
+    expect(at(b, "0.1.0.0").w).toBe(80);
+    expect(at(b, "0.1.0.0").h).toBe(40);
+  });
+
+  it("fills for a fit-content width when the height is auto", async () => {
+    const b = await boxes(grid("", SVG("width:fit-content")));
+    expect(at(b, "0.1.0.0").w).toBe(400);
+    expect(at(b, "0.1.0.0").h).toBe(200);
+  });
+
+  it("fills for a min-content width when the height is auto", async () => {
+    const b = await boxes(grid("", SVG("width:min-content")));
+    expect(at(b, "0.1.0.0").w).toBe(400);
+    expect(at(b, "0.1.0.0").h).toBe(200);
+  });
+
+  it("still transfers under place-items:start with a definite height", async () => {
+    const b = await boxes(grid("place-items:start", SVG("width:fit-content;height:40px")));
+    expect(at(b, "0.1.0.0").w).toBe(80);
+    expect(at(b, "0.1.0.0").h).toBe(40);
+  });
+});
+
+// P0-25: an <img> whose source is a viewBox-only SVG has an aspect ratio but no
+// intrinsic size: it is a ratio-only replaced box, like an inline <svg>. The
+// decoder used to report a 512x512 fallback size for it, so the box came out
+// square (512x512 in a block, 50x50 at width:50px). The ratio now travels from
+// the decoder through the image cache and the container to el_image, and the
+// layout-path raster is the default object size fitted to the ratio (300x150),
+// so the graphic fills its box instead of letterboxing.
+describe("P0-25: img of a viewBox-only SVG is ratio-only", () => {
+  type Box = { p: string; t: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(body: string): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const at = (b: Box[], p: string) => b.find((x) => x.p === p)!;
+  const URI = (attrs: string, vb = "0 0 200 100") =>
+    "data:image/svg+xml," +
+    encodeURIComponent(
+      `<svg xmlns='http://www.w3.org/2000/svg' ${attrs} viewBox='${vb}'><rect width='100%' height='100%' fill='#00f'/></svg>`,
+    );
+  const IMG = (style = "", attrs = "", vb?: string) =>
+    `<img src="${URI(attrs, vb)}" style="${style}">`;
+
+  it("fills its block and derives the height from the viewBox ratio", async () => {
+    const b = await boxes(`<div style="width:400px">${IMG()}</div>`);
+    expect(at(b, "0.1.0.0").w).toBe(400);
+    expect(at(b, "0.1.0.0").h).toBe(200);
+  });
+
+  it("derives the height from a definite width", async () => {
+    const b = await boxes(`<div style="width:400px">${IMG("width:50px")}</div>`);
+    expect(at(b, "0.1.0.0").w).toBe(50);
+    expect(at(b, "0.1.0.0").h).toBe(25);
+  });
+
+  it("derives the width from a definite height", async () => {
+    const b = await boxes(`<div style="width:400px">${IMG("height:50px")}</div>`);
+    expect(at(b, "0.1.0.0").w).toBe(100);
+    expect(at(b, "0.1.0.0").h).toBe(50);
+  });
+
+  it("keeps the ratio under a max-width clamp", async () => {
+    const b = await boxes(`<div style="width:400px">${IMG("max-width:100px")}</div>`);
+    expect(at(b, "0.1.0.0").w).toBe(100);
+    expect(at(b, "0.1.0.0").h).toBe(50);
+  });
+
+  it("fills its grid area under place-items:start", async () => {
+    const b = await boxes(
+      `<div style="display:grid;width:400px;height:200px;place-items:start">${IMG()}</div>`,
+    );
+    expect(at(b, "0.1.0.0").w).toBe(400);
+    expect(at(b, "0.1.0.0").h).toBe(200);
+  });
+
+  it("transfers in a grid from a definite height", async () => {
+    const b = await boxes(
+      `<div style="display:grid;width:400px;height:200px">${IMG("width:fit-content;height:40px")}</div>`,
+    );
+    expect(at(b, "0.1.0.0").w).toBe(80);
+    expect(at(b, "0.1.0.0").h).toBe(40);
+  });
+
+  it("uses the viewBox ratio of a square and a tall SVG", async () => {
+    const s = await boxes(`<div style="width:400px">${IMG("", "", "0 0 100 100")}</div>`);
+    expect(at(s, "0.1.0.0").w).toBe(400);
+    expect(at(s, "0.1.0.0").h).toBe(400);
+    const t = await boxes(`<div style="width:400px">${IMG("", "", "0 0 100 200")}</div>`);
+    expect(at(t, "0.1.0.0").w).toBe(400);
+    expect(at(t, "0.1.0.0").h).toBe(800);
+  });
+
+  it("an SVG with width/height attributes keeps its intrinsic size", async () => {
+    const b = await boxes(
+      `<div style="width:800px">${IMG("", "width='512' height='323'", "0 0 512 323")}</div>`,
+    );
+    expect(at(b, "0.1.0.0").w).toBe(512);
+    expect(at(b, "0.1.0.0").h).toBe(323);
+  });
+});
+
+// P0-26: grid placement line resolution. A definite END line pins an item
+// whose start is auto or a span keyword (start = end - span, clamped to the
+// first line with the span shrinking, down to 0 for end line 1), on either
+// axis and in either flow; two definite lines are swapped when the end
+// precedes the start. The engine used to ignore an end line unless the
+// start was also a line number, so `grid-column: auto / 3` auto-placed.
+describe("P0-26: grid end-line placement resolution", () => {
+  type Box = { p: string; t: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(body: string): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const at = (b: Box[], p: string) => b.find((x) => x.p === p)!;
+  const D = (style = "") => `<div style="background:#ccc;height:20px;${style}"></div>`;
+  const G = (inner: string, extra = "") =>
+    `<div style="display:grid;grid-template-columns:100px 100px 100px;width:300px;${extra}">${inner}</div>`;
+
+  it("pins an auto-start item to its end line", async () => {
+    const b = await boxes(G(D("grid-column:auto/3") + D() + D()));
+    expect(at(b, "0.1.0.0").x).toBe(100);
+    expect(at(b, "0.1.0.1").x).toBe(200);
+    expect(at(b, "0.1.0.2").y).toBe(20);
+  });
+
+  it("keeps the column lock when the item comes last in DOM order", async () => {
+    const b = await boxes(G(D() + D() + D("grid-column:auto/3")));
+    expect(at(b, "0.1.0.2").x).toBe(100);
+    expect(at(b, "0.1.0.2").y).toBe(20);
+  });
+
+  it("derives the start from a span and an end line", async () => {
+    const b = await boxes(G(D("grid-column:span 2/4") + D()));
+    expect(at(b, "0.1.0.0").x).toBe(100);
+    expect(at(b, "0.1.0.0").w).toBe(200);
+  });
+
+  it("resolves a negative end line from the explicit grid end", async () => {
+    const b = await boxes(G(D("grid-column:auto/-1") + D()));
+    expect(at(b, "0.1.0.0").x).toBe(200);
+  });
+
+  it("locks the row for a row end line, ahead of auto items", async () => {
+    const b = await boxes(G(D() + D("grid-row:auto/2") + D()));
+    expect(at(b, "0.1.0.1").x).toBe(0);
+    expect(at(b, "0.1.0.1").y).toBe(0);
+    expect(at(b, "0.1.0.0").x).toBe(100);
+  });
+
+  it("applies an end-derived column inside a definite row", async () => {
+    const b = await boxes(G(D("grid-row:1;grid-column:auto/3") + D() + D()));
+    expect(at(b, "0.1.0.0").x).toBe(100);
+    expect(at(b, "0.1.0.0").y).toBe(0);
+  });
+
+  it("swaps two definite lines when the end precedes the start", async () => {
+    const b = await boxes(G(D("grid-column:4/2") + D()));
+    expect(at(b, "0.1.0.0").x).toBe(100);
+    expect(at(b, "0.1.0.0").w).toBe(200);
+    const r = await boxes(
+      `<div style="display:grid;grid-template-columns:100px 100px 100px;grid-template-rows:20px 20px 20px;width:300px"><div style="background:#ccc;grid-row:3/1"></div>${D()}</div>`,
+    );
+    expect(at(r, "0.1.0.0").y).toBe(0);
+    expect(at(r, "0.1.0.0").h).toBe(40);
+  });
+
+  it("clamps a derived start to line 1, shrinking the span", async () => {
+    const b = await boxes(G(D("grid-column:span 3/2") + D()));
+    expect(at(b, "0.1.0.0").x).toBe(0);
+    expect(at(b, "0.1.0.0").w).toBe(100);
+    const z = await boxes(G(D("grid-column:auto/1") + D()));
+    expect(at(z, "0.1.0.0").w).toBe(0);
+    expect(at(z, "0.1.0.1").x).toBe(0);
+  });
+
+  it("extends implicit columns for an end-derived start", async () => {
+    const b = await boxes(G(D("grid-column:auto/5") + D()));
+    expect(at(b, "0.1.0.0").x).toBe(300);
+    expect(at(b, "0.1.0.1").y).toBe(20);
+  });
+});
+
+// P0-27: a <select> is sized to its longest option label, measured with the
+// real text machinery plus a fixed allowance for the control chrome. The
+// longest label used to be estimated per character (0.55em per ASCII byte,
+// 1em per wide byte) plus 4.4em, which overshot Chromium by ~30px on a
+// three-option select and by 70px on rust-lang.org's language switcher.
+// The injected width is in em of the select's own (fractional, 13.33px)
+// font size; the expectations below are the post-P0-28 values, where em
+// resolves against the computed size instead of the rounded font's.
+describe("P0-27: select width from the measured longest option", () => {
+  type Box = { p: string; t: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(body: string): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const sel = (b: Box[]) => b.find((x) => x.t === "select")!;
+
+  it("sizes to the longest option, selected or not", async () => {
+    const b = await boxes(
+      `<select><option selected>En</option><option>A very long language name</option><option>Fr</option></select>`,
+    );
+    expect(sel(b).w).toBeCloseTo(189.5, 0);
+    expect(sel(b).h).toBe(19);
+  });
+
+  it("sizes a short single option to the label plus chrome", async () => {
+    const b = await boxes(`<select><option>x</option></select>`);
+    expect(sel(b).w).toBeCloseTo(29.3, 0);
+  });
+
+  it("an empty option still gets the chrome width", async () => {
+    const b = await boxes(`<select><option></option></select>`);
+    expect(sel(b).w).toBeCloseTo(26, 0);
+  });
+});
+
+// P0-28: em lengths resolve against the element's computed font size, even
+// when it is fractional. The font is created at a whole-pixel size and the
+// metrics carried that rounded size, so 0.8rem (12.8px) resolved ems at
+// 13px: width:10em came out 130 instead of 128, and MDN's
+// min-height:calc(3em*1.2) summaries were 46.8 instead of 46.08.
+describe("P0-28: em resolves against the computed (fractional) font size", () => {
+  type Box = { p: string; t: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(body: string): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const at = (b: Box[], p: string) => b.find((x) => x.p === p)!;
+
+  it("width:10em at font-size 12.8px is 128, not 130", async () => {
+    const b = await boxes(`<div style="font-size:12.8px;width:10em;height:5px"></div>`);
+    expect(at(b, "0.1.0").w).toBeCloseTo(128, 0);
+  });
+
+  it("width:10em at font-size 12.5px is 125, not 130", async () => {
+    const b = await boxes(`<div style="font-size:12.5px;width:10em;height:5px"></div>`);
+    expect(at(b, "0.1.0").w).toBeCloseTo(125, 0);
+  });
+
+  it("min-height calc(3em * 1.2) at 0.8rem is 46.08", async () => {
+    const b = await boxes(
+      `<p style="font-size:0.8rem;min-height:calc(3em*1.2);max-height:calc(3em*1.2);margin:0">x</p>`,
+    );
+    expect(at(b, "0.1.0").h).toBeCloseTo(46.08, 0);
+  });
+
+  it("an inherited fractional size resolves ems on the child too", async () => {
+    const b = await boxes(
+      `<div style="font-size:12.8px"><div style="width:10em;height:5px"></div></div>`,
+    );
+    expect(at(b, "0.1.0.0").w).toBeCloseTo(128, 0);
+  });
+
+  it("whole-pixel sizes are unchanged", async () => {
+    const b = await boxes(`<div style="font-size:13px;width:10em;height:5px"></div>`);
+    expect(at(b, "0.1.0").w).toBe(130);
+  });
+});
+
+// P0-29: three flex/replaced sizing fixes from the rust-lang.org page.
+// (1) A percentage max-width on a replaced element measured as a flex item's
+//     content (a descendant query whose basis is indefinite once the direct
+//     measure bit has been stripped) behaves as none, so a definite-width
+//     ratio-only img keeps its size instead of collapsing to its padding.
+// (2) A column flex line's cross size is bounded by the container's used
+//     inline size (the definite size and the max property combine with min,
+//     and a definite render size bounds it directly), so a stretched item
+//     cannot overflow a column whose width an outer flex container assigned.
+// (3) A flex item's base measure that came back capped by the item's own max
+//     main size is re-measured unbounded: the flex base size is the
+//     unclamped max-content size (the clamp belongs to the hypothetical).
+describe("P0-29: flex base/cross sizing and replaced percentage max-width", () => {
+  type Box = { p: string; t: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(body: string, width = 1000): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0}</style></head><body>${body}</body></html>`,
+      width,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const at = (b: Box[], p: string) => b.find((x) => x.p === p)!;
+
+  it("ratio-only img with max-width:100% inside a flex item keeps its definite width", async () => {
+    const svg =
+      "data:image/svg+xml;utf8," +
+      encodeURIComponent(
+        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 512"><rect width="480" height="512" fill="#00f"/></svg>`,
+      );
+    const b = await boxes(
+      `<div style="display:flex;flex-wrap:wrap;width:277px"><a><img src="${svg}" style="width:40px;padding:0 10px;max-width:100%"></a></div>`,
+    );
+    expect(at(b, "0.1.0.0").w).toBeCloseTo(60, 0);
+    expect(at(b, "0.1.0.0.0").w).toBeCloseTo(60, 0);
+    expect(at(b, "0.1.0.0.0").h).toBeCloseTo((40 * 512) / 480, 0);
+  });
+
+  it("a stretched column item is capped by the column's used width", async () => {
+    const words = "word ".repeat(60);
+    const col = `<div style="box-sizing:border-box;flex:0 0 200px;display:flex;flex-direction:column;max-width:612px;padding:0 24px"><ul style="margin:0;padding:0"><li>${words}</li></ul></div>`;
+    const b = await boxes(`<div style="display:flex;width:600px">${col}</div>`, 600);
+    // The outer row assigns the column 200px; its list stretches to the
+    // column's content width (200 - 48 padding), not to its single-line
+    // width, even though the column's own max-width is much larger.
+    expect(at(b, "0.1.0.0.0").w).toBeCloseTo(152, 0);
+  });
+
+  it("flex bases are the unclamped max-content sizes under a percentage max-width", async () => {
+    const col = (w: number, extra: string) =>
+      `<div style="display:flex;flex-direction:column;max-width:50%;${extra}"><div style="width:${w}px;height:10px"></div></div>`;
+    const b = await boxes(
+      `<div style="display:flex;width:976px">${col(885, "margin-right:24px")}${col(893, "")}</div>`,
+    );
+    // Bases 885 (+24 margin) and 893 shrink proportionally into 976.
+    expect(at(b, "0.1.0.0").w).toBeCloseTo(473.8, 0);
+    expect(at(b, "0.1.0.1").w).toBeCloseTo(478.2, 0);
+  });
+});
+
+// P0-30: a non-stretched grid item is sized fit-content against its grid
+// area: the content measure answers with its max-content, which the area
+// bounds, so an item whose text is wider than its area wraps inside it
+// instead of overflowing at its single-line width (MDN's footer legal
+// paragraph, grid-area spanning both columns with justify-items:start).
+// width:max-content is exempt: it overflows by definition.
+describe("P0-30: non-stretched grid item clamped to its area (fit-content)", () => {
+  type Box = { p: string; t: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(body: string, width = 1000): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0}</style></head><body>${body}</body></html>`,
+      width,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const at = (b: Box[], p: string) => b.find((x) => x.p === p)!;
+  const T = "Portions of this content are by individual mozilla.org contributors. Content available under a Creative Commons license.";
+
+  it("a justify-items:start item spanning both columns takes the area width", async () => {
+    const b = await boxes(
+      `<div style="display:grid;width:400px;grid-template-columns:min-content 1fr;column-gap:24px;justify-items:start"><div style="width:128px;height:10px"></div><div></div><p style="grid-column:1/3;margin:0">${T}</p></div>`,
+      400,
+    );
+    expect(at(b, "0.1.0.2").w).toBeCloseTo(400, 0);
+  });
+
+  it("a single-column start item is clamped the same way", async () => {
+    const b = await boxes(
+      `<div style="display:grid;width:400px;grid-template-columns:1fr;justify-items:start"><p style="margin:0">${T}</p></div>`,
+      400,
+    );
+    expect(at(b, "0.1.0.0").w).toBeCloseTo(400, 0);
+  });
+
+  it("width:max-content still overflows its area", async () => {
+    const b = await boxes(
+      `<div style="display:grid;width:400px;grid-template-columns:1fr;justify-items:start"><p style="margin:0;width:max-content">${T}</p></div>`,
+      400,
+    );
+    expect(at(b, "0.1.0.0").w).toBeGreaterThan(400);
+  });
+
+  it("a stretched item is unchanged (area width)", async () => {
+    const b = await boxes(
+      `<div style="display:grid;width:400px;grid-template-columns:1fr"><p style="margin:0">${T}</p></div>`,
+      400,
+    );
+    expect(at(b, "0.1.0.0").w).toBeCloseTo(400, 0);
+  });
+});
+
+// P0-31: a select's height comes from its font, not a fixed 19px: the UA
+// rule used to pin height:19px, so a select at any other font size kept a
+// 19px box (rust-lang.org's language selects: 19 vs Chromium's 23.25) and
+// authored padding could not grow it (font-size:20px + padding:10px gave
+// 22 vs 46). The height is now content-driven with a 1px block padding in
+// the UA rule modelling the native button's insets: at the default
+// 13.333px size the box is unchanged (19px), and it tracks Chromium
+// within a pixel at other sizes (15px -> 21, 20px -> 27 vs Chromium 26,
+// 20px + padding:10px -> 45 vs Chromium 46).
+describe("P0-31: select height follows its font size", () => {
+  type Box = { p: string; t: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(body: string): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const sel = (style: string) =>
+    `<select style="${style}"><option>English (en-US)</option><option>Français (fr)</option></select>`;
+
+  it("the default-size select keeps its 19px height", async () => {
+    const b = await boxes(sel(""));
+    expect(b.find((x) => x.t === "select")!.h).toBeCloseTo(19, 0);
+  });
+
+  it("font-size:15px gives 21px", async () => {
+    const b = await boxes(sel("font-size:15px"));
+    expect(b.find((x) => x.t === "select")!.h).toBeCloseTo(21, 0);
+  });
+
+  it("font-size:20px gives 27px", async () => {
+    const b = await boxes(sel("font-size:20px"));
+    expect(b.find((x) => x.t === "select")!.h).toBeCloseTo(27, 0);
+  });
+
+  it("authored padding grows the box", async () => {
+    const b = await boxes(sel("font-size:20px;padding:10px"));
+    expect(b.find((x) => x.t === "select")!.h).toBeCloseTo(45, 0);
   });
 });
