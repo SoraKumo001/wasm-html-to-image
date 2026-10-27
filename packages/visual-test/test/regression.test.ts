@@ -6517,3 +6517,85 @@ describe("P0-23: replaced element min/max constraints resolve per axis", () => {
     expect(F(b).h).toBeCloseTo(189.26, 1);
   });
 });
+
+// P0-24: a ratio-only replaced item (a viewBox-only <svg>) in a grid. Its track-sizing
+// contribution is cyclic and counts as 0, but at placement its used size is the block-
+// level fill of its grid area: under start/center/end alignment it must not collapse
+// to the 0 contribution, and a keyword width must not stretch it to the area when a
+// definite height gives the width through the ratio transfer. With an auto height a
+// keyword width has nothing to transfer from and fills like auto.
+describe("P0-24: ratio-only grid item placement size", () => {
+  type Box = { p: string; t: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(body: string): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const at = (b: Box[], p: string) => b.find((x) => x.p === p)!;
+  const SVG = (style = "") => `<svg viewBox="0 0 200 100" style="${style}"></svg>`;
+  const grid = (gstyle: string, inner: string) =>
+    `<div style="display:grid;width:400px;height:200px;${gstyle}">${inner}</div>`;
+
+  it("fills its area under place-items:start instead of vanishing", async () => {
+    const b = await boxes(grid("place-items:start", SVG()));
+    expect(at(b, "0.1.0.0").w).toBe(400);
+    expect(at(b, "0.1.0.0").h).toBe(200);
+  });
+
+  it("fills its area under place-items:center and end", async () => {
+    const c = await boxes(grid("place-items:center", SVG()));
+    expect(at(c, "0.1.0.0").w).toBe(400);
+    expect(at(c, "0.1.0.0").h).toBe(200);
+    const e = await boxes(grid("place-items:end", SVG()));
+    expect(at(e, "0.1.0.0").w).toBe(400);
+    expect(at(e, "0.1.0.0").h).toBe(200);
+  });
+
+  it("fills each column under justify-items:start in a two-column grid", async () => {
+    const b = await boxes(
+      `<div style="display:grid;width:400px;height:200px;grid-template-columns:1fr 1fr;place-items:start">${SVG()}${SVG()}</div>`,
+    );
+    expect(at(b, "0.1.0.0").w).toBe(200);
+    expect(at(b, "0.1.0.0").h).toBe(100);
+    expect(at(b, "0.1.0.1").w).toBe(200);
+    expect(at(b, "0.1.0.1").h).toBe(100);
+  });
+
+  it("transfers from a definite height for a fit-content width", async () => {
+    const b = await boxes(grid("", SVG("width:fit-content;height:40px")));
+    expect(at(b, "0.1.0.0").w).toBe(80);
+    expect(at(b, "0.1.0.0").h).toBe(40);
+  });
+
+  it("transfers from a definite height for a max-content width", async () => {
+    const b = await boxes(grid("", SVG("width:max-content;height:40px")));
+    expect(at(b, "0.1.0.0").w).toBe(80);
+    expect(at(b, "0.1.0.0").h).toBe(40);
+  });
+
+  it("fills for a fit-content width when the height is auto", async () => {
+    const b = await boxes(grid("", SVG("width:fit-content")));
+    expect(at(b, "0.1.0.0").w).toBe(400);
+    expect(at(b, "0.1.0.0").h).toBe(200);
+  });
+
+  it("fills for a min-content width when the height is auto", async () => {
+    const b = await boxes(grid("", SVG("width:min-content")));
+    expect(at(b, "0.1.0.0").w).toBe(400);
+    expect(at(b, "0.1.0.0").h).toBe(200);
+  });
+
+  it("still transfers under place-items:start with a definite height", async () => {
+    const b = await boxes(grid("place-items:start", SVG("width:fit-content;height:40px")));
+    expect(at(b, "0.1.0.0").w).toBe(80);
+    expect(at(b, "0.1.0.0").h).toBe(40);
+  });
+});

@@ -2270,9 +2270,10 @@ void litehtml::render_item_grid::place_grid_items(pixel_t x, pixel_t y, const co
         const bool j_normal = jst == flex_justify_content_auto || jst == flex_justify_content_normal;
         const bool a_normal = (aln & 0xFF) == flex_align_items_auto || (aln & 0xFF) == flex_align_items_normal;
         // width: fit-content / max-content / min-content is not `auto`: the item is not stretched to its area.
-        // (a ratio-only replaced box has no content width of its own: it fills the area either way)
-        const bool intrinsic_width = item.el->src_el()->css().get_width().is_predefined() && item.el->src_el()->css().get_width().predef() > 0 &&
-                                     !(replaced_item && item.el->src_el()->is_ratio_only_replaced());
+        // (a ratio-only replaced box has no content width of its own, but with an explicit content
+        // keyword the width still comes from the content measure -- the ratio transfer from a
+        // definite block size -- not from the area)
+        const bool intrinsic_width = item.el->src_el()->css().get_width().is_predefined() && item.el->src_el()->css().get_width().predef() > 0;
         const bool j_stretch = ((j_normal && !replaced_start_x) && !intrinsic_width) || jst == flex_justify_content_stretch;
         const bool intrinsic_height = item.el->src_el()->css().get_height().is_predefined() && item.el->src_el()->css().get_height().predef() > 0;
         const bool a_stretch = !intrinsic_height && ((a_normal && !replaced_item) || (aln & 0xFF) == flex_align_items_stretch);
@@ -2303,9 +2304,21 @@ void litehtml::render_item_grid::place_grid_items(pixel_t x, pixel_t y, const co
                 if (has_ratio) ratio_w_from_h = true;
             }
         }
+        // A ratio-only item whose block size does not resolve has no definite block
+        // size to transfer from, so a keyword width (auto / fit-content / max-content /
+        // min-content) has no content size to measure either: its used width is the
+        // grid area's width (the block-level fill its own sizing computes), whatever
+        // the justify alignment. Measuring it in content mode would report the cyclic
+        // 0 it contributes to track sizing and the item would vanish. When the block
+        // size does resolve -- a definite height, or an align stretch (ratio_w_from_h)
+        // -- the transfer measure below is the right one instead.
+        const bool ratio_fill = !vert && item.el->src_el()->is_ratio_only_replaced() &&
+                                item.el->src_el()->css().get_width().is_predefined() &&
+                                item.el->src_el()->css().get_height().is_predefined() &&
+                                !ratio_w_from_h;
         if (!vert)
         {
-            if ((!j_stretch || ratio_w_from_h) && item.el->src_el()->css().get_width().is_predefined())
+            if ((!j_stretch || ratio_w_from_h) && item.el->src_el()->css().get_width().is_predefined() && !ratio_fill)
             {
                 cb.size_mode &= ~containing_block_context::size_mode_exact_width;
                 cb.size_mode |= containing_block_context::size_mode_content;
