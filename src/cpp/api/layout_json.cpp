@@ -1,8 +1,10 @@
 #include "layout_json.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -47,8 +49,9 @@ struct path_index {
     }
 };
 
-void append_escaped(std::string& out, const char* s, size_t max_len) {
-    if (!s) return;
+std::string escaped(const char* s, size_t max_len) {
+    std::string out;
+    if (!s) return out;
     size_t n = 0;
     for (; *s && n < max_len; ++s, ++n) {
         unsigned char c = (unsigned char)*s;
@@ -61,6 +64,7 @@ void append_escaped(std::string& out, const char* s, size_t max_len) {
             out += (char)c;
         }
     }
+    return out;
 }
 
 bool is_replaced_tag(const char* tag) {
@@ -77,8 +81,17 @@ void number(std::string& out, double v) {
     out += buf;
 }
 
-void walk(const std::shared_ptr<litehtml::render_item>& ri, path_index& paths, std::string& out,
-          bool& first) {
+struct box_entry {
+    std::string p;
+    std::string t;
+    std::string i;
+    std::string c;
+    litehtml::style_display display = litehtml::display_none;
+    double x = 0, y = 0, w = 0, h = 0;
+};
+
+void walk(const std::shared_ptr<litehtml::render_item>& ri, path_index& paths,
+          std::vector<box_entry>& entries) {
     if (!ri) return;
     const auto& el = ri->src_el();
     if (is_tree_element(el)) {
@@ -87,32 +100,104 @@ void walk(const std::shared_ptr<litehtml::render_item>& ri, path_index& paths, s
         const bool inline_box = display == litehtml::display_inline || display == litehtml::display_inline_text;
         if ((!inline_box || is_replaced_tag(tag)) && strcmp(tag, "br") != 0) {
             litehtml::position pl = ri->get_placement();
-            const double x = pl.x - ri->padding_left() - ri->border_left();
-            const double y = pl.y - ri->padding_top() - ri->border_top();
-            const double w = ri->pos().width + ri->padding_left() + ri->padding_right() + ri->border_left() + ri->border_right();
-            const double h = ri->pos().height + ri->padding_top() + ri->padding_bottom() + ri->border_top() + ri->border_bottom();
-            if (!first) out += ',';
-            first = false;
-            out += "{\"p\":\"";
-            out += paths.path_of(el);
-            out += "\",\"t\":\"";
-            append_escaped(out, tag, 32);
-            out += "\",\"i\":\"";
-            append_escaped(out, el->get_attr("id"), 60);
-            out += "\",\"c\":\"";
-            append_escaped(out, el->get_attr("class"), 80);
-            out += "\",\"x\":";
-            number(out, x);
-            out += ",\"y\":";
-            number(out, y);
-            out += ",\"w\":";
-            number(out, w);
-            out += ",\"h\":";
-            number(out, h);
-            out += '}';
+            box_entry e;
+            e.p = paths.path_of(el);
+            e.t = escaped(tag, 32);
+            e.i = escaped(el->get_attr("id"), 60);
+            e.c = escaped(el->get_attr("class"), 80);
+            e.display = display;
+            e.x = pl.x - ri->padding_left() - ri->border_left();
+            e.y = pl.y - ri->padding_top() - ri->border_top();
+            e.w = ri->pos().width + ri->padding_left() + ri->padding_right() + ri->border_left() + ri->border_right();
+            e.h = ri->pos().height + ri->padding_top() + ri->padding_bottom() + ri->border_top() + ri->border_bottom();
+            entries.push_back(std::move(e));
         }
     }
-    for (const auto& child : ri->children()) walk(child, paths, out, first);
+    for (const auto& child : ri->children()) walk(child, paths, entries);
+}
+
+bool is_direct_child(const std::string& parent, const std::string& path) {
+    if (path.size() <= parent.size() + 1) return false;
+    if (path.compare(0, parent.size(), parent) != 0 || path[parent.size()] != '.') return false;
+    return path.find('.', parent.size() + 1) == std::string::npos;
+}
+
+// Table layout positions the cells and never writes a row's (or row group's) own size back to
+// its render item, so rows would report a 0x0 box even though the table paints correctly.
+// Rebuild those boxes the way a browser reports them: a row's height band comes from its own
+// cells, its inline extent is the table's full column band (a short row still spans every
+// column), and a row group's box is the union of its rows.
+bool is_ancestor_path(const std::string& ancestor, const std::string& path) {
+    return path.size() > ancestor.size() && path.compare(0, ancestor.size(), ancestor) == 0 &&
+           path[ancestor.size()] == '.';
+}
+
+void fix_up_table_boxes(std::vector<box_entry>& entries) {
+    auto unite_children = [&](box_entry& parent, litehtml::style_display child_display) {
+        bool found = false;
+        double x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+        for (const auto& e : entries) {
+            if (e.display != child_display || !is_direct_child(parent.p, e.p)) continue;
+            if (!found) {
+                x0 = e.x; y0 = e.y; x1 = e.x + e.w; y1 = e.y + e.h;
+                found = true;
+            } else {
+                x0 = std::min(x0, e.x); y0 = std::min(y0, e.y);
+                x1 = std::max(x1, e.x + e.w); y1 = std::max(y1, e.y + e.h);
+            }
+        }
+        if (found) {
+            parent.x = x0; parent.y = y0; parent.w = x1 - x0; parent.h = y1 - y0;
+        }
+    };
+    for (auto& e : entries) {
+        if (e.display == litehtml::display_table_row) unite_children(e, litehtml::display_table_cell);
+    }
+    // Widen every row to its table's column band: the band is the union of all rows
+    // that share the same nearest table ancestor.
+    for (auto& row : entries) {
+        if (row.display != litehtml::display_table_row) continue;
+        const box_entry* table = nullptr;
+        for (const auto& e : entries) {
+            if ((e.display == litehtml::display_table || e.display == litehtml::display_inline_table) &&
+                is_ancestor_path(e.p, row.p) && (!table || e.p.size() > table->p.size())) {
+                table = &e;
+            }
+        }
+        if (!table) continue;
+        bool found = false;
+        double x0 = 0, x1 = 0;
+        for (auto& other : entries) {
+            if (other.display != litehtml::display_table_row || !is_ancestor_path(table->p, other.p)) continue;
+            bool nested = false;
+            for (const auto& e : entries) {
+                if ((e.display == litehtml::display_table || e.display == litehtml::display_inline_table) &&
+                    e.p.size() > table->p.size() && is_ancestor_path(table->p, e.p) &&
+                    is_ancestor_path(e.p, other.p)) {
+                    nested = true;
+                    break;
+                }
+            }
+            if (nested || other.w <= 0) continue;
+            if (!found) {
+                x0 = other.x; x1 = other.x + other.w;
+                found = true;
+            } else {
+                x0 = std::min(x0, other.x); x1 = std::max(x1, other.x + other.w);
+            }
+        }
+        if (found) {
+            row.x = x0;
+            row.w = x1 - x0;
+        }
+    }
+    for (auto& e : entries) {
+        if (e.display == litehtml::display_table_row_group ||
+            e.display == litehtml::display_table_header_group ||
+            e.display == litehtml::display_table_footer_group) {
+            unite_children(e, litehtml::display_table_row);
+        }
+    }
 }
 
 }  // namespace
@@ -126,9 +211,32 @@ std::string satoru_api_layout_json(SatoruInstance* inst, const std::string& html
     }
     if (!inst->doc || !inst->doc->root_render()) return "[]";
     path_index paths;
+    std::vector<box_entry> entries;
+    walk(inst->doc->root_render(), paths, entries);
+    fix_up_table_boxes(entries);
     std::string out = "[";
     bool first = true;
-    walk(inst->doc->root_render(), paths, out, first);
+    for (const auto& e : entries) {
+        if (!first) out += ',';
+        first = false;
+        out += "{\"p\":\"";
+        out += e.p;
+        out += "\",\"t\":\"";
+        out += e.t;
+        out += "\",\"i\":\"";
+        out += e.i;
+        out += "\",\"c\":\"";
+        out += e.c;
+        out += "\",\"x\":";
+        number(out, e.x);
+        out += ",\"y\":";
+        number(out, e.y);
+        out += ",\"w\":";
+        number(out, e.w);
+        out += ",\"h\":";
+        number(out, e.h);
+        out += '}';
+    }
     out += ']';
     return out;
 }

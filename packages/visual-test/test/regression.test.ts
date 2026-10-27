@@ -5581,3 +5581,71 @@ describe("P0-11: generic font families take canonical metric profiles", () => {
     expect(at(b, "0.1.0").h).toBe(18);
   });
 });
+
+// P0-12: real page news.ycombinator.com (a table-heavy page) scored 96% boxes-off
+// while rendering almost correctly: litehtml's table layout positions the cells
+// and never writes a row's own size back, so every tr/tbody reported a 0x0 box
+// in the layout dump. Row boxes are now rebuilt as the union of their cells'
+// border boxes (and row groups as the union of their rows), matching what a
+// browser reports for the same elements.
+describe("P0-12: table row and row-group boxes are the union of their cells/rows", () => {
+  type Box = { p: string; t: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(body: string): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const byTag = (b: Box[], t: string) => b.filter((x) => x.t === t);
+
+  it("reports a row as wide and tall as its cells", async () => {
+    const b = await boxes(
+      `<table cellspacing="0" cellpadding="0"><tbody><tr><td style="width:80px;height:20px"></td><td style="width:40px;height:20px"></td></tr></tbody></table>`,
+    );
+    const tr = byTag(b, "tr")[0];
+    expect(tr.w).toBe(120);
+    expect(tr.h).toBe(20);
+    expect(tr.x).toBe(0);
+    expect(tr.y).toBe(0);
+  });
+
+  it("reports a row group spanning all its rows", async () => {
+    const b = await boxes(
+      `<table cellspacing="0" cellpadding="0"><tbody><tr><td style="width:80px;height:20px"></td></tr><tr><td style="width:80px;height:30px"></td></tr></tbody></table>`,
+    );
+    const tbody = byTag(b, "tbody")[0];
+    expect(tbody.w).toBe(80);
+    expect(tbody.h).toBe(50);
+    const rows = byTag(b, "tr");
+    expect(rows[1].y).toBe(20);
+    expect(rows[1].h).toBe(30);
+  });
+
+  it("spans a short row over the table's full column band", async () => {
+    // a spacer row holds a single cell in the first column, but a browser still
+    // reports the row across every column of the table
+    const b = await boxes(
+      `<table cellspacing="0" cellpadding="0"><tbody><tr><td style="width:30px;height:10px"></td><td style="width:50px;height:10px"></td></tr><tr><td style="height:5px"></td></tr></tbody></table>`,
+    );
+    const rows = byTag(b, "tr");
+    expect(rows[1].w).toBe(80);
+    expect(rows[1].h).toBe(5);
+    expect(rows[1].x).toBe(0);
+  });
+
+  it("unions a header group separately from the body group", async () => {
+    const b = await boxes(
+      `<table cellspacing="0" cellpadding="0"><thead><tr><td style="width:60px;height:10px"></td></tr></thead><tbody><tr><td style="width:60px;height:22px"></td></tr></tbody></table>`,
+    );
+    expect(byTag(b, "thead")[0].h).toBe(10);
+    expect(byTag(b, "tbody")[0].h).toBe(22);
+    expect(byTag(b, "tbody")[0].y).toBe(10);
+  });
+});
