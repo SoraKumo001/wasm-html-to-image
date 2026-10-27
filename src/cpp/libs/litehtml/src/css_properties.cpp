@@ -1266,6 +1266,7 @@ void litehtml::css_properties::compute_font(const element* el, const document::p
     }
 
     m_text_fit = el->get_property<int>(_text_fit_, false, 0, offset(m_text_fit));
+    m_scrollbar_gutter = el->get_property<int>(_scrollbar_gutter_, false, scrollbar_gutter_auto, offset(m_scrollbar_gutter));
     m_line_break = (line_break)el->get_property<int>(_line_break_, true, line_break_auto, offset(m_line_break));
     m_text_align_last = (text_align_last)el->get_property<int>(_text_align_last_, true, text_align_last_auto,
                                                                offset(m_text_align_last));
@@ -1782,6 +1783,7 @@ litehtml::css_properties::dump_get_attrs() const {
     ret.emplace_back("text_overflow", index_value(m_text_overflow, text_overflow_strings));
     ret.emplace_back("white_space", index_value(m_white_space, white_space_strings));
     ret.emplace_back("visibility", index_value(m_visibility, visibility_strings));
+    ret.emplace_back("scrollbar-gutter", index_value(m_scrollbar_gutter, scrollbar_gutter_strings));
     ret.emplace_back("appearance", index_value(m_appearance, appearance_strings));
     ret.emplace_back("box_sizing", index_value(m_box_sizing, box_sizing_strings));
     ret.emplace_back("z_index", m_z_index.to_string());

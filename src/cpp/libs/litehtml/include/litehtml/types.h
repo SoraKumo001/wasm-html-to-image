@@ -1186,6 +1186,15 @@ namespace litehtml
                 visibility_collapse,
         };
 
+#define scrollbar_gutter_strings                "auto;stable;stable both-edges"
+
+        enum scrollbar_gutter
+        {
+                scrollbar_gutter_auto,
+                scrollbar_gutter_stable,
+                scrollbar_gutter_stable_both_edges,
+        };
+
 #define border_collapse_strings         "collapse;separate"
 
         enum border_collapse

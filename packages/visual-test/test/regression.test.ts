@@ -5723,3 +5723,60 @@ describe("P0-13: shrink-to-fit boxes honor max-width once, against the containin
     expect(block.h).toBe(36);
   });
 });
+
+// P0-14: real page developer.mozilla.org. MDN declares `scrollbar-gutter: stable`
+// on the root; browsers reserve a 15px gutter for the scrollbar and lay the page
+// out at viewport-minus-15, which the engine ignored, so the root box was 15px
+// wider than the browser's and every centered column sat half a gutter (7.5px)
+// to the right. The property is now parsed, and document layout reserves the
+// classic scrollbar width at the inline-end edge (both edges for
+// `stable both-edges`).
+describe("P0-14: scrollbar-gutter: stable reserves the gutter on the root", () => {
+  type Box = { p: string; t: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(style: string): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html style="${style}"><head></head><body style="margin:0"><div style="width:600px;margin:0 auto;height:50px"></div></body></html>`,
+      width: 1000,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+
+  it("stable narrows the root by the scrollbar width and centers within it", async () => {
+    const b = await boxes("scrollbar-gutter:stable");
+    const html = b.find((x) => x.t === "html")!;
+    expect(html.w).toBe(985);
+    const div = b.find((x) => x.t === "div")!;
+    expect(div.x).toBe(192.5); // (985 - 600) / 2
+  });
+
+  it("stable both-edges reserves both edges", async () => {
+    const b = await boxes("scrollbar-gutter:stable both-edges");
+    expect(b.find((x) => x.t === "html")!.w).toBe(970);
+  });
+
+  it("auto and unset keep the full width", async () => {
+    for (const style of ["scrollbar-gutter:auto", ""]) {
+      const b = await boxes(style);
+      expect(b.find((x) => x.t === "html")!.w).toBe(1000);
+    }
+  });
+
+  it("the gutter declared in a stylesheet (not inline) applies too", async () => {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html{scrollbar-gutter:stable}</style></head><body style="margin:0"><div style="height:50px"></div></body></html>`,
+      width: 1000,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    expect(out.find((x) => x.t === "html")!.w).toBe(985);
+  });
+});

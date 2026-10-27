@@ -803,6 +803,19 @@ pixel_t document::render( pixel_t max_width, render_type rt )
 		    cb_context.width.type = containing_block_context::cbc_value_type_absolute;
 		    cb_context.height = viewport.height;
 		    cb_context.height.type = containing_block_context::cbc_value_type_absolute;
+	    // scrollbar-gutter: stable on the root reserves the scrollbar's width at the
+	    // inline-end edge of the scrollport (both edges for stable both-edges), so
+	    // the page is laid out narrower even though this renderer draws no
+	    // scrollbar. Pages that ask for the reservation (e.g. MDN) are laid out by
+	    // browsers at viewport-minus-gutter; without it every centered column is
+	    // half a gutter off. 15px is the classic scrollbar width browsers reserve.
+	    const int gutter = m_root->css().get_scrollbar_gutter();
+	    if (gutter == scrollbar_gutter_stable || gutter == scrollbar_gutter_stable_both_edges)
+	    {
+		    const pixel_t scrollbar_width = 15;
+		    cb_context.width.value -= scrollbar_width * (gutter == scrollbar_gutter_stable_both_edges ? 2 : 1);
+		    if (cb_context.width.value < 0) cb_context.width.value = 0;
+	    }
         }
         else
         {

@@ -415,6 +415,7 @@ namespace litehtml
       _corner_bottom_right_shape_,
       _corner_bottom_left_shape_,
       _text_fit_,
+      _scrollbar_gutter_,
       _grid_template_,
       _grid_,
       _line_break_,

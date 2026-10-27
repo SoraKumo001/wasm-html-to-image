@@ -46,6 +46,7 @@ namespace litehtml
     text_overflow m_text_overflow;
     box_decoration_break m_box_decoration_break = box_decoration_break_slice;
     int m_text_fit = 0;  // bits 0-1: 1 grow, 2 shrink, 3 both; bits 2+: percentage limit (0 = none)
+    int m_scrollbar_gutter = 0;  // scrollbar_gutter enum (types.h)
     line_break m_line_break = line_break_auto;
     text_align_last m_text_align_last = text_align_last_auto;
     text_justify m_text_justify = text_justify_auto;
@@ -594,6 +595,7 @@ namespace litehtml
     int get_font_synthesis() const { return m_font_synthesis; }
     int get_font_optical_sizing() const { return m_font_optical_sizing; }
     int get_text_fit() const;
+    int get_scrollbar_gutter() const;
     box_decoration_break get_box_decoration_break() const;
     const string& get_block_ellipsis() const;
 
@@ -1443,6 +1445,11 @@ namespace litehtml
   inline int css_properties::get_text_fit() const
   {
     return m_text_fit;
+  }
+
+  inline int css_properties::get_scrollbar_gutter() const
+  {
+    return m_scrollbar_gutter;
   }
 
   inline int css_properties::get_stroke_linejoin() const

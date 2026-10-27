@@ -1486,6 +1486,30 @@ namespace litehtml
       break;
     }
 
+    case _scrollbar_gutter_:
+    {
+      // auto | stable | stable both-edges ("both-edges" alone is invalid).
+      int mode = -1;
+      bool both = false, ok = !value.empty();
+      for (const auto &t : value)
+      {
+        if (t.type == IDENT)
+        {
+          string id = lowcase(t.ident());
+          if (id == "auto") mode = scrollbar_gutter_auto;
+          else if (id == "stable") mode = scrollbar_gutter_stable;
+          else if (id == "both-edges") both = true;
+          else ok = false;
+        }
+        else ok = false;
+      }
+      if (ok && mode >= 0)
+        add_parsed_property(name, property_value(both && mode == scrollbar_gutter_stable
+                                                     ? (int)scrollbar_gutter_stable_both_edges : mode,
+                                                 important, false, m_layer, m_specificity));
+      break;
+    }
+
     case _text_fit_:
     {
       // none | grow | shrink | grow shrink, optionally followed by a percentage limit.
