@@ -716,6 +716,15 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
     int curr_row = 0;
     int curr_col = 0;
 
+    // Locked-axis phase state: items pinned to a row (row flow) or a column
+    // (column flow) scan only their own track line. The scan continues after
+    // the previous locked item when it shared the line; a new line (or dense
+    // packing) restarts from the first track.
+    int locked_row = -1;
+    int locked_scan_col = 0;
+    int locked_col = -1;
+    int locked_scan_row = 0;
+
     // Auto-placement runs in order-modified document order: `order` moves a grid item to its
     // place in the flow just like it does for flex items, while items sharing an order keep
     // their DOM order. Paint order (draw_children) still follows the DOM.
@@ -745,6 +754,33 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         std::stable_sort(placement_items.begin(), placement_items.end(),
                          [](const std::shared_ptr<render_item>& item1, const std::shared_ptr<render_item>& item2)
                          { return item1->src_el()->css().get_order() < item2->src_el()->css().get_order(); });
+    }
+
+    // Placement runs in the spec's phases, not raw document order: items with
+    // both axes definite first, then the items locked to the cross axis (a
+    // definite row in row flow, a definite column in column flow), and only
+    // then the auto-row items, whose packing cursor starts at the grid's
+    // first cell. A single interleaved pass let a locked item inherit the
+    // shared cursor and land in whatever row/column the previous item had
+    // reached, ignoring its definite line.
+    {
+        auto placement_phase = [&](const std::shared_ptr<render_item>& el) {
+            grid_line pcs, prs;
+            pcs.parse(el->src_el()->css().get_grid_column_start());
+            prs.parse(el->src_el()->css().get_grid_row_start());
+            resolve_named(pcs, col_names, false);
+            resolve_named(prs, row_names, false);
+            if (!pcs.is_span && pcs.index < 0) pcs.index = std::max(1, num_columns + 2 + pcs.index);
+            const bool col_def = !pcs.is_span && pcs.index > 0;
+            const bool row_def = !prs.is_span && prs.index > 0;
+            if (col_def && row_def) return 0;
+            if (column_flow ? col_def : row_def) return 1;
+            return 2;
+        };
+        std::stable_partition(placement_items.begin(), placement_items.end(),
+                              [&](const std::shared_ptr<render_item>& el) { return placement_phase(el) == 0; });
+        std::stable_partition(placement_items.begin(), placement_items.end(),
+                              [&](const std::shared_ptr<render_item>& el) { return placement_phase(el) < 2; });
     }
 
     for (const auto& el : placement_items)
@@ -810,19 +846,23 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         {
             if (cs.index > 0 && rs.index <= 0)
             {
-                // Definite column, auto row: the item is locked to its column in either flow.
-                if (item_col_start < curr_col) curr_row++;
-                curr_col = item_col_start;
+                // Definite column, auto row: the locked-column phase. The item
+                // scans only its own column, from the top unless the previous
+                // locked item shared the column (sparse packing continues
+                // after it); dense restarts per item.
+                int scan_row = (dense || item_col_start != locked_col) ? 0 : locked_scan_row;
                 for (;;)
                 {
                     bool conflict = false;
-                    for (int r = curr_row; r < curr_row + item_row_span && !conflict; r++)
+                    for (int r = scan_row; r < scan_row + item_row_span && !conflict; r++)
                         for (int c = item_col_start; c < item_col_start + item_col_span; c++)
                             if (is_occupied(r, c)) { conflict = true; break; }
                     if (!conflict) break;
-                    curr_row++;
+                    scan_row++;
                 }
-                item_row_start = curr_row;
+                item_row_start = scan_row;
+                locked_col = item_col_start;
+                locked_scan_row = scan_row + item_row_span;
             }
             else if (rs.index > 0 && cs.index <= 0)
             {
@@ -887,6 +927,27 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                     }
                 }
             }
+        }
+        else if (rs.index > 0 && cs.index <= 0)
+        {
+            // Definite row, auto column: the locked-row phase. The item scans
+            // only its own row, from the first track unless the previous
+            // locked item shared the row (sparse packing continues after
+            // it); dense restarts per item. Running past the explicit tracks
+            // creates implicit columns, as a definite placement there would.
+            int scan_col = (dense || item_row_start != locked_row) ? 0 : locked_scan_col;
+            for (;;)
+            {
+                bool conflict = false;
+                for (int r = item_row_start; r < item_row_start + item_row_span && !conflict; r++)
+                    for (int c = scan_col; c < scan_col + item_col_span; c++)
+                        if (is_occupied(r, c)) { conflict = true; break; }
+                if (!conflict) break;
+                scan_col++;
+            }
+            item_col_start = scan_col;
+            locked_row = item_row_start;
+            locked_scan_col = scan_col + item_col_span;
         }
         else if (cs.index <= 0 && !cs.is_span)
         {

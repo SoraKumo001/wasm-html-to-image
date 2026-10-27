@@ -6012,3 +6012,68 @@ describe("P0-17: a lone custom-ident in grid-column/grid-row spans to the <ident
     expect(byClass(b, "cc").w).toBe(166); // 16 + 150
   });
 });
+
+// P0-18: grid auto-placement ignored definite lines on the locked axis.
+// Placement ran as a single document-order pass over one shared cursor, so
+// an item with `grid-row: 3` and an auto column was scanned from whatever
+// row the previous item had reached (and a column-flow item locked to a
+// fresh column kept scanning from the cursor's row). Placement now runs
+// in the spec's phases -- both-axes definite, then the locked-axis items
+// scanning only their own row/column, then the auto-row items with a fresh
+// cursor. Found next to MDN's grid (cycle 9's tests): a span-2 item with
+// `grid-row: 3` landed on row 2, tracks 3-4 instead of row 3, tracks 1-2.
+describe("P0-18: locked-axis grid items scan only their own row/column", () => {
+  type Box = { p: string; t: string; c?: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(bodyHtml: string): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head></head><body style="margin:0">${bodyHtml}</body></html>`,
+      width: 1000,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const byClass = (bs: Box[], cls: string) => bs.find((x) => (x.c || "").includes(cls))!;
+
+  it("a span item with a definite row lands in that row, from its first track", async () => {
+    const b = await boxes(
+      `<div style="display:grid;width:400px;grid-template-columns:100px 100px 100px 100px;grid-template-rows:10px 10px 10px 10px"><div class="a" style="grid-column:3"></div><div class="bb" style="grid-column:2"></div><div class="cc" style="grid-row:3;grid-column:span 2"></div></div>`,
+    );
+    const cc = byClass(b, "cc");
+    expect(cc.x).toBe(0);
+    expect(cc.y).toBe(20);
+    expect(cc.w).toBe(200);
+  });
+
+  it("locked-row items skip occupied cells and continue after each other in the row", async () => {
+    const b = await boxes(
+      `<div style="display:grid;width:400px;grid-template-columns:100px 100px 100px 100px;grid-template-rows:10px 10px 10px 10px"><div class="x" style="grid-column:1;grid-row:2"></div><div class="a" style="grid-row:2;grid-column:span 2"></div><div class="bb" style="grid-row:2"></div></div>`,
+    );
+    const a = byClass(b, "a");
+    const bb = byClass(b, "bb");
+    expect([a.x, a.y, a.w]).toEqual([100, 10, 200]);
+    expect([bb.x, bb.y]).toEqual([300, 10]);
+  });
+
+  it("a fully-auto item after a definite-row item starts from the first cell", async () => {
+    const b = await boxes(
+      `<div style="display:grid;width:400px;grid-template-columns:100px 100px 100px 100px;grid-template-rows:10px 10px 10px 10px"><div class="a" style="grid-row:2"></div><div class="bb"></div></div>`,
+    );
+    expect([byClass(b, "a").x, byClass(b, "a").y]).toEqual([0, 10]);
+    expect([byClass(b, "bb").x, byClass(b, "bb").y]).toEqual([0, 0]);
+  });
+
+  it("column flow: an item locked to a fresh column scans it from the top", async () => {
+    const b = await boxes(
+      `<div style="display:grid;height:120px;grid-template-rows:30px 30px 30px 30px;grid-auto-flow:column;grid-auto-columns:100px"><div class="a" style="grid-row:3"></div><div class="bb" style="grid-row:2"></div><div class="cc" style="grid-column:3;grid-row:span 2"></div><div class="dd" style="grid-column:2"></div></div>`,
+    );
+    const cc = byClass(b, "cc");
+    const dd = byClass(b, "dd");
+    expect([cc.x, cc.y, cc.h]).toEqual([200, 0, 60]);
+    expect([dd.x, dd.y]).toEqual([100, 0]);
+  });
+});
