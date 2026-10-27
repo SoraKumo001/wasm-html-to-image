@@ -180,11 +180,21 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
 					el->place_logical(inline_offset, block_offset, self_size.new_inline_size(inline_available_size, self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content)), fmt_ctx);
 				}
 
+				// The shrink-to-fit block below replaces inline_available_size with the shrunk
+				// width; auto margins must still be solved against the full width on offer.
+				const pixel_t margin_basis = inline_available_size;
+
 				// width: fit-content / max-content / min-content on a block: size the box to its content,
 				// like a shrink-to-fit float. The width is still "predefined" (auto) to the rest of layout.
-				if(el->src_el()->css().get_display() != display_table && el->css().get_width().is_predefined() && el->css().get_width().predef() > 0)
+				// A <button> with width:auto takes the same path as fit-content: a form control
+				// never stretches to fill its containing block the way a plain block does (MDN's
+				// display:flex search button filled its 532px column instead of shrink-wrapping
+				// its label, where Chromium sizes it to the label and centres it via margin:auto).
+				const bool button_auto_width = el->css().get_width().is_predefined() && el->css().get_width().predef() == 0 &&
+					!strcmp(el->src_el()->get_tagName(), "button");
+				if(el->src_el()->css().get_display() != display_table && el->css().get_width().is_predefined() && (el->css().get_width().predef() > 0 || button_auto_width))
 				{
-					const int kw = el->css().get_width().predef();
+					const int kw = button_auto_width ? 1 : el->css().get_width().predef();
 					int content_mode = (self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content)) | containing_block_context::size_mode_content;
 					if(kw == 3) content_mode |= containing_block_context::size_mode_min_content;
 					rw = el->measure(self_size.new_inline_size(inline_available_size, content_mode), fmt_ctx);
@@ -251,7 +261,7 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
 
 				if (!(self_size.size_mode & containing_block_context::size_mode_measure))
 				{
-					pixel_t auto_margin = el->calc_auto_margins(inline_available_size);
+					pixel_t auto_margin = el->calc_auto_margins(margin_basis);
 					if(auto_margin != 0)
 					{
 						el->inline_shift(auto_margin);

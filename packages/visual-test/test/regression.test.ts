@@ -6077,3 +6077,71 @@ describe("P0-18: locked-axis grid items scan only their own row/column", () => {
     expect([dd.x, dd.y]).toEqual([100, 0]);
   });
 });
+
+// P0-19: real page developer.mozilla.org. The homepage search button (a
+// display:flex <button> with margin: 0 auto inside the flattened shadow
+// tree) filled its whole 532px column: a <button> was laid out like a
+// plain block, but a form control with width:auto shrink-wraps its
+// content (fit-content) in a browser, and its auto margins then centre
+// it. The block child path now routes an auto-width <button> through
+// the same content-sizing path as width:fit-content, and auto margins
+// are solved against the width on offer before the shrink, not the
+// shrunk width (which also centres fit-content blocks with margin:auto).
+describe("P0-19: a block-level <button> with width:auto shrink-wraps and centres", () => {
+  type Box = { p: string; t: string; c?: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(bodyHtml: string): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head></head><body style="margin:0">${bodyHtml}</body></html>`,
+      width: 1000,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const btn = (bs: Box[]) => bs.find((x) => x.t === "button")!;
+  const BTN = "margin:0 auto;padding:.8em 1em;border:2px solid #000;font-size:20px";
+
+  it("display:block and display:flex buttons size like the inline-block button", async () => {
+    const ref = btn(await boxes(`<div style="width:532px"><button style="display:inline-block;${BTN}">Search</button></div>`));
+    for (const disp of ["block", "flex"]) {
+      const b = btn(await boxes(`<div style="width:532px"><button style="display:${disp};${BTN}">Search</button></div>`));
+      expect(b.w).toBeCloseTo(ref.w, 0);
+      expect(b.w).toBeLessThan(200);
+      expect(Math.abs(b.x - (532 - b.w) / 2)).toBeLessThan(1.5); // margin:auto centres it
+    }
+  });
+
+  it("a long label grows to near the available width and wraps instead of shrink-wrapping", async () => {
+    const b = btn(await boxes(
+      `<div style="width:532px"><button style="display:block;${BTN}">Search the whole site for documentation about web platform APIs and guides</button></div>`,
+    ));
+    // (The shared fit-content path measures max-content as the widest line
+    // of a wrap at the offered width, so an overflowing label lands a few
+    // px short of the full 532 a browser reports; the point here is that
+    // the button grows to the cap and wraps, not that it shrink-wraps.)
+    expect(b.w).toBeGreaterThan(500);
+    expect(b.w).toBeLessThanOrEqual(532);
+    expect(b.h).toBeGreaterThan(60);
+  });
+
+  it("explicit widths and plain blocks are untouched", async () => {
+    const fixed = btn(await boxes(`<div style="width:532px"><button style="display:block;width:200px;${BTN}">Search</button></div>`));
+    expect(fixed.w).toBe(200);
+    const full = btn(await boxes(`<div style="width:532px"><button style="display:block;width:100%;${BTN}">Search</button></div>`));
+    expect(full.w).toBe(532);
+    const div = (await boxes(`<div style="width:532px"><div class="d" style="${BTN}">Search</div></div>`)).find((x) => (x.c || "").includes("d"))!;
+    expect(div.w).toBe(532);
+  });
+
+  it("a fit-content block with margin:auto centres as well", async () => {
+    const d = (await boxes(
+      `<div style="width:532px"><div class="d" style="width:fit-content;margin:0 auto;padding:.8em 1em;border:2px solid #000;font-size:20px">Search</div></div>`,
+    )).find((x) => (x.c || "").includes("d"))!;
+    expect(d.w).toBeLessThan(200);
+    expect(Math.abs(d.x - (532 - d.w) / 2)).toBeLessThan(1.5);
+  });
+});
