@@ -6874,3 +6874,68 @@ describe("P0-28: em resolves against the computed (fractional) font size", () =>
     expect(at(b, "0.1.0").w).toBe(130);
   });
 });
+
+// P0-29: three flex/replaced sizing fixes from the rust-lang.org page.
+// (1) A percentage max-width on a replaced element measured as a flex item's
+//     content (a descendant query whose basis is indefinite once the direct
+//     measure bit has been stripped) behaves as none, so a definite-width
+//     ratio-only img keeps its size instead of collapsing to its padding.
+// (2) A column flex line's cross size is bounded by the container's used
+//     inline size (the definite size and the max property combine with min,
+//     and a definite render size bounds it directly), so a stretched item
+//     cannot overflow a column whose width an outer flex container assigned.
+// (3) A flex item's base measure that came back capped by the item's own max
+//     main size is re-measured unbounded: the flex base size is the
+//     unclamped max-content size (the clamp belongs to the hypothetical).
+describe("P0-29: flex base/cross sizing and replaced percentage max-width", () => {
+  type Box = { p: string; t: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(body: string, width = 1000): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0}</style></head><body>${body}</body></html>`,
+      width,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const at = (b: Box[], p: string) => b.find((x) => x.p === p)!;
+
+  it("ratio-only img with max-width:100% inside a flex item keeps its definite width", async () => {
+    const svg =
+      "data:image/svg+xml;utf8," +
+      encodeURIComponent(
+        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 512"><rect width="480" height="512" fill="#00f"/></svg>`,
+      );
+    const b = await boxes(
+      `<div style="display:flex;flex-wrap:wrap;width:277px"><a><img src="${svg}" style="width:40px;padding:0 10px;max-width:100%"></a></div>`,
+    );
+    expect(at(b, "0.1.0.0").w).toBeCloseTo(60, 0);
+    expect(at(b, "0.1.0.0.0").w).toBeCloseTo(60, 0);
+    expect(at(b, "0.1.0.0.0").h).toBeCloseTo((40 * 512) / 480, 0);
+  });
+
+  it("a stretched column item is capped by the column's used width", async () => {
+    const words = "word ".repeat(60);
+    const col = `<div style="box-sizing:border-box;flex:0 0 200px;display:flex;flex-direction:column;max-width:612px;padding:0 24px"><ul style="margin:0;padding:0"><li>${words}</li></ul></div>`;
+    const b = await boxes(`<div style="display:flex;width:600px">${col}</div>`, 600);
+    // The outer row assigns the column 200px; its list stretches to the
+    // column's content width (200 - 48 padding), not to its single-line
+    // width, even though the column's own max-width is much larger.
+    expect(at(b, "0.1.0.0.0").w).toBeCloseTo(152, 0);
+  });
+
+  it("flex bases are the unclamped max-content sizes under a percentage max-width", async () => {
+    const col = (w: number, extra: string) =>
+      `<div style="display:flex;flex-direction:column;max-width:50%;${extra}"><div style="width:${w}px;height:10px"></div></div>`;
+    const b = await boxes(
+      `<div style="display:flex;width:976px">${col(885, "margin-right:24px")}${col(893, "")}</div>`,
+    );
+    // Bases 885 (+24 margin) and 893 shrink proportionally into 976.
+    expect(at(b, "0.1.0.0").w).toBeCloseTo(473.8, 0);
+    expect(at(b, "0.1.0.1").w).toBeCloseTo(478.2, 0);
+  });
+});
