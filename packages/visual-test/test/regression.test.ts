@@ -6426,3 +6426,93 @@ describe("P0-22: a replaced flex item's percentage max size resolves against the
     expect(F(b).w).toBeCloseTo(202.9, 0);
   });
 });
+
+// P0-23: replaced-element constraint resolution. render_image applied the max
+// pair by transferring the ratio into whichever axis it clamped -- including a
+// definite one (width:400px;max-height:128px came out 202.90x128) -- and the
+// min pair not at all (width:100px;min-width:300px rendered 100 wide in block
+// and grid flow; flex items were fine because flex_item clamps itself). The
+// constraints now resolve in the CSS sequence: clamp the width, re-derive an
+// auto height, clamp the height, re-derive and re-clamp an auto width; a
+// definite axis is never re-derived, and on a same-axis conflict the min wins.
+// (The images carry no width/height attributes: litehtml maps those to
+// definite sizes as presentational hints, so an attributed axis is definite
+// here even though the HTML spec maps the pair to an aspect ratio instead.)
+describe("P0-23: replaced element min/max constraints resolve per axis", () => {
+  type Box = { p: string; t: string; c?: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(body: string): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 1000,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const SVG_URI =
+    "data:image/svg+xml," +
+    encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='512' height='323'><rect width='512' height='323' fill='#00f'/></svg>`);
+  const IMG = (style: string) => `<img src="${SVG_URI}" style="${style}">`;
+  const F = (x: Box[]) => x.find((b) => b.t === "img")!;
+  const B = (style: string) => `<div style="width:768px">${IMG(style)}</div>`;
+
+  it("min-width grows a definite-width image and transfers to its auto height", async () => {
+    const b = await boxes(B("width:100px;min-width:300px"));
+    expect(F(b).w).toBe(300);
+    expect(F(b).h).toBeCloseTo(189.26, 1);
+  });
+
+  it("min-height grows a definite-height image and transfers to its auto width", async () => {
+    const b = await boxes(B("height:100px;min-height:200px"));
+    expect(F(b).h).toBe(200);
+    expect(F(b).w).toBeCloseTo(317.02, 1);
+  });
+
+  it("a percentage min-width resolves against the containing block", async () => {
+    const b = await boxes(B("width:100px;min-width:50%"));
+    expect(F(b).w).toBe(384);
+  });
+
+  it("min-width beyond the intrinsic size grows an auto image", async () => {
+    const b = await boxes(B("min-width:600px"));
+    expect(F(b).w).toBe(600);
+    expect(F(b).h).toBeCloseTo(378.52, 1);
+  });
+
+  it("a max-height does not transfer into a definite width", async () => {
+    const b = await boxes(B("width:400px;max-height:128px"));
+    expect(F(b).w).toBe(400);
+    expect(F(b).h).toBe(128);
+  });
+
+  it("with both axes definite a clamp applies to its own axis only", async () => {
+    const b = await boxes(B("width:400px;height:200px;max-height:128px"));
+    expect(F(b).w).toBe(400);
+    expect(F(b).h).toBe(128);
+    const c = await boxes(B("width:100px;height:200px;min-width:300px"));
+    expect(F(c).w).toBe(300);
+    expect(F(c).h).toBe(200);
+  });
+
+  it("a min-width and a max-height are both honoured, breaking the ratio", async () => {
+    const b = await boxes(B("width:100px;min-width:300px;max-height:150px"));
+    expect(F(b).w).toBe(300);
+    expect(F(b).h).toBe(150);
+  });
+
+  it("a min-height and a max-width are both honoured, breaking the ratio", async () => {
+    const b = await boxes(B("height:100px;min-height:200px;max-width:200px"));
+    expect(F(b).w).toBe(200);
+    expect(F(b).h).toBe(200);
+  });
+
+  it("on a same-axis conflict the min wins and the auto axis follows it", async () => {
+    const b = await boxes(B("width:100px;min-width:300px;max-width:200px"));
+    expect(F(b).w).toBe(300);
+    expect(F(b).h).toBeCloseTo(189.26, 1);
+  });
+});
