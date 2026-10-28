@@ -79,6 +79,11 @@ class SatoruFontManager : public satoru::IFontManager {
     // 実体は代替書体そのものなので、登録済みでも縦メトリクスはプロファイルに合わせる。
     bool isGenericMetricFamily(const std::string& family) const;
 
+    // 名前付き family がメトリクスプロファイル経由で描かれる際の代替実体となる
+    // 汎用 family ("serif" / "monospace")。Sans プロファイルとプロファイルの無い
+    // family では "" (sans の実体は常時要求されるため追加要求は不要)。
+    std::string metricProfileGenericFamily(const std::string& family) const;
+
    private:
     sk_sp<SkFontMgr> m_fontMgr;
 

@@ -325,6 +325,25 @@ void SatoruInstance::collect_resources(const std::string& html, int width, int h
         requestedAttribs.insert(req);
     }
 
+    // 名前付き family (例: "Liberation Mono", "Georgia") はメトリクスプロファイル
+    // 経由で汎用 family の代替書体で描かれるが、font-family に汎用名が無ければ
+    // その代替書体は一切要求されず、matchMetricFallbackFonts が sans の実体に
+    // 縦メトリクスだけ載せた形へ劣化する (等幅指定がプロポーショナル字形になる)。
+    // プロファイルの汎用 family も同じ weight/slant で要求しておく。
+    {
+        std::vector<font_request> genericReqs;
+        for (const auto& req : requestedAttribs) {
+            const std::string generic =
+                context.fontManager.metricProfileGenericFamily(req.family);
+            if (!generic.empty() && generic != req.family) {
+                font_request greq = req;
+                greq.family = generic;
+                genericReqs.push_back(greq);
+            }
+        }
+        for (const auto& greq : genericReqs) requestedAttribs.insert(greq);
+    }
+
     if (collect_profile_enabled) profile_requested_font_count = (int)requestedAttribs.size();
     for (const auto& req : requestedAttribs) {
         std::string charactersStr;
