@@ -7799,3 +7799,66 @@ describe("P0-43: scroll containers floor fr/auto tracks at their specified sizes
     expect(b.x).toBeCloseTo(70, 0);
   });
 });
+
+// P0-44: under a min-content constraint, a fit-content(limit) track
+// contributed max(min-content, min(max-content, limit)) -- the
+// max-content side of the formula -- so a grid being measured for its
+// min-content size came out too wide whenever an item's max-content
+// exceeded the limit (fuzz replaced seed 6: the grid's min-content
+// was 240 instead of 200 and it could not shrink as a flex item).
+// The min-content contribution is the track's floor instead: an
+// explicit min-width replaces the content contribution, and a
+// measured min-content is not capped by the limit.
+describe("P0-44: fit-content tracks contribute their floor under a min-content constraint", () => {
+  type Box = { p: string; t: string; i?: string; x: number; y: number; w: number; h: number };
+
+  async function box(html: string): Promise<Box> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0}</style></head><body>${html}</body></html>`,
+      width: 1000,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out.find((x) => x.i === "w")!;
+  }
+  const uri = (attrs: string) =>
+    `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" ${attrs}><rect width="100%" height="100%" fill="#69c"/></svg>`)}`;
+  // Grid min-content = fit-content track + 0 (fr floors) + 60 + 0.
+  const gridMin = (item: string) =>
+    `<div style="width:min-content"><div id="w" style="display:grid;grid-template-columns:fit-content(80px) 2fr 60px 2fr">${item}</div></div>`;
+  const blk = (minW: number | null, kidW: number) =>
+    `<div style="${minW === null ? "" : `min-width:${minW}px;`}padding:4px"><div style="width:${kidW}px;height:10px"></div></div>`;
+
+  it("a definite min-width replaces the content contribution", async () => {
+    expect((await box(gridMin(blk(40, 200)))).w).toBeCloseTo(108, 0);
+  });
+
+  it("a larger min-width raises the contribution", async () => {
+    expect((await box(gridMin(blk(100, 200)))).w).toBeCloseTo(168, 0);
+  });
+
+  it("a min-width above the content size still rules", async () => {
+    expect((await box(gridMin(blk(300, 200)))).w).toBeCloseTo(368, 0);
+  });
+
+  it("a definite min-width rules even when the content is narrower than the limit", async () => {
+    expect((await box(gridMin(blk(40, 50)))).w).toBeCloseTo(108, 0);
+  });
+
+  it("without a min-width the full min-content counts, uncapped by the limit", async () => {
+    expect((await box(gridMin(blk(null, 200)))).w).toBeCloseTo(268, 0);
+  });
+
+  it("a flex container item follows the same rule", async () => {
+    const item = `<div style="display:flex;flex-wrap:wrap;gap:8px;min-width:40px;padding:4px"><img src="${uri('width="120" height="50" viewBox="0 0 120 50"')}"></div>`;
+    expect((await box(gridMin(item))).w).toBeCloseTo(108, 0);
+  });
+
+  it("the max-content side keeps the clamped formula", async () => {
+    const html = `<div style="width:max-content"><div id="w" style="display:grid;grid-template-columns:fit-content(80px) 2fr 60px 2fr">${blk(40, 200)}</div></div>`;
+    expect((await box(html)).w).toBeCloseTo(140, 0);
+  });
+});
