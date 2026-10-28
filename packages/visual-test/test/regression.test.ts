@@ -740,6 +740,24 @@ describe("regression: layout and paint probes", () => {
     expect(await pdf(doc("").replace(";break-inside:avoid", ""))).not.toBe(tight);
   });
 
+  it("PDF break-inside: avoid cuts at the border-box top of a padded block, not at its content", async () => {
+    // A 100px box (20px padding + 60px content) straddles the 200px page cut. The cut must be the
+    // box's top edge (120px): at its content top (140px) the 20px of top padding stayed behind as a
+    // grey sliver on page 1.
+    const html =
+      `<html><head><style>@page{size:300px 200px;margin:0}</style></head><body style="margin:0">` +
+      `<p style="margin:0;height:120px;background:#9cf">a</p>` +
+      `<pre style="margin:0;padding:20px;height:60px;background:#fc9;break-inside:avoid">b</pre></body></html>`;
+    const data = Buffer.from((await render({ value: html, width: 300, format: "pdf" })).data as Uint8Array);
+    const text = data.toString("latin1");
+    const firstPage = /\/Contents (\d+) 0 R/.exec(text)![1];
+    const at = text.indexOf(`\n${firstPage} 0 obj\n`);
+    const start = text.indexOf("stream\n", at) + 7;
+    const content = inflateSync(data.subarray(start, text.indexOf("\nendstream", start))).toString("latin1");
+    // The page clip is in points (0.75 per px): 120px = 90pt.
+    expect(/^0 0 225 (\d+(?:\.\d+)?) re$/m.exec(content)![1]).toBe("90");
+  });
+
   it("text-fit: shrink / grow scale the font so the widest line fits the container", async () => {
     const extent = async (style: string, text: string) => {
       const { img } = await renderPng(

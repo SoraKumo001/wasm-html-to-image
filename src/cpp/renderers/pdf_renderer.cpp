@@ -221,7 +221,7 @@ bool is_grouping_wrapper(const litehtml::element* el) {
 }
 
 // Resolve one in-flow flow-root child into units (innermost-wins, see above).
-void append_break_units(const litehtml::element* el, std::vector<BreakUnit>& units) {
+void append_break_units(litehtml::element* el, std::vector<BreakUnit>& units) {
     if (!el) return;
     if (!el->in_normal_flow()) return;
     // Block boxes, plus replaced elements (img / whole table).
@@ -232,22 +232,30 @@ void append_break_units(const litehtml::element* el, std::vector<BreakUnit>& uni
         return;
     }
 
+    // get_placement() is the content box: widen it by padding and border so that a cut taken at
+    // the unit's edge is the edge of the box (a padded <pre> otherwise leaves its top padding
+    // behind on the previous page).
     litehtml::position p = el->get_placement();
     if (p.height <= 0) return;
+    litehtml::pixel_t above = 0, below = 0;
+    if (const auto ri = el->get_render_item()) {
+        above = ri->padding_top() + ri->border_top();
+        below = ri->padding_bottom() + ri->border_bottom();
+    }
     BreakUnit u;
-    u.top = (int)p.y;
-    u.bottom = (int)(p.y + p.height);
+    u.top = (int)(p.y - above);
+    u.bottom = (int)(p.y + p.height + below);
     u.before = el->css().get_break_before();
     u.after = el->css().get_break_after();
     u.inside = el->css().get_break_inside();
     units.push_back(u);
 }
 
-std::vector<BreakUnit> collect_break_units(const litehtml::element* root) {
+std::vector<BreakUnit> collect_break_units(litehtml::element* root) {
     std::vector<BreakUnit> units;
     if (!root) return units;
 
-    const litehtml::element* flow = root;
+    litehtml::element* flow = root;
     for (const auto& child : root->children()) {
         if (child && child->tag() == litehtml::_body_) {
             flow = child.get();
