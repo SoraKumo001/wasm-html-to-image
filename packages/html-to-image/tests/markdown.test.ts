@@ -28,6 +28,15 @@ describe("markdownToHtml", () => {
     expect(markdownStylesheet("light", 10, 600)).toContain("max-width: 600px");
   });
 
+  it("paged output moves the padding into an @page margin", () => {
+    const paged = markdownToHtml("x", { paged: true, padding: 40 });
+    expect(paged).toContain("@page { margin: 40px; }");
+    expect(paged).toMatch(/\.markdown-body \{ padding: 0px;/);
+    const plain = markdownToHtml("x", { padding: 40 });
+    expect(plain).not.toContain("@page");
+    expect(plain).toMatch(/\.markdown-body \{ padding: 40px;/);
+  });
+
   it("needs nothing but `marked`, so it runs in browsers and Workers", () => {
     const source = fs.readFileSync(
       fileURLToPath(new URL("../src/markdown.ts", import.meta.url)),
@@ -58,6 +67,9 @@ describe("markdown CLI input", () => {
     const fromFile = await buildRenderOptions(file, flags);
     expect(String(fromFile.value)).toContain("<h1>From file</h1>");
     expect(fromFile.baseUrl).toBe(dir);
+    const pdf = await buildRenderOptions(file, { ...flags, format: "pdf" });
+    expect(String(pdf.value)).toContain("@page { margin: 32px; }");
+    expect(String(fromFile.value)).not.toContain("@page");
     const inline = await buildRenderOptions("**bold**", { ...flags, markdown: true, markdownTheme: "dark" });
     expect(String(inline.value)).toContain("<strong>bold</strong>");
     expect(String(inline.value)).toContain("#0d1117");

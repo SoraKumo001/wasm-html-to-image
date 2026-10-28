@@ -199,7 +199,7 @@ const html = markdownToHtml("# Hello
 const { data } = await render({ value: html, width: 800, format: "pdf" });
 ```
 
-Options: `theme` (`"light"` | `"dark"`), `css` (appended after the built-in sheet), `stylesheet` (replaces it), `padding`, `maxWidth`, `title`.
+Options: `theme` (`"light"` | `"dark"`), `css` (appended after the built-in sheet), `stylesheet` (replaces it), `padding`, `maxWidth`, `title`, `paged` (for PDF: `padding` becomes the margin of every page, so pages after the first keep their top and bottom margins; the CLI sets it for `.pdf` output, in code pass `paged: true` with `format: "pdf"`). Headings stay with the text after them and code blocks, tables and quotes are not split across pages.
 
 The CLI does the same for `.md` / `.markdown` files, and for inline text or stdin with `--markdown`:
 

@@ -8,6 +8,11 @@ export interface MarkdownOptions {
   css?: string;
   /** Page padding around the article in px. Defaults to 32. */
   padding?: number;
+  /**
+   * Paginated output (`format: "pdf"`): `padding` becomes the `@page` margin on every page instead
+   * of padding around the article, so pages after the first keep their top and bottom margins.
+   */
+  paged?: boolean;
   /** Maximum width of the article in px; omit for the full viewport width. */
   maxWidth?: number;
   /** `<title>` of the generated document. */
@@ -45,11 +50,12 @@ export function markdownStylesheet(
   theme: "light" | "dark" = "light",
   padding = 32,
   maxWidth?: number,
+  paged = false,
 ): string {
   const c = PALETTES[theme];
-  return `html, body { margin: 0; padding: 0; background: ${c.bg}; }
+  return `${paged ? `@page { margin: ${padding}px; }\n` : ""}html, body { margin: 0; padding: 0; background: ${c.bg}; }
 body { color: ${c.fg}; font-family: sans-serif; font-size: 16px; line-height: 1.5; }
-.markdown-body { padding: ${padding}px;${maxWidth ? ` max-width: ${maxWidth}px; margin: 0 auto;` : ""} }
+.markdown-body { padding: ${paged ? 0 : padding}px;${maxWidth ? ` max-width: ${maxWidth}px; margin: 0 auto;` : ""} }
 .markdown-body > *:first-child { margin-top: 0; }
 .markdown-body > *:last-child { margin-bottom: 0; }
 .markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4, .markdown-body h5, .markdown-body h6 { margin-top: 24px; margin-bottom: 16px; font-weight: 600; line-height: 1.25; }
@@ -90,7 +96,7 @@ export function markdownToHtml(markdown: string, options: MarkdownOptions = {}):
   const body = marked.parse(markdown, { async: false, gfm: true }) as string;
   const sheet =
     options.stylesheet ??
-    markdownStylesheet(options.theme, options.padding, options.maxWidth);
+    markdownStylesheet(options.theme, options.padding, options.maxWidth, options.paged);
   const title = options.title ? `<title>${escapeHtml(options.title)}</title>` : "";
   return `<!doctype html><html><head><meta charset="utf-8">${title}<style>${sheet}${options.css ?? ""}</style></head><body><article class="markdown-body">${body}</article></body></html>`;
 }

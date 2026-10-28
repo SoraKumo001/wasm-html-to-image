@@ -160,7 +160,7 @@ export async function markdownToDocument(markdown: string, flags: CliFlags): Pro
     throw new Error(`unsupported markdown theme "${flags.markdownTheme}". Choose from: light, dark`);
   }
   const css = flags.markdownCss ? await fs.readFile(flags.markdownCss, "utf-8") : undefined;
-  return mod.markdownToHtml(markdown, { theme, css });
+  return mod.markdownToHtml(markdown, { theme, css, paged: flags.format === "pdf" });
 }
 
 /** Inline markup passed on the command line (as opposed to a path or URL). */
