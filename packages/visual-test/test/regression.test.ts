@@ -8042,3 +8042,59 @@ describe("P0-47: a grid row measures a non-stretched item at its used width", ()
     expect(b.h).toBeCloseTo(116.8, 0);
   });
 });
+
+// P0-48: under a min-content constraint, a grid item with a definite
+// min-width contributed its full content size to an auto track, so the
+// grid's own min-content came out at its max-content and the grid
+// could not shrink as a flex item (fuzz replaced seed 25: the grid
+// stayed 250 wide where Chrome shrinks it to 52). The fit-content
+// floor already replaced the contribution with the min-width; an auto
+// track under a min-content constraint now does the same.
+describe("P0-48: a definite min-width replaces an auto track's min-content contribution", () => {
+  type Box = { p: string; t: string; i?: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(html: string): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0;font-size:0;line-height:0}</style></head><body>${html}</body></html>`,
+      width: 1000,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const uri = (w: number, h: number) =>
+    `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><rect width="100%" height="100%" fill="#69c"/></svg>`)}`;
+  const gridIn = (mode: string, item: string) =>
+    `<div style="width:${mode}"><div id="g" style="display:grid;grid-template-columns:auto;padding:4px">${item}</div></div>`;
+  const w = (out: Box[], id: string) => out.find((x) => x.i === id)!.w;
+
+  it("a block with min-width:40px around wide content contributes 40", async () => {
+    const out = await boxes(gridIn("min-content", `<div id="f" style="min-width:40px;padding:2px;margin:2px"><div style="width:200px;height:10px"></div></div>`));
+    expect(w(out, "g")).toBeCloseTo(56, 0);
+    expect(w(out, "f")).toBeCloseTo(44, 0);
+  });
+
+  it("without min-width the content contribution stands", async () => {
+    const out = await boxes(gridIn("min-content", `<div id="f" style="padding:2px;margin:2px"><div style="width:200px;height:10px"></div></div>`));
+    expect(w(out, "g")).toBeCloseTo(216, 0);
+  });
+
+  it("a max-content measure is unaffected by the min-width", async () => {
+    const out = await boxes(gridIn("max-content", `<div id="f" style="min-width:40px;padding:2px;margin:2px"><div style="width:200px;height:10px"></div></div>`));
+    expect(w(out, "g")).toBeCloseTo(216, 0);
+  });
+
+  it("a definite width counts in full, above the min-width", async () => {
+    const out = await boxes(gridIn("min-content", `<div id="f" style="width:200px;min-width:100px;margin:2px"></div>`));
+    expect(w(out, "g")).toBeCloseTo(212, 0);
+    expect(w(out, "f")).toBeCloseTo(200, 0);
+  });
+
+  it("a flex item with a definite min-width contributes it too", async () => {
+    const out = await boxes(gridIn("min-content", `<div id="f" style="display:flex;min-width:40px;padding:2px;margin:2px"><img src="${uri(80, 30)}" style="width:120px"></div>`));
+    expect(w(out, "g")).toBeCloseTo(56, 0);
+  });
+});
