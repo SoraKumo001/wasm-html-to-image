@@ -7537,3 +7537,63 @@ describe("P0-39: cyclic var() references fall back", () => {
     expect(b.w).toBeCloseTo(0, 0);
   });
 });
+
+// P0-40: a line box was capped at the largest line-height among its
+// runs. But each run's inline box is its own line-height tall with
+// the leading split around its own ascent/descent, so an
+// ascent-dominant run beside ordinary text extends the union past
+// the line-height in browsers (python.org's widget titles: a
+// Pythonicon glyph, ascent 0.94em, beside 0.90em body text grows the
+// line 33.4 -> 35.4). line_box::finish now recomputes the per-run
+// extents for such runs and grows the box by the union's excess.
+// The growth is deliberately restricted to runs whose ascent
+// exceeds the strut's: descent-side splits of ordinary text runs
+// are dominated by substitute-font noise in this engine's
+// per-element fallback resolution, and counting them grew plain
+// lines by a pixel across whole pages (Wikipedia).
+describe("P0-40: line box grows for ascent-dominant runs", () => {
+  type Box = { p: string; t: string; i?: string; x: number; y: number; w: number; h: number };
+
+  async function para(html: string): Promise<Box> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0}</style></head><body>${html}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out.find((x) => x.i === "w")!;
+  }
+
+  it("an ascent-dominant run extends the line past the line-height", async () => {
+    // Strut font Courier New at 20px: metrics 17/6, line-height 34
+    // -> above 22, below 12. Segoe UI run: metrics 22/5 (ascent
+    // past the strut's) -> above 25, below 9. Union 25 + 12 = 37.
+    const b = await para(
+      `<p id="w" style="font-family:'Courier New';font-size:20px;line-height:34px">A<span style="font-family:'Segoe UI'">B</span></p>`);
+    expect(b.h).toBeCloseTo(37, 0);
+  });
+
+  it("a single font keeps the line at its line-height", async () => {
+    const b = await para(
+      `<p id="w" style="font-family:'Courier New';font-size:20px;line-height:34px">AB</p>`);
+    expect(b.h).toBeCloseTo(34, 0);
+  });
+
+  it("a top-aligned inline box's font does not extend the line", async () => {
+    const b = await para(
+      `<p id="w" style="font-family:'Courier New';font-size:20px;line-height:34px">A<span style="font-family:'Segoe UI';vertical-align:top">B</span></p>`);
+    expect(b.h).toBeCloseTo(34, 0);
+  });
+
+  it("a descent-side-only divergence does not extend the line", async () => {
+    // Verdana strut (20/4) with a Courier New run (17/6): the
+    // descent split differs but no run's ascent passes the
+    // strut's, so the restricted growth stays out.
+    const b = await para(
+      `<p id="w" style="font-family:Verdana;font-size:20px;line-height:30px">A<span style="font-family:'Courier New'">B</span></p>`);
+    expect(b.h).toBeCloseTo(30, 0);
+  });
+});
