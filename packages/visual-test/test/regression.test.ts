@@ -7597,3 +7597,74 @@ describe("P0-40: line box grows for ascent-dominant runs", () => {
     expect(b.h).toBeCloseTo(30, 0);
   });
 });
+
+// P0-41: two replaced-element sizing gaps. (1) An SVG image with
+// exactly one absolute dimension (width=80, no height) had no
+// intrinsic size at all in decode_svg -- Skia's containerSize() is
+// empty for that shape and the layout path fell to 512x512, where a
+// browser derives the other dimension from the viewBox ratio, or
+// from the default object size (300x150) without a viewBox.
+// (2) A replaced flex item stretched to a definite container height
+// transfers that height through its ratio to its flex base size, but
+// its automatic minimum stayed the intrinsic width, so flex-shrink
+// pulled it back (120x50 in a 60px-tall, 80px-wide row: Chrome keeps
+// the transferred 144 and overflows; the engine shrank to 120). The
+// shrink floor is now the transferred size for non-ratio-only items
+// (ratio-only items are re-transferred by render_flex afterwards and
+// keep the old floor).
+describe("P0-41: one-dimension SVG images and the flex stretch floor", () => {
+  type Box = { p: string; t: string; i?: string; x: number; y: number; w: number; h: number };
+  const uri = (inner: string) =>
+    `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" ${inner}><rect width="80" height="40" fill="#69c"/></svg>`)}`;
+
+  async function box(html: string): Promise<Box> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0;font-size:0;line-height:0}</style></head><body>${html}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out.find((x) => x.i === "w")!;
+  }
+
+  it("width-only SVG image with a viewBox derives height from the ratio", async () => {
+    const b = await box(`<img id="w" src="${uri('width="80" viewBox="0 0 80 10"')}">`);
+    expect(b.w).toBeCloseTo(80, 0);
+    expect(b.h).toBeCloseTo(10, 0);
+  });
+
+  it("width-only SVG image without a viewBox gets the default object height", async () => {
+    const b = await box(`<img id="w" src="${uri('width="80"')}">`);
+    expect(b.w).toBeCloseTo(80, 0);
+    expect(b.h).toBeCloseTo(150, 0);
+  });
+
+  it("height-only SVG image with a viewBox derives width from the ratio", async () => {
+    const b = await box(`<img id="w" src="${uri('height="40" viewBox="0 0 80 10"')}">`);
+    expect(b.w).toBeCloseTo(320, 0);
+    expect(b.h).toBeCloseTo(40, 0);
+  });
+
+  it("height-only SVG image without a viewBox gets the default object width", async () => {
+    const b = await box(`<img id="w" src="${uri('height="40"')}">`);
+    expect(b.w).toBeCloseTo(300, 0);
+    expect(b.h).toBeCloseTo(40, 0);
+  });
+
+  it("a stretched flex image keeps its transferred width under shrink pressure", async () => {
+    const b = await box(
+      `<div style="display:flex;height:60px;width:80px"><img id="w" src="${uri('width="120" height="50" viewBox="0 0 120 50"')}"></div>`);
+    expect(b.w).toBeCloseTo(144, 0);
+    expect(b.h).toBeCloseTo(60, 0);
+  });
+
+  it("an image stretched to a shorter container narrows below its intrinsic width", async () => {
+    const b = await box(
+      `<div style="display:flex;height:30px;width:300px"><img id="w" src="${uri('width="120" height="50" viewBox="0 0 120 50"')}"></div>`);
+    expect(b.w).toBeCloseTo(72, 0);
+    expect(b.h).toBeCloseTo(30, 0);
+  });
+});
