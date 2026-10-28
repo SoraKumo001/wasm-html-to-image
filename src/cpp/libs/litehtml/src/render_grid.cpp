@@ -2060,21 +2060,33 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                 item.el->measure(mcb, fmt_ctx);
                 measured_at_used_width = true;
                 const int predef_h = item.el->src_el()->css().get_width().predef();
-                if ((predef_h == 0 || predef_h == 1) && item.el->width() > cell_width + 0.01f)
+                const pixel_t maxw_h = item.el->width();
+                pixel_t used_w = maxw_h;
+                if (predef_h == 3 || ((predef_h == 0 || predef_h == 1) && maxw_h > cell_width + 0.01f))
                 {
                     containing_block_context min_cb = mcb;
                     min_cb.size_mode |= containing_block_context::size_mode_min_content;
                     item.el->measure(min_cb, fmt_ctx);
-                    const pixel_t fit_w = std::max(item.el->width(), cell_width);
-                    containing_block_context fit_cb = mcb;
-                    fit_cb.width = fit_w - item.el->content_offset_width() + item.el->box_sizing_width();
-                    fit_cb.width.type = containing_block_context::cbc_value_type_absolute;
-                    fit_cb.render_width = fit_cb.width;
-                    fit_cb.size_mode |= containing_block_context::size_mode_exact_width;
-                    fit_cb.size_mode &= ~(containing_block_context::size_mode_content |
-                                          containing_block_context::size_mode_min_content);
-                    item.el->measure(fit_cb, fmt_ctx);
+                    const pixel_t minw_h = item.el->width();
+                    used_w = predef_h == 3 ? minw_h
+                                           : std::max(minw_h, std::min(maxw_h, cell_width));
                 }
+                // The content-mode measure resolves the item's own layout intrinsically,
+                // which can report a height the item never has at its used width even
+                // when that width equals the content width: a nested grid's tracks open
+                // up intrinsically (a ratio-only svg inside measures 300 wide / 60 tall)
+                // where the placed layout resolves them against the definite used width
+                // (0 wide / the 30px row floor). Always finish with an exact-width
+                // measure at the used width so the row takes the placed height
+                // (fuzz replaced seed 4).
+                containing_block_context fit_cb = mcb;
+                fit_cb.width = used_w - item.el->content_offset_width() + item.el->box_sizing_width();
+                fit_cb.width.type = containing_block_context::cbc_value_type_absolute;
+                fit_cb.render_width = fit_cb.width;
+                fit_cb.size_mode |= containing_block_context::size_mode_exact_width;
+                fit_cb.size_mode &= ~(containing_block_context::size_mode_content |
+                                      containing_block_context::size_mode_min_content);
+                item.el->measure(fit_cb, fmt_ctx);
             }
         }
         if (!measured_at_used_width)
@@ -2421,6 +2433,13 @@ void litehtml::render_item_grid::place_grid_items(pixel_t x, pixel_t y, const co
             {
                 cb.size_mode &= ~containing_block_context::size_mode_exact_width;
                 cb.size_mode |= containing_block_context::size_mode_content;
+                // width:min-content is sized by the min-content measure, not the
+                // max-content one the content mode alone reports: a flex-wrap item
+                // with width:min-content measured 160 wide / 20 tall in content
+                // mode but is placed at its 80px min-content width (Chrome), where
+                // its two lines make it 40 tall (fuzz replaced seed 4 follow-up).
+                if (!replaced_item && item.el->src_el()->css().get_width().predef() == 3)
+                    cb.size_mode |= containing_block_context::size_mode_min_content;
                 cb.render_width = cell_w;
                 cb.width = cell_w;
             }
