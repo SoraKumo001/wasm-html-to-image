@@ -7187,3 +7187,61 @@ describe("P0-33: font-family on html inherits into the page", () => {
     expect(plain).toBeCloseTo(viaBodySans, 0);
   });
 });
+
+// P0-34: scrollbar-gutter must narrow the containing block of positioned
+// boxes too. document::render subtracted the reserved 15px for in-flow
+// layout (P0-14), but render_positioned built the initial containing
+// block from the raw viewport width, so an absolutely positioned or
+// fixed box resolved percentages and auto sizes against the full
+// viewport: MDN's off-screen .a11y-menu (left/right 2px,
+// width: calc(100% - 4px)) measured 996 against Chromium's 981 on a
+// 1000px viewport. The positioned containing block now subtracts the
+// same gutter (30px for stable both-edges).
+describe("P0-34: scrollbar-gutter applies to positioned containing blocks", () => {
+  type Box = { p: string; t: string; i?: string; x: number; y: number; w: number; h: number };
+
+  async function box(css: string, style: string): Promise<Box> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0}${css}</style></head><body><div id="w" style="${style}"></div><div style="height:2000px"></div></body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out.find((x) => x.i === "w")!;
+  }
+  const GUT = `html{scrollbar-gutter:stable}`;
+
+  it("absolute width:100% resolves against the narrowed ICB (585 of 600)", async () => {
+    const b = await box(GUT, "position:absolute;left:0;top:0;width:100%;height:10px");
+    expect(b.w).toBeCloseTo(585, 0);
+  });
+
+  it("absolute width:calc(100% - 4px) matches the a11y-menu shape (581)", async () => {
+    const b = await box(GUT, "position:absolute;left:2px;right:2px;top:0;width:calc(100% - 4px);height:10px");
+    expect(b.w).toBeCloseTo(581, 0);
+    expect(b.x).toBeCloseTo(2, 0);
+  });
+
+  it("absolute auto width between left and right uses the narrowed ICB", async () => {
+    const b = await box(GUT, "position:absolute;left:2px;right:2px;top:0;height:10px");
+    expect(b.w).toBeCloseTo(581, 0);
+  });
+
+  it("fixed width:100% resolves against the narrowed viewport", async () => {
+    const b = await box(GUT, "position:fixed;left:0;top:0;width:100%;height:10px");
+    expect(b.w).toBeCloseTo(585, 0);
+  });
+
+  it("without the gutter, positioned boxes keep the full viewport width", async () => {
+    const b = await box("", "position:absolute;left:0;top:0;width:100%;height:10px");
+    expect(b.w).toBeCloseTo(600, 0);
+  });
+
+  it("stable both-edges reserves twice the gutter (570)", async () => {
+    const b = await box(`html{scrollbar-gutter:stable both-edges}`, "position:absolute;left:0;top:0;width:100%;height:10px");
+    expect(b.w).toBeCloseTo(570, 0);
+  });
+});
