@@ -7668,3 +7668,69 @@ describe("P0-41: one-dimension SVG images and the flex stretch floor", () => {
     expect(b.h).toBeCloseTo(30, 0);
   });
 });
+
+// P0-42: a ratio-only replaced grid item with a content-keyword width
+// (fit-content / max-content / min-content) was sent down the
+// ratio_fill path -- it filled its track (or vanished to 0) -- even
+// when its block size resolved. A keyword width is not stretched, so
+// when the height is definite, a percentage of the row, or the align
+// stretch, the used width is the ratio transfer from that block size
+// (unclamped by the track), exactly like an auto width. The
+// justify-stretch fill exception now covers auto widths only, and
+// with the block size unresolved the fill stays.
+describe("P0-42: keyword widths on ratio-only grid items transfer from the block size", () => {
+  type Box = { p: string; t: string; i?: string; x: number; y: number; w: number; h: number };
+
+  async function box(html: string): Promise<Box> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0;font-size:0;line-height:0}</style></head><body>${html}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out.find((x) => x.i === "w")!;
+  }
+  const svg = (style: string) =>
+    `<svg id="w" viewBox="0 0 40 20" style="${style}"><rect width="40" height="20" fill="#69c"/></svg>`;
+  const grid = (cols: string, extra: string, inner: string) =>
+    `<div style="display:grid;grid-template-columns:${cols};${extra}">${inner}</div>`;
+
+  it("fit-content transfers from the stretched row height", async () => {
+    const b = await box(grid("50px", "grid-template-rows:20px;align-items:stretch;justify-items:stretch", svg("width:fit-content")));
+    expect(b.w).toBeCloseTo(40, 0);
+    expect(b.h).toBeCloseTo(20, 0);
+  });
+
+  it("fit-content transfers from a percentage height", async () => {
+    const b = await box(grid("50px", "grid-template-rows:20px;align-items:stretch;justify-items:stretch", svg("width:fit-content;height:50%")));
+    expect(b.w).toBeCloseTo(20, 0);
+    expect(b.h).toBeCloseTo(10, 0);
+  });
+
+  it("fit-content transfers from a definite height", async () => {
+    const b = await box(grid("50px", "grid-template-rows:20px;align-items:stretch;justify-items:stretch", svg("width:fit-content;height:12px")));
+    expect(b.w).toBeCloseTo(24, 0);
+    expect(b.h).toBeCloseTo(12, 0);
+  });
+
+  it("max-content is not clamped by a narrower track", async () => {
+    const b = await box(grid("30px", "grid-template-rows:20px;align-items:stretch;justify-items:stretch", svg("width:max-content")));
+    expect(b.w).toBeCloseTo(40, 0);
+    expect(b.h).toBeCloseTo(20, 0);
+  });
+
+  it("an unresolved block size keeps the fill", async () => {
+    const b = await box(grid("50px", "align-items:start;justify-items:stretch", svg("width:fit-content")));
+    expect(b.w).toBeCloseTo(50, 0);
+    expect(b.h).toBeCloseTo(25, 0);
+  });
+
+  it("an auto width under justify stretch still fills its track", async () => {
+    const b = await box(grid("50px", "grid-template-rows:20px;align-items:stretch;justify-items:stretch", svg("")));
+    expect(b.w).toBeCloseTo(50, 0);
+    expect(b.h).toBeCloseTo(20, 0);
+  });
+});
