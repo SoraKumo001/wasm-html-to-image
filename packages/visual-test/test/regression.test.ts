@@ -717,6 +717,29 @@ describe("regression: layout and paint probes", () => {
     expect(smallClone.equals(smallPlain)).toBe(true);
   });
 
+  it("PDF page breaks see through the whitespace between a wrapper's blocks (pretty-printed markup)", async () => {
+    // 120px of paragraphs, then a 100px break-inside:avoid block that straddles the 200px page cut.
+    // The wrapper only groups blocks, so the avoid must be honoured whether or not the markup has
+    // newlines between them; whitespace text used to make the whole wrapper one unbreakable unit.
+    const blocks = [
+      `<p style="margin:0;height:120px;background:#9cf">a</p>`,
+      `<pre style="margin:0;height:100px;background:#fc9;break-inside:avoid">b</pre>`,
+    ];
+    const doc = (sep: string) =>
+      `<html><head><style>@page{size:300px 200px;margin:0}</style></head><body style="margin:0"><article style="padding:0">${sep}${blocks.join(sep)}${sep}</article></body></html>`;
+    // Compare whole files minus the creation/modification dates and the trailer ID.
+    const pdf = async (html: string) =>
+      Buffer.from((await render({ value: html, width: 300, format: "pdf" })).data as Uint8Array)
+        .toString("latin1")
+        .replace(/\/(CreationDate|ModDate)\s*\([^)]*\)/g, "")
+        .replace(/\/ID\s*\[[^\]]*\]/g, "");
+    await pdf(doc("")); // warm-up: a process' first PDF embeds its fonts differently from later ones
+    const tight = await pdf(doc(""));
+    expect(await pdf(doc("\n  "))).toBe(tight);
+    // ... and the avoid really moved the block to page 2: the pages differ from a no-avoid run.
+    expect(await pdf(doc("").replace(";break-inside:avoid", ""))).not.toBe(tight);
+  });
+
   it("text-fit: shrink / grow scale the font so the widest line fits the container", async () => {
     const extent = async (style: string, text: string) => {
       const { img } = await renderPng(

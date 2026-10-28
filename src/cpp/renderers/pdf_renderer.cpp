@@ -212,6 +212,8 @@ bool is_grouping_wrapper(const litehtml::element* el) {
     for (const auto& child : el->children()) {
         if (!child) continue;
         if (!child->in_normal_flow()) continue;  // absolute/fixed/none: not content
+        // Whitespace between blocks (pretty-printed markup, marked's output) generates no box.
+        if (child->is_white_space()) continue;
         if (!(child->is_block_box() || child->is_replaced())) return false;
         has_block_child = true;
     }
