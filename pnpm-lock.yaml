@@ -23,10 +23,6 @@ importers:
       typescript:
         specifier: ^7.0.2
         version: 7.0.2
-    optionalDependencies:
-      highlight.js:
-        specifier: ^11.12.0
-        version: 11.12.0
 
   packages/cloudflare-ogp:
     dependencies:
