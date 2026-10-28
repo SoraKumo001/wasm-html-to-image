@@ -471,6 +471,24 @@ void litehtml::render_item::render_positioned(render_type rt) {
                 (is_root() && !src_el()->is_positioned())) {
                 containing_block_size.height = view_port.height;
                 containing_block_size.width = view_port.width;
+                // scrollbar-gutter: stable reserves the same strip of the
+                // initial containing block that document::render subtracts
+                // for in-flow layout. Positioned boxes whose containing
+                // block is the ICB (and fixed boxes, whose containing block
+                // is the viewport) resolve percentages and auto sizes
+                // against the narrowed width too; without this they lay out
+                // one gutter wider than the page around them.
+                if (auto doc = src_el()->get_document()) {
+                    const int gutter = doc->root()->css().get_scrollbar_gutter();
+                    if (gutter == scrollbar_gutter_stable ||
+                        gutter == scrollbar_gutter_stable_both_edges) {
+                        containing_block_size.width.value -=
+                            15 * (gutter == scrollbar_gutter_stable_both_edges ? 2 : 1);
+                        if (containing_block_size.width.value < 0) {
+                            containing_block_size.width.value = 0;
+                        }
+                    }
+                }
             } else {
                 containing_block_size.height = m_pos.height + m_padding.height();
                 containing_block_size.width = m_pos.width + m_padding.width();
