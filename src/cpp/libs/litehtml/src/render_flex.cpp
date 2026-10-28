@@ -289,11 +289,13 @@ litehtml::pixel_t litehtml::render_item_flex::_render_content(pixel_t x, pixel_t
 		// container, this value is identical to flex-start.
 		if (m_lines.size() == 1 || free_cross_size < 0) align_content = flex_align_content_flex_start;
 	}
-	if(align_content == flex_align_content_space_around)
+	if(align_content == flex_align_content_space_around || align_content == flex_align_content_space_evenly)
 	{
-		// If the leftover free-space is negative or there is only a single flex line in the flex
-		// container, this value is identical to flex-start.
-		if (m_lines.size() == 1 || free_cross_size < 0) align_content = flex_align_content_center;
+		// With negative free cross space the distribution falls back to packing at the
+		// cross-start edge, as it does for justify-content (Chrome; a centered fallback
+		// overflows on both sides). A single line needs no fix-up: the space-around
+		// formula already centers it and space-evenly leaves half the free space before it.
+		if (free_cross_size < 0) align_content = flex_align_content_flex_start;
 	}
 
 	/////////////////////////////////////////////////////////////////
@@ -361,6 +363,11 @@ litehtml::pixel_t litehtml::render_item_flex::_render_content(pixel_t x, pixel_t
 			break;
 		case flex_align_content_space_around:
 			add_before_line = add_after_line = free_cross_size / (pixel_t) (m_lines.size() * 2);
+			break;
+		case flex_align_content_space_evenly:
+			// Only the leading unit is added per line; the loop's own advance plus the
+			// undistributed remainder form the equal spaces between and after the lines.
+			add_before_line = free_cross_size / (pixel_t) (m_lines.size() + 1);
 			break;
 		default:
 			if(is_wrap_reverse)
