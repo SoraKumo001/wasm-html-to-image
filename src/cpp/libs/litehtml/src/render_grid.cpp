@@ -2304,13 +2304,23 @@ void litehtml::render_item_grid::place_grid_items(pixel_t x, pixel_t y, const co
         // <svg>): it has no intrinsic inline size to transfer to, so it fills its track; a
         // box with a natural size transfers under an explicit stretch too.
         bool ratio_w_from_h = false;
-        if (!vert && replaced_item &&
-            !(jst == flex_justify_content_stretch && item.el->src_el()->is_ratio_only_replaced()))
+        if (!vert && replaced_item)
         {
             const css_length& ratio_w = item.el->src_el()->css().get_width();
             const css_length& ratio_h = item.el->src_el()->css().get_height();
             const bool width_auto_kw = ratio_w.is_predefined() && ratio_w.predef() == 0;
-            if (width_auto_kw && (!ratio_h.is_predefined() || a_stretch))
+            const bool width_content_kw = ratio_w.is_predefined() && ratio_w.predef() > 0;
+            // The justify-stretch fill exception covers an auto width only: a
+            // content keyword (fit-content / max-content / min-content) is not
+            // stretched, so a ratio-only box with a keyword width still
+            // transfers from a resolved block size -- a definite or percentage
+            // height, or the align stretch (Chrome: width:fit-content with
+            // height:50% of a 20px row measures 20 wide, not the 50px track;
+            // with the block size unresolved it keeps the fill instead).
+            const bool jstretch_fill = width_auto_kw &&
+                jst == flex_justify_content_stretch && item.el->src_el()->is_ratio_only_replaced();
+            if ((width_auto_kw || width_content_kw) && !jstretch_fill &&
+                (!ratio_h.is_predefined() || a_stretch))
             {
                 litehtml::size ratio_sz;
                 item.el->src_el()->get_content_size(ratio_sz, cell_w);
