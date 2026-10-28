@@ -37,6 +37,12 @@ export interface CliFlags {
   font?: string[];
   /** `--js`: run the page's scripts (jsdom) before rendering. */
   js?: boolean;
+  /** `--markdown`: treat the input as Markdown (implied by a `.md` / `.markdown` file). */
+  markdown?: boolean;
+  /** `--markdown-theme <light|dark>`; absent means light. */
+  markdownTheme?: string;
+  /** `--markdown-css <path>`: extra stylesheet appended after the built-in one. */
+  markdownCss?: string;
   /** `--js-wait <ms|selector>`: a number is the settle time after load, anything else a CSS selector to wait for. */
   jsWait?: string;
 }
@@ -117,6 +123,44 @@ export function inferFormat(output: string | undefined): OutputFormat | undefine
   if (!output) return undefined;
   const ext = path.extname(output).slice(1).toLowerCase();
   return EXTENSION_FORMATS[ext];
+}
+
+/** Whether `input` names an existing file (a Markdown text or HTML string is not a path). */
+export async function isFile(input: string): Promise<boolean> {
+  try {
+    return (await fs.stat(input)).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/** Markdown text passed with `--markdown` instead of a file path. */
+export async function isInlineMarkdown(input: string, flags: { markdown?: boolean }): Promise<boolean> {
+  return !!flags.markdown && input !== "-" && !isUrlInput(input) && !(await isFile(input));
+}
+
+/** A `.md` / `.markdown` file path is Markdown input without `--markdown`. */
+export function isMarkdownPath(input: string): boolean {
+  return /\.(md|markdown)$/i.test(input) && !isUrlInput(input);
+}
+
+/** Convert Markdown text to a styled HTML document (`marked` is an optional dependency). */
+export async function markdownToDocument(markdown: string, flags: CliFlags): Promise<string> {
+  let mod: typeof import("./markdown.js");
+  try {
+    mod = await import("./markdown.js");
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "ERR_MODULE_NOT_FOUND") throw e;
+    throw new Error(
+      "Markdown input needs the optional dependency `marked`. Install it with `npm i marked`.",
+    );
+  }
+  const theme = flags.markdownTheme?.toLowerCase();
+  if (theme !== undefined && theme !== "light" && theme !== "dark") {
+    throw new Error(`unsupported markdown theme "${flags.markdownTheme}". Choose from: light, dark`);
+  }
+  const css = flags.markdownCss ? await fs.readFile(flags.markdownCss, "utf-8") : undefined;
+  return mod.markdownToHtml(markdown, { theme, css });
 }
 
 /** Inline markup passed on the command line (as opposed to a path or URL). */
@@ -219,13 +263,19 @@ export async function buildRenderOptions(
   input: string,
   flags: CliFlags,
 ): Promise<HtmlToImageOptions> {
-  const source = isInlineHtml(input)
+  const markdown = flags.markdown || isMarkdownPath(input);
+  // `--markdown` takes a file path, `-` (stdin) or the Markdown text itself.
+  const inlineMarkdown = await isInlineMarkdown(input, flags);
+  let source = inlineMarkdown || isInlineHtml(input)
     ? { value: input, baseUrl: process.cwd() }
     : input === "-"
       ? { value: await readStdin(), baseUrl: process.cwd() }
       : isUrlInput(input)
         ? { url: input }
         : await readInput(input);
+  if (markdown && "value" in source && typeof source.value === "string") {
+    source = { ...source, value: await markdownToDocument(source.value, flags) };
+  }
   const fonts = flags.font?.length ? await loadFonts(flags.font) : [];
   const { animation, warning } = resolveAnimation(flags);
   if (warning) console.warn(`wasm-html-to-image: ${warning}`);

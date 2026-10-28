@@ -7,6 +7,7 @@ import {
   buildRenderOptions,
   inferFormat,
   isInlineHtml,
+  isInlineMarkdown,
   isUrlInput,
   type CliFlags,
 } from "./cli-options.js";
@@ -93,6 +94,12 @@ program
     (v) => parseInt(v, 10),
   )
   .option(
+    "--markdown",
+    "treat the input as Markdown (implied by a .md / .markdown file; inline text and stdin need it; needs the optional dependency marked)",
+  )
+  .option("--markdown-theme <light|dark>", "colour scheme of the built-in Markdown stylesheet (default light)")
+  .option("--markdown-css <path>", "extra CSS file appended after the built-in Markdown stylesheet")
+  .option(
     "--js",
     "run the page's scripts in jsdom before rendering (needs the optional dependency jsdom; trusted pages only)",
   )
@@ -124,7 +131,7 @@ program
       }
 
       const isUrl = isUrlInput(input);
-      const isVirtual = isInlineHtml(input) || input === "-";
+      const isVirtual = isInlineHtml(input) || input === "-" || (await isInlineMarkdown(input, options));
       if (isVirtual && !options.output) {
         console.error("Error: --output is required for inline HTML or stdin input");
         process.exit(1);
@@ -158,6 +165,9 @@ program
         font: options.font,
         js: options.js,
         jsWait: options.jsWait,
+        markdown: options.markdown,
+        markdownTheme: options.markdownTheme,
+        markdownCss: options.markdownCss,
       };
 
       const result = await render(await buildRenderOptions(input, flags));

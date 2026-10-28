@@ -178,10 +178,40 @@ interface RenderResult {
 | `wasm-html-to-image/react` | React integration | Directly render React JSX element trees |
 | `wasm-html-to-image/preact` | Preact integration | Directly render Preact JSX element trees |
 | `wasm-html-to-image/tailwind` | Utility styling | UnoCSS / Tailwind v4 utilities (`createCSS`, `tailwind()`) |
+| `wasm-html-to-image/markdown` | Markdown input | GitHub-flavoured Markdown to a styled HTML page (`markdownToHtml`); pure JS, runs in browsers and Workers |
 
 ---
 
 ## 💡 Advanced Examples
+
+<details>
+<summary><b>Markdown to image / PDF</b></summary>
+
+`markdownToHtml` (from the `wasm-html-to-image/markdown` subpath, built on [marked](https://github.com/markedjs/marked)) turns GitHub-flavoured Markdown into a complete HTML page with a built-in GitHub-like stylesheet. It is plain JavaScript, so it works in Node, browsers and Cloudflare Workers alike; pass the result to `render()` as `value`:
+
+```ts
+import { render } from "wasm-html-to-image";
+import { markdownToHtml } from "wasm-html-to-image/markdown";
+
+const html = markdownToHtml("# Hello
+
+- **bold** and `code`", { theme: "dark", maxWidth: 720 });
+const { data } = await render({ value: html, width: 800, format: "pdf" });
+```
+
+Options: `theme` (`"light"` | `"dark"`), `css` (appended after the built-in sheet), `stylesheet` (replaces it), `padding`, `maxWidth`, `title`.
+
+The CLI does the same for `.md` / `.markdown` files, and for inline text or stdin with `--markdown`:
+
+```bash
+npx wasm-html-to-image README.md -o readme.png -w 800
+npx wasm-html-to-image notes.md -o notes.pdf --markdown-theme dark --markdown-css extra.css
+npx wasm-html-to-image "# Hello" --markdown -o hello.png
+```
+
+`marked` is an optional dependency, installed with the package by default.
+
+</details>
 
 <details>
 <summary><b>0. Pages that build themselves with JavaScript (jsdom, Node only)</b></summary>
