@@ -421,9 +421,17 @@ void document::create_node(void* gnode, elements_list& elements, bool parseTextN
 					// The longest label is measured with the real text machinery (in em of
 					// the default font, so the injected width scales with the select's own
 					// font size); a per-character estimate is kept only as a fallback.
+					// A select with size > 1 or multiple is a list box instead: every
+					// option (and optgroup label) becomes a row of a pre-formatted text
+					// child and the box is pinned to the display size -- its height is
+					// rows * (ascent + descent + 2px) + border and its width is the
+					// widest row plus the list box's padding and border (this platform's
+					// overlay scrollbars reserve no extra width).
 					string label, first_label;
 					bool have_selected = false;
 					float widest = 0;
+					float row_ratio = 1.15f; // (ascent + descent) / font size of the measure font
+					std::vector<string> rows;
 					uint_ptr measure_font = 0;
 					float measure_size = 16;
 					if (m_container)
@@ -435,13 +443,47 @@ void document::create_node(void* gnode, elements_list& elements, bool parseTextN
 						descr.weight = 400;
 						font_metrics fm;
 						measure_font = get_font(descr, &fm);
+						// The row ratio is taken at the UA select size (13.333px):
+						// the container rounds ascent/descent to whole pixels, so
+						// the ratio at another size need not match the laid-out line.
+						font_description rdescr = descr;
+						rdescr.size = 13.333f;
+						font_metrics rfm;
+						if (get_font(rdescr, &rfm) && rfm.ascent + rfm.descent > 0)
+						{
+							row_ratio = (float)(rfm.ascent + rfm.descent) / 13.333f;
+						}
 					}
+					auto add_row = [&](const string& t) {
+						float w = 0;
+						if (measure_font && measure_size > 0)
+						{
+							w = (float)m_container->text_width(t.c_str(), measure_font, direction_ltr) / measure_size;
+						}
+						else
+						{
+							for (size_t k = 0; k < t.size(); k++)
+							{
+								unsigned char ch = (unsigned char)t[k];
+								if ((ch & 0xC0) == 0x80) continue;
+								w += ch >= 0xE0 ? 1.0f : 0.55f;
+							}
+						}
+						widest = std::max(widest, w);
+						rows.push_back(t);
+					};
 					std::function<void(GumboNode*)> scan = [&](GumboNode* n) {
 						for (unsigned int i = 0; i < n->v.element.children.length; i++)
 						{
 							auto* c = static_cast<GumboNode*>(n->v.element.children.data[i]);
 							if (c->type != GUMBO_NODE_ELEMENT) continue;
-							if (c->v.element.tag == GUMBO_TAG_OPTGROUP) { scan(c); continue; }
+							if (c->v.element.tag == GUMBO_TAG_OPTGROUP)
+							{
+								auto* la = gumbo_get_attribute(&c->v.element.attributes, "label");
+								if (la && la->value && *la->value) add_row(string(la->value));
+								scan(c);
+								continue;
+							}
 							if (c->v.element.tag != GUMBO_TAG_OPTION) continue;
 							string t;
 							for (unsigned int k = 0; k < c->v.element.children.length; k++)
@@ -449,25 +491,17 @@ void document::create_node(void* gnode, elements_list& elements, bool parseTextN
 								auto* tn = static_cast<GumboNode*>(c->v.element.children.data[k]);
 								if (tn->type == GUMBO_NODE_TEXT || tn->type == GUMBO_NODE_WHITESPACE) t += tn->v.text.text;
 							}
-							while (!t.empty() && isspace((unsigned char)t.back())) t.pop_back();
-							size_t b = 0;
-							while (b < t.size() && isspace((unsigned char)t[b])) b++;
-							t = t.substr(b);
-							float w = 0;
-							if (measure_font && measure_size > 0)
+							// Option labels are stripped and their whitespace collapsed.
+							string clean;
+							bool pending_space = false;
+							for (size_t k = 0; k < t.size(); k++)
 							{
-								w = (float)m_container->text_width(t.c_str(), measure_font, direction_ltr) / measure_size;
+								if (isspace((unsigned char)t[k])) { pending_space = !clean.empty(); continue; }
+								if (pending_space) { clean += ' '; pending_space = false; }
+								clean += t[k];
 							}
-							else
-							{
-								for (size_t k = 0; k < t.size(); k++)
-								{
-									unsigned char ch = (unsigned char)t[k];
-									if ((ch & 0xC0) == 0x80) continue;
-									w += ch >= 0xE0 ? 1.0f : 0.55f;
-								}
-							}
-							widest = std::max(widest, w);
+							t = clean;
+							add_row(t);
 							if (first_label.empty()) first_label = t;
 							if (!have_selected && gumbo_get_attribute(&c->v.element.attributes, "selected"))
 							{
@@ -478,15 +512,60 @@ void document::create_node(void* gnode, elements_list& elements, bool parseTextN
 					};
 					scan(node);
 					if (!have_selected) label = first_label;
-					if (!label.empty()) ret->appendChild(std::make_shared<el_text>(label.c_str(), shared_from_this()));
-					const char* st = ret->get_attr("style");
-					if (!st || !strstr(st, "width"))
+					int display_rows = 1;
+					auto* multiple_attr = gumbo_get_attribute(&node->v.element.attributes, "multiple");
+					auto* size_attr = gumbo_get_attribute(&node->v.element.attributes, "size");
+					if (size_attr && size_attr->value)
 					{
-						char buf[64];
-						snprintf(buf, sizeof(buf), "width:%.2fem", widest + 1.7f);
-						string ns = st ? string(st) + ";" : string();
-						ret->set_attr("style", (ns + buf).c_str());
+						int s = atoi(size_attr->value);
+						if (s > 0) display_rows = s;
 					}
+					if (multiple_attr && !size_attr) display_rows = 4;
+					const bool listbox = multiple_attr != nullptr || display_rows > 1;
+					const char* st = ret->get_attr("style");
+					string ns = st ? string(st) + ";" : string();
+					string extra;
+					char buf[128];
+					if (listbox)
+					{
+						if (!rows.empty())
+						{
+							string all;
+							for (size_t k = 0; k < rows.size(); k++)
+							{
+								if (k) all += '\n';
+								all += rows[k];
+							}
+							ret->appendChild(std::make_shared<el_text>(all.c_str(), shared_from_this()));
+						}
+						if (!st || !strstr(st, "white-space")) extra += "white-space:pre;";
+						if (!st || !strstr(st, "padding")) extra += "padding:0 2px;";
+						if (!st || !strstr(st, "line-height"))
+						{
+							snprintf(buf, sizeof(buf), "line-height:%.4fem;", row_ratio + 0.15f);
+							extra += buf;
+						}
+						if (!st || !strstr(st, "width"))
+						{
+							snprintf(buf, sizeof(buf), "width:%.2fem;", widest + 0.45f);
+							extra += buf;
+						}
+						if (!st || !strstr(st, "height"))
+						{
+							snprintf(buf, sizeof(buf), "height:%.4fem;", (row_ratio + 0.15f) * display_rows + 0.15f);
+							extra += buf;
+						}
+					}
+					else
+					{
+						if (!label.empty()) ret->appendChild(std::make_shared<el_text>(label.c_str(), shared_from_this()));
+						if (!st || !strstr(st, "width"))
+						{
+							snprintf(buf, sizeof(buf), "width:%.2fem", widest + 1.7f);
+							extra = buf;
+						}
+					}
+					if (!extra.empty()) ret->set_attr("style", (ns + extra).c_str());
 				}
 				elements.push_back(ret);
 			}
