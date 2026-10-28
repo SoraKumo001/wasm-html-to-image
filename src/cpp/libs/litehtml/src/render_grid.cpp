@@ -1519,6 +1519,20 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                     item.el->src_el()->css().get_width().is_predefined() && item.el->src_el()->css().get_width().predef() == 0 &&
                     item.el->src_el()->css().get_min_width().is_predefined())
                     w = item.el->content_offset_width();
+                // Under a min-content constraint an item with a definite min-width
+                // contributes that min-width outright to an auto track, replacing its
+                // content contribution -- the same rule the fit-content floor above
+                // uses. A block with min-width:40px around a 200px child contributes
+                // 40, so the grid's own min-content stays small and the grid can
+                // shrink as a flex item (Chrome; fuzz replaced seed 25's grid kept
+                // its max-content as its minimum and never shrank).
+                if (min_content_constraint && kinds[c] == 1 && !vert &&
+                    item.el->src_el()->css().get_width().is_predefined() && item.el->src_el()->css().get_width().predef() == 0)
+                {
+                    const css_length& imw2 = item.el->src_el()->css().get_min_width();
+                    if (!imw2.is_predefined() && !imw2.is_calc() && imw2.units() != css_units_percentage)
+                        w = std::max<pixel_t>(0, imw2.calc_percent(render_inline) - item.el->box_sizing_width()) + item.el->content_offset_width();
+                }
                 // A ratio-only replaced item with a percentage width contributes the
                 // default object width (300) to a content-sized track, not the size the
                 // percentage would give against the space on offer: the percentage is
