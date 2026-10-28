@@ -1541,8 +1541,12 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             {
                 if (!kinds[i]) continue;
                 pixel_t w = contrib[i];
-                // fit-content(limit) = max(min-content, min(max-content, limit))
-                if (kinds[i] == 4) w = std::max(fit_floor[i], std::min(w, columns_template[i].get_operands()[0].calc_percent(render_inline)));
+                // fit-content(limit) = max(min-content, min(max-content, limit)) -- but under a
+                // min-content constraint the track contributes its min-content-based size
+                // outright: the floor, where an explicit min-width has already replaced the
+                // content contribution and a measured min-content is not capped by the limit.
+                if (kinds[i] == 4) w = min_content_constraint ? fit_floor[i]
+                    : std::max(fit_floor[i], std::min(w, columns_template[i].get_operands()[0].calc_percent(render_inline)));
                 if (kinds[i] == 5)
                 {
                     const auto& mm = columns_template[i].get_operands();
