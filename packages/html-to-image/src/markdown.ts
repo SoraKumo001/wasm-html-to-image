@@ -1,4 +1,52 @@
 import { marked } from "marked";
+import hljs from "highlight.js/lib/core";
+import bash from "highlight.js/lib/languages/bash";
+import c from "highlight.js/lib/languages/c";
+import cpp from "highlight.js/lib/languages/cpp";
+import csharp from "highlight.js/lib/languages/csharp";
+import css from "highlight.js/lib/languages/css";
+import diff from "highlight.js/lib/languages/diff";
+import dockerfile from "highlight.js/lib/languages/dockerfile";
+import go from "highlight.js/lib/languages/go";
+import ini from "highlight.js/lib/languages/ini";
+import java from "highlight.js/lib/languages/java";
+import javascript from "highlight.js/lib/languages/javascript";
+import json from "highlight.js/lib/languages/json";
+import kotlin from "highlight.js/lib/languages/kotlin";
+import markdownLang from "highlight.js/lib/languages/markdown";
+import php from "highlight.js/lib/languages/php";
+import python from "highlight.js/lib/languages/python";
+import ruby from "highlight.js/lib/languages/ruby";
+import rust from "highlight.js/lib/languages/rust";
+import scss from "highlight.js/lib/languages/scss";
+import shell from "highlight.js/lib/languages/shell";
+import sql from "highlight.js/lib/languages/sql";
+import swift from "highlight.js/lib/languages/swift";
+import typescript from "highlight.js/lib/languages/typescript";
+import xml from "highlight.js/lib/languages/xml";
+import yaml from "highlight.js/lib/languages/yaml";
+
+// A private instance: registering languages must not leak into an app's own highlight.js.
+const highlighter = hljs.newInstance();
+for (const [name, def] of Object.entries({
+  bash, c, cpp, csharp, css, diff, dockerfile, go, ini, java, javascript, json, kotlin,
+  markdown: markdownLang, php, python, ruby, rust, scss, shell, sql, swift, typescript, xml, yaml,
+})) {
+  highlighter.registerLanguage(name, def);
+}
+highlighter.registerAliases(["js", "jsx", "mjs", "cjs"], { languageName: "javascript" });
+highlighter.registerAliases(["ts", "tsx"], { languageName: "typescript" });
+highlighter.registerAliases(["sh", "zsh"], { languageName: "bash" });
+highlighter.registerAliases(["html", "svg", "vue"], { languageName: "xml" });
+highlighter.registerAliases(["yml"], { languageName: "yaml" });
+highlighter.registerAliases(["py"], { languageName: "python" });
+highlighter.registerAliases(["rs"], { languageName: "rust" });
+highlighter.registerAliases(["rb"], { languageName: "ruby" });
+highlighter.registerAliases(["md"], { languageName: "markdown" });
+highlighter.registerAliases(["c++", "h", "hpp"], { languageName: "cpp" });
+highlighter.registerAliases(["cs"], { languageName: "csharp" });
+highlighter.registerAliases(["kt"], { languageName: "kotlin" });
+highlighter.registerAliases(["toml"], { languageName: "ini" });
 
 /** Options for {@link markdownToHtml}. */
 export interface MarkdownOptions {
@@ -15,8 +63,12 @@ export interface MarkdownOptions {
   paged?: boolean;
   /** Maximum width of the article in px; omit for the full viewport width. */
   maxWidth?: number;
-  /** `<title>` of the generated document. */
+  /** `<title>` of the generated document. Defaults to the `title` of the front matter, if any. */
   title?: string;
+  /** Highlight fenced code blocks that name a known language. Defaults to true. */
+  highlight?: boolean;
+  /** Strip a leading `---` YAML front matter block (and read its `title`). Defaults to true. */
+  frontMatter?: boolean;
   /** Replace the built-in stylesheet entirely (`theme` is then ignored). */
   stylesheet?: string;
 }
@@ -33,6 +85,14 @@ const PALETTES = {
     codeBg: "#f6f8fa",
     link: "#0969da",
     quote: "#59636e",
+    keyword: "#cf222e",
+    string: "#0a3069",
+    comment: "#6e7781",
+    number: "#0550ae",
+    title: "#8250df",
+    tag: "#116329",
+    add: "#dafbe1",
+    del: "#ffebe9",
   },
   dark: {
     fg: "#e6edf3",
@@ -42,6 +102,14 @@ const PALETTES = {
     codeBg: "#151b23",
     link: "#4493f8",
     quote: "#9198a1",
+    keyword: "#ff7b72",
+    string: "#a5d6ff",
+    comment: "#8b949e",
+    number: "#79c0ff",
+    title: "#d2a8ff",
+    tag: "#7ee787",
+    add: "#12261e",
+    del: "#3c1618",
   },
 } as const;
 
@@ -83,6 +151,17 @@ body { color: ${c.fg}; font-family: sans-serif; font-size: 16px; line-height: 1.
 .markdown-body th { font-weight: 600; }
 .markdown-body tr:nth-child(2n) { background: ${c.codeBg}; }
 .markdown-body input[type="checkbox"] { margin: 0 0.4em 0 -1.4em; }
+.hljs-keyword, .hljs-doctag, .hljs-template-tag, .hljs-type, .hljs-meta { color: ${c.keyword}; }
+.hljs-string, .hljs-regexp, .hljs-symbol { color: ${c.string}; }
+.hljs-comment, .hljs-quote { color: ${c.comment}; }
+.hljs-number, .hljs-literal, .hljs-attr, .hljs-attribute, .hljs-variable, .hljs-built_in, .hljs-selector-id, .hljs-selector-class, .hljs-params { color: ${c.number}; }
+.hljs-title { color: ${c.title}; }
+.hljs-name, .hljs-tag, .hljs-selector-tag, .hljs-bullet { color: ${c.tag}; }
+.hljs-section { color: ${c.number}; font-weight: 600; }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: 600; }
+.hljs-addition { color: ${c.tag}; background: ${c.add}; }
+.hljs-deletion { color: ${c.keyword}; background: ${c.del}; }
 .markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4, .markdown-body h5, .markdown-body h6 { break-after: avoid; }
 .markdown-body pre, .markdown-body table, .markdown-body blockquote, .markdown-body img, .markdown-body tr { break-inside: avoid; }
 `;
@@ -93,10 +172,31 @@ body { color: ${c.fg}; font-family: sans-serif; font-size: 16px; line-height: 1.
  * GitHub-like stylesheet, ready to pass to `render({ value })`.
  */
 export function markdownToHtml(markdown: string, options: MarkdownOptions = {}): string {
-  const body = marked.parse(markdown, { async: false, gfm: true }) as string;
+  let source = markdown;
+  let frontTitle: string | undefined;
+  if (options.frontMatter !== false) {
+    const front = /^\uFEFF?---[ \t]*\r?\n([^]*?)\r?\n---[ \t]*(?:\r?\n|$)/.exec(source);
+    if (front) {
+      source = source.slice(front[0].length);
+      const t = /^title:[ \t]*(.+?)[ \t]*$/m.exec(front[1]);
+      if (t) frontTitle = t[1].replace(/^(["'])(.*)\1$/, "$2");
+    }
+  }
+  const renderer = new marked.Renderer();
+  if (options.highlight !== false) {
+    renderer.code = ({ text, lang }) => {
+      const name = (lang ?? "").trim().split(/\s+/)[0];
+      const body = name && highlighter.getLanguage(name)
+        ? highlighter.highlight(text, { language: name, ignoreIllegals: true }).value
+        : escapeHtml(text);
+      return `<pre><code${name ? ` class="language-${escapeHtml(name)}"` : ""}>${body}\n</code></pre>\n`;
+    };
+  }
+  const body = marked.parse(source, { async: false, gfm: true, renderer }) as string;
   const sheet =
     options.stylesheet ??
     markdownStylesheet(options.theme, options.padding, options.maxWidth, options.paged);
-  const title = options.title ? `<title>${escapeHtml(options.title)}</title>` : "";
+  const titleText = options.title ?? frontTitle;
+  const title = titleText ? `<title>${escapeHtml(titleText)}</title>` : "";
   return `<!doctype html><html><head><meta charset="utf-8">${title}<style>${sheet}${options.css ?? ""}</style></head><body><article class="markdown-body">${body}</article></body></html>`;
 }

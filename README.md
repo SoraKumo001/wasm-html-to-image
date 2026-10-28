@@ -199,7 +199,7 @@ const html = markdownToHtml("# Hello
 const { data } = await render({ value: html, width: 800, format: "pdf" });
 ```
 
-Options: `theme` (`"light"` | `"dark"`), `css` (appended after the built-in sheet), `stylesheet` (replaces it), `padding`, `maxWidth`, `title`, `paged` (for PDF: `padding` becomes the margin of every page, so pages after the first keep their top and bottom margins; the CLI sets it for `.pdf` output, in code pass `paged: true` with `format: "pdf"`). Headings stay with the text after them and code blocks, tables and quotes are not split across pages.
+Options: `theme` (`"light"` | `"dark"`), `css` (appended after the built-in sheet), `stylesheet` (replaces it), `padding`, `maxWidth`, `title`, `highlight` (fenced code with a known language is syntax-highlighted; default on), `frontMatter` (a leading `---` YAML block is dropped and its `title` becomes the page title; default on), `paged` (for PDF: `padding` becomes the margin of every page, so pages after the first keep their top and bottom margins; the CLI sets it for `.pdf` output, in code pass `paged: true` with `format: "pdf"`). Headings stay with the text after them and code blocks, tables and quotes are not split across pages.
 
 The CLI does the same for `.md` / `.markdown` files, and for inline text or stdin with `--markdown`:
 
@@ -209,7 +209,9 @@ npx wasm-html-to-image notes.md -o notes.pdf --markdown-theme dark --markdown-cs
 npx wasm-html-to-image "# Hello" --markdown -o hello.png
 ```
 
-`marked` is an optional dependency, installed with the package by default.
+Highlighted languages: bash/shell, c, c++, c#, css/scss, diff, dockerfile, go, html/xml/svg, ini/toml, java, javascript, json, kotlin, markdown, php, python, ruby, rust, sql, swift, typescript, yaml (and the usual aliases such as `js`, `ts`, `sh`, `py`). Other fences stay plain.
+
+`marked` and `highlight.js` are optional dependencies, installed with the package by default (about 280 kB when bundled for a browser).
 
 </details>
 

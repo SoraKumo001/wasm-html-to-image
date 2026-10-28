@@ -37,13 +37,42 @@ describe("markdownToHtml", () => {
     expect(plain).toMatch(/\.markdown-body \{ padding: 40px;/);
   });
 
-  it("needs nothing but `marked`, so it runs in browsers and Workers", () => {
+  it("highlights fenced code with a known language and leaves the rest escaped", () => {
+    const html = markdownToHtml(
+      '```ts\nconst s: string = "a<b"; // c\n```\n\n```nope\n<b>x</b>\n```\n\n```\nplain\n```',
+    );
+    expect(html).toContain('<code class="language-ts"><span class="hljs-keyword">const</span>');
+    expect(html).toContain('<span class="hljs-comment">// c</span>');
+    expect(html).toContain("&lt;"); // string content stays escaped inside the highlighted markup
+    expect(html).toContain('<code class="language-nope">&lt;b&gt;x&lt;/b&gt;');
+    expect(html).toContain("<pre><code>plain");
+    // (the built-in stylesheet itself mentions .hljs-keyword, so look at the code block)
+    expect(markdownToHtml("```ts\nconst a = 1;\n```", { highlight: false })).not.toContain(
+      '<span class="hljs-keyword">',
+    );
+    expect(markdownToHtml("```js\nlet a;\n```")).toContain("hljs-keyword"); // alias of javascript
+  });
+
+  it("strips YAML front matter and uses its title", () => {
+    const md = '---\ntitle: "My doc"\nauthor: x\n---\n\n# Body\n';
+    const html = markdownToHtml(md);
+    expect(html).toContain("<title>My doc</title>");
+    expect(html).toContain("<h1>Body</h1>");
+    expect(html).not.toContain("author");
+    expect(markdownToHtml(md, { title: "Own" })).toContain("<title>Own</title>");
+    expect(markdownToHtml("---\r\ntitle: A\r\n---\r\nx")).toContain("<title>A</title>");
+    // Off, or not at the very start: it is ordinary Markdown (a rule and text).
+    expect(markdownToHtml(md, { frontMatter: false })).toContain("<hr>");
+    expect(markdownToHtml("text\n\n---\ntitle: no\n---\n")).not.toContain("<title>");
+  });
+
+  it("needs nothing but marked and highlight.js, so it runs in browsers and Workers", () => {
     const source = fs.readFileSync(
       fileURLToPath(new URL("../src/markdown.ts", import.meta.url)),
       "utf8",
     );
     const imports = [...source.matchAll(/^import .* from "([^"]+)"/gm)].map((m) => m[1]);
-    expect(imports).toEqual(["marked"]);
+    expect(imports.every((m) => m === "marked" || m.startsWith("highlight.js/"))).toBe(true);
     expect(source).not.toMatch(/\bprocess\.|\brequire\(|node:/);
   });
 });
