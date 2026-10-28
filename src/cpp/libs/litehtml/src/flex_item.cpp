@@ -419,12 +419,23 @@ void litehtml::flex_item_row_direction::direction_specific_init(const litehtml::
 		{
 			const pixel_t cross = std::max<pixel_t>(0, (pixel_t)self_size.render_height - el->content_offset_block(m_container_wm));
 			flex_base_size = cross * sz.width / sz.height + render_offset;
-			// The automatic minimum is then the transferred size too, not the intrinsic width: an image
-			// squeezed to a container shorter than itself gets narrower, not stuck at its natural width.
+			// The automatic minimum is then the transferred size too, in both directions: an image
+			// squeezed to a container shorter than itself gets narrower, not stuck at its natural
+			// width, and one stretched to a TALLER container keeps the transferred width as its
+			// floor, so flex-shrink cannot pull it back to its intrinsic width (Chrome keeps the
+			// transferred size and lets the line overflow). The min-content measure behind
+			// min_main_size runs without the stretched cross size, so it cannot see the transfer.
 			if (min_size_prop.is_predefined() && min_main_size > flex_base_size)
 			{
 				min_main_size = flex_base_size;
 				min_content_contribution = std::min(min_content_contribution, flex_base_size);
+			} else if (min_size_prop.is_predefined() && !el->src_el()->is_ratio_only_replaced())
+			{
+				// Raise the shrink floor to the transferred size. Ratio-only items are
+				// excluded: render_flex re-transfers them against its own cross size
+				// afterwards, and a floor raised from THIS pass's height would clamp
+				// that second transfer up to a size the item never gets.
+				min_main_size = flex_base_size;
 			}
 		}
 	}
