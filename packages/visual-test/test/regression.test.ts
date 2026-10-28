@@ -8098,3 +8098,88 @@ describe("P0-48: a definite min-width replaces an auto track's min-content contr
     expect(w(out, "g")).toBeCloseTo(56, 0);
   });
 });
+
+// P0-49: content distribution fallbacks. (a) justify-content space-around /
+// space-evenly with negative free space fell back to flex-start even for
+// reverse directions, packing an oversized item at the main-start edge;
+// Chrome packs at the container's start edge (the line overflows only
+// toward the end side), which for row-reverse is the physical left
+// (fuzz replaced seed 41: the whole subtree sat 114px too far right,
+// exactly the negative free space). (b) align-content: space-evenly was
+// never distributed at all, and space-around with negative free cross
+// space fell back to center instead of cross-start packing.
+describe("P0-49: space distribution fallbacks for justify-content and align-content", () => {
+  type Box = { p: string; t: string; i?: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(html: string): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0;font-size:0;line-height:0}</style></head><body>${html}</body></html>`,
+      width: 1000,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const at = (out: Box[], id: string) => out.find((x) => x.i === id)!;
+  const flex = (dir: string, jc: string, items: string, extra = "") =>
+    `<div style="display:flex;flex-direction:${dir};justify-content:${jc};gap:4px;width:60px;${extra}">${items}</div>`;
+  const item = (id: string, w: number) => `<div id="${id}" style="width:${w}px;height:20px;flex:none"></div>`;
+
+  it("row-reverse space-around packs an oversized item at the left edge", async () => {
+    const out = await boxes(flex("row-reverse", "space-around", item("a", 150)));
+    expect(at(out, "a").x).toBeCloseTo(0, 0);
+  });
+
+  it("row-reverse space-evenly packs oversized items at the left edge", async () => {
+    const out = await boxes(flex("row-reverse", "space-evenly", item("a", 150) + item("b", 30)));
+    expect(at(out, "a").x).toBeCloseTo(34, 0);
+    expect(at(out, "b").x).toBeCloseTo(0, 0);
+  });
+
+  it("row-reverse space-between keeps the flex-start fallback", async () => {
+    const out = await boxes(flex("row-reverse", "space-between", item("a", 150)));
+    expect(at(out, "a").x).toBeCloseTo(-90, 0);
+  });
+
+  it("row space-around packs an oversized item at the left edge", async () => {
+    const out = await boxes(flex("row", "space-around", item("a", 150)));
+    expect(at(out, "a").x).toBeCloseTo(0, 0);
+  });
+
+  it("column-reverse space-around packs an oversized item at the top", async () => {
+    const out = await boxes(
+      `<div style="display:flex;flex-direction:column-reverse;justify-content:space-around;width:60px;height:60px"><div id="a" style="height:150px;width:20px;flex:none"></div></div>`,
+    );
+    expect(at(out, "a").y).toBeCloseTo(0, 0);
+  });
+
+  const wrap = (ac: string, w: number, h: number) =>
+    `<div style="display:flex;flex-wrap:wrap;align-content:${ac};width:${w}px;height:${h}px"><div id="a" style="width:90px;height:50px;flex:none"></div><div id="b" style="width:90px;height:50px;flex:none"></div></div>`;
+
+  it("align-content space-evenly distributes the lines", async () => {
+    const out = await boxes(wrap("space-evenly", 100, 200));
+    expect(at(out, "a").y).toBeCloseTo(33.33, 0);
+    expect(at(out, "b").y).toBeCloseTo(116.67, 0);
+  });
+
+  it("align-content space-evenly with negative free space packs at cross-start", async () => {
+    const out = await boxes(wrap("space-evenly", 100, 60));
+    expect(at(out, "a").y).toBeCloseTo(0, 0);
+    expect(at(out, "b").y).toBeCloseTo(50, 0);
+  });
+
+  it("align-content space-around with negative free space packs at cross-start", async () => {
+    const out = await boxes(wrap("space-around", 100, 60));
+    expect(at(out, "a").y).toBeCloseTo(0, 0);
+    expect(at(out, "b").y).toBeCloseTo(50, 0);
+  });
+
+  it("align-content space-around distributes the lines", async () => {
+    const out = await boxes(wrap("space-around", 100, 200));
+    expect(at(out, "a").y).toBeCloseTo(25, 0);
+    expect(at(out, "b").y).toBeCloseTo(125, 0);
+  });
+});
