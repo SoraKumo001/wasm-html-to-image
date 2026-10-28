@@ -7317,3 +7317,49 @@ describe("P0-35: em/rem inside calc() resolve with the element's fonts", () => {
     expect(b2.w).toBeCloseTo(60, 0);
   });
 });
+
+// P0-36: a named family that resolves through a metric profile (Courier
+// New, Georgia, the Liberation clones, ...) is drawn with the profile
+// generic's substitute typeface, but when the font stack named no
+// generic, that substitute was never requested -- so the metric
+// fallback degraded to the sans typeface carrying only the profile's
+// vertical metrics: 'Courier New' alone measured the proportional
+// sans width (118.5px for "mmmmmmmm" at 16px) instead of the mono
+// width (64px) the same stack with an explicit `monospace` produced.
+// The collect stage now also requests the profile's generic family,
+// and the Liberation fonts (metric clones of Arial / Times New Roman
+// / Courier New by design) have profile aliases.
+describe("P0-36: profiled named families shape with their generic's glyphs", () => {
+  type Box = { p: string; t: string; i?: string; x: number; y: number; w: number; h: number };
+
+  async function measure(family: string): Promise<number> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0}</style></head><body><div id="w" style="font-family:${family};font-size:16px;width:fit-content">mmmmmmmm</div></body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out.find((x) => x.i === "w")!.w;
+  }
+
+  it("'Courier New' alone matches the monospace generic's width", async () => {
+    const generic = await measure("monospace");
+    const named = await measure("'Courier New'");
+    expect(Math.abs(named - generic)).toBeLessThan(1);
+  });
+
+  it("'Liberation Mono' alone matches the monospace generic's width", async () => {
+    const generic = await measure("monospace");
+    const named = await measure("'Liberation Mono'");
+    expect(Math.abs(named - generic)).toBeLessThan(1);
+  });
+
+  it("'Georgia' alone matches the serif generic's width", async () => {
+    const generic = await measure("serif");
+    const named = await measure("'Georgia'");
+    expect(Math.abs(named - generic)).toBeLessThan(1);
+  });
+});
