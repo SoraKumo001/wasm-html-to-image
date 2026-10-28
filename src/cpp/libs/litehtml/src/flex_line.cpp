@@ -541,10 +541,16 @@ litehtml::pixel_t litehtml::flex_line::calculate_items_position(
             break;
         case flex_justify_content_space_around:
         case flex_justify_content_space_evenly:
-            // With a single flex item the fallback is center; with negative free space it is `safe center`
-            // (css-align-3), which does not overflow on the start side: the items start at the start edge.
+            // With a single flex item the fallback is center. With negative free space the
+            // distribution falls back to packing at the container's start edge (css-align-3),
+            // so the line overflows only toward the end side. The item list is pre-reversed
+            // for reverse directions in this engine, so packing at the start edge is
+            // flex-start normally and flex-end when the main axis is reversed (Chrome:
+            // row-reverse + space-around + an oversized item packs it at the left edge,
+            // where flex-start would pack it at the right; fuzz replaced seed 41).
             if (free_main_size < 0)
-                justify_content = flex_justify_content_flex_start;
+                justify_content = reverse_main ? flex_justify_content_flex_end
+                                               : flex_justify_content_flex_start;
             else if (items.size() == 1)
                 justify_content = flex_justify_content_center;
             break;
