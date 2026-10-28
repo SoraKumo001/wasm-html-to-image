@@ -7363,3 +7363,49 @@ describe("P0-36: profiled named families shape with their generic's glyphs", () 
     expect(Math.abs(named - generic)).toBeLessThan(1);
   });
 });
+
+// P0-37: a table row with no cells at all (an empty <tr>, e.g. Hacker
+// News's <tr class="spacer" style="height:5px"></tr>) still occupies
+// its grid slot -- the following rows are placed after it -- but the
+// layout dump derived row boxes from the union of their cells, so a
+// cell-less row reported a degenerate 0x0 box at the table origin.
+// The dump now interpolates a cell-less row's band from its
+// neighbouring rows (x/width already came from the column-band pass).
+describe("P0-37: cell-less table rows report their grid slot", () => {
+  type Box = { p: string; t: string; i?: string; x: number; y: number; w: number; h: number };
+
+  async function rows(body: string): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const T = (mid: string) =>
+    `<table cellspacing="0" cellpadding="0"><tr><td>a</td></tr>${mid}<tr><td>b</td></tr></table>`;
+
+  it("an empty tr with height:5px reports y=18 h=5", async () => {
+    const out = await rows(T(`<tr id="sp" style="height:5px"></tr>`));
+    const sp = out.find((x) => x.i === "sp")!;
+    expect(sp.y).toBeCloseTo(18, 0);
+    expect(sp.h).toBeCloseTo(5, 0);
+  });
+
+  it("an empty tr with height:9px reports h=9", async () => {
+    const out = await rows(T(`<tr id="sp" style="height:9px"></tr>`));
+    const sp = out.find((x) => x.i === "sp")!;
+    expect(sp.h).toBeCloseTo(9, 0);
+  });
+
+  it("an empty tr without height reports h=0 at the right y", async () => {
+    const out = await rows(T(`<tr id="sp"></tr>`));
+    const sp = out.find((x) => x.i === "sp")!;
+    expect(sp.y).toBeCloseTo(18, 0);
+    expect(sp.h).toBeCloseTo(0, 0);
+  });
+});
