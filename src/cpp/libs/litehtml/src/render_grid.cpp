@@ -1289,7 +1289,16 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             if (item.pos.col_end - item.pos.col_start != 1) continue;
             const int c = item.pos.col_start;
             if (c >= num_columns || columns_template[c].units() != css_units_fr) continue;
-            if (item.el->src_el()->css().get_overflow() != overflow_visible && !item.el->src_el()->is_replaced()) continue;
+            if (item.el->src_el()->css().get_overflow() != overflow_visible && !item.el->src_el()->is_replaced())
+            {
+                // A scroll container's automatic minimum size is 0 (CSS Grid 6.6), so with an
+                // auto width and no min-width its content contributes nothing to the floor.
+                // A definite width or min-width still sizes the box, so it still floors the
+                // track: the zero applies to the content-based minimum, not to specified sizes.
+                const css_length& iw0 = item.el->src_el()->css().get_width();
+                const css_length& imw0 = item.el->src_el()->css().get_min_width();
+                if (iw0.is_predefined() && iw0.predef() == 0 && imw0.is_predefined()) continue;
+            }
             const css_length& iw = item.el->src_el()->css().get_width();
             const css_length& imw = item.el->src_el()->css().get_min_width();
             auto definite = [](const css_length& l) { return !l.is_predefined() && !l.is_calc() && l.units() != css_units_percentage; };
@@ -1704,7 +1713,14 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                                 continue;
                             }
                         }
-                        if (item.el->src_el()->css().get_overflow() != overflow_visible && !item.el->src_el()->is_replaced()) continue;
+                        if (item.el->src_el()->css().get_overflow() != overflow_visible && !item.el->src_el()->is_replaced())
+                        {
+                            // Same rule as the fr floors: the scroll container's zero minimum is
+                            // its content-based one; a definite width still floors the track.
+                            // (A non-auto min-width was already handled above.)
+                            const css_length& iw0 = item.el->src_el()->css().get_width();
+                            if (iw0.is_predefined() && iw0.predef() == 0) continue;
+                        }
                         containing_block_context cb = self_size;
                         // The grid's own exact size describes its box, not the intrinsic size of an item.
                         cb.size_mode &= ~(containing_block_context::size_mode_exact_width | containing_block_context::size_mode_exact_height);
