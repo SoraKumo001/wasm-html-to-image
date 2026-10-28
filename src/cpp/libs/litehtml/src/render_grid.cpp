@@ -2025,7 +2025,46 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         // leak into sizing its items: their content height has to be measured, not forced.
         cb.size_mode &= ~(containing_block_context::size_mode_exact_width | containing_block_context::size_mode_exact_height);
 
-        item.el->measure(cb, fmt_ctx);
+        // A non-stretched item is placed at its fit-content width, not the grid area's
+        // width (see the clamp in place_grid_items), so its height contribution must be
+        // measured at that width too: measured at the full area, a shrink-to-fit grid
+        // whose tracks only open up at the wider size reports the wide height (116.8 for
+        // a row that renders 16 tall once the item shrinks to 32 -- fuzz replaced 14).
+        bool measured_at_used_width = false;
+        if (!vert && !item.el->src_el()->is_replaced() &&
+            item.el->src_el()->css().get_width().is_predefined())
+        {
+            flex_justify_content jst_h = item.el->src_el()->css().get_justify_self();
+            if (jst_h == flex_justify_content_auto) jst_h = css().get_justify_items();
+            const bool j_normal_h = jst_h == flex_justify_content_auto || jst_h == flex_justify_content_normal;
+            const bool intrinsic_width_h = item.el->src_el()->css().get_width().predef() > 0;
+            const bool j_stretch_h = (j_normal_h && !intrinsic_width_h) || jst_h == flex_justify_content_stretch;
+            if (!j_stretch_h)
+            {
+                containing_block_context mcb = cb;
+                mcb.size_mode |= containing_block_context::size_mode_content;
+                item.el->measure(mcb, fmt_ctx);
+                measured_at_used_width = true;
+                const int predef_h = item.el->src_el()->css().get_width().predef();
+                if ((predef_h == 0 || predef_h == 1) && item.el->width() > cell_width + 0.01f)
+                {
+                    containing_block_context min_cb = mcb;
+                    min_cb.size_mode |= containing_block_context::size_mode_min_content;
+                    item.el->measure(min_cb, fmt_ctx);
+                    const pixel_t fit_w = std::max(item.el->width(), cell_width);
+                    containing_block_context fit_cb = mcb;
+                    fit_cb.width = fit_w - item.el->content_offset_width() + item.el->box_sizing_width();
+                    fit_cb.width.type = containing_block_context::cbc_value_type_absolute;
+                    fit_cb.render_width = fit_cb.width;
+                    fit_cb.size_mode |= containing_block_context::size_mode_exact_width;
+                    fit_cb.size_mode &= ~(containing_block_context::size_mode_content |
+                                          containing_block_context::size_mode_min_content);
+                    item.el->measure(fit_cb, fmt_ctx);
+                }
+            }
+        }
+        if (!measured_at_used_width)
+            item.el->measure(cb, fmt_ctx);
 
         if (!vert && item.pos.row_span() == 1)
         {
