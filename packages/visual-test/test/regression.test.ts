@@ -7044,3 +7044,80 @@ describe("P0-31: select height follows its font size", () => {
     expect(b.find((x) => x.t === "select")!.h).toBeCloseTo(45, 0);
   });
 });
+
+// P0-32: a select with size > 1 or multiple renders as a list box. It used
+// to ignore size/multiple entirely and draw the one-line dropdown box
+// (19px) whatever the display size. Now every option (and optgroup
+// label) becomes a row of a pre-formatted text child and the box is
+// pinned to the display size: Chromium's list box at the default
+// 13.333px size is rows * 17px + 2px border (size 4 -> 70, size 2 -> 36,
+// size 8 -> 138, even when fewer options exist), and its width is the
+// widest row plus ~6px of padding and border (this platform's overlay
+// scrollbars reserve no width). The engine's row ratio is the measure
+// font's (ascent + descent) at the UA select size plus 2px per row,
+// expressed in em; widths carry the usual substitute-font advance gap
+// vs Chromium (cf. the dropdown widths in P0-27).
+describe("P0-32: select list box (size / multiple)", () => {
+  type Box = { p: string; t: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(body: string): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const sel = (attrs: string, labels: string[]) =>
+    `<select ${attrs}>${labels.map((l) => `<option>${l}</option>`).join("")}</select>`;
+  const SHORT = ["a", "bb", "ccc", "dddd"];
+  const MANY = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+  const h = async (attrs: string, labels: string[]) =>
+    (await boxes(sel(attrs, labels))).find((x) => x.t === "select")!.h;
+
+  it("size=4 shows four rows (70px)", async () => {
+    expect(await h('size="4"', SHORT)).toBeCloseTo(70, 0);
+  });
+
+  it("size=4 with only two options is still four rows tall", async () => {
+    expect(await h('size="4"', SHORT.slice(0, 2))).toBeCloseTo(70, 0);
+  });
+
+  it("size=2 shows two rows (36px)", async () => {
+    expect(await h('size="2"', SHORT)).toBeCloseTo(36, 0);
+  });
+
+  it("size=8 with ten options shows eight rows (138px)", async () => {
+    expect(await h('size="8"', MANY)).toBeCloseTo(138, 0);
+  });
+
+  it("multiple without size defaults to four rows", async () => {
+    expect(await h("multiple", SHORT)).toBeCloseTo(70, 0);
+  });
+
+  it("optgroup labels count as rows (size=6 -> 104px)", async () => {
+    const b = await boxes(
+      `<select size="6"><optgroup label="Group A"><option>one</option><option>two</option></optgroup><optgroup label="Group B"><option>three</option></optgroup></select>`,
+    );
+    expect(b.find((x) => x.t === "select")!.h).toBeCloseTo(104, 0);
+  });
+
+  it("size=1 and size=0 stay dropdowns (19px)", async () => {
+    expect(await h('size="1"', SHORT)).toBeCloseTo(19, 0);
+    expect(await h('size="0"', SHORT)).toBeCloseTo(19, 0);
+    expect(await h("", SHORT)).toBeCloseTo(19, 0);
+  });
+
+  it("the list box width follows the widest row, not the dropdown chrome", async () => {
+    const b = await boxes(sel('size="4"', MANY));
+    const s = b.find((x) => x.t === "select")!;
+    // Chromium: 41.58 for these labels; the engine's substitute advances
+    // run slightly wide (42.00 measured).
+    expect(s.w).toBeGreaterThan(38);
+    expect(s.w).toBeLessThan(46);
+  });
+});
