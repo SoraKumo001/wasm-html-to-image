@@ -7734,3 +7734,68 @@ describe("P0-42: keyword widths on ratio-only grid items transfer from the block
     expect(b.h).toBeCloseTo(20, 0);
   });
 });
+
+// P0-43: the fr-track floor pass and the auto-track give-back pass
+// skipped every non-replaced item with overflow != visible, applying
+// the scroll container's zero automatic minimum (CSS Grid 6.6) to its
+// specified sizes as well. A scroll container with a definite width
+// or min-width still sizes its box to that width, so the track floor
+// is that size (plus padding); only the content-based minimum of an
+// auto-width, no-min-width scroll container is 0.
+describe("P0-43: scroll containers floor fr/auto tracks at their specified sizes", () => {
+  type Box = { p: string; t: string; i?: string; x: number; y: number; w: number; h: number };
+
+  async function box(html: string): Promise<Box> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0}</style></head><body>${html}</body></html>`,
+      width: 1000,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out.find((x) => x.i === "w")!;
+  }
+  const uri = (attrs: string) =>
+    `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" ${attrs}><rect width="100%" height="100%" fill="#69c"/></svg>`)}`;
+  // The first item forces track 1 to 304 (300 + 2x2 margins); the
+  // target img sits in the min-content track 3, so its x reads out
+  // track 2's resolved size: x = 304 + 16 + track2 + 16.
+  const frGrid = (item2: string) =>
+    `<div style="display:grid;grid-template-columns:1fr 1fr min-content;gap:16px;width:80px">` +
+    `<div style="margin:2px"><div style="width:300px;height:10px"></div></div>${item2}` +
+    `<img id="w" style="width:fit-content" src="${uri('width="20" height="30" viewBox="0 0 20 30"')}"></div>`;
+
+  it("a definite-width scroll container floors its fr track", async () => {
+    const b = await box(frGrid(`<div style="width:20px;padding:2px;overflow:hidden">mm</div>`));
+    expect(b.x).toBeCloseTo(360, 0);
+  });
+
+  it("an overflow:scroll container floors the same way", async () => {
+    const b = await box(frGrid(`<div style="width:20px;padding:2px;overflow:scroll">mm</div>`));
+    expect(b.x).toBeCloseTo(360, 0);
+  });
+
+  it("a min-width scroll container floors its fr track at the min-width", async () => {
+    const b = await box(frGrid(`<div style="min-width:44px;overflow:hidden">mm</div>`));
+    expect(b.x).toBeCloseTo(380, 0);
+  });
+
+  it("an auto-width scroll container contributes no floor", async () => {
+    const b = await box(frGrid(`<div style="overflow:hidden"><img src="${uri('width="80" height="90" viewBox="0 0 80 90"')}" style="width:60px"></div>`));
+    expect(b.x).toBeCloseTo(336, 0);
+  });
+
+  it("an auto track gives back only down to a scroll container's definite width", async () => {
+    const b = await box(
+      `<div style="display:grid;grid-template-columns:auto auto;width:80px"><div style="width:90px;overflow:hidden">mm</div><div id="w" style="width:10px"></div></div>`);
+    expect(b.x).toBeCloseTo(90, 0);
+  });
+
+  it("an auto track gives an auto-width scroll container's space back fully", async () => {
+    const b = await box(
+      `<div style="display:grid;grid-template-columns:auto auto;width:80px"><div style="overflow:hidden"><img src="${uri('width="200" height="10" viewBox="0 0 200 10"')}"></div><div id="w" style="width:10px"></div></div>`);
+    expect(b.x).toBeCloseTo(70, 0);
+  });
+});
