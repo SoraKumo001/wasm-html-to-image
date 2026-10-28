@@ -77,6 +77,8 @@ body { color: ${c.fg}; font-family: sans-serif; font-size: 16px; line-height: 1.
 .markdown-body th { font-weight: 600; }
 .markdown-body tr:nth-child(2n) { background: ${c.codeBg}; }
 .markdown-body input[type="checkbox"] { margin: 0 0.4em 0 -1.4em; }
+.markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4, .markdown-body h5, .markdown-body h6 { break-after: avoid; }
+.markdown-body pre, .markdown-body table, .markdown-body blockquote, .markdown-body img, .markdown-body tr { break-inside: avoid; }
 `;
 }
 
