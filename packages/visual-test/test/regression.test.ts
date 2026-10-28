@@ -7409,3 +7409,70 @@ describe("P0-37: cell-less table rows report their grid slot", () => {
     expect(sp.h).toBeCloseTo(0, 0);
   });
 });
+
+// P0-38: <img srcset> was ignored entirely -- the engine always loaded
+// src. For the common pattern where src is the 2x file (or a
+// placeholder) and srcset carries the candidate a DPR-1 browser would
+// pick, that fetched the wrong resource (and missed entirely against
+// offline stores holding only the 1x). Candidates are now selected
+// the way a browser at device pixel ratio 1 does: with x descriptors,
+// the smallest density >= 1 (else the largest); with w descriptors,
+// the smallest width covering the sizes slot (default 100vw, with
+// (max/min-width) conditions understood), else the largest.
+describe("P0-38: img srcset candidate selection", () => {
+  type Box = { p: string; t: string; i?: string; x: number; y: number; w: number; h: number };
+
+  // Renders an img whose candidates are data: URIs of different-sized
+  // SVGs and returns the laid-out box: the chosen candidate is visible
+  // through the intrinsic size it contributes (no CSS size set).
+  async function imgBox(attrs: string): Promise<Box> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0}</style></head><body><img id="w" ${attrs}></body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out.find((x) => x.i === "w")!;
+  }
+  const svg = (w: number, h: number) =>
+    "data:image/svg+xml," +
+    encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='${w}' height='${h}'></svg>`);
+
+  it("x descriptors: the 1x candidate wins over the 2x in src", async () => {
+    const b = await imgBox(`src="${svg(200, 100)}" srcset="${svg(50, 25)} 1x, ${svg(200, 100)} 2x"`);
+    expect(b.w).toBeCloseTo(50, 0);
+    expect(b.h).toBeCloseTo(25, 0);
+  });
+
+  it("x descriptors: with only densities below 1... none, falls to the largest", async () => {
+    const b = await imgBox(`src="${svg(200, 100)}" srcset="${svg(80, 40)} 2x, ${svg(120, 60)} 3x"`);
+    expect(b.w).toBeCloseTo(80, 0);
+  });
+
+  it("w descriptors: the smallest width covering 100vw wins", async () => {
+    const b = await imgBox(`src="${svg(10, 10)}" srcset="${svg(300, 30)} 300w, ${svg(700, 70)} 700w, ${svg(1200, 120)} 1200w"`);
+    // viewport 600 -> slot 600 -> 700w candidate
+    expect(b.w).toBeCloseTo(700, 0);
+  });
+
+  it("w descriptors with sizes: the sizes slot drives the pick", async () => {
+    const b = await imgBox(`sizes="200px" src="${svg(10, 10)}" srcset="${svg(300, 30)} 300w, ${svg(700, 70)} 700w"`);
+    expect(b.w).toBeCloseTo(300, 0);
+  });
+
+  it("w descriptors with a matching media condition in sizes", async () => {
+    const b = await imgBox(`sizes="(max-width: 700px) 150px, 900px" src="${svg(10, 10)}" srcset="${svg(300, 30)} 300w, ${svg(1200, 120)} 1200w"`);
+    // viewport 600 <= 700 -> slot 150 -> 300w candidate
+    expect(b.w).toBeCloseTo(300, 0);
+  });
+
+  it("no srcset keeps src; an unparseable srcset falls back to src", async () => {
+    const b1 = await imgBox(`src="${svg(64, 32)}"`);
+    expect(b1.w).toBeCloseTo(64, 0);
+    const b2 = await imgBox(`src="${svg(64, 32)}" srcset="  "`);
+    expect(b2.w).toBeCloseTo(64, 0);
+  });
+});
