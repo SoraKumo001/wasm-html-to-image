@@ -7121,3 +7121,69 @@ describe("P0-32: select list box (size / multiple)", () => {
     expect(s.w).toBeLessThan(46);
   });
 });
+
+// P0-33: a font-family declared on html (or :root) must inherit into the
+// page. The UA stylesheet used to carry `font-family: sans-serif` on
+// body, and a cascaded value on body beats anything inherited, so the
+// widespread `html { font-family: ... }` pattern (MDN's base font is
+// declared exactly this way) never reached any element: the whole page
+// rendered in the fallback font (MDN's "Contributor Spotlight" h2
+// measured 247.25 against Chromium's 231.75 with Inter applied). The UA
+// default now sits on html, where an author rule on html/:root
+// overrides it and body or below still win as before. Monospace stands
+// in for a webfont here: its advance profile differs clearly from the
+// sans default, so an inherited family is observable in the width.
+describe("P0-33: font-family on html inherits into the page", () => {
+  type Box = { p: string; t: string; x: number; y: number; w: number; h: number };
+
+  async function width(css: string, attrs = ""): Promise<number> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html ${attrs}><head><style>html,body{margin:0}${css}</style></head><body><div id="w" style="width:fit-content">Contributor Spotlight</div></body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out.find((x) => x.t === "div")!.w;
+  }
+
+  it("html { font-family: monospace } reaches body content", async () => {
+    const viaHtml = await width(`html{font-family:monospace}`);
+    const viaBody = await width(`body{font-family:monospace}`);
+    const plain = await width(``);
+    expect(viaHtml).toBeCloseTo(viaBody, 0);
+    expect(Math.abs(viaHtml - plain)).toBeGreaterThan(10);
+  });
+
+  it(":root { font-family: monospace } reaches body content", async () => {
+    const viaRoot = await width(`:root{font-family:monospace}`);
+    const viaBody = await width(`body{font-family:monospace}`);
+    expect(viaRoot).toBeCloseTo(viaBody, 0);
+  });
+
+  it("a class rule on html reaches body content", async () => {
+    const viaClass = await width(`.x{font-family:monospace}`, `class="x"`);
+    const viaBody = await width(`body{font-family:monospace}`);
+    expect(viaClass).toBeCloseTo(viaBody, 0);
+  });
+
+  it("var() indirection on html works", async () => {
+    const viaVar = await width(`:root{--f:monospace}html{font-family:var(--f)}`);
+    const viaBody = await width(`body{font-family:monospace}`);
+    expect(viaVar).toBeCloseTo(viaBody, 0);
+  });
+
+  it("an element's own font-family still wins over the html rule", async () => {
+    const own = await width(`html{font-family:monospace}div{font-family:serif}`);
+    const plainSerif = await width(`div{font-family:serif}`);
+    expect(own).toBeCloseTo(plainSerif, 0);
+  });
+
+  it("the unstyled default is unchanged (sans by inheritance from html)", async () => {
+    const plain = await width(``);
+    const viaBodySans = await width(`body{font-family:sans-serif}`);
+    expect(plain).toBeCloseTo(viaBodySans, 0);
+  });
+});

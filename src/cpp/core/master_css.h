@@ -2,12 +2,17 @@
 #define SATORU_MASTER_CSS_H
 
 const char* satoru_master_css =
-    "html { display: block; margin: 0; padding: 0; }\n"
+    // The default font-family sits on html, not body: a UA font-family on body wins over
+    // anything inherited, so the common author pattern `html { font-family: ... }` (MDN's
+    // base font, among many others) would never reach the page. No browser UA sheet sets a
+    // font on body for the same reason. Pages that style body or below are unaffected, and
+    // unstyled pages inherit the same sans-serif default from html instead.
+    "html { display: block; margin: 0; padding: 0; font-family: sans-serif; }\n"
     // margin: 0 is deliberate: the engine's body fills the canvas. Chromium's UA keeps 8px here
     // (Blink html.css), so the Chromium comparison tools opt in to that value for their own
     // measurement (packages/visual-test/tools/real/lib.mts) instead of the engine changing
     // its default.
-    "body { display: block; margin: 0; padding: 0; font-family: sans-serif;}\n"
+    "body { display: block; margin: 0; padding: 0; }\n"
     "p, dl, multicol, menu, ol, ul { display: block; margin-block-start: 1em; margin-block-end: "
     "1em; }\n"
     "dd { display: block; margin-inline-start: 40px; }\n"
