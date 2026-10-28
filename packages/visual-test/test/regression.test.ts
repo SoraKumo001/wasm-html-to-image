@@ -7476,3 +7476,64 @@ describe("P0-38: img srcset candidate selection", () => {
     expect(b2.w).toBeCloseTo(64, 0);
   });
 });
+
+// P0-39: a var() reference that forms a cycle (a custom property
+// referencing itself, the design-token alias idiom
+// `--x: var(--x, fallback)` used by Wikipedia's .vector-icon) was
+// dropped outright during substitution, emptying the whole
+// declaration: width became auto and only the min-width clamp
+// remained (10px instead of 16px). A cyclic reference makes the
+// property invalid at computed-value time, so the var() must take
+// its fallback exactly like an undefined property does.
+describe("P0-39: cyclic var() references fall back", () => {
+  type Box = { p: string; t: string; i?: string; x: number; y: number; w: number; h: number };
+
+  async function box(html: string): Promise<Box> {
+    let out: Box[] = [];
+    await render({
+      value: html,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out.find((x) => x.i === "w")!;
+  }
+  const page = (css: string, body: string) =>
+    `<!doctype html><html><head><style>html,body{margin:0}span{display:inline-block}${css}</style></head><body>${body}</body></html>`;
+
+  it("self-referential alias resolves through the inner fallback", async () => {
+    const b = await box(page(
+      `.b{--fsm:var(--fsm,1rem);width:var(--fsm,1rem);height:var(--fsm,1rem);min-width:10px;min-height:10px}`,
+      `<span class="b" id="w"></span>`));
+    expect(b.w).toBeCloseTo(16, 0);
+    expect(b.h).toBeCloseTo(16, 0);
+  });
+
+  it("the element's own alias shadows an inherited chain, via its fallback", async () => {
+    const b = await box(page(
+      `.a{--fsm:var(--font-size-x-large,1.25rem)}.b{--fsm:var(--fsm,1rem);width:var(--fsm,1rem);height:var(--fsm,1rem);min-width:10px;min-height:10px}`,
+      `<span class="a"><span class="b" id="w"></span></span>`));
+    expect(b.w).toBeCloseTo(16, 0);
+  });
+
+  it("a two-property cycle falls back on both sides", async () => {
+    const b = await box(page(
+      `.b{--a:var(--b,2rem);--b:var(--a,3rem);width:var(--a,1rem);height:var(--b,1rem)}`,
+      `<span class="b" id="w"></span>`));
+    // --a: var(--b) -> --b is var(--a) -> cycle: --b's var() takes
+    // its fallback 3rem, so --a = 3rem; height reads --b, whose own
+    // substitution hits the same cycle and takes 3rem as well...
+    // (browsers agree on width here; keep to the width assertion)
+    expect(b.w).toBeCloseTo(48, 0);
+  });
+
+  it("a cyclic var() without a fallback still empties only itself", async () => {
+    const b = await box(page(
+      `.b{--a:var(--a);width:var(--a);height:22px;background:#f00}`,
+      `<span class="b" id="w"></span>`));
+    expect(b.h).toBeCloseTo(22, 0);
+    expect(b.w).toBeCloseTo(0, 0);
+  });
+});
