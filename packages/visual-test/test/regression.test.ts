@@ -8183,3 +8183,66 @@ describe("P0-49: space distribution fallbacks for justify-content and align-cont
     expect(at(out, "b").y).toBeCloseTo(125, 0);
   });
 });
+
+// P0-50: the grid row measure pass measured a non-stretched item in
+// content mode and kept that height whenever the content width fit the
+// grid area. The content-mode measure resolves the item's own layout
+// intrinsically, which can differ from the placed layout at the same
+// width: a nested grid's tracks open up intrinsically (a ratio-only
+// svg inside measures 300 wide / 60 tall) where the placed layout
+// resolves them against the definite used width (0 wide, the 30px row
+// floor) -- the row came out 60 where Chrome gets 30 (fuzz replaced
+// seed 4). The pass now always finishes with an exact-width measure at
+// the used width, and a width:min-content item is measured at its
+// min-content width instead of its max-content width.
+describe("P0-50: grid row measure takes the height at the used width", () => {
+  type Box = { p: string; t: string; i?: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(html: string): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0;font-size:0;line-height:0}</style></head><body>${html}</body></html>`,
+      width: 1000,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const at = (out: Box[], id: string) => out.find((x) => x.i === id)!;
+  const SVG = `<svg viewBox="0 0 100 20" style="width:100%"><rect width="100" height="20" fill="#69c"/></svg>`;
+  const innerG = `<div id="g" style="display:grid;grid-template-columns:1fr minmax(40px,1fr);grid-auto-rows:minmax(30px,auto);align-items:center">${SVG}</div>`;
+  const outer = (decl: string, item: string, cols = "min-content 2fr") =>
+    `<div style="display:grid;grid-template-columns:${cols};margin:8px;${decl}">${item}</div>`;
+
+  it("a centered nested grid takes its placed height, not its intrinsic height", async () => {
+    const out = await boxes(outer("justify-items:center", innerG));
+    expect(at(out, "g").w).toBeCloseTo(40, 0);
+    expect(at(out, "g").h).toBeCloseTo(30, 0);
+  });
+
+  it("the same holds for justify-items:start", async () => {
+    const out = await boxes(outer("justify-items:start", innerG));
+    expect(at(out, "g").h).toBeCloseTo(30, 0);
+  });
+
+  it("a stretched nested grid is unaffected", async () => {
+    const out = await boxes(outer("", innerG));
+    expect(at(out, "g").h).toBeCloseTo(30, 0);
+  });
+
+  it("a width:min-content flex item is measured at its min-content width", async () => {
+    const item = `<div id="g" style="display:flex;flex-wrap:wrap;width:min-content"><div style="width:80px;height:20px;flex:none"></div><div style="width:80px;height:20px;flex:none"></div></div>`;
+    const out = await boxes(outer("justify-items:start", item, "200px"));
+    expect(at(out, "g").w).toBeCloseTo(80, 0);
+    expect(at(out, "g").h).toBeCloseTo(40, 0);
+  });
+
+  it("a width:max-content flex item keeps its max-content height", async () => {
+    const item = `<div id="g" style="display:flex;flex-wrap:wrap;width:max-content"><div style="width:80px;height:20px;flex:none"></div><div style="width:80px;height:20px;flex:none"></div></div>`;
+    const out = await boxes(outer("justify-items:start", item, "200px"));
+    expect(at(out, "g").w).toBeCloseTo(160, 0);
+    expect(at(out, "g").h).toBeCloseTo(20, 0);
+  });
+});
