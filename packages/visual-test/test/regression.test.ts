@@ -7245,3 +7245,75 @@ describe("P0-34: scrollbar-gutter applies to positioned containing blocks", () =
     expect(b.w).toBeCloseTo(570, 0);
   });
 });
+
+// P0-35: font-relative units inside calc() resolve against the owning
+// element's font size (em) and the root font size (rem). The calc
+// parser used to fold em into px at a hardcoded 16 and the evaluator
+// did the same for rem, so `width: calc(2em)` at font-size 20px
+// measured 32 instead of 40 wherever the size came from (own,
+// inherited, or the root's), and `line-height: calc(...)` computed to
+// 0 because a calc length carries css_units_none and fell into the
+// unitless-number branch. A calc length now keeps an em component
+// alongside px/%/rem, document::to_pixels evaluates with the caller's
+// metrics, and cvt_units folds the font-relative components into px
+// at the owning element's sizes during style computation (including
+// plain em/rem operands of min()/max()/clamp()).
+describe("P0-35: em/rem inside calc() resolve with the element's fonts", () => {
+  type Box = { p: string; t: string; i?: string; x: number; y: number; w: number; h: number };
+
+  async function box(css: string, inner: string): Promise<Box> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0}${css}</style></head><body>${inner}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out.find((x) => x.i === "w")!;
+  }
+  const D = (style: string) => `<div id="w" style="${style}">x</div>`;
+
+  it("width: calc(2em) uses the element's own font size", async () => {
+    const b = await box("", D("font-size:20px;width:calc(2em);height:10px"));
+    expect(b.w).toBeCloseTo(40, 0);
+  });
+
+  it("width: calc(2em) uses an inherited font size", async () => {
+    const b = await box("", `<div style="font-size:20px">${D("width:calc(2em);height:10px")}</div>`);
+    expect(b.w).toBeCloseTo(40, 0);
+  });
+
+  it("width: calc(2rem) uses the root font size", async () => {
+    const b = await box("html{font-size:20px}", D("width:calc(2rem);height:10px"));
+    expect(b.w).toBeCloseTo(40, 0);
+  });
+
+  it("margin-left: calc(2em) offsets by the element's font size", async () => {
+    const b = await box("", D("font-size:20px;margin-left:calc(2em);width:10px;height:10px"));
+    expect(b.x).toBeCloseTo(40, 0);
+  });
+
+  it("calc() mixing % and em keeps both bases", async () => {
+    const b = await box("", `<div style="width:400px">${D("font-size:20px;width:calc(50% - 1em);height:10px")}</div>`);
+    expect(b.w).toBeCloseTo(180, 0);
+  });
+
+  it("font-size: calc(1em + 4px) resolves em against the parent", async () => {
+    const b = await box("", `<div style="font-size:20px"><div id="w" style="font-size:calc(1em + 4px);width:1em;height:10px"></div></div>`);
+    expect(b.w).toBeCloseTo(24, 0);
+  });
+
+  it("line-height: calc(1em + 2px) is the sum, not zero", async () => {
+    const b = await box("", D("font-size:20px;line-height:calc(1em + 2px)"));
+    expect(b.h).toBeCloseTo(22, 0);
+  });
+
+  it("min()/clamp() operands in em use the element's font size", async () => {
+    const b1 = await box("", D("font-size:20px;width:min(3em, 100px);height:10px"));
+    expect(b1.w).toBeCloseTo(60, 0);
+    const b2 = await box("", D("font-size:20px;width:clamp(10px, 3em, 100px);height:10px"));
+    expect(b2.w).toBeCloseTo(60, 0);
+  });
+});
