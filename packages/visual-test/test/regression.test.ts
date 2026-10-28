@@ -7915,3 +7915,79 @@ describe("P0-45: min-width bounds a block measure before its content is laid out
     expect(b.h).toBeCloseTo(106, 0);
   });
 });
+
+// P0-46: the automatic minimum size of a flex item with a percentage
+// width clamped that width by the item's MIN-content size, so a
+// replaced item measured at ~0 and shrank freely: an image with
+// width:30% and a 300px intrinsic width in a 496px container shrank
+// to 113.8 instead of holding its specified 148.8 (fuzz replaced seed
+// 35's shrink distribution was off for every item in the row). Per
+// Flexbox 4.5 the content size suggestion is the MAX-content size, so
+// the floor is min(specified percentage, max-content): width:30%
+// floors at min(148.8, 300), width:90% at min(446.4, 300) = 300.
+describe("P0-46: a percentage-width flex item floors at min(specified, max-content)", () => {
+  type Box = { p: string; t: string; i?: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(html: string): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0;font-size:0;line-height:0}</style></head><body>${html}</body></html>`,
+      width: 1000,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const uri = (w: number, h: number) =>
+    `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><rect width="100%" height="100%" fill="#69c"/></svg>`)}`;
+  const wrap = (kids: string) =>
+    `<div style="width:500px"><div style="display:flex;padding:2px">${kids}</div></div>`;
+  const div = (id: string, w: string) => `<div id="${id}" style="width:${w};height:20px"></div>`;
+  const w = (out: Box[], id: string) => out.find((x) => x.i === id)!.w;
+
+  it("an image at width:30% does not shrink below its specified size", async () => {
+    const out = await boxes(wrap(`<img id="b" src="${uri(300, 10)}" style="width:30%">${div("c", "500px")}`));
+    expect(w(out, "b")).toBeCloseTo(148.8, 0);
+    expect(w(out, "c")).toBeCloseTo(347.2, 0);
+  });
+
+  it("an image at width:90% floors at its intrinsic width instead", async () => {
+    const out = await boxes(wrap(`${div("a", "120px")}<img id="b" src="${uri(300, 10)}" style="width:90%">${div("c", "500px")}`));
+    expect(w(out, "b")).toBeCloseTo(300, 0);
+    expect(w(out, "a")).toBeCloseTo(37.9, 0);
+    expect(w(out, "c")).toBeCloseTo(158.1, 0);
+  });
+
+  it("two percentage images both hold, the length item absorbs the shrink", async () => {
+    const out = await boxes(wrap(`<img id="a" src="${uri(300, 10)}" style="width:30%"><img id="b" src="${uri(300, 10)}" style="width:30%">${div("c", "500px")}`));
+    expect(w(out, "a")).toBeCloseTo(148.8, 0);
+    expect(w(out, "b")).toBeCloseTo(148.8, 0);
+    expect(w(out, "c")).toBeCloseTo(198.4, 0);
+  });
+
+  it("a larger flex-shrink factor does not move the floor", async () => {
+    const out = await boxes(wrap(`${div("a", "120px")}<img id="b" src="${uri(300, 10)}" style="width:30%;flex-shrink:2">${div("c", "500px")}`));
+    expect(w(out, "b")).toBeCloseTo(148.8, 0);
+  });
+
+  it("a percentage-width block item still shrinks to its content floor", async () => {
+    const out = await boxes(wrap(`${div("a", "120px")}${div("b", "30%")}${div("c", "500px")}`));
+    expect(w(out, "b")).toBeCloseTo(96, 0);
+  });
+
+  it("percentage text columns shrink proportionally with their siblings", async () => {
+    // The floor applies to replaced items only: a text block's content
+    // suggestion is its min-content (its longest word), so 33.333%
+    // columns share the shrink with a fixed sibling instead of
+    // crushing it to zero (rust-lang.org's three-column row).
+    const txt = "Rust is a systems programming language that runs blazingly fast, prevents segfaults, and guarantees thread safety for everyone building reliable software.";
+    const col = (id: string) => `<div id="${id}" style="width:33.333%;font-size:16px;line-height:20px"><p>${txt}</p></div>`;
+    const out = await boxes(
+      `<div style="display:flex;width:1000px">${col("a")}${col("b")}${col("c")}<div id="d" style="width:200px;height:10px"></div></div>`);
+    expect(w(out, "a")).toBeCloseTo(277.8, 0);
+    expect(w(out, "b")).toBeCloseTo(277.8, 0);
+    expect(w(out, "d")).toBeCloseTo(166.7, 0);
+  });
+});
