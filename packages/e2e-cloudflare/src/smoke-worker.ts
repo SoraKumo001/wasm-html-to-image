@@ -1,4 +1,5 @@
 import { render } from "wasm-html-to-image/workerd";
+import { markdownToHtml } from "wasm-html-to-image/markdown";
 
 /**
  * Minimal worker that exercises the workerd entry over HTTP.
@@ -27,6 +28,25 @@ export default {
       });
       return new Response(out.data, {
         headers: { "Content-Type": "image/svg+xml" },
+      });
+    }
+
+    if (url.pathname === "/pdf") {
+      const out = await render({ value: "<h1>hi</h1>", width: 600, format: "pdf" });
+      return new Response(out.data as BodyInit, {
+        headers: { "Content-Type": "application/pdf" },
+      });
+    }
+
+    // Markdown -> styled HTML (marked + highlight.js bundled into the worker) -> PDF.
+    if (url.pathname === "/markdown-pdf") {
+      const html = markdownToHtml(
+        "---\ntitle: Worker\n---\n\n# Hello\n\n```ts\nconst a: number = 1;\n```\n",
+        { paged: true },
+      );
+      const out = await render({ value: html, width: 600, format: "pdf" });
+      return new Response(out.data as BodyInit, {
+        headers: { "Content-Type": "application/pdf" },
       });
     }
 
