@@ -898,6 +898,87 @@ std::list< std::unique_ptr<litehtml::line_box_item> > litehtml::line_box::finish
 					m_baseline += diff1;
 				}
 			}
+			// A baseline-aligned text run whose font splits its
+			// ascent/descent differently from the run that set the
+			// line height extends the line box beyond that
+			// line-height: each run's inline box is its own
+			// line-height tall with the leading split around its
+			// own ascent/descent, so the union of two runs can
+			// exceed both line-heights (Blink behaves the same;
+			// e.g. an icon font with ascent 0.94em beside body
+			// text). line_max_height tracks only the raw
+			// ascent/descent union, which cannot express this,
+			// so recompute the per-run extents here and grow the
+			// box the same way inline boxes above do.
+			{
+				pixel_t font_above = 0;
+				pixel_t font_below = 0;
+				bool have_font_extent = false;
+				auto add_font_extent = [&](const font_metrics& fm, pixel_t lh)
+				{
+					if (fm.ascent + fm.descent <= 0) return;
+					have_font_extent = true;
+					const pixel_t leading = lh - (fm.ascent + fm.descent);
+					const pixel_t half = std::floor(leading / 2);
+					font_above = std::max(font_above, fm.ascent + half);
+					font_below = std::max(font_below, fm.descent + (leading - half));
+				};
+				add_font_extent(m_font_metrics, m_default_line_height.computed_value);
+				int top_bottom_depth = 0;
+				for (const auto& lbi2 : m_items)
+				{
+					const auto lbi_type = lbi2->get_type();
+					if (lbi_type == line_box_item::type_inline_start)
+					{
+						const auto& el_css = lbi2->get_el()->src_el()->css();
+						if (is_one_of(el_css.get_vertical_align(), va_top, va_bottom))
+							top_bottom_depth++;
+					} else if (lbi_type == line_box_item::type_inline_end)
+					{
+						if (top_bottom_depth > 0) top_bottom_depth--;
+					} else if (lbi_type == line_box_item::type_text_part && top_bottom_depth == 0)
+					{
+						const auto& el_css = lbi2->get_el()->src_el()->css();
+						// Only ascent-dominant runs (the icon-font
+						// shape: ascent past the strut's, in a font
+						// whose ascent+descent is small next to the
+						// line-height) qualify. Descent-side splits
+						// of ordinary text runs are dominated by
+						// substitute-font noise in this engine's
+						// per-element fallback resolution, and
+						// counting them grew plain lines by a pixel
+						// across whole pages.
+						if (!lbi2->get_el()->src_el()->is_replaced() &&
+							is_one_of(el_css.get_display(), display_inline, display_inline_text) &&
+							el_css.get_vertical_align() == va_baseline &&
+							el_css.get_font_metrics().ascent > m_font_metrics.ascent)
+							add_font_extent(el_css.get_font_metrics(), el_css.line_height().computed_value);
+					}
+				}
+				// Only grow when at least one run carried real
+				// metrics. With none (a line whose fonts all
+				// resolved without ascent/descent) the extents
+				// stay 0, and the model's baseline can sit
+				// slightly outside the box -- treating that 0 as
+				// an extent would grow every such line.
+				if (have_font_extent)
+				{
+					// Grow only by what the union of extents
+					// exceeds the current box in TOTAL: the
+					// model's baseline split can sit a pixel
+					// off the CSS split on either side without
+					// the line actually being taller.
+					const pixel_t excess = (font_above + font_below) - m_block_size;
+					if (excess > 0)
+					{
+						pixel_t grow_above = std::min(excess, std::max(0.f, font_above - top_shift));
+						pixel_t grow_below = excess - grow_above;
+						m_block_size += excess;
+						top_shift += grow_above;
+						m_baseline += grow_below;
+					}
+				}
+			}
 		} else if(inline_boxes_dims.count != 0)
 		{
 			// We have inline boxes only

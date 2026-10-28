@@ -88,6 +88,7 @@ struct box_entry {
     std::string c;
     litehtml::style_display display = litehtml::display_none;
     double x = 0, y = 0, w = 0, h = 0;
+    bool has_cells = false;  // table rows only: any direct cell child entry
 };
 
 void walk(const std::shared_ptr<litehtml::render_item>& ri, path_index& paths,
@@ -151,6 +152,15 @@ void fix_up_table_boxes(std::vector<box_entry>& entries) {
         }
     };
     for (auto& e : entries) {
+        if (e.display != litehtml::display_table_row) continue;
+        for (const auto& c : entries) {
+            if (c.display == litehtml::display_table_cell && is_direct_child(e.p, c.p)) {
+                e.has_cells = true;
+                break;
+            }
+        }
+    }
+    for (auto& e : entries) {
         if (e.display == litehtml::display_table_row) unite_children(e, litehtml::display_table_cell);
     }
     // Widen every row to its table's column band: the band is the union of all rows
@@ -189,6 +199,41 @@ void fix_up_table_boxes(std::vector<box_entry>& entries) {
         if (found) {
             row.x = x0;
             row.w = x1 - x0;
+        }
+    }
+    // A row with no cells at all (an empty <tr>, e.g. a styled spacer row) paints
+    // nothing but still occupies its grid slot: the following rows are placed
+    // after it. The union above cannot see it, so interpolate its band from the
+    // neighbouring rows of the same parent when both exist. Runs of consecutive
+    // empty rows keep the degenerate box (their split of the gap is unknowable
+    // from boxes alone), as do empty first/last rows.
+    {
+        auto parent_of = [](const std::string& path) {
+            const size_t dot = path.rfind('.');
+            return dot == std::string::npos ? std::string() : path.substr(0, dot);
+        };
+        for (size_t i = 0; i < entries.size(); i++) {
+            box_entry& row = entries[i];
+            if (row.display != litehtml::display_table_row || row.has_cells) continue;
+            const std::string parent = parent_of(row.p);
+            const box_entry* prev = nullptr;
+            const box_entry* next = nullptr;
+            for (size_t j = i; j-- > 0;) {
+                if (entries[j].display == litehtml::display_table_row && parent_of(entries[j].p) == parent) {
+                    prev = &entries[j];
+                    break;
+                }
+            }
+            for (size_t j = i + 1; j < entries.size(); j++) {
+                if (entries[j].display == litehtml::display_table_row && parent_of(entries[j].p) == parent) {
+                    next = &entries[j];
+                    break;
+                }
+            }
+            if (prev && next && prev->has_cells && next->has_cells) {
+                row.y = prev->y + prev->h;
+                row.h = std::max(0.0, next->y - row.y);
+            }
         }
     }
     for (auto& e : entries) {

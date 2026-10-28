@@ -3335,17 +3335,18 @@ namespace litehtml
         if (!check_var_syntax(args))
           continue;
         auto name = _id(args[0].name);
-        if (used_vars.count(name))
-        {
-          remove(tokens, i);
-          i--;
-          replaced_any = true;
-          continue;
-        }
         std::set<string_id> next_used_vars = used_vars;
         next_used_vars.insert(name);
         css_token_vector value;
-        if (el->get_custom_property(name, value))
+        // A reference to a property already being substituted is a
+        // cycle: that property is invalid at computed-value time, so
+        // the var() behaves exactly like one naming an undefined
+        // property -- it takes its fallback when it has one. (The
+        // token-system idiom `--x: var(--x, 1rem)` on Wikipedia's
+        // .vector-icon relies on this; dropping the var() outright
+        // emptied the whole declaration.)
+        bool cyclic = used_vars.count(name) != 0;
+        if (!cyclic && el->get_custom_property(name, value))
         {
           subst_var_nested(value, el, next_used_vars);
           remove(tokens, i);

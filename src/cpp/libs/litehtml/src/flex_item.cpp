@@ -208,7 +208,27 @@ void litehtml::flex_item_row_direction::direction_specific_init(const litehtml::
 					 !(self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content)))
 			{
 				// A percentage width against a definite container is a specified size too.
-				min_main_size = std::min(min_main_size, size_prop.calc_percent(parent_size) + render_offset - el->box_sizing_inline(m_container_wm));
+				// The content size suggestion it is clamped by (Flexbox 4.5) is the item's
+				// min-content size -- which for a REPLACED item is its intrinsic width: the
+				// min-content measure above treats the percentage as cyclic and reports ~0
+				// for an image, so measure a replaced item at its max-content (identical to
+				// its min-content) instead. An image with width:30% and a 300px intrinsic
+				// width in a 496px container then floors at min(148.8, 300) = 148.8 and does
+				// not shrink at all, while width:90% floors at min(446.4, 300) = 300. A
+				// non-replaced item (a text block, say) keeps the min-content floor and
+				// shrinks freely below its percentage.
+				if (el->src_el()->is_replaced())
+				{
+					formatting_context fmt_ctx_copy3;
+					if(fmt_ctx) fmt_ctx_copy3 = *fmt_ctx;
+					measure_cb.size_mode = containing_block_context::size_mode_content |
+										   containing_block_context::size_mode_measure;
+					el->measure(measure_cb, fmt_ctx ? &fmt_ctx_copy3 : nullptr);
+					min_main_size = std::min(get_el_main_size(), size_prop.calc_percent(parent_size) + render_offset - el->box_sizing_inline(m_container_wm));
+				} else
+				{
+					min_main_size = std::min(min_main_size, size_prop.calc_percent(parent_size) + render_offset - el->box_sizing_inline(m_container_wm));
+				}
 			}
 			content_size = min_main_size;
 		} else
@@ -419,12 +439,23 @@ void litehtml::flex_item_row_direction::direction_specific_init(const litehtml::
 		{
 			const pixel_t cross = std::max<pixel_t>(0, (pixel_t)self_size.render_height - el->content_offset_block(m_container_wm));
 			flex_base_size = cross * sz.width / sz.height + render_offset;
-			// The automatic minimum is then the transferred size too, not the intrinsic width: an image
-			// squeezed to a container shorter than itself gets narrower, not stuck at its natural width.
+			// The automatic minimum is then the transferred size too, in both directions: an image
+			// squeezed to a container shorter than itself gets narrower, not stuck at its natural
+			// width, and one stretched to a TALLER container keeps the transferred width as its
+			// floor, so flex-shrink cannot pull it back to its intrinsic width (Chrome keeps the
+			// transferred size and lets the line overflow). The min-content measure behind
+			// min_main_size runs without the stretched cross size, so it cannot see the transfer.
 			if (min_size_prop.is_predefined() && min_main_size > flex_base_size)
 			{
 				min_main_size = flex_base_size;
 				min_content_contribution = std::min(min_content_contribution, flex_base_size);
+			} else if (min_size_prop.is_predefined() && !el->src_el()->is_ratio_only_replaced())
+			{
+				// Raise the shrink floor to the transferred size. Ratio-only items are
+				// excluded: render_flex re-transfers them against its own cross size
+				// afterwards, and a floor raised from THIS pass's height would clamp
+				// that second transfer up to a size the item never gets.
+				min_main_size = flex_base_size;
 			}
 		}
 	}

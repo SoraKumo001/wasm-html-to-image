@@ -7358,3 +7358,932 @@ describe("P0-35: em/rem inside calc() resolve with the element's fonts", () => {
     expect(b2.w).toBeCloseTo(60, 0);
   });
 });
+
+// P0-36: a named family that resolves through a metric profile (Courier
+// New, Georgia, the Liberation clones, ...) is drawn with the profile
+// generic's substitute typeface, but when the font stack named no
+// generic, that substitute was never requested -- so the metric
+// fallback degraded to the sans typeface carrying only the profile's
+// vertical metrics: 'Courier New' alone measured the proportional
+// sans width (118.5px for "mmmmmmmm" at 16px) instead of the mono
+// width (64px) the same stack with an explicit `monospace` produced.
+// The collect stage now also requests the profile's generic family,
+// and the Liberation fonts (metric clones of Arial / Times New Roman
+// / Courier New by design) have profile aliases.
+describe("P0-36: profiled named families shape with their generic's glyphs", () => {
+  type Box = { p: string; t: string; i?: string; x: number; y: number; w: number; h: number };
+
+  async function measure(family: string): Promise<number> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0}</style></head><body><div id="w" style="font-family:${family};font-size:16px;width:fit-content">mmmmmmmm</div></body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out.find((x) => x.i === "w")!.w;
+  }
+
+  it("'Courier New' alone matches the monospace generic's width", async () => {
+    const generic = await measure("monospace");
+    const named = await measure("'Courier New'");
+    expect(Math.abs(named - generic)).toBeLessThan(1);
+  });
+
+  it("'Liberation Mono' alone matches the monospace generic's width", async () => {
+    const generic = await measure("monospace");
+    const named = await measure("'Liberation Mono'");
+    expect(Math.abs(named - generic)).toBeLessThan(1);
+  });
+
+  it("'Georgia' alone matches the serif generic's width", async () => {
+    const generic = await measure("serif");
+    const named = await measure("'Georgia'");
+    expect(Math.abs(named - generic)).toBeLessThan(1);
+  });
+});
+
+// P0-37: a table row with no cells at all (an empty <tr>, e.g. Hacker
+// News's <tr class="spacer" style="height:5px"></tr>) still occupies
+// its grid slot -- the following rows are placed after it -- but the
+// layout dump derived row boxes from the union of their cells, so a
+// cell-less row reported a degenerate 0x0 box at the table origin.
+// The dump now interpolates a cell-less row's band from its
+// neighbouring rows (x/width already came from the column-band pass).
+describe("P0-37: cell-less table rows report their grid slot", () => {
+  type Box = { p: string; t: string; i?: string; x: number; y: number; w: number; h: number };
+
+  async function rows(body: string): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const T = (mid: string) =>
+    `<table cellspacing="0" cellpadding="0"><tr><td>a</td></tr>${mid}<tr><td>b</td></tr></table>`;
+
+  it("an empty tr with height:5px reports y=18 h=5", async () => {
+    const out = await rows(T(`<tr id="sp" style="height:5px"></tr>`));
+    const sp = out.find((x) => x.i === "sp")!;
+    expect(sp.y).toBeCloseTo(18, 0);
+    expect(sp.h).toBeCloseTo(5, 0);
+  });
+
+  it("an empty tr with height:9px reports h=9", async () => {
+    const out = await rows(T(`<tr id="sp" style="height:9px"></tr>`));
+    const sp = out.find((x) => x.i === "sp")!;
+    expect(sp.h).toBeCloseTo(9, 0);
+  });
+
+  it("an empty tr without height reports h=0 at the right y", async () => {
+    const out = await rows(T(`<tr id="sp"></tr>`));
+    const sp = out.find((x) => x.i === "sp")!;
+    expect(sp.y).toBeCloseTo(18, 0);
+    expect(sp.h).toBeCloseTo(0, 0);
+  });
+});
+
+// P0-38: <img srcset> was ignored entirely -- the engine always loaded
+// src. For the common pattern where src is the 2x file (or a
+// placeholder) and srcset carries the candidate a DPR-1 browser would
+// pick, that fetched the wrong resource (and missed entirely against
+// offline stores holding only the 1x). Candidates are now selected
+// the way a browser at device pixel ratio 1 does: with x descriptors,
+// the smallest density >= 1 (else the largest); with w descriptors,
+// the smallest width covering the sizes slot (default 100vw, with
+// (max/min-width) conditions understood), else the largest.
+describe("P0-38: img srcset candidate selection", () => {
+  type Box = { p: string; t: string; i?: string; x: number; y: number; w: number; h: number };
+
+  // Renders an img whose candidates are data: URIs of different-sized
+  // SVGs and returns the laid-out box: the chosen candidate is visible
+  // through the intrinsic size it contributes (no CSS size set).
+  async function imgBox(attrs: string): Promise<Box> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0}</style></head><body><img id="w" ${attrs}></body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out.find((x) => x.i === "w")!;
+  }
+  const svg = (w: number, h: number) =>
+    "data:image/svg+xml," +
+    encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='${w}' height='${h}'></svg>`);
+
+  it("x descriptors: the 1x candidate wins over the 2x in src", async () => {
+    const b = await imgBox(`src="${svg(200, 100)}" srcset="${svg(50, 25)} 1x, ${svg(200, 100)} 2x"`);
+    expect(b.w).toBeCloseTo(50, 0);
+    expect(b.h).toBeCloseTo(25, 0);
+  });
+
+  it("x descriptors: with only densities below 1... none, falls to the largest", async () => {
+    const b = await imgBox(`src="${svg(200, 100)}" srcset="${svg(80, 40)} 2x, ${svg(120, 60)} 3x"`);
+    expect(b.w).toBeCloseTo(80, 0);
+  });
+
+  it("w descriptors: the smallest width covering 100vw wins", async () => {
+    const b = await imgBox(`src="${svg(10, 10)}" srcset="${svg(300, 30)} 300w, ${svg(700, 70)} 700w, ${svg(1200, 120)} 1200w"`);
+    // viewport 600 -> slot 600 -> 700w candidate
+    expect(b.w).toBeCloseTo(700, 0);
+  });
+
+  it("w descriptors with sizes: the sizes slot drives the pick", async () => {
+    const b = await imgBox(`sizes="200px" src="${svg(10, 10)}" srcset="${svg(300, 30)} 300w, ${svg(700, 70)} 700w"`);
+    expect(b.w).toBeCloseTo(300, 0);
+  });
+
+  it("w descriptors with a matching media condition in sizes", async () => {
+    const b = await imgBox(`sizes="(max-width: 700px) 150px, 900px" src="${svg(10, 10)}" srcset="${svg(300, 30)} 300w, ${svg(1200, 120)} 1200w"`);
+    // viewport 600 <= 700 -> slot 150 -> 300w candidate
+    expect(b.w).toBeCloseTo(300, 0);
+  });
+
+  it("no srcset keeps src; an unparseable srcset falls back to src", async () => {
+    const b1 = await imgBox(`src="${svg(64, 32)}"`);
+    expect(b1.w).toBeCloseTo(64, 0);
+    const b2 = await imgBox(`src="${svg(64, 32)}" srcset="  "`);
+    expect(b2.w).toBeCloseTo(64, 0);
+  });
+});
+
+// P0-39: a var() reference that forms a cycle (a custom property
+// referencing itself, the design-token alias idiom
+// `--x: var(--x, fallback)` used by Wikipedia's .vector-icon) was
+// dropped outright during substitution, emptying the whole
+// declaration: width became auto and only the min-width clamp
+// remained (10px instead of 16px). A cyclic reference makes the
+// property invalid at computed-value time, so the var() must take
+// its fallback exactly like an undefined property does.
+describe("P0-39: cyclic var() references fall back", () => {
+  type Box = { p: string; t: string; i?: string; x: number; y: number; w: number; h: number };
+
+  async function box(html: string): Promise<Box> {
+    let out: Box[] = [];
+    await render({
+      value: html,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out.find((x) => x.i === "w")!;
+  }
+  const page = (css: string, body: string) =>
+    `<!doctype html><html><head><style>html,body{margin:0}span{display:inline-block}${css}</style></head><body>${body}</body></html>`;
+
+  it("self-referential alias resolves through the inner fallback", async () => {
+    const b = await box(page(
+      `.b{--fsm:var(--fsm,1rem);width:var(--fsm,1rem);height:var(--fsm,1rem);min-width:10px;min-height:10px}`,
+      `<span class="b" id="w"></span>`));
+    expect(b.w).toBeCloseTo(16, 0);
+    expect(b.h).toBeCloseTo(16, 0);
+  });
+
+  it("the element's own alias shadows an inherited chain, via its fallback", async () => {
+    const b = await box(page(
+      `.a{--fsm:var(--font-size-x-large,1.25rem)}.b{--fsm:var(--fsm,1rem);width:var(--fsm,1rem);height:var(--fsm,1rem);min-width:10px;min-height:10px}`,
+      `<span class="a"><span class="b" id="w"></span></span>`));
+    expect(b.w).toBeCloseTo(16, 0);
+  });
+
+  it("a two-property cycle falls back on both sides", async () => {
+    const b = await box(page(
+      `.b{--a:var(--b,2rem);--b:var(--a,3rem);width:var(--a,1rem);height:var(--b,1rem)}`,
+      `<span class="b" id="w"></span>`));
+    // --a: var(--b) -> --b is var(--a) -> cycle: --b's var() takes
+    // its fallback 3rem, so --a = 3rem; height reads --b, whose own
+    // substitution hits the same cycle and takes 3rem as well...
+    // (browsers agree on width here; keep to the width assertion)
+    expect(b.w).toBeCloseTo(48, 0);
+  });
+
+  it("a cyclic var() without a fallback still empties only itself", async () => {
+    const b = await box(page(
+      `.b{--a:var(--a);width:var(--a);height:22px;background:#f00}`,
+      `<span class="b" id="w"></span>`));
+    expect(b.h).toBeCloseTo(22, 0);
+    expect(b.w).toBeCloseTo(0, 0);
+  });
+});
+
+// P0-40: a line box was capped at the largest line-height among its
+// runs. But each run's inline box is its own line-height tall with
+// the leading split around its own ascent/descent, so an
+// ascent-dominant run beside ordinary text extends the union past
+// the line-height in browsers (python.org's widget titles: a
+// Pythonicon glyph, ascent 0.94em, beside 0.90em body text grows the
+// line 33.4 -> 35.4). line_box::finish now recomputes the per-run
+// extents for such runs and grows the box by the union's excess.
+// The growth is deliberately restricted to runs whose ascent
+// exceeds the strut's: descent-side splits of ordinary text runs
+// are dominated by substitute-font noise in this engine's
+// per-element fallback resolution, and counting them grew plain
+// lines by a pixel across whole pages (Wikipedia).
+describe("P0-40: line box grows for ascent-dominant runs", () => {
+  type Box = { p: string; t: string; i?: string; x: number; y: number; w: number; h: number };
+
+  async function para(html: string): Promise<Box> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0}</style></head><body>${html}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out.find((x) => x.i === "w")!;
+  }
+
+  it("an ascent-dominant run extends the line past the line-height", async () => {
+    // Strut font Courier New at 20px: metrics 17/6, line-height 34
+    // -> above 22, below 12. Segoe UI run: metrics 22/5 (ascent
+    // past the strut's) -> above 25, below 9. Union 25 + 12 = 37.
+    const b = await para(
+      `<p id="w" style="font-family:'Courier New';font-size:20px;line-height:34px">A<span style="font-family:'Segoe UI'">B</span></p>`);
+    expect(b.h).toBeCloseTo(37, 0);
+  });
+
+  it("a single font keeps the line at its line-height", async () => {
+    const b = await para(
+      `<p id="w" style="font-family:'Courier New';font-size:20px;line-height:34px">AB</p>`);
+    expect(b.h).toBeCloseTo(34, 0);
+  });
+
+  it("a top-aligned inline box's font does not extend the line", async () => {
+    const b = await para(
+      `<p id="w" style="font-family:'Courier New';font-size:20px;line-height:34px">A<span style="font-family:'Segoe UI';vertical-align:top">B</span></p>`);
+    expect(b.h).toBeCloseTo(34, 0);
+  });
+
+  it("a descent-side-only divergence does not extend the line", async () => {
+    // Verdana strut (20/4) with a Courier New run (17/6): the
+    // descent split differs but no run's ascent passes the
+    // strut's, so the restricted growth stays out.
+    const b = await para(
+      `<p id="w" style="font-family:Verdana;font-size:20px;line-height:30px">A<span style="font-family:'Courier New'">B</span></p>`);
+    expect(b.h).toBeCloseTo(30, 0);
+  });
+});
+
+// P0-41: two replaced-element sizing gaps. (1) An SVG image with
+// exactly one absolute dimension (width=80, no height) had no
+// intrinsic size at all in decode_svg -- Skia's containerSize() is
+// empty for that shape and the layout path fell to 512x512, where a
+// browser derives the other dimension from the viewBox ratio, or
+// from the default object size (300x150) without a viewBox.
+// (2) A replaced flex item stretched to a definite container height
+// transfers that height through its ratio to its flex base size, but
+// its automatic minimum stayed the intrinsic width, so flex-shrink
+// pulled it back (120x50 in a 60px-tall, 80px-wide row: Chrome keeps
+// the transferred 144 and overflows; the engine shrank to 120). The
+// shrink floor is now the transferred size for non-ratio-only items
+// (ratio-only items are re-transferred by render_flex afterwards and
+// keep the old floor).
+describe("P0-41: one-dimension SVG images and the flex stretch floor", () => {
+  type Box = { p: string; t: string; i?: string; x: number; y: number; w: number; h: number };
+  const uri = (inner: string) =>
+    `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" ${inner}><rect width="80" height="40" fill="#69c"/></svg>`)}`;
+
+  async function box(html: string): Promise<Box> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0;font-size:0;line-height:0}</style></head><body>${html}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out.find((x) => x.i === "w")!;
+  }
+
+  it("width-only SVG image with a viewBox derives height from the ratio", async () => {
+    const b = await box(`<img id="w" src="${uri('width="80" viewBox="0 0 80 10"')}">`);
+    expect(b.w).toBeCloseTo(80, 0);
+    expect(b.h).toBeCloseTo(10, 0);
+  });
+
+  it("width-only SVG image without a viewBox gets the default object height", async () => {
+    const b = await box(`<img id="w" src="${uri('width="80"')}">`);
+    expect(b.w).toBeCloseTo(80, 0);
+    expect(b.h).toBeCloseTo(150, 0);
+  });
+
+  it("height-only SVG image with a viewBox derives width from the ratio", async () => {
+    const b = await box(`<img id="w" src="${uri('height="40" viewBox="0 0 80 10"')}">`);
+    expect(b.w).toBeCloseTo(320, 0);
+    expect(b.h).toBeCloseTo(40, 0);
+  });
+
+  it("height-only SVG image without a viewBox gets the default object width", async () => {
+    const b = await box(`<img id="w" src="${uri('height="40"')}">`);
+    expect(b.w).toBeCloseTo(300, 0);
+    expect(b.h).toBeCloseTo(40, 0);
+  });
+
+  it("a stretched flex image keeps its transferred width under shrink pressure", async () => {
+    const b = await box(
+      `<div style="display:flex;height:60px;width:80px"><img id="w" src="${uri('width="120" height="50" viewBox="0 0 120 50"')}"></div>`);
+    expect(b.w).toBeCloseTo(144, 0);
+    expect(b.h).toBeCloseTo(60, 0);
+  });
+
+  it("an image stretched to a shorter container narrows below its intrinsic width", async () => {
+    const b = await box(
+      `<div style="display:flex;height:30px;width:300px"><img id="w" src="${uri('width="120" height="50" viewBox="0 0 120 50"')}"></div>`);
+    expect(b.w).toBeCloseTo(72, 0);
+    expect(b.h).toBeCloseTo(30, 0);
+  });
+});
+
+// P0-42: a ratio-only replaced grid item with a content-keyword width
+// (fit-content / max-content / min-content) was sent down the
+// ratio_fill path -- it filled its track (or vanished to 0) -- even
+// when its block size resolved. A keyword width is not stretched, so
+// when the height is definite, a percentage of the row, or the align
+// stretch, the used width is the ratio transfer from that block size
+// (unclamped by the track), exactly like an auto width. The
+// justify-stretch fill exception now covers auto widths only, and
+// with the block size unresolved the fill stays.
+describe("P0-42: keyword widths on ratio-only grid items transfer from the block size", () => {
+  type Box = { p: string; t: string; i?: string; x: number; y: number; w: number; h: number };
+
+  async function box(html: string): Promise<Box> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0;font-size:0;line-height:0}</style></head><body>${html}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out.find((x) => x.i === "w")!;
+  }
+  const svg = (style: string) =>
+    `<svg id="w" viewBox="0 0 40 20" style="${style}"><rect width="40" height="20" fill="#69c"/></svg>`;
+  const grid = (cols: string, extra: string, inner: string) =>
+    `<div style="display:grid;grid-template-columns:${cols};${extra}">${inner}</div>`;
+
+  it("fit-content transfers from the stretched row height", async () => {
+    const b = await box(grid("50px", "grid-template-rows:20px;align-items:stretch;justify-items:stretch", svg("width:fit-content")));
+    expect(b.w).toBeCloseTo(40, 0);
+    expect(b.h).toBeCloseTo(20, 0);
+  });
+
+  it("fit-content transfers from a percentage height", async () => {
+    const b = await box(grid("50px", "grid-template-rows:20px;align-items:stretch;justify-items:stretch", svg("width:fit-content;height:50%")));
+    expect(b.w).toBeCloseTo(20, 0);
+    expect(b.h).toBeCloseTo(10, 0);
+  });
+
+  it("fit-content transfers from a definite height", async () => {
+    const b = await box(grid("50px", "grid-template-rows:20px;align-items:stretch;justify-items:stretch", svg("width:fit-content;height:12px")));
+    expect(b.w).toBeCloseTo(24, 0);
+    expect(b.h).toBeCloseTo(12, 0);
+  });
+
+  it("max-content is not clamped by a narrower track", async () => {
+    const b = await box(grid("30px", "grid-template-rows:20px;align-items:stretch;justify-items:stretch", svg("width:max-content")));
+    expect(b.w).toBeCloseTo(40, 0);
+    expect(b.h).toBeCloseTo(20, 0);
+  });
+
+  it("an unresolved block size keeps the fill", async () => {
+    const b = await box(grid("50px", "align-items:start;justify-items:stretch", svg("width:fit-content")));
+    expect(b.w).toBeCloseTo(50, 0);
+    expect(b.h).toBeCloseTo(25, 0);
+  });
+
+  it("an auto width under justify stretch still fills its track", async () => {
+    const b = await box(grid("50px", "grid-template-rows:20px;align-items:stretch;justify-items:stretch", svg("")));
+    expect(b.w).toBeCloseTo(50, 0);
+    expect(b.h).toBeCloseTo(20, 0);
+  });
+});
+
+// P0-43: the fr-track floor pass and the auto-track give-back pass
+// skipped every non-replaced item with overflow != visible, applying
+// the scroll container's zero automatic minimum (CSS Grid 6.6) to its
+// specified sizes as well. A scroll container with a definite width
+// or min-width still sizes its box to that width, so the track floor
+// is that size (plus padding); only the content-based minimum of an
+// auto-width, no-min-width scroll container is 0.
+describe("P0-43: scroll containers floor fr/auto tracks at their specified sizes", () => {
+  type Box = { p: string; t: string; i?: string; x: number; y: number; w: number; h: number };
+
+  async function box(html: string): Promise<Box> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0}</style></head><body>${html}</body></html>`,
+      width: 1000,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out.find((x) => x.i === "w")!;
+  }
+  const uri = (attrs: string) =>
+    `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" ${attrs}><rect width="100%" height="100%" fill="#69c"/></svg>`)}`;
+  // The first item forces track 1 to 304 (300 + 2x2 margins); the
+  // target img sits in the min-content track 3, so its x reads out
+  // track 2's resolved size: x = 304 + 16 + track2 + 16.
+  const frGrid = (item2: string) =>
+    `<div style="display:grid;grid-template-columns:1fr 1fr min-content;gap:16px;width:80px">` +
+    `<div style="margin:2px"><div style="width:300px;height:10px"></div></div>${item2}` +
+    `<img id="w" style="width:fit-content" src="${uri('width="20" height="30" viewBox="0 0 20 30"')}"></div>`;
+
+  it("a definite-width scroll container floors its fr track", async () => {
+    const b = await box(frGrid(`<div style="width:20px;padding:2px;overflow:hidden">mm</div>`));
+    expect(b.x).toBeCloseTo(360, 0);
+  });
+
+  it("an overflow:scroll container floors the same way", async () => {
+    const b = await box(frGrid(`<div style="width:20px;padding:2px;overflow:scroll">mm</div>`));
+    expect(b.x).toBeCloseTo(360, 0);
+  });
+
+  it("a min-width scroll container floors its fr track at the min-width", async () => {
+    const b = await box(frGrid(`<div style="min-width:44px;overflow:hidden">mm</div>`));
+    expect(b.x).toBeCloseTo(380, 0);
+  });
+
+  it("an auto-width scroll container contributes no floor", async () => {
+    const b = await box(frGrid(`<div style="overflow:hidden"><img src="${uri('width="80" height="90" viewBox="0 0 80 90"')}" style="width:60px"></div>`));
+    expect(b.x).toBeCloseTo(336, 0);
+  });
+
+  it("an auto track gives back only down to a scroll container's definite width", async () => {
+    const b = await box(
+      `<div style="display:grid;grid-template-columns:auto auto;width:80px"><div style="width:90px;overflow:hidden">mm</div><div id="w" style="width:10px"></div></div>`);
+    expect(b.x).toBeCloseTo(90, 0);
+  });
+
+  it("an auto track gives an auto-width scroll container's space back fully", async () => {
+    const b = await box(
+      `<div style="display:grid;grid-template-columns:auto auto;width:80px"><div style="overflow:hidden"><img src="${uri('width="200" height="10" viewBox="0 0 200 10"')}"></div><div id="w" style="width:10px"></div></div>`);
+    expect(b.x).toBeCloseTo(70, 0);
+  });
+});
+
+// P0-44: under a min-content constraint, a fit-content(limit) track
+// contributed max(min-content, min(max-content, limit)) -- the
+// max-content side of the formula -- so a grid being measured for its
+// min-content size came out too wide whenever an item's max-content
+// exceeded the limit (fuzz replaced seed 6: the grid's min-content
+// was 240 instead of 200 and it could not shrink as a flex item).
+// The min-content contribution is the track's floor instead: an
+// explicit min-width replaces the content contribution, and a
+// measured min-content is not capped by the limit.
+describe("P0-44: fit-content tracks contribute their floor under a min-content constraint", () => {
+  type Box = { p: string; t: string; i?: string; x: number; y: number; w: number; h: number };
+
+  async function box(html: string): Promise<Box> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0}</style></head><body>${html}</body></html>`,
+      width: 1000,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out.find((x) => x.i === "w")!;
+  }
+  const uri = (attrs: string) =>
+    `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" ${attrs}><rect width="100%" height="100%" fill="#69c"/></svg>`)}`;
+  // Grid min-content = fit-content track + 0 (fr floors) + 60 + 0.
+  const gridMin = (item: string) =>
+    `<div style="width:min-content"><div id="w" style="display:grid;grid-template-columns:fit-content(80px) 2fr 60px 2fr">${item}</div></div>`;
+  const blk = (minW: number | null, kidW: number) =>
+    `<div style="${minW === null ? "" : `min-width:${minW}px;`}padding:4px"><div style="width:${kidW}px;height:10px"></div></div>`;
+
+  it("a definite min-width replaces the content contribution", async () => {
+    expect((await box(gridMin(blk(40, 200)))).w).toBeCloseTo(108, 0);
+  });
+
+  it("a larger min-width raises the contribution", async () => {
+    expect((await box(gridMin(blk(100, 200)))).w).toBeCloseTo(168, 0);
+  });
+
+  it("a min-width above the content size still rules", async () => {
+    expect((await box(gridMin(blk(300, 200)))).w).toBeCloseTo(368, 0);
+  });
+
+  it("a definite min-width rules even when the content is narrower than the limit", async () => {
+    expect((await box(gridMin(blk(40, 50)))).w).toBeCloseTo(108, 0);
+  });
+
+  it("without a min-width the full min-content counts, uncapped by the limit", async () => {
+    expect((await box(gridMin(blk(null, 200)))).w).toBeCloseTo(268, 0);
+  });
+
+  it("a flex container item follows the same rule", async () => {
+    const item = `<div style="display:flex;flex-wrap:wrap;gap:8px;min-width:40px;padding:4px"><img src="${uri('width="120" height="50" viewBox="0 0 120 50"')}"></div>`;
+    expect((await box(gridMin(item))).w).toBeCloseTo(108, 0);
+  });
+
+  it("the max-content side keeps the clamped formula", async () => {
+    const html = `<div style="width:max-content"><div id="w" style="display:grid;grid-template-columns:fit-content(80px) 2fr 60px 2fr">${blk(40, 200)}</div></div>`;
+    expect((await box(html)).w).toBeCloseTo(140, 0);
+  });
+});
+
+// P0-45: a block's min-width clamp was applied to its measured width
+// only AFTER its content had been laid out, so a measure (a grid row
+// sizing to the item, say) kept the height of the unclamped layout:
+// width:10% + min-width:40px in a 50px track laid its percentage-sized
+// child out at the 5px width and measured 92.1 tall where the final
+// layout at the clamped 40px is 105 (fuzz replaced seed 6's row came
+// out 12.9px short). The clamp now bounds the measure itself, for
+// length-typed and percentage-typed resolved widths alike.
+describe("P0-45: min-width bounds a block measure before its content is laid out", () => {
+  type Box = { p: string; t: string; i?: string; x: number; y: number; w: number; h: number };
+
+  async function box(html: string): Promise<Box> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0;font-size:0;line-height:0}</style></head><body>${html}</body></html>`,
+      width: 1000,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out.find((x) => x.i === "w")!;
+  }
+  const uri = (attrs: string) =>
+    `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" ${attrs}><rect width="100%" height="100%" fill="#69c"/></svg>`)}`;
+  const kids = `<img src="${uri('width="80" height="90" viewBox="0 0 80 90"')}"><svg viewBox="0 0 40 60" style="width:25%"><rect width="40" height="60" fill="#69c"/></svg>`;
+  const grid = (item: string) =>
+    `<div id="w" style="display:grid;grid-template-columns:50px;width:200px">${item}</div>`;
+
+  it("a percentage width below min-width measures its content at the clamped width", async () => {
+    // img line 90 + svg at 25% of 40 = 10 wide -> 15 tall + margins 16
+    const b = await box(grid(`<div style="width:10%;min-width:40px;margin:8px">${kids}</div>`));
+    expect(b.h).toBeCloseTo(121, 0);
+  });
+
+  it("a length width below min-width does the same", async () => {
+    const b = await box(grid(`<div style="width:5px;min-width:40px;margin:8px">${kids}</div>`));
+    expect(b.h).toBeCloseTo(121, 0);
+  });
+
+  it("without min-width the percentage width stands as resolved", async () => {
+    // svg at 25% of 5 = 1.25 wide -> 1.9 tall: 90 + 1.9 + margins 16
+    const b = await box(grid(`<div style="width:10%;margin:8px">${kids}</div>`));
+    expect(b.h).toBeCloseTo(107.9, 0);
+  });
+
+  it("content without percentage sizes is unaffected by the clamp", async () => {
+    const b = await box(
+      grid(`<div style="width:10%;min-width:40px;margin:8px"><img src="${uri('width="80" height="90" viewBox="0 0 80 90"')}"></div>`));
+    expect(b.h).toBeCloseTo(106, 0);
+  });
+});
+
+// P0-46: the automatic minimum size of a flex item with a percentage
+// width clamped that width by the item's MIN-content size, so a
+// replaced item measured at ~0 and shrank freely: an image with
+// width:30% and a 300px intrinsic width in a 496px container shrank
+// to 113.8 instead of holding its specified 148.8 (fuzz replaced seed
+// 35's shrink distribution was off for every item in the row). Per
+// Flexbox 4.5 the content size suggestion is the MAX-content size, so
+// the floor is min(specified percentage, max-content): width:30%
+// floors at min(148.8, 300), width:90% at min(446.4, 300) = 300.
+describe("P0-46: a percentage-width flex item floors at min(specified, max-content)", () => {
+  type Box = { p: string; t: string; i?: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(html: string): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0;font-size:0;line-height:0}</style></head><body>${html}</body></html>`,
+      width: 1000,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const uri = (w: number, h: number) =>
+    `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><rect width="100%" height="100%" fill="#69c"/></svg>`)}`;
+  const wrap = (kids: string) =>
+    `<div style="width:500px"><div style="display:flex;padding:2px">${kids}</div></div>`;
+  const div = (id: string, w: string) => `<div id="${id}" style="width:${w};height:20px"></div>`;
+  const w = (out: Box[], id: string) => out.find((x) => x.i === id)!.w;
+
+  it("an image at width:30% does not shrink below its specified size", async () => {
+    const out = await boxes(wrap(`<img id="b" src="${uri(300, 10)}" style="width:30%">${div("c", "500px")}`));
+    expect(w(out, "b")).toBeCloseTo(148.8, 0);
+    expect(w(out, "c")).toBeCloseTo(347.2, 0);
+  });
+
+  it("an image at width:90% floors at its intrinsic width instead", async () => {
+    const out = await boxes(wrap(`${div("a", "120px")}<img id="b" src="${uri(300, 10)}" style="width:90%">${div("c", "500px")}`));
+    expect(w(out, "b")).toBeCloseTo(300, 0);
+    expect(w(out, "a")).toBeCloseTo(37.9, 0);
+    expect(w(out, "c")).toBeCloseTo(158.1, 0);
+  });
+
+  it("two percentage images both hold, the length item absorbs the shrink", async () => {
+    const out = await boxes(wrap(`<img id="a" src="${uri(300, 10)}" style="width:30%"><img id="b" src="${uri(300, 10)}" style="width:30%">${div("c", "500px")}`));
+    expect(w(out, "a")).toBeCloseTo(148.8, 0);
+    expect(w(out, "b")).toBeCloseTo(148.8, 0);
+    expect(w(out, "c")).toBeCloseTo(198.4, 0);
+  });
+
+  it("a larger flex-shrink factor does not move the floor", async () => {
+    const out = await boxes(wrap(`${div("a", "120px")}<img id="b" src="${uri(300, 10)}" style="width:30%;flex-shrink:2">${div("c", "500px")}`));
+    expect(w(out, "b")).toBeCloseTo(148.8, 0);
+  });
+
+  it("a percentage-width block item still shrinks to its content floor", async () => {
+    const out = await boxes(wrap(`${div("a", "120px")}${div("b", "30%")}${div("c", "500px")}`));
+    expect(w(out, "b")).toBeCloseTo(96, 0);
+  });
+
+  it("percentage text columns shrink proportionally with their siblings", async () => {
+    // The floor applies to replaced items only: a text block's content
+    // suggestion is its min-content (its longest word), so 33.333%
+    // columns share the shrink with a fixed sibling instead of
+    // crushing it to zero (rust-lang.org's three-column row).
+    const txt = "Rust is a systems programming language that runs blazingly fast, prevents segfaults, and guarantees thread safety for everyone building reliable software.";
+    const col = (id: string) => `<div id="${id}" style="width:33.333%;font-size:16px;line-height:20px"><p>${txt}</p></div>`;
+    const out = await boxes(
+      `<div style="display:flex;width:1000px">${col("a")}${col("b")}${col("c")}<div id="d" style="width:200px;height:10px"></div></div>`);
+    expect(w(out, "a")).toBeCloseTo(277.8, 0);
+    expect(w(out, "b")).toBeCloseTo(277.8, 0);
+    expect(w(out, "d")).toBeCloseTo(166.7, 0);
+  });
+});
+
+// P0-47: the grid row measure pass measured every item at the full grid
+// area width, but a non-stretched item is placed at its fit-content
+// width -- so the row took the height of the wide layout: a centered
+// shrink-to-fit grid whose 1fr track only opens at the area width
+// reported 116.8 for a row that renders 16 tall at its used 32px
+// (fuzz replaced seed 14). The measure pass now resolves the used
+// width the same way place_grid_items does (content measure, clamped
+// by max(min-content, area) for auto/fit-content widths) and measures
+// the height there.
+describe("P0-47: a grid row measures a non-stretched item at its used width", () => {
+  type Box = { p: string; t: string; i?: string; x: number; y: number; w: number; h: number };
+
+  async function box(html: string): Promise<Box> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0;font-size:0;line-height:0}</style></head><body>${html}</body></html>`,
+      width: 1000,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out.find((x) => x.i === "w")!;
+  }
+  const S = (vb: string) => `<svg viewBox="${vb}"><rect width="100" height="60" fill="#69c"/></svg>`;
+  const inner = (extra = "") =>
+    `<div id="w" style="display:grid;grid-template-columns:min-content min-content 1fr;gap:8px;padding:8px;${extra}">${S("0 0 100 60")}${S("0 0 100 20")}${S("0 0 100 60")}</div>`;
+
+  it("a centered shrink-to-fit item contributes its fit-width height", async () => {
+    const b = await box(`<div style="display:grid;grid-template-columns:1fr;justify-items:center;width:200px">${inner()}</div>`);
+    expect(b.w).toBeCloseTo(32, 0);
+    expect(b.h).toBeCloseTo(16, 0);
+  });
+
+  it("a start-aligned item does the same", async () => {
+    const b = await box(`<div style="display:grid;grid-template-columns:1fr;justify-items:start;width:200px">${inner()}</div>`);
+    expect(b.h).toBeCloseTo(16, 0);
+  });
+
+  it("at a definite width the wide height stands", async () => {
+    const b = await box(inner("width:200px"));
+    expect(b.w).toBeCloseTo(216, 0);
+    expect(b.h).toBeCloseTo(126.4, 0);
+  });
+
+  it("a stretched item still measures at the area width", async () => {
+    const b = await box(`<div style="display:grid;grid-template-columns:1fr;justify-items:stretch;width:200px">${inner()}</div>`);
+    expect(b.h).toBeCloseTo(116.8, 0);
+  });
+});
+
+// P0-48: under a min-content constraint, a grid item with a definite
+// min-width contributed its full content size to an auto track, so the
+// grid's own min-content came out at its max-content and the grid
+// could not shrink as a flex item (fuzz replaced seed 25: the grid
+// stayed 250 wide where Chrome shrinks it to 52). The fit-content
+// floor already replaced the contribution with the min-width; an auto
+// track under a min-content constraint now does the same.
+describe("P0-48: a definite min-width replaces an auto track's min-content contribution", () => {
+  type Box = { p: string; t: string; i?: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(html: string): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0;font-size:0;line-height:0}</style></head><body>${html}</body></html>`,
+      width: 1000,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const uri = (w: number, h: number) =>
+    `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><rect width="100%" height="100%" fill="#69c"/></svg>`)}`;
+  const gridIn = (mode: string, item: string) =>
+    `<div style="width:${mode}"><div id="g" style="display:grid;grid-template-columns:auto;padding:4px">${item}</div></div>`;
+  const w = (out: Box[], id: string) => out.find((x) => x.i === id)!.w;
+
+  it("a block with min-width:40px around wide content contributes 40", async () => {
+    const out = await boxes(gridIn("min-content", `<div id="f" style="min-width:40px;padding:2px;margin:2px"><div style="width:200px;height:10px"></div></div>`));
+    expect(w(out, "g")).toBeCloseTo(56, 0);
+    expect(w(out, "f")).toBeCloseTo(44, 0);
+  });
+
+  it("without min-width the content contribution stands", async () => {
+    const out = await boxes(gridIn("min-content", `<div id="f" style="padding:2px;margin:2px"><div style="width:200px;height:10px"></div></div>`));
+    expect(w(out, "g")).toBeCloseTo(216, 0);
+  });
+
+  it("a max-content measure is unaffected by the min-width", async () => {
+    const out = await boxes(gridIn("max-content", `<div id="f" style="min-width:40px;padding:2px;margin:2px"><div style="width:200px;height:10px"></div></div>`));
+    expect(w(out, "g")).toBeCloseTo(216, 0);
+  });
+
+  it("a definite width counts in full, above the min-width", async () => {
+    const out = await boxes(gridIn("min-content", `<div id="f" style="width:200px;min-width:100px;margin:2px"></div>`));
+    expect(w(out, "g")).toBeCloseTo(212, 0);
+    expect(w(out, "f")).toBeCloseTo(200, 0);
+  });
+
+  it("a flex item with a definite min-width contributes it too", async () => {
+    const out = await boxes(gridIn("min-content", `<div id="f" style="display:flex;min-width:40px;padding:2px;margin:2px"><img src="${uri(80, 30)}" style="width:120px"></div>`));
+    expect(w(out, "g")).toBeCloseTo(56, 0);
+  });
+});
+
+// P0-49: content distribution fallbacks. (a) justify-content space-around /
+// space-evenly with negative free space fell back to flex-start even for
+// reverse directions, packing an oversized item at the main-start edge;
+// Chrome packs at the container's start edge (the line overflows only
+// toward the end side), which for row-reverse is the physical left
+// (fuzz replaced seed 41: the whole subtree sat 114px too far right,
+// exactly the negative free space). (b) align-content: space-evenly was
+// never distributed at all, and space-around with negative free cross
+// space fell back to center instead of cross-start packing.
+describe("P0-49: space distribution fallbacks for justify-content and align-content", () => {
+  type Box = { p: string; t: string; i?: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(html: string): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0;font-size:0;line-height:0}</style></head><body>${html}</body></html>`,
+      width: 1000,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const at = (out: Box[], id: string) => out.find((x) => x.i === id)!;
+  const flex = (dir: string, jc: string, items: string, extra = "") =>
+    `<div style="display:flex;flex-direction:${dir};justify-content:${jc};gap:4px;width:60px;${extra}">${items}</div>`;
+  const item = (id: string, w: number) => `<div id="${id}" style="width:${w}px;height:20px;flex:none"></div>`;
+
+  it("row-reverse space-around packs an oversized item at the left edge", async () => {
+    const out = await boxes(flex("row-reverse", "space-around", item("a", 150)));
+    expect(at(out, "a").x).toBeCloseTo(0, 0);
+  });
+
+  it("row-reverse space-evenly packs oversized items at the left edge", async () => {
+    const out = await boxes(flex("row-reverse", "space-evenly", item("a", 150) + item("b", 30)));
+    expect(at(out, "a").x).toBeCloseTo(34, 0);
+    expect(at(out, "b").x).toBeCloseTo(0, 0);
+  });
+
+  it("row-reverse space-between keeps the flex-start fallback", async () => {
+    const out = await boxes(flex("row-reverse", "space-between", item("a", 150)));
+    expect(at(out, "a").x).toBeCloseTo(-90, 0);
+  });
+
+  it("row space-around packs an oversized item at the left edge", async () => {
+    const out = await boxes(flex("row", "space-around", item("a", 150)));
+    expect(at(out, "a").x).toBeCloseTo(0, 0);
+  });
+
+  it("column-reverse space-around packs an oversized item at the top", async () => {
+    const out = await boxes(
+      `<div style="display:flex;flex-direction:column-reverse;justify-content:space-around;width:60px;height:60px"><div id="a" style="height:150px;width:20px;flex:none"></div></div>`,
+    );
+    expect(at(out, "a").y).toBeCloseTo(0, 0);
+  });
+
+  const wrap = (ac: string, w: number, h: number) =>
+    `<div style="display:flex;flex-wrap:wrap;align-content:${ac};width:${w}px;height:${h}px"><div id="a" style="width:90px;height:50px;flex:none"></div><div id="b" style="width:90px;height:50px;flex:none"></div></div>`;
+
+  it("align-content space-evenly distributes the lines", async () => {
+    const out = await boxes(wrap("space-evenly", 100, 200));
+    expect(at(out, "a").y).toBeCloseTo(33.33, 0);
+    expect(at(out, "b").y).toBeCloseTo(116.67, 0);
+  });
+
+  it("align-content space-evenly with negative free space packs at cross-start", async () => {
+    const out = await boxes(wrap("space-evenly", 100, 60));
+    expect(at(out, "a").y).toBeCloseTo(0, 0);
+    expect(at(out, "b").y).toBeCloseTo(50, 0);
+  });
+
+  it("align-content space-around with negative free space packs at cross-start", async () => {
+    const out = await boxes(wrap("space-around", 100, 60));
+    expect(at(out, "a").y).toBeCloseTo(0, 0);
+    expect(at(out, "b").y).toBeCloseTo(50, 0);
+  });
+
+  it("align-content space-around distributes the lines", async () => {
+    const out = await boxes(wrap("space-around", 100, 200));
+    expect(at(out, "a").y).toBeCloseTo(25, 0);
+    expect(at(out, "b").y).toBeCloseTo(125, 0);
+  });
+});
+
+// P0-50: the grid row measure pass measured a non-stretched item in
+// content mode and kept that height whenever the content width fit the
+// grid area. The content-mode measure resolves the item's own layout
+// intrinsically, which can differ from the placed layout at the same
+// width: a nested grid's tracks open up intrinsically (a ratio-only
+// svg inside measures 300 wide / 60 tall) where the placed layout
+// resolves them against the definite used width (0 wide, the 30px row
+// floor) -- the row came out 60 where Chrome gets 30 (fuzz replaced
+// seed 4). The pass now always finishes with an exact-width measure at
+// the used width, and a width:min-content item is measured at its
+// min-content width instead of its max-content width.
+describe("P0-50: grid row measure takes the height at the used width", () => {
+  type Box = { p: string; t: string; i?: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(html: string): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0;font-size:0;line-height:0}</style></head><body>${html}</body></html>`,
+      width: 1000,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const at = (out: Box[], id: string) => out.find((x) => x.i === id)!;
+  const SVG = `<svg viewBox="0 0 100 20" style="width:100%"><rect width="100" height="20" fill="#69c"/></svg>`;
+  const innerG = `<div id="g" style="display:grid;grid-template-columns:1fr minmax(40px,1fr);grid-auto-rows:minmax(30px,auto);align-items:center">${SVG}</div>`;
+  const outer = (decl: string, item: string, cols = "min-content 2fr") =>
+    `<div style="display:grid;grid-template-columns:${cols};margin:8px;${decl}">${item}</div>`;
+
+  it("a centered nested grid takes its placed height, not its intrinsic height", async () => {
+    const out = await boxes(outer("justify-items:center", innerG));
+    expect(at(out, "g").w).toBeCloseTo(40, 0);
+    expect(at(out, "g").h).toBeCloseTo(30, 0);
+  });
+
+  it("the same holds for justify-items:start", async () => {
+    const out = await boxes(outer("justify-items:start", innerG));
+    expect(at(out, "g").h).toBeCloseTo(30, 0);
+  });
+
+  it("a stretched nested grid is unaffected", async () => {
+    const out = await boxes(outer("", innerG));
+    expect(at(out, "g").h).toBeCloseTo(30, 0);
+  });
+
+  it("a width:min-content flex item is measured at its min-content width", async () => {
+    const item = `<div id="g" style="display:flex;flex-wrap:wrap;width:min-content"><div style="width:80px;height:20px;flex:none"></div><div style="width:80px;height:20px;flex:none"></div></div>`;
+    const out = await boxes(outer("justify-items:start", item, "200px"));
+    expect(at(out, "g").w).toBeCloseTo(80, 0);
+    expect(at(out, "g").h).toBeCloseTo(40, 0);
+  });
+
+  it("a width:max-content flex item keeps its max-content height", async () => {
+    const item = `<div id="g" style="display:flex;flex-wrap:wrap;width:max-content"><div style="width:80px;height:20px;flex:none"></div><div style="width:80px;height:20px;flex:none"></div></div>`;
+    const out = await boxes(outer("justify-items:start", item, "200px"));
+    expect(at(out, "g").w).toBeCloseTo(160, 0);
+    expect(at(out, "g").h).toBeCloseTo(20, 0);
+  });
+});

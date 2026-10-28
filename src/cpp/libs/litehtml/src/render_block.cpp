@@ -312,6 +312,22 @@ litehtml::pixel_t litehtml::render_item_block::_measure(const containing_block_c
 		}
 	}
 
+	// The min-inline-size clamp has to bound the measure itself: a box whose
+	// definite inline size (a percentage, say) resolves below its min-width is
+	// laid out at the min-width, and its content -- percentage sizes of the
+	// children included -- follows that width. Clamping only m_pos.width after
+	// the content render keeps the height the narrower layout produced (a grid
+	// row then sizes to the unclamped measure: width:10% + min-width:40px in a
+	// 50px track measured 92.1 tall instead of 105).
+	if (self_size.min_inline_size().type != containing_block_context::cbc_value_type_none &&
+	    self_size.render_inline_size().type != containing_block_context::cbc_value_type_auto &&
+	    self_size.render_inline_size().type != containing_block_context::cbc_value_type_none &&
+	    self_size.render_inline_size() < self_size.min_inline_size())
+	{
+		self_size.render_inline_size() = (pixel_t)self_size.min_inline_size();
+		self_size.inline_size() = (pixel_t)self_size.render_inline_size();
+	}
+
 	// For measurement, we pass size_mode_measure
 	containing_block_context measure_size = self_size;
 	measure_size.size_mode |= containing_block_context::size_mode_measure;

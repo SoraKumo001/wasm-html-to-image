@@ -263,10 +263,15 @@ constexpr MetricFamilyAlias kMetricFamilyAliases[] = {
     {"arial", 2},
     {"helvetica", 2},
     {"helveticaneue", 2},
+    // Liberation fonts are metric-compatible clones of Arial / Times New
+    // Roman / Courier New by design, so they share those profiles.
+    {"liberationsans", 2},
     {"timesnewroman", 3},
     {"times", 3},
+    {"liberationserif", 3},
     {"couriernew", 4},
     {"courier", 4},
+    {"liberationmono", 4},
     {"georgia", 5},
     {"trebuchetms", 6},
     {"segoeui", 7},
@@ -851,6 +856,20 @@ std::vector<sk_sp<SkTypeface>> SatoruFontManager::matchFonts(const std::string& 
 
 bool SatoruFontManager::isGenericMetricFamily(const std::string& family) const {
     return is_generic_metric_family(cleanName(family));
+}
+
+std::string SatoruFontManager::metricProfileGenericFamily(const std::string& family) const {
+    const int profile_index = find_metric_profile(cleanName(family));
+    if (profile_index < 0) return "";
+    switch (kMetricProfiles[profile_index].generic) {
+        case FontMetricProfile::Generic::Serif:
+            return "serif";
+        case FontMetricProfile::Generic::Mono:
+            return "monospace";
+        case FontMetricProfile::Generic::Sans:
+            return "";
+    }
+    return "";
 }
 
 std::vector<sk_sp<SkTypeface>> SatoruFontManager::matchMetricFallbackFonts(
