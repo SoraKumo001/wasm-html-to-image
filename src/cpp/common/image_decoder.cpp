@@ -247,17 +247,19 @@ DecodeResult ImageDecoder::decode_svg(const sk_sp<SkData>& data, sk_sp<SkFontMgr
     // inline <svg>). Width/height default to 100%, i.e. a percentage.
     bool ratio_only = false;
     float vb_w = 0, vb_h = 0;
+    float abs_w = 0, abs_h = 0;  // root width/height when absolute, else 0
     if (auto* root = svg_dom->getRoot()) {
         auto absolute = [](const SkSVGLength& len) {
             return len.unit() != SkSVGLength::Unit::kPercentage &&
                    len.unit() != SkSVGLength::Unit::kUnknown && len.value() > 0;
         };
+        if (absolute(root->getWidth())) abs_w = root->getWidth().value();
+        if (absolute(root->getHeight())) abs_h = root->getHeight().value();
         const auto& vb = root->getViewBox();
-        if (vb && vb->width() > 0 && vb->height() > 0 && !absolute(root->getWidth()) &&
-            !absolute(root->getHeight())) {
-            ratio_only = true;
+        if (vb && vb->width() > 0 && vb->height() > 0) {
             vb_w = vb->width();
             vb_h = vb->height();
+            if (!abs_w && !abs_h) ratio_only = true;
         }
     }
     result.ratio_only = ratio_only;
@@ -266,10 +268,32 @@ DecodeResult ImageDecoder::decode_svg(const sk_sp<SkData>& data, sk_sp<SkFontMgr
     if (ratio_only && default_object_raster) {
         // Rasterize at the CSS default object size (300x150) fitted to the
         // ratio, so the bitmap's own size carries the ratio and the graphic
-        // fills it exactly, instead of a letterboxed 512x512.
-        float scale = std::min(300.0f / vb_w, 150.0f / vb_h);
-        container_size = SkSize::Make(std::max(1.0f, (float)std::lround(vb_w * scale)),
-                                      std::max(1.0f, (float)std::lround(vb_h * scale)));
+        // fills it exactly, instead of a letterboxed 512x512. Prefer an
+        // integer multiple of the viewBox so the bitmap's ratio is EXACT
+        // (80x10 at fit 3.75 would otherwise round to 300x38 = ratio 7.89
+        // where the true ratio is 8).
+        float fit = std::min(300.0f / vb_w, 150.0f / vb_h);
+        int factor = (int)fit;
+        if (factor >= 1) {
+            container_size = SkSize::Make(vb_w * factor, vb_h * factor);
+        } else {
+            container_size = SkSize::Make(std::max(1.0f, (float)std::lround(vb_w * fit)),
+                                          std::max(1.0f, (float)std::lround(vb_h * fit)));
+        }
+    } else if (default_object_raster && (bool)abs_w != (bool)abs_h) {
+        // Exactly one absolute dimension: the intrinsic size derives the
+        // other from the viewBox ratio, or from the CSS default object
+        // size (300x150) when there is no viewBox. Skia's containerSize()
+        // is empty for this shape and the old code fell to 512x512, where
+        // a browser shows e.g. width=80 + viewBox 80x10 as 80x10.
+        // (Layout sizing path only; decode() keeps the 512 fallback.)
+        if (abs_w) {
+            float h = vb_w > 0 ? abs_w * vb_h / vb_w : 150.0f;
+            container_size = SkSize::Make(abs_w, std::max(1.0f, (float)std::lround(h)));
+        } else {
+            float w = vb_h > 0 ? abs_h * vb_w / vb_h : 300.0f;
+            container_size = SkSize::Make(std::max(1.0f, (float)std::lround(w)), abs_h);
+        }
     } else if (container_size.isEmpty()) {
         container_size = SkSize::Make(512, 512);  // satoru/converter 共通のフォールバック
     }
