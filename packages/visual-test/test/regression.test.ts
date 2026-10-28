@@ -7991,3 +7991,54 @@ describe("P0-46: a percentage-width flex item floors at min(specified, max-conte
     expect(w(out, "d")).toBeCloseTo(166.7, 0);
   });
 });
+
+// P0-47: the grid row measure pass measured every item at the full grid
+// area width, but a non-stretched item is placed at its fit-content
+// width -- so the row took the height of the wide layout: a centered
+// shrink-to-fit grid whose 1fr track only opens at the area width
+// reported 116.8 for a row that renders 16 tall at its used 32px
+// (fuzz replaced seed 14). The measure pass now resolves the used
+// width the same way place_grid_items does (content measure, clamped
+// by max(min-content, area) for auto/fit-content widths) and measures
+// the height there.
+describe("P0-47: a grid row measures a non-stretched item at its used width", () => {
+  type Box = { p: string; t: string; i?: string; x: number; y: number; w: number; h: number };
+
+  async function box(html: string): Promise<Box> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0;font-size:0;line-height:0}</style></head><body>${html}</body></html>`,
+      width: 1000,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out.find((x) => x.i === "w")!;
+  }
+  const S = (vb: string) => `<svg viewBox="${vb}"><rect width="100" height="60" fill="#69c"/></svg>`;
+  const inner = (extra = "") =>
+    `<div id="w" style="display:grid;grid-template-columns:min-content min-content 1fr;gap:8px;padding:8px;${extra}">${S("0 0 100 60")}${S("0 0 100 20")}${S("0 0 100 60")}</div>`;
+
+  it("a centered shrink-to-fit item contributes its fit-width height", async () => {
+    const b = await box(`<div style="display:grid;grid-template-columns:1fr;justify-items:center;width:200px">${inner()}</div>`);
+    expect(b.w).toBeCloseTo(32, 0);
+    expect(b.h).toBeCloseTo(16, 0);
+  });
+
+  it("a start-aligned item does the same", async () => {
+    const b = await box(`<div style="display:grid;grid-template-columns:1fr;justify-items:start;width:200px">${inner()}</div>`);
+    expect(b.h).toBeCloseTo(16, 0);
+  });
+
+  it("at a definite width the wide height stands", async () => {
+    const b = await box(inner("width:200px"));
+    expect(b.w).toBeCloseTo(216, 0);
+    expect(b.h).toBeCloseTo(126.4, 0);
+  });
+
+  it("a stretched item still measures at the area width", async () => {
+    const b = await box(`<div style="display:grid;grid-template-columns:1fr;justify-items:stretch;width:200px">${inner()}</div>`);
+    expect(b.h).toBeCloseTo(116.8, 0);
+  });
+});
