@@ -7862,3 +7862,56 @@ describe("P0-44: fit-content tracks contribute their floor under a min-content c
     expect((await box(html)).w).toBeCloseTo(140, 0);
   });
 });
+
+// P0-45: a block's min-width clamp was applied to its measured width
+// only AFTER its content had been laid out, so a measure (a grid row
+// sizing to the item, say) kept the height of the unclamped layout:
+// width:10% + min-width:40px in a 50px track laid its percentage-sized
+// child out at the 5px width and measured 92.1 tall where the final
+// layout at the clamped 40px is 105 (fuzz replaced seed 6's row came
+// out 12.9px short). The clamp now bounds the measure itself, for
+// length-typed and percentage-typed resolved widths alike.
+describe("P0-45: min-width bounds a block measure before its content is laid out", () => {
+  type Box = { p: string; t: string; i?: string; x: number; y: number; w: number; h: number };
+
+  async function box(html: string): Promise<Box> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0;font-size:0;line-height:0}</style></head><body>${html}</body></html>`,
+      width: 1000,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out.find((x) => x.i === "w")!;
+  }
+  const uri = (attrs: string) =>
+    `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" ${attrs}><rect width="100%" height="100%" fill="#69c"/></svg>`)}`;
+  const kids = `<img src="${uri('width="80" height="90" viewBox="0 0 80 90"')}"><svg viewBox="0 0 40 60" style="width:25%"><rect width="40" height="60" fill="#69c"/></svg>`;
+  const grid = (item: string) =>
+    `<div id="w" style="display:grid;grid-template-columns:50px;width:200px">${item}</div>`;
+
+  it("a percentage width below min-width measures its content at the clamped width", async () => {
+    // img line 90 + svg at 25% of 40 = 10 wide -> 15 tall + margins 16
+    const b = await box(grid(`<div style="width:10%;min-width:40px;margin:8px">${kids}</div>`));
+    expect(b.h).toBeCloseTo(121, 0);
+  });
+
+  it("a length width below min-width does the same", async () => {
+    const b = await box(grid(`<div style="width:5px;min-width:40px;margin:8px">${kids}</div>`));
+    expect(b.h).toBeCloseTo(121, 0);
+  });
+
+  it("without min-width the percentage width stands as resolved", async () => {
+    // svg at 25% of 5 = 1.25 wide -> 1.9 tall: 90 + 1.9 + margins 16
+    const b = await box(grid(`<div style="width:10%;margin:8px">${kids}</div>`));
+    expect(b.h).toBeCloseTo(107.9, 0);
+  });
+
+  it("content without percentage sizes is unaffected by the clamp", async () => {
+    const b = await box(
+      grid(`<div style="width:10%;min-width:40px;margin:8px"><img src="${uri('width="80" height="90" viewBox="0 0 80 90"')}"></div>`));
+    expect(b.h).toBeCloseTo(106, 0);
+  });
+});
