@@ -477,6 +477,23 @@ export async function measureChrome(
     // Web fonts load after "load"; measuring before they apply makes the numbers vary run to run.
     await page.waitForLoadState("networkidle").catch(() => {});
     await page.evaluate("document.fonts.ready.then(() => true)");
+    // Lazy images below the fold may still be unloaded at this point. A fullPage
+    // screenshot usually triggers them, but whether they have painted by capture
+    // time races (observed on tailwind's showcase gallery: +-1.3pt of pixels
+    // flipping between runs, concentrated in the gallery bands). Force them
+    // eager, wait for them to complete, and decode them before measuring.
+    await page.evaluate(`(async () => {
+      for (const img of document.querySelectorAll("img")) {
+        if (img.loading === "lazy") img.loading = "eager";
+      }
+      const settled = (p) => Promise.race([p, new Promise((r) => setTimeout(r, 15000))]);
+      await settled(Promise.all(Array.from(document.images).map((i) =>
+        i.complete ? null : new Promise((r) => {
+          i.addEventListener("load", r, { once: true });
+          i.addEventListener("error", r, { once: true });
+        }))));
+      await settled(Promise.all(Array.from(document.images).map((i) => i.decode().catch(() => {}))));
+    })()`);
     const boxes = (await page.evaluate(GEOMETRY_SOURCE)) as LayoutBox[];
     // scrollHeight is floored at the viewport height, so a short page would look taller than it is:
     // beyond the viewport it is the content height, below it the root element's own height.
