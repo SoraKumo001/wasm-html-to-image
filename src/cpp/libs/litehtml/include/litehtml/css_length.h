@@ -30,6 +30,7 @@ namespace litehtml
 		float		m_px;
 		float		m_percent;
 		float		m_rem;
+		float		m_em;
 		bool		m_is_calc;
 
 	public:
@@ -61,18 +62,24 @@ namespace litehtml
 		float		val() const;
 		css_units	units() const;
 		pixel_t		calc_percent(pixel_t width) const;
+		pixel_t		calc_percent(pixel_t width, pixel_t em_base, pixel_t rem_base) const;
+		// Fold a calc()'s font-relative components (em, rem) into its px
+		// component once the owning element's font sizes are known, so the
+		// context-free calc_percent() below evaluates the length correctly.
+		void		resolve_font_units(pixel_t em_base, pixel_t rem_base);
 		bool		from_token(const css_token& token, int options, const string& predefined_keywords = "");
 		string		to_string() const;
 
 		static void set_viewport(float width, float height);
-		void        set_calc(float px, float percent, float rem) { m_px = px; m_percent = percent; m_rem = rem; m_is_calc = true; m_is_predefined = false; m_op = op_none; m_operands.clear(); }
-		void        set_math(math_op op, std::vector<css_length>&& operands) { m_px = 0; m_percent = 0; m_rem = 0; m_op = op; m_operands = std::move(operands); m_is_calc = true; m_is_predefined = false; }
+		void        set_calc(float px, float percent, float rem, float em = 0) { m_px = px; m_percent = percent; m_rem = rem; m_em = em; m_is_calc = true; m_is_predefined = false; m_op = op_none; m_operands.clear(); }
+		void        set_math(math_op op, std::vector<css_length>&& operands) { m_px = 0; m_percent = 0; m_rem = 0; m_em = 0; m_op = op; m_operands = std::move(operands); m_is_calc = true; m_is_predefined = false; }
 		bool        is_calc() const { return m_is_calc; }
 		math_op     get_op() const { return m_op; }
 		const std::vector<css_length>& get_operands() const { return m_operands; }
 		float       calc_px() const { return m_px; }
 		float       calc_percent() const { return m_percent; }
 		float       calc_rem() const { return m_rem; }
+		float       calc_em() const { return m_em; }
 	};
 
 	using length_vector = vector<css_length>;
@@ -88,6 +95,7 @@ namespace litehtml
 		m_px            = 0;
 		m_percent       = 0;
 		m_rem           = 0;
+		m_em            = 0;
 		m_is_calc       = false;
 		m_op            = op_none;
 	}
@@ -100,6 +108,7 @@ namespace litehtml
 		m_px            = 0;
 		m_percent       = 0;
 		m_rem           = 0;
+		m_em            = 0;
 		m_is_calc       = false;
 		m_op            = op_none;
 	}
@@ -112,6 +121,7 @@ namespace litehtml
 		m_px            = 0;
 		m_percent       = 0;
 		m_rem           = 0;
+		m_em            = 0;
 		m_is_calc       = false;
 		m_op            = op_none;
 		m_operands.clear();
@@ -161,47 +171,60 @@ namespace litehtml
 
 	inline pixel_t css_length::calc_percent(pixel_t width) const
 	{
+		// Context-free fallback (media queries and other element-less
+		// evaluations): font-relative components use the initial 16px.
+		// Element lengths pass through document::cvt_units first, which
+		// folds em/rem at the element's own sizes, so this fallback is
+		// not what layout normally sees.
+		return calc_percent(width, 16, 16);
+	}
+
+	inline pixel_t css_length::calc_percent(pixel_t width, pixel_t em_base, pixel_t rem_base) const
+	{
 		if(!is_predefined())
 		{
 			if (m_is_calc)
 			{
 				if (m_op == op_none)
 				{
-					return (pixel_t)(m_px + (width * m_percent / 100.0) + (m_rem * 16.0)); // Temporary 16.0 for rem
+					return (pixel_t)(m_px + (width * m_percent / 100.0) + (m_rem * rem_base) + (m_em * em_base));
 				}
 				else if (m_op == op_min && !m_operands.empty())
 				{
-					pixel_t res = m_operands[0].calc_percent(width);
+					pixel_t res = m_operands[0].calc_percent(width, em_base, rem_base);
 					for (size_t i = 1; i < m_operands.size(); i++)
 					{
-						res = std::min(res, m_operands[i].calc_percent(width));
+						res = std::min(res, m_operands[i].calc_percent(width, em_base, rem_base));
 					}
 					return res;
 				}
 				else if (m_op == op_max && !m_operands.empty())
 				{
-					pixel_t res = m_operands[0].calc_percent(width);
+					pixel_t res = m_operands[0].calc_percent(width, em_base, rem_base);
 					for (size_t i = 1; i < m_operands.size(); i++)
 					{
-						res = std::max(res, m_operands[i].calc_percent(width));
+						res = std::max(res, m_operands[i].calc_percent(width, em_base, rem_base));
 					}
 					return res;
 				}
 				else if (m_op == op_clamp && m_operands.size() >= 3)
 				{
-					pixel_t min_v = m_operands[0].calc_percent(width);
-					pixel_t val = m_operands[1].calc_percent(width);
-					pixel_t max_v = m_operands[2].calc_percent(width);
+					pixel_t min_v = m_operands[0].calc_percent(width, em_base, rem_base);
+					pixel_t val = m_operands[1].calc_percent(width, em_base, rem_base);
+					pixel_t max_v = m_operands[2].calc_percent(width, em_base, rem_base);
 					return std::max(min_v, std::min(val, max_v));
 				}
-				return (pixel_t)(m_px + (width * m_percent / 100.0) + (m_rem * 16.0));
+				return (pixel_t)(m_px + (width * m_percent / 100.0) + (m_rem * rem_base) + (m_em * em_base));
 			}
 			if(units() == css_units_percentage)
 			{
 				return (pixel_t) (width * m_value / 100.0);
 			} else if (units() == css_units_rem)
 			{
-				return (pixel_t) (m_value * 16.0); // Simple fallback for now
+				return (pixel_t) (m_value * rem_base);
+			} else if (units() == css_units_em)
+			{
+				return (pixel_t) (m_value * em_base);
 			} else
 			{
 				return (pixel_t) val();
@@ -209,6 +232,37 @@ namespace litehtml
 		}
 		return 0;
 	}
-}
+
+	inline void css_length::resolve_font_units(pixel_t em_base, pixel_t rem_base)
+	{
+		if (!m_is_calc) return;
+		if (m_op == op_none)
+		{
+			m_px += (float)(m_em * em_base + m_rem * rem_base);
+			m_em = 0;
+			m_rem = 0;
+		} else
+		{
+			for (auto& op : m_operands)
+			{
+				if (op.is_calc())
+				{
+					op.resolve_font_units(em_base, rem_base);
+				} else if (op.units() == css_units_em)
+				{
+					// A plain em operand of min()/max()/clamp(): unlike a
+					// top-level length it is not converted by cvt_units on
+					// its own, and the math evaluation would otherwise use
+					// the context-free fallback size.
+					op.set_value(op.val() * (float)em_base, css_units_px);
+				} else if (op.units() == css_units_rem)
+				{
+					op.set_value(op.val() * (float)rem_base, css_units_px);
+				}
+			}
+		}
+	}
+
+} // namespace litehtml
 
 #endif  // LH_CSS_LENGTH_H

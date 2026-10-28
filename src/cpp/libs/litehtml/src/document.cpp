@@ -1032,7 +1032,15 @@ pixel_t document::to_pixels( const css_length& val, const font_metrics& metrics,
 	}
 	if (val.is_calc())
 	{
-		return val.calc_percent(size);
+		// calc() keeps its em/rem components symbolic; they resolve against
+		// the font metrics the caller supplies (the owning element's size,
+		// the parent's for font-size itself) and the root font size.
+		pixel_t rem_base = metrics.font_size;
+		if (m_root && m_root->css().get_font_size() > 0)
+		{
+			rem_base = m_root->css().get_font_size();
+		}
+		return val.calc_percent(size, (pixel_t)metrics.font_size, rem_base);
 	}
 	pixel_t ret;
 	switch(val.units())
@@ -1098,6 +1106,15 @@ void document::cvt_units( css_length& val, const font_metrics& metrics, pixel_t 
 	{
 		return;
 	}
+	if(val.is_calc())
+	{
+		pixel_t rem_base = metrics.font_size;
+		if (m_root && m_root->css().get_font_size() > 0)
+		{
+			rem_base = m_root->css().get_font_size();
+		}
+		val.resolve_font_units((pixel_t)metrics.font_size, rem_base);
+	}
 	if(val.units() != css_units_percentage && val.units() != css_units_fr)
 	{
 		val.set_value((float)to_pixels(val, metrics, size), css_units_px);
@@ -1109,6 +1126,15 @@ void document::cvt_units( css_length& val, const font_metrics& metrics, pixel_t 
 	if(val.is_predefined())
 	{
 		return;
+	}
+	if(val.is_calc())
+	{
+		pixel_t rem_base = metrics.font_size;
+		if (m_root && m_root->css().get_font_size() > 0)
+		{
+			rem_base = m_root->css().get_font_size();
+		}
+		val.resolve_font_units((pixel_t)metrics.font_size, rem_base);
 	}
 	if(val.units() == css_units_percentage)
 	{

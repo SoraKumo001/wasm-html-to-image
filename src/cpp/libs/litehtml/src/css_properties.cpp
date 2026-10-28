@@ -975,6 +975,12 @@ void litehtml::css_properties::compute(const element* el, const document::ptr& d
         el->get_property<css_length>(_line_height_, true, normal, offset(m_line_height.css_value));
     if (m_line_height.css_value.is_predefined()) {
         m_line_height.computed_value = (pixel_t)(m_font_metrics.height);
+    } else if (m_line_height.css_value.is_calc()) {
+        // A calc() length carries css_units_none, so without this branch it
+        // fell into the unitless-number case below and computed to 0.
+        m_line_height.computed_value =
+            doc->to_pixels(m_line_height.css_value, m_font_metrics, m_font_metrics.font_size);
+        m_line_height.css_value = (float)m_line_height.computed_value;
     } else if (m_line_height.css_value.units() == css_units_none) {
         m_line_height.computed_value = (pixel_t)(m_line_height.css_value.val() * font_size);
     } else {
