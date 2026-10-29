@@ -895,8 +895,12 @@ void litehtml::render_item::render_positioned(render_type rt) {
             }
             el->m_pos.x = left + el->content_offset_left() + cb_origin_x;
             // (a zero-width box matches by accident when nothing was laid out inside it: measure it)
+            // A percentage width needs the render too: the box may already carry the solved
+            // width from the static-position place in its parent's block layout, but its
+            // children were laid out there against the measured (shrink) width, not against
+            // the solved one -- the equal own width must not suppress the re-render.
             if (el->m_pos.width != width - el->content_offset_width() || el->m_pos.width == 0 ||
-                el_width.is_predefined()) {
+                el_width.is_predefined() || el_width.units() == css_units_percentage) {
                 el->m_pos.width = width - el->content_offset_width();
                 need_render = true;
             }
