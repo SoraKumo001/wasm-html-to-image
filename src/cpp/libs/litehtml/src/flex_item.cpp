@@ -671,6 +671,15 @@ void litehtml::flex_item_column_direction::direction_specific_init(const litehtm
 	self_size.width = self_size.render_width;
 	self_size.height = self_size.render_height;
 
+	// The container height is indefinite for percentage resolution not only when it is
+	// auto-typed: a height that was itself resolved from content in an auto-height
+	// ancestor arrives as a plain number but stays cyclic (a column flex item in an
+	// auto-height column container). The container's own height property staying auto
+	// is the discriminator -- a container with a definite height of its own resolves
+	// percentages against it even under a cyclic ancestor.
+	const bool container_height_indefinite =
+		self_size.render_height.type == containing_block_context::cbc_value_type_auto ||
+		(self_size.height_cyclic && el->parent() && el->parent()->css().get_height().is_predefined());
     // Map logical margins to auto_margin flags (Main = Block, Cross = Inline)
     const auto& margins = el->css().get_margins();
     if(m_container_wm.block_start(margins).is_predefined()) auto_margin_main_start = 0;
@@ -922,7 +931,7 @@ void litehtml::flex_item_column_direction::direction_specific_init(const litehtm
 				if (content_main < min_main_size) min_main_size = content_main;
 			}
 			else if (!m_container_wm.is_vertical() && size_prop.units() == css_units_percentage &&
-					 self_size.render_height.type != containing_block_context::cbc_value_type_auto)
+					 !container_height_indefinite)
 			{
 				// A percentage against a definite container height is a specified size suggestion too.
 				pixel_t specified = size_prop.calc_percent(parent_size) + render_offset - el->box_sizing_block(m_container_wm);
@@ -961,7 +970,7 @@ void litehtml::flex_item_column_direction::direction_specific_init(const litehtm
 	// behaves as content.
 	if (!flex_basis_predefined && !m_container_wm.is_vertical() &&
 		el->css().get_flex_basis().units() == css_units_percentage &&
-		self_size.render_height.type == containing_block_context::cbc_value_type_auto)
+		container_height_indefinite)
 	{
 		flex_basis_predefined = true;
 		predef = flex_basis_fit_content;
@@ -973,7 +982,7 @@ void litehtml::flex_item_column_direction::direction_specific_init(const litehtm
 		// A percentage block size against an indefinite container height behaves as auto.
 		if(predef == flex_basis_auto && !m_container_wm.is_vertical() &&
 		   size_prop.units() == css_units_percentage &&
-		   self_size.render_height.type == containing_block_context::cbc_value_type_auto)
+		   container_height_indefinite)
 		{
 			predef = flex_basis_fit_content;
 		}
@@ -1104,7 +1113,9 @@ void litehtml::flex_item_column_direction::layout_item(litehtml::flex_line &ln,
         child_cb.inline_size() = ln.cross_size - el->content_offset_inline(m_container_wm) + el->box_sizing_inline(m_container_wm);
         child_cb.render_inline_size() = child_cb.inline_size();
 		child_cb.size_mode = containing_block_context::size_mode_exact_width | containing_block_context::size_mode_exact_height;
-		if (!m_container_wm.is_vertical() && self_size_const.height.type == containing_block_context::cbc_value_type_auto)
+		if (!m_container_wm.is_vertical() &&
+			(self_size_const.height.type == containing_block_context::cbc_value_type_auto || self_size_const.height_cyclic) &&
+			el->css().get_height().is_predefined())
 			child_cb.size_mode |= containing_block_context::size_mode_cyclic_height;
 	} else {
         child_cb.width.type = containing_block_context::cbc_value_type_auto;
@@ -1122,7 +1133,8 @@ void litehtml::flex_item_column_direction::layout_item(litehtml::flex_line &ln,
             child_cb.render_height = child_cb.height;
 			child_cb.size_mode |= containing_block_context::size_mode_exact_height;
 			// The main size of an item in an auto-height column container is not definite for percentage children.
-			if (self_size_const.height.type == containing_block_context::cbc_value_type_auto)
+			if ((self_size_const.height.type == containing_block_context::cbc_value_type_auto || self_size_const.height_cyclic) &&
+				el->css().get_height().is_predefined())
 				child_cb.size_mode |= containing_block_context::size_mode_cyclic_height;
 		}
 		if (cross_prop.is_predefined())
@@ -1205,7 +1217,8 @@ void litehtml::flex_item_column_direction::align_stretch(flex_line &ln, const co
         cb.size_mode = containing_block_context::size_mode_exact_width | containing_block_context::size_mode_exact_height;
         // A stretched item is a definite size for its percentage children only when the container's
         // own height is definite (mirrors the row direction's align_stretch).
-        if (self_size_const.height.type == containing_block_context::cbc_value_type_auto)
+        if ((self_size_const.height.type == containing_block_context::cbc_value_type_auto || self_size_const.height_cyclic) &&
+            el->css().get_height().is_predefined())
             cb.size_mode |= containing_block_context::size_mode_cyclic_height;
 
 		if (self_size.size_mode & containing_block_context::size_mode_measure)
