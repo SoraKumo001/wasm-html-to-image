@@ -8474,3 +8474,38 @@ describe("P0-53 scrollbar-gutter stable both-edges insets the scrollport on both
     expect(Math.round(c.w)).toBe(970);
   });
 });
+
+describe("P0-54 a line-height on the select does not change the control's geometry", () => {
+  const page = (body: string) => ({
+    value: `<!doctype html><html><head><style>html,body{margin:0}</style></head><body>${body}</body></html>`,
+    width: 1000,
+    format: "png" as const,
+  });
+  const box = (layout: any[], id: string) => layout.find((b: any) => b.i === id);
+  const render1 = async (body: string) => {
+    let layout: any[] = [];
+    await render({ ...page(body), onLayout: (l: any) => (layout = l) } as never);
+    return box(layout, "c");
+  };
+  const OPTS = `<option>Alpha</option><option>Beta</option><option>Gamma</option>`;
+
+  it("dropdown with line-height:30px keeps the font-driven height", async () => {
+    const c = await render1(`<select id="c" style="line-height:30px">${OPTS}</select>`);
+    expect(Math.round(c.h)).toBe(19);
+  });
+
+  it("dropdown with line-height:2 keeps the font-driven height", async () => {
+    const c = await render1(`<select id="c" style="line-height:2">${OPTS}</select>`);
+    expect(Math.round(c.h)).toBe(19);
+  });
+
+  it("list box with an author line-height keeps its pinned height", async () => {
+    const c = await render1(`<select id="c" size="3" style="line-height:30px">${OPTS}</select>`);
+    expect(Math.round(c.h)).toBe(53);
+  });
+
+  it("list box with only an author line-height in the style attribute keeps its pinned height", async () => {
+    const c = await render1(`<select id="c" size="3" style="line-height:1.3em">${OPTS}</select>`);
+    expect(Math.round(c.h)).toBe(53);
+  });
+});
