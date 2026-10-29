@@ -8982,3 +8982,60 @@ describe("P0-59 lh / rlh units resolve against computed line-heights", () => {
     expect(hOf(layout, "t")).toBeCloseTo(32, 0);
   });
 });
+
+describe("P0-60 definite minmax tracks size intrinsically by the query kind", () => {
+  const render1 = async (body: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 1000,
+      format: "png" as const,
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    return layout;
+  };
+  const wOf = (layout: any[], id: string) => layout.find((b: any) => b.i === id)!.w;
+  const svg = (w: number, h: number) =>
+    `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='${w}' height='${h}' viewBox='0 0 ${w} ${h}'%3E%3C/svg%3E`;
+
+  it("a min-content grid keeps a minmax(0,100px) track at its minimum", async () => {
+    const layout = await render1(
+      `<div id="g" style="display:grid;grid-template-columns:minmax(0px,100px);width:min-content"><img src="${svg(40, 30)}"></div>`,
+    );
+    expect(wOf(layout, "g")).toBeCloseTo(0, 0);
+  });
+
+  it("a max-content grid puts a minmax(0,100px) track at its maximum", async () => {
+    const layout = await render1(
+      `<div id="g" style="display:grid;grid-template-columns:minmax(0px,100px);width:max-content"><img src="${svg(40, 30)}"></div>`,
+    );
+    expect(wOf(layout, "g")).toBeCloseTo(100, 0);
+  });
+
+  it("a fit-content grid also uses the maximum", async () => {
+    const layout = await render1(
+      `<div id="g" style="display:grid;grid-template-columns:minmax(0px,100px);width:fit-content"><img src="${svg(200, 30)}"></div>`,
+    );
+    expect(wOf(layout, "g")).toBeCloseTo(100, 0);
+  });
+
+  it("minmax(50px,100px): min-content uses 50, max-content uses 100", async () => {
+    const minc = await render1(
+      `<div id="g" style="display:grid;grid-template-columns:minmax(50px,100px);width:min-content"><img src="${svg(40, 30)}"></div>`,
+    );
+    expect(wOf(minc, "g")).toBeCloseTo(50, 0);
+    const maxc = await render1(
+      `<div id="g" style="display:grid;grid-template-columns:minmax(50px,100px);width:max-content"><img src="${svg(40, 30)}"></div>`,
+    );
+    expect(wOf(maxc, "g")).toBeCloseTo(100, 0);
+  });
+
+  it("seed 8 shape: a min-content grid next to a max-content track stays 88", async () => {
+    const layout = await render1(
+      `<div id="g" style="display:grid;grid-template-columns:max-content minmax(0px, 100px);gap:4px;height:200px;padding:2px;width:min-content">` +
+        `<img src="${svg(80, 50)}"><img style="width:100%" src="${svg(40, 30)}">` +
+        `<img style="width:60px" src="${svg(300, 90)}"><svg viewBox="0 0 100 60"><rect width="100" height="60"/></svg></div>`,
+    );
+    expect(wOf(layout, "g")).toBeCloseTo(88, 0);
+  });
+});
