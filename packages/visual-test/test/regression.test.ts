@@ -8856,3 +8856,42 @@ describe("P0-56 flexible grid rows resolve against the container, floored by con
     expect(hOf(layout, "j")).toBeCloseTo(100, 0);
   });
 });
+
+describe("P0-57 container queries compare against the content box, once", () => {
+  const render1 = async (body: string, style: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0;font-size:0;line-height:0}${style}</style></head><body>${body}</body></html>`,
+      width: 1000,
+      format: "png" as const,
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    return layout;
+  };
+  const box = (layout: any[], id: string) => layout.find((b: any) => b.i === id)!;
+  // #h is a column flex; the query switches it to row, dropping its height 102 -> 72.
+  const page = (w: number, extra = "") =>
+    `<div id="c" style="container-type:inline-size;width:${w}px;padding:8px;${extra}"><div id="h"><div style="width:112px;height:72px"></div><div style="height:30px"></div></div></div>`;
+  const minStyle = `#h{display:flex;flex-direction:column}@container (min-width: 448px){#h{flex-direction:row}}`;
+
+  it("a container with 448px of content matches (min-width: 448px)", async () => {
+    const layout = await render1(page(448), minStyle);
+    expect(box(layout, "h").h).toBeCloseTo(72, 0);
+  });
+
+  it("a container with 430px of content does not match", async () => {
+    const layout = await render1(page(430), minStyle);
+    expect(box(layout, "h").h).toBeCloseTo(102, 0);
+  });
+
+  it("borders do not shrink the queried size either", async () => {
+    const layout = await render1(page(448, "border:4px solid black"), minStyle);
+    expect(box(layout, "h").h).toBeCloseTo(72, 0);
+  });
+
+  it("(max-width: 448px) matches at exactly 448 and not above", async () => {
+    const maxStyle = `#h{display:flex;flex-direction:column}@container (max-width: 448px){#h{flex-direction:row}}`;
+    expect(box(await render1(page(448), maxStyle), "h").h).toBeCloseTo(72, 0);
+    expect(box(await render1(page(500), maxStyle), "h").h).toBeCloseTo(102, 0);
+  });
+});
