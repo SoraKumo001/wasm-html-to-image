@@ -9500,3 +9500,36 @@ describe("P0-74 margins collapse through a block whose only content is a float",
     expect(Math.round(boxes.find((b: any) => b.i === "p").h)).toBe(24);
   });
 });
+
+describe("P0-75 a margined float joining a run's line still displaces the line's content", () => {
+  const page = async (body: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    return layout;
+  };
+  const IB = `<div id="ib" style="display:inline-block;width:20px;height:80px"></div>`;
+  const FL = `<div id="fl" style="float:left;width:20px;margin:2px;height:30px"></div>`;
+  const BK = `<div style="min-width:40px;min-height:30px;padding:4px"></div>`;
+  it("with a block after the float, the inline-block moves right of the float", async () => {
+    const boxes = await page(`<div style="width:48px">${IB}${FL}${BK}</div>`);
+    expect(Math.round(boxes.find((b: any) => b.i === "ib").x)).toBe(24);
+    expect(Math.round(boxes.find((b: any) => b.i === "fl").x)).toBe(2);
+  });
+  it("without the trailing block the result is the same (control)", async () => {
+    const boxes = await page(`<div style="width:48px">${IB}${FL}</div>`);
+    expect(Math.round(boxes.find((b: any) => b.i === "ib").x)).toBe(24);
+  });
+  it("inside a floated fit-content box with nested inline-blocks", async () => {
+    const boxes = await page(
+      `<div id="c" style="float:left;width:fit-content;padding:8px;margin:2px">` +
+      `<div id="ib" style="display:inline-block;max-width:250px"><div style="display:inline-block;width:20px;height:80px"><div style="min-width:40px;min-height:10px;padding:12px"></div><div style="min-width:10px;min-height:30px"></div></div></div>` +
+      `<div id="fl" style="float:left;width:20px;margin:2px"><div style="min-width:40px;min-height:30px"></div><div style="height:12px"></div></div>${BK}</div>`);
+    const c = boxes.find((b: any) => b.i === "c");
+    expect(Math.round(boxes.find((b: any) => b.i === "ib").x - c.x)).toBe(32);
+  });
+});
