@@ -1494,6 +1494,12 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                 cb.size_mode |= containing_block_context::size_mode_content;
                 // a min-content track takes its items' min-content contribution
                 if (kinds[c] == 2) cb.size_mode |= containing_block_context::size_mode_min_content;
+                // a max-content track takes its items' max-content contribution even when the grid
+                // itself is measured under a min-content constraint: the bit inherited from the
+                // grid's own query would shrink the items to their minima (a percentage-width
+                // image contributes 0), and the track -- and every shrink-to-fit ancestor sized
+                // from the grid's min-content -- comes out one contribution too narrow.
+                if (kinds[c] == 3) cb.size_mode &= ~containing_block_context::size_mode_min_content;
                 // a max-content track is the item's width with no line broken, however narrow the grid is
                 if (kinds[c] == 3 && !vert)
                 {
