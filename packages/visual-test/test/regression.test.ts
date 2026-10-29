@@ -9039,3 +9039,56 @@ describe("P0-60 definite minmax tracks size intrinsically by the query kind", ()
     expect(wOf(layout, "g")).toBeCloseTo(88, 0);
   });
 });
+
+describe("P0-61 a float after inline content joins or drops below its line", () => {
+  const render1 = async (body: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 1000,
+      format: "png" as const,
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    return layout;
+  };
+  const IMG = `<img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='30' viewBox='0 0 40 30'%3E%3C/svg%3E">`;
+  const FL = (id: string) => `<div id="${id}" style="float:left;width:80px;height:60px"></div>`;
+
+  it("a block-level float joining the previous run's line displaces its content", async () => {
+    const layout = await render1(
+      `<div style="width:120px"><div style="height:10px"></div>${IMG}${FL("fl")}</div>`,
+    );
+    const img = layout.find((b: any) => b.t === "img")!;
+    expect(img.x).toBeCloseTo(80, 0);
+    expect(img.y).toBeCloseTo(10, 0);
+  });
+
+  it("the second of two runs is displaced, the first is not", async () => {
+    const layout = await render1(
+      `<div style="width:120px">${IMG}<div style="height:10px"></div>${IMG}${FL("fl")}</div>`,
+    );
+    const imgs = layout.filter((b: any) => b.t === "img");
+    expect(imgs[0].x).toBeCloseTo(0, 0);
+    expect(imgs[1].x).toBeCloseTo(80, 0);
+  });
+
+  it("a shrink-to-fit container counts a run and its following float side by side", async () => {
+    const layout = await render1(
+      `<div id="ct" style="float:left;padding:12px"><div style="height:10px"></div>${IMG}${FL("fl")}</div>`,
+    );
+    const ct = layout.find((b: any) => b.i === "ct")!;
+    expect(ct.w).toBeCloseTo(144, 0);
+    const img = layout.find((b: any) => b.t === "img")!;
+    expect(img.x).toBeCloseTo(92, 0);
+  });
+
+  it("a mid-line float that does not fit beside the content drops below the line", async () => {
+    const layout = await render1(
+      `<div style="width:120px"><div style="display:inline-block;width:30px;height:10px"></div>${IMG}${FL("fl")}</div>`,
+    );
+    const img = layout.find((b: any) => b.t === "img")!;
+    expect(img.x).toBeCloseTo(30, 0);
+    const fl = layout.find((b: any) => b.i === "fl")!;
+    expect(fl.y).toBeCloseTo(30, 0);
+  });
+});
