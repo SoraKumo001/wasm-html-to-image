@@ -9472,3 +9472,31 @@ describe("P0-73 floats sharing a line sum into intrinsic width; re-layout drops 
     expect(Math.round(boxes.find((b: any) => b.i === "d2").w)).toBe(148);
   });
 });
+
+describe("P0-74 margins collapse through a block whose only content is a float", () => {
+  const page = async (body: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    return layout;
+  };
+  const A = `<div style="height:24px;margin:12px"></div>`;
+  const FL = `<div style="float:right"><div style="width:50px;height:40px"></div><div style="min-width:10px;min-height:30px"></div></div>`;
+  const FL2 = `<div style="float:left"><div style="height:36px;margin:8px"></div><div style="display:inline-block;height:fit-content"><div style="min-width:40px;min-height:30px"></div></div></div>`;
+  it("the trailing margin leaves through the float-only block and out of the parent", async () => {
+    const boxes = await page(`<div id="p" style="width:200px">${A}<div>${FL}</div>${FL2}</div>`);
+    expect(Math.round(boxes.find((b: any) => b.i === "p").h)).toBe(24);
+  });
+  it("the same without the trailing float", async () => {
+    const boxes = await page(`<div id="p" style="width:200px">${A}<div>${FL}</div></div>`);
+    expect(Math.round(boxes.find((b: any) => b.i === "p").h)).toBe(24);
+  });
+  it("an actually empty block behaves the same (control)", async () => {
+    const boxes = await page(`<div id="p" style="width:200px">${A}<div></div>${FL2}</div>`);
+    expect(Math.round(boxes.find((b: any) => b.i === "p").h)).toBe(24);
+  });
+});
