@@ -2096,6 +2096,10 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         }
     }
 
+    m_grid_layout.row_definite.assign(num_rows, 0);
+    for (int i = 0; i < num_rows; i++)
+        m_grid_layout.row_definite[i] = row_kinds[i] == 0;
+
     // Flexible rows are resolved after the measure pass (below): a plain fr row's
     // automatic minimum is its items' content floor, which is only known by then.
 
@@ -2496,6 +2500,21 @@ void litehtml::render_item_grid::place_grid_items(pixel_t x, pixel_t y, const co
         cb.width = cb.render_width;
         cb.render_height = cell_h - item.el->content_offset_height() + item.el->box_sizing_height();
         cb.height = cb.render_height;
+        // The item's percentage basis is its grid area, not the grid container: when every
+        // spanned row is a fixed track, the area height is definite even when the
+        // container's own height is cyclic (content-derived), so the inherited cyclic flag
+        // must not make the item's percentage height behave as auto.
+        if (!vert && !m_grid_layout.row_definite.empty())
+        {
+            bool span_definite = true;
+            for (int i = item.pos.row_start; i < item.pos.row_end && i < num_rows; i++)
+                if (!m_grid_layout.row_definite[i]) { span_definite = false; break; }
+            if (span_definite && item.pos.row_end <= num_rows)
+            {
+                cb.height_cyclic = false;
+                cb.size_mode &= ~containing_block_context::size_mode_cyclic_height;
+            }
+        }
         cb.size_mode |= containing_block_context::size_mode_exact_height;
         cb.size_mode |= containing_block_context::size_mode_exact_width;
         if (!vert)
