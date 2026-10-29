@@ -236,6 +236,19 @@ void litehtml::flex_item_row_direction::direction_specific_init(const litehtml::
 		{
 			min_main_size = render_offset;
 			content_size = min_main_size;
+			// The automatic minimum size of a scroll container is 0, but its
+			// min-content contribution is still its min-content size (the same
+			// item as a grid item contributes its content, not zero): measure
+			// it for the contribution below.
+			formatting_context fmt_ctx_copy;
+			if(fmt_ctx) fmt_ctx_copy = *fmt_ctx;
+			containing_block_context::typed_pixel tp_content_offset(content_offset, containing_block_context::cbc_value_type_auto);
+			containing_block_context measure_cb = m_container_wm.update_logical(self_size, tp_content_offset, std::nullopt);
+			measure_cb.size_mode = containing_block_context::size_mode_content |
+								   containing_block_context::size_mode_min_content |
+								   containing_block_context::size_mode_measure;
+			el->measure(measure_cb, fmt_ctx ? &fmt_ctx_copy : nullptr);
+			measured_min_content = get_el_main_size();
 		}
 	} else
 	{
@@ -248,8 +261,6 @@ void litehtml::flex_item_row_direction::direction_specific_init(const litehtml::
 		// narrow in a min-content sense. A definite width still counts in full below, so only
 		// an auto / percentage width needs the measure.
 		if (!m_container_wm.is_vertical() &&
-			(el->css().get_overflow() == overflow_visible ||
-			 el->src_el()->css().get_display() == display_webkit_box) &&
 			(size_prop.is_predefined() || size_prop.units() == css_units_percentage || size_prop.is_calc()))
 		{
 			formatting_context fmt_ctx_copy;
