@@ -550,9 +550,14 @@ void litehtml::flex_item_row_direction::layout_item(litehtml::flex_line &ln,
 			child_cb.size_mode |= containing_block_context::size_mode_content;
 		}
 		else if (!m_container_wm.is_vertical() && cross_prop.units() == css_units_percentage &&
-				 self_size.render_block_size().type != containing_block_context::cbc_value_type_auto)
+				 self_size.render_block_size().type != containing_block_context::cbc_value_type_auto &&
+				 !(self_size.height_cyclic && el->parent() && el->parent()->css().get_height().is_predefined()))
 		{
 			// A percentage height against a definite container height is a definite cross size.
+			// It stays indefinite when the container's height is cyclic AND content-derived
+			// (an auto height the container got from flexing in an auto-height ancestor):
+			// a container with a definite height of its own (height:80px) resolves the
+			// percentage even when the cyclic flag was inherited from further up.
 			// The block size carries the box-sizing offset (as in align_stretch), so it is used as is.
 			pixel_t content = cross_prop.calc_percent(self_size.render_block_size().value);
 			child_cb.block_size() = content;
@@ -1175,6 +1180,10 @@ void litehtml::flex_item_column_direction::align_stretch(flex_line &ln, const co
 
         containing_block_context cb = m_container_wm.update_logical(self_size, tp_is, tp_bs);
         cb.size_mode = containing_block_context::size_mode_exact_width | containing_block_context::size_mode_exact_height;
+        // A stretched item is a definite size for its percentage children only when the container's
+        // own height is definite (mirrors the row direction's align_stretch).
+        if (self_size_const.height.type == containing_block_context::cbc_value_type_auto)
+            cb.size_mode |= containing_block_context::size_mode_cyclic_height;
 
 		if (self_size.size_mode & containing_block_context::size_mode_measure)
 		{
