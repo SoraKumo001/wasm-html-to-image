@@ -128,21 +128,25 @@ container_query_list parse_container_query_list(const css_token_vector& _tokens,
 
 	container_query_list result;
 	
-	// @container <name>? ( <condition> )
+	// @container <name>? <condition>, where the condition may itself start with
+	// `not` (a media-not) -- the form Tailwind v4 compiles every @max-* container
+	// variant to: `@container not (min-width: 64rem)`. The leading ident is the
+	// container name only when it is not a query keyword: taking `not` as a name
+	// made every negated query silently never match (no container is named "not").
 	container_query query;
 	int index = 0;
-	if (tokens[index].type == IDENT)
+	if (tokens[index].type == IDENT && !is_one_of(tokens[index].ident(), "not", "only"))
 	{
 		query.m_name = tokens[index].ident();
 		index++;
 	}
-	
-	if (index < (int)tokens.size() && tokens[index].type == ROUND_BLOCK)
+
+	if (index < (int)tokens.size())
 	{
-		// Reuse media query parsing logic for the condition
-		// We need to pass the ROUND_BLOCK token itself in a vector
-		css_token_vector wrapper = { tokens[index] };
-		media_query_list mql = parse_media_query_list(wrapper, doc);
+		// Reuse the media query parser for the whole remainder, so a leading
+		// `not`, `and` chains and range forms behave exactly as in @media.
+		css_token_vector rest(tokens.begin() + index, tokens.end());
+		media_query_list mql = parse_media_query_list(rest, doc);
 		if (!mql.m_queries.empty() && !mql.m_queries[0].m_conditions.empty())
 		{
 			query.m_condition = make_shared<media_condition>(mql.m_queries[0].m_conditions[0]);
