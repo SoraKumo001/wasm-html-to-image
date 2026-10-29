@@ -523,6 +523,22 @@ void document::create_node(void* gnode, elements_list& elements, bool parseTextN
 					if (multiple_attr && !size_attr) display_rows = 4;
 					const bool listbox = multiple_attr != nullptr || display_rows > 1;
 					const char* st = ret->get_attr("style");
+					// Property presence in the author's inline style, matched at a
+					// declaration boundary: a plain substring search for "height"
+					// also matches "line-height" (and "width" matches "max-width"),
+					// which used to suppress the height pin exactly when the author
+					// set a line-height on the select.
+					auto style_has = [](const char* s, const char* prop) -> bool {
+						if (!s) return false;
+						const size_t plen = strlen(prop);
+						for (const char* p = s; *p; p++)
+						{
+							if (p != s && p[-1] != ';') continue;
+							while (*p == ' ' || *p == '\t') p++;
+							if (!strncmp(p, prop, plen) && p[plen] == ':') return true;
+						}
+						return false;
+					};
 					string ns = st ? string(st) + ";" : string();
 					string extra;
 					char buf[128];
@@ -538,19 +554,22 @@ void document::create_node(void* gnode, elements_list& elements, bool parseTextN
 							}
 							ret->appendChild(std::make_shared<el_text>(all.c_str(), shared_from_this()));
 						}
-						if (!st || !strstr(st, "white-space")) extra += "white-space:pre;";
-						if (!st || !strstr(st, "padding")) extra += "padding:0 2px;";
-						if (!st || !strstr(st, "line-height"))
+						if (!style_has(st, "white-space")) extra += "white-space:pre;";
+						if (!style_has(st, "padding")) extra += "padding:0 2px;";
+						// The row line-height is pinned unconditionally: browsers ignore a
+						// line-height set on the select itself for the control's geometry
+						// (the rows keep the font's natural height), so an author value
+						// must not win over the pin.
 						{
 							snprintf(buf, sizeof(buf), "line-height:%.4fem;", row_ratio + 0.15f);
 							extra += buf;
 						}
-						if (!st || !strstr(st, "width"))
+						if (!style_has(st, "width"))
 						{
 							snprintf(buf, sizeof(buf), "width:%.2fem;", widest + 0.45f);
 							extra += buf;
 						}
-						if (!st || !strstr(st, "height"))
+						if (!style_has(st, "height"))
 						{
 							snprintf(buf, sizeof(buf), "height:%.4fem;", (row_ratio + 0.15f) * display_rows + 0.15f);
 							extra += buf;
@@ -559,10 +578,13 @@ void document::create_node(void* gnode, elements_list& elements, bool parseTextN
 					else
 					{
 						if (!label.empty()) ret->appendChild(std::make_shared<el_text>(label.c_str(), shared_from_this()));
-						if (!st || !strstr(st, "width"))
+						// Browsers size the closed control from the font alone; a line-height
+						// set on the select must not inflate the label's line box.
+						extra = "line-height:normal;";
+						if (!style_has(st, "width"))
 						{
-							snprintf(buf, sizeof(buf), "width:%.2fem", widest + 1.7f);
-							extra = buf;
+							snprintf(buf, sizeof(buf), "width:%.2fem;", widest + 1.7f);
+							extra += buf;
 						}
 					}
 					if (!extra.empty()) ret->set_attr("style", (ns + extra).c_str());
