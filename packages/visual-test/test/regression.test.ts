@@ -8329,3 +8329,76 @@ describe("P0-51: ratio-only percentage-width flex item in a shrink-to-fit row fl
     expect(at(out, "c").w).toBeCloseTo(30, 0);
   });
 });
+
+// P0-52: the intrinsic column pass of a grid measured under a min-content
+// constraint handed the grid's own min-content bit down to the items of a
+// max-content track. A max-content track takes its items' MAX-content
+// contribution regardless of the constraint on the grid itself (CSS Grid:
+// the min-content contribution of a max-content track is its max-content
+// size), so a percentage-width image in such a track contributed 0 (the
+// min-content treatment of a cyclic percentage) instead of its intrinsic
+// 40px. The grid's min-content came out one contribution too narrow, and
+// a shrink-to-fit flex ancestor sized from it squeezed the grid and
+// shifted every centered sibling (fuzz replaced seed 8). Min-content,
+// auto and minmax tracks keep the inherited constraint.
+describe("P0-52: max-content tracks contribute max-content under a min-content constraint", () => {
+  type Box = { p: string; t: string; i?: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(html: string): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0;font-size:0;line-height:0}</style></head><body>${html}</body></html>`,
+      width: 1000,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const at = (out: Box[], id: string) => out.find((x) => x.i === id)!;
+  const svgfile = (w: number, h: number) =>
+    `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='${w}' height='${h}' viewBox='0 0 ${w} ${h}'%3E%3Crect width='${w}' height='${h}' fill='%2369c'/%3E%3C/svg%3E`;
+  const I1 = `<img src="${svgfile(80, 50)}">`;
+  const I2 = `<img style="width:100%" src="${svgfile(40, 30)}">`;
+  const I3 = `<img style="width:60px" src="${svgfile(300, 90)}">`;
+  const I4 = `<svg viewBox="0 0 100 60"><rect width="100" height="60" fill="#69c"/></svg>`;
+  const G = (cols: string, wmode: string) =>
+    `<div id="g" style="display:grid;grid-template-columns:${cols};gap:4px;height:200px;padding:2px;width:${wmode}">${I1}${I2}${I3}${I4}</div>`;
+
+  it("a min-content grid with max-content tracks keeps the percentage image's intrinsic width", async () => {
+    const out = await boxes(G("max-content max-content", "min-content"));
+    expect(at(out, "g").w).toBeCloseTo(128, 0);
+  });
+
+  it("the seed shape: the grid as a flex item sizes its fit-content flex parent from 128", async () => {
+    const el =
+      `<div style="width:234px"><div id="f" style="display:flex;justify-content:flex-end;align-items:center;width:fit-content">` +
+      `<div style="width:200px;height:90px;flex:none"></div>` +
+      G("max-content max-content", "auto").replace('id="g" style="', 'id="g" style="margin:4px;') +
+      `</div></div>`;
+    const out = await boxes(el);
+    expect(at(out, "g").w).toBeCloseTo(128, 0);
+    expect(at(out, "f").w).toBeCloseTo(336, 0);
+  });
+
+  it("min-content tracks still take the items' minima", async () => {
+    const out = await boxes(G("min-content min-content", "min-content"));
+    expect(at(out, "g").w).toBeCloseTo(88, 0);
+  });
+
+  it("an auto track next to a max-content track still takes the minimum", async () => {
+    const out = await boxes(G("max-content auto", "min-content"));
+    expect(at(out, "g").w).toBeCloseTo(88, 0);
+  });
+
+  it("a minmax(0, max-content) track is unchanged", async () => {
+    const out = await boxes(G("max-content minmax(0px, max-content)", "min-content"));
+    expect(at(out, "g").w).toBeCloseTo(88, 0);
+  });
+
+  it("without the constraint the max-content size is the same", async () => {
+    const out = await boxes(G("max-content max-content", "max-content"));
+    expect(at(out, "g").w).toBeCloseTo(128, 0);
+  });
+});
