@@ -1315,6 +1315,11 @@ namespace litehtml
                 std::shared_ptr<render_item>    el;
                 int                                                             context;
                 pixel_t                                                 min_width;
+                // The block whose layout pass placed this float, and the order within that
+                // pass: when the pass runs again, re-placing a float invalidates the entries
+                // the previous run placed after it (they belong to the trial geometry).
+                const render_item*              scope = nullptr;
+                unsigned int                    seq = 0;
 
                 floated_box() = default;
                 floated_box(const floated_box& val)
@@ -1325,6 +1330,8 @@ namespace litehtml
                         el = val.el;
                         context = val.context;
                         min_width = val.min_width;
+                        scope = val.scope;
+                        seq = val.seq;
                 }
 
                 floated_box& operator=(const floated_box& val) = default;
@@ -1337,6 +1344,8 @@ namespace litehtml
                         el = std::move(val.el);
                         context = val.context;
                         min_width = val.min_width;
+                        scope = val.scope;
+                        seq = val.seq;
                 }
                 void operator=(floated_box&& val)
                 {
@@ -1346,6 +1355,8 @@ namespace litehtml
                         el = std::move(val.el);
                         context = val.context;
                         min_width = val.min_width;
+                        scope = val.scope;
+                        seq = val.seq;
                 }
         };
 

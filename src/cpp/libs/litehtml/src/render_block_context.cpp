@@ -68,7 +68,9 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
                     // floats after it side by side, not each on its own. The
                     // float_run_width path below only covers floats that come
                     // BEFORE a run.
-                    floats_after_run += rw;
+                    // place_float reports the float's whole line extent (floats sharing
+                    // the line included), so the latest float's value is the total.
+                    floats_after_run = rw;
                     if (last_run_own + floats_after_run > max_inline_size)
                         max_inline_size = last_run_own + floats_after_run;
                 }
@@ -95,7 +97,7 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
                     fmt_ctx->pop_position(run->pos().x, run->pos().y);
                 }
             }
-            if (max_content_sizing && last_run_own < 0) float_run_width += rw;
+            if (max_content_sizing && last_run_own < 0) float_run_width = rw;
             if (rw > max_inline_size)
             {
                 max_inline_size = rw;
