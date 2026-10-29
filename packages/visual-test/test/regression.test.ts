@@ -9618,10 +9618,14 @@ describe("P0-78 a grid item's percentage height resolves against a fixed row und
     expect(Math.round(im.w)).toBe(40);
     expect(Math.round(im.h)).toBe(20);
   });
-  it("content-sized row: the percentage still behaves as auto (guard)", async () => {
+  it("content-sized row: the percentage resolves against the used row height", async () => {
+    // Chrome-verified (cycle 76): at final placement the grid area is a
+    // definite size once the tracks are sized, so height:50% of the 30px
+    // row is 15 -- the earlier guard expectation (auto, 30) enshrined the
+    // pre-fix engine behaviour, not Chrome's.
     const boxes = await page(wrap(
       `<div style="display:grid;grid-template-columns:max-content;grid-auto-rows:auto;gap:16px"><div id="t" style="height:50%"><div style="height:30px"></div></div></div>`));
-    expect(Math.round(boxes.find((b: any) => b.i === "t").h)).toBe(30);
+    expect(Math.round(boxes.find((b: any) => b.i === "t").h)).toBe(15);
   });
 });
 
@@ -9814,5 +9818,22 @@ describe("P0-84 grid contribution of a percentage-height item uses the row heigh
     const im = boxes.find((b: any) => b.i === "im");
     expect(Math.round(t.w)).toBe(116);
     expect(Math.round(im.w)).toBe(112);
+  });
+});
+
+describe("P0-85 a grid item's percentage height resolves at final placement", () => {
+  it("a height:30% item in a content-sized row under a cyclic ancestor takes the row height", async () => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:content-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body><div style="display:flex;flex-direction:column"><div style="width:fit-content;flex:0 1 auto"><div id="g" style="display:grid;grid-template-columns:1fr auto auto;gap:4px;width:200px"><div id="t" style="display:flex;flex-direction:column;flex-wrap:wrap;height:30%;padding:8px;margin:12px"><div style="height:36px;margin:2px"></div><div style="height:36px"></div><div style="width:90px;height:10px;flex:1"></div></div><div style="width:90px;height:10px"></div></div></div></div></body></html>`,
+      width: 800,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    const g = layout.find((b: any) => b.i === "g");
+    const t = layout.find((b: any) => b.i === "t");
+    expect(Math.round(g.h)).toBe(116);
+    // 30% of the 116px row = 34.8 content + 16 padding (content-box)
+    expect(Math.round(t.h)).toBe(51);
   });
 });
