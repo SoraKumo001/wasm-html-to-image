@@ -8895,3 +8895,45 @@ describe("P0-57 container queries compare against the content box, once", () => 
     expect(box(await render1(page(500), maxStyle), "h").h).toBeCloseTo(102, 0);
   });
 });
+
+describe("P0-58 negated container queries (@container not (...))", () => {
+  const render1 = async (body: string, style: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0;font-size:0;line-height:0}${style}</style></head><body>${body}</body></html>`,
+      width: 1400,
+      format: "png" as const,
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    return layout;
+  };
+  const shown = (layout: any[], id: string) => layout.some((b: any) => b.i === id);
+  const page = (w: number, nameDecl = "") =>
+    `<div id="c" style="container-type:inline-size;${nameDecl}width:${w}px"><div style="height:10px"></div><div id="t" style="height:50px"></div></div>`;
+
+  it("not (min-width: 1024px) applies below the threshold", async () => {
+    const layout = await render1(page(920), `@container not (min-width: 1024px){#t{display:none}}`);
+    expect(shown(layout, "t")).toBe(false);
+  });
+
+  it("not (min-width: 1024px) does not apply above the threshold", async () => {
+    const layout = await render1(page(1200), `@container not (min-width: 1024px){#t{display:none}}`);
+    expect(shown(layout, "t")).toBe(true);
+  });
+
+  it("a named container keeps working with a negated condition", async () => {
+    const layout = await render1(
+      page(920, "container-name: card;"),
+      `@container card not (min-width: 1024px){#t{display:none}}`,
+    );
+    expect(shown(layout, "t")).toBe(false);
+  });
+
+  it("a plain query on a named container still matches by name only", async () => {
+    const layout = await render1(
+      page(920, "container-name: card;"),
+      `@container other (min-width: 100px){#t{display:none}}`,
+    );
+    expect(shown(layout, "t")).toBe(true);
+  });
+});
