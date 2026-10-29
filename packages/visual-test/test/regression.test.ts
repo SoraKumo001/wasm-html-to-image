@@ -9595,3 +9595,32 @@ describe("P0-77 an abspos box measured provisionally is re-rendered at its solve
     expect(Math.round(boxes.find((b: any) => b.i === "g").w)).toBe(24);
   });
 });
+
+describe("P0-78 a grid item's percentage height resolves against a fixed row under a cyclic container", () => {
+  const page = async (body: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    return layout;
+  };
+  const IMG = `<img id="im" src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2220%22%20height%3D%2210%22%20viewBox%3D%220%200%2020%2010%22%3E%3Crect%20width%3D%2220%22%20height%3D%2210%22%20fill%3D%22%2369c%22%2F%3E%3C%2Fsvg%3E">`;
+  const wrap = (grid: string) =>
+    `<div style="display:flex;flex-wrap:wrap;gap:4px;width:120px;height:100%;margin:4px">${grid}</div>`;
+  it("fixed 40px row: height:50% resolves to 20 and the stretched img transfers", async () => {
+    const boxes = await page(wrap(
+      `<div style="display:grid;grid-template-columns:max-content;grid-auto-rows:40px;gap:16px"><div id="t" style="display:flex;height:50%">${IMG}</div></div>`));
+    expect(Math.round(boxes.find((b: any) => b.i === "t").h)).toBe(20);
+    const im = boxes.find((b: any) => b.i === "im");
+    expect(Math.round(im.w)).toBe(40);
+    expect(Math.round(im.h)).toBe(20);
+  });
+  it("content-sized row: the percentage still behaves as auto (guard)", async () => {
+    const boxes = await page(wrap(
+      `<div style="display:grid;grid-template-columns:max-content;grid-auto-rows:auto;gap:16px"><div id="t" style="height:50%"><div style="height:30px"></div></div></div>`));
+    expect(Math.round(boxes.find((b: any) => b.i === "t").h)).toBe(30);
+  });
+});
