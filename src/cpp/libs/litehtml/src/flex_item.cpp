@@ -161,6 +161,7 @@ void litehtml::flex_item_row_direction::direction_specific_init(const litehtml::
     if(m_container_wm.block_end(margins).is_predefined()) auto_margin_cross_end = true;
 
 	def_value<pixel_t> content_size(0);
+	pixel_t measured_min_content = -1;
     
     // No helpers for min/max properties in WritingModeContext, so manual branching
     const css_length& min_size_prop = m_container_wm.is_vertical() ? el->css().get_min_height() : el->css().get_min_width();
@@ -239,9 +240,33 @@ void litehtml::flex_item_row_direction::direction_specific_init(const litehtml::
 	} else
 	{
 		min_main_size = min_size_prop.calc_percent(parent_size) + render_offset - el->box_sizing_inline(m_container_wm);
+		// A definite min-width is only the floor of the item's min-content contribution, not the
+		// contribution itself: the contribution is the item's min-content size clamped by that
+		// floor (CSS Sizing / Flexbox 9.9.1), so measure it as for an automatic minimum. Without
+		// this a `min-width:100px` item whose content needs 198 contributes 100, and a
+		// shrink-to-fit ancestor comes out too narrow even though the item can never be that
+		// narrow in a min-content sense. A definite width still counts in full below, so only
+		// an auto / percentage width needs the measure.
+		if (!m_container_wm.is_vertical() &&
+			(el->css().get_overflow() == overflow_visible ||
+			 el->src_el()->css().get_display() == display_webkit_box) &&
+			(size_prop.is_predefined() || size_prop.units() == css_units_percentage || size_prop.is_calc()))
+		{
+			formatting_context fmt_ctx_copy;
+			if(fmt_ctx) fmt_ctx_copy = *fmt_ctx;
+			containing_block_context::typed_pixel tp_content_offset(content_offset, containing_block_context::cbc_value_type_auto);
+			containing_block_context measure_cb = m_container_wm.update_logical(self_size, tp_content_offset, std::nullopt);
+			measure_cb.size_mode = containing_block_context::size_mode_content |
+								   containing_block_context::size_mode_min_content |
+								   containing_block_context::size_mode_measure;
+			el->measure(measure_cb, fmt_ctx ? &fmt_ctx_copy : nullptr);
+			measured_min_content = get_el_main_size();
+		}
 	}
 	// min-content contribution: a definite width counts in full, otherwise the item's min-content size
 	min_content_contribution = min_main_size;
+	if (measured_min_content >= 0)
+		min_content_contribution = std::max(min_content_contribution, measured_min_content);
 	if (!m_container_wm.is_vertical() && !size_prop.is_predefined() && size_prop.units() != css_units_percentage)
 		min_content_contribution = std::max(min_main_size, size_prop.calc_percent(parent_size) + render_offset - el->box_sizing_inline(m_container_wm));
 	// An inflexible item (flex-shrink: 0) with a definite flex-basis can never be
