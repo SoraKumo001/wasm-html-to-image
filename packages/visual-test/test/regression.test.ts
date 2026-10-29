@@ -8402,3 +8402,75 @@ describe("P0-52: max-content tracks contribute max-content under a min-content c
     expect(at(out, "g").w).toBeCloseTo(128, 0);
   });
 });
+
+describe("P0-53 scrollbar-gutter stable both-edges insets the scrollport on both sides", () => {
+  const gutterPage = (css: string, body: string) => ({
+    value: `<!doctype html><html><head><style>${css}html,body{margin:0}</style></head><body>${body}</body></html>`,
+    width: 1000,
+    format: "png" as const,
+  });
+  const box = (layout: any[], id: string) => layout.find((b: any) => b.i === id);
+
+  it("in-flow content starts one gutter in and is two gutters narrower", async () => {
+    let layout: any[] = [];
+    await render({
+      ...gutterPage("html{scrollbar-gutter:stable both-edges}", `<div id="c" style="height:10px"></div>`),
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    const c = box(layout, "c");
+    expect(Math.round(c.x)).toBe(15);
+    expect(Math.round(c.w)).toBe(970);
+  });
+
+  it("stable alone keeps the start edge at 0 and narrows by one gutter", async () => {
+    let layout: any[] = [];
+    await render({
+      ...gutterPage("html{scrollbar-gutter:stable}", `<div id="c" style="height:10px"></div>`),
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    const c = box(layout, "c");
+    expect(Math.round(c.x)).toBe(0);
+    expect(Math.round(c.w)).toBe(985);
+  });
+
+  it("a fixed box at left:0 sits inside the start gutter", async () => {
+    let layout: any[] = [];
+    await render({
+      ...gutterPage(
+        "html{scrollbar-gutter:stable both-edges}",
+        `<div style="height:50px"></div><div id="c" style="position:fixed;left:0;top:0;width:100px;height:10px"></div>`,
+      ),
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    const c = box(layout, "c");
+    expect(Math.round(c.x)).toBe(15);
+    expect(Math.round(c.w)).toBe(100);
+  });
+
+  it("a fixed box at right:0 ends one gutter before the page edge", async () => {
+    let layout: any[] = [];
+    await render({
+      ...gutterPage(
+        "html{scrollbar-gutter:stable both-edges}",
+        `<div style="height:50px"></div><div id="c" style="position:fixed;right:0;top:0;width:100px;height:10px"></div>`,
+      ),
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    const c = box(layout, "c");
+    expect(Math.round(c.x)).toBe(885);
+  });
+
+  it("a fixed box stretched between both insets starts at the start gutter", async () => {
+    let layout: any[] = [];
+    await render({
+      ...gutterPage(
+        "html{scrollbar-gutter:stable both-edges}",
+        `<div style="height:50px"></div><div id="c" style="position:fixed;left:0;right:0;top:0;height:10px"></div>`,
+      ),
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    const c = box(layout, "c");
+    expect(Math.round(c.x)).toBe(15);
+    expect(Math.round(c.w)).toBe(970);
+  });
+});
