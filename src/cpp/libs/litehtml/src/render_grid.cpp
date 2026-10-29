@@ -2164,15 +2164,38 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         // whose tracks only open up at the wider size reports the wide height (116.8 for
         // a row that renders 16 tall once the item shrinks to 32 -- fuzz replaced 14).
         bool measured_at_used_width = false;
-        if (!vert && !item.el->src_el()->is_replaced() &&
-            item.el->src_el()->css().get_width().is_predefined())
+        if (!vert && item.el->src_el()->css().get_width().is_predefined())
         {
             flex_justify_content jst_h = item.el->src_el()->css().get_justify_self();
             if (jst_h == flex_justify_content_auto) jst_h = css().get_justify_items();
             const bool j_normal_h = jst_h == flex_justify_content_auto || jst_h == flex_justify_content_normal;
             const bool intrinsic_width_h = item.el->src_el()->css().get_width().predef() > 0;
-            const bool j_stretch_h = (j_normal_h && !intrinsic_width_h) || jst_h == flex_justify_content_stretch;
-            if (!j_stretch_h)
+            // Mirroring place_grid_items: a replaced item with a natural size is not
+            // stretched by normal alignment, and no alignment stretches a
+            // content-keyword width.
+            const bool replaced_start_h = item.el->src_el()->is_replaced() &&
+                                          !item.el->src_el()->is_ratio_only_replaced();
+            const bool j_stretch_h = ((j_normal_h && !replaced_start_h) && !intrinsic_width_h) ||
+                                     (jst_h == flex_justify_content_stretch && !intrinsic_width_h);
+            if (item.el->src_el()->is_replaced())
+            {
+                // A replaced item ignores the area width in the measure above: with an
+                // auto width it reports its natural size. When placement will stretch
+                // it to the area (or fill it, for a ratio-only box), its height
+                // contribution is the height at the area width instead -- an img with
+                // a natural 120x30 in a 60px stretched column contributed 30 to its
+                // row where the placed height is 15 (all fuzz seed 33).
+                if (j_stretch_h)
+                {
+                    containing_block_context wcb = cb;
+                    wcb.size_mode |= containing_block_context::size_mode_exact_width;
+                    wcb.render_width = cell_width;
+                    wcb.width = wcb.render_width;
+                    item.el->measure(wcb, fmt_ctx);
+                    measured_at_used_width = true;
+                }
+            }
+            else if (!j_stretch_h)
             {
                 containing_block_context mcb = cb;
                 mcb.size_mode |= containing_block_context::size_mode_content;
@@ -2210,6 +2233,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         }
         if (!measured_at_used_width)
             item.el->measure(cb, fmt_ctx);
+
 
         if (!vert && item.pos.row_span() == 1)
         {
@@ -2568,7 +2592,13 @@ void litehtml::render_item_grid::place_grid_items(pixel_t x, pixel_t y, const co
         // keyword the width still comes from the content measure -- the ratio transfer from a
         // definite block size -- not from the area)
         const bool intrinsic_width = item.el->src_el()->css().get_width().is_predefined() && item.el->src_el()->css().get_width().predef() > 0;
-        const bool j_stretch = ((j_normal && !replaced_start_x) && !intrinsic_width) || jst == flex_justify_content_stretch;
+        // An explicit stretch does not override a content-keyword width either: stretch
+        // sizing applies to an auto inline size only, so a fit-content / max-content /
+        // min-content item keeps its keyword size under justify-items:stretch (an
+        // intrinsic-width img measured the full track width and transferred a huge
+        // height through its ratio -- all fuzz seed 33).
+        const bool j_stretch = ((j_normal && !replaced_start_x) && !intrinsic_width) ||
+                               (jst == flex_justify_content_stretch && !intrinsic_width);
         const bool intrinsic_height = item.el->src_el()->css().get_height().is_predefined() && item.el->src_el()->css().get_height().predef() > 0;
         const bool a_stretch = !intrinsic_height && ((a_normal && !replaced_item) || (aln & 0xFF) == flex_align_items_stretch);
         // A replaced item with an aspect ratio does not stretch in both axes: when its block
