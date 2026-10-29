@@ -289,16 +289,33 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
                         pixel_t ln_left  = 0;
                         pixel_t ln_right = el->inline_size();
 						pixel_t new_block_offset = fmt_ctx->find_next_line_top(block_offset, el->inline_size(), ln_right);
+						if (new_block_offset == block_offset &&
+							(self_size.size_mode & containing_block_context::size_mode_measure) &&
+							self_size.mode == writing_mode_horizontal_tb)
+						{
+							// A measure pass keeps this block's floats out of the real ledger
+							// find_next_line_top reads; the measured-float records are the
+							// only float state it has, so consult them before concluding the
+							// box fits beside the floats.
+							new_block_offset = fmt_ctx->find_next_line_top_measured(this, block_offset,
+								el->inline_size(), el->height(), self_size.render_inline_size());
+						}
 						// If block was moved to the next line, recalculate its position
 						if(new_block_offset != block_offset)
 						{
 							block_offset = new_block_offset;
 							fmt_ctx->get_line_left_right(block_offset, el->inline_size(), ln_left, ln_right);
+							// find_next_line_top returns the edge the box's BORDER must clear
+							// (the bottom margin edge of the float it moved below): the box's
+							// own top margin is absorbed above that edge rather than added
+							// below it, so step back to the margin edge before placing (a
+							// flex child with margin:2 pushed below a 50px float sat at 52
+							// where Chrome puts its border at 50 -- all fuzz seed 33).
+							block_offset -= wm.block_start(el->get_margins());
 							if (!(self_size.size_mode & containing_block_context::size_mode_measure))
 							{
 								el->place_logical(ln_left, block_offset, self_size.new_inline_size(inline_available_size, self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content)), fmt_ctx);
 							}
-							block_offset -= wm.block_start(el->get_margins());
 							// Rollback top margin collapse
 							if(is_first && collapse_top_margin())
 							{

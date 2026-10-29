@@ -80,6 +80,7 @@ namespace litehtml
 		void remove_float(const std::shared_ptr<render_item> &el, const render_item* scope = nullptr);
 		void clear_floats(int context);
 		pixel_t find_next_line_top( pixel_t top, pixel_t width, pixel_t def_right );
+		pixel_t find_next_line_top_measured(const render_item* scope, pixel_t top, pixel_t width, pixel_t block_size, pixel_t container_inline_size);
 		pixel_t get_floats_height(element_float el_float = float_none) const;
 		// Measure passes do not register floats; this keeps how far down they reach so that a box which
 		// contains its floats (a flow root) still grows to them.

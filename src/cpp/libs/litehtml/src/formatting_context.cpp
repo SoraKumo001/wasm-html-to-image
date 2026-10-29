@@ -483,6 +483,45 @@ litehtml::pixel_t litehtml::formatting_context::find_next_line_top(pixel_t top, 
 	return new_top - m_current_block_pos;
 }
 
+litehtml::pixel_t litehtml::formatting_context::find_next_line_top_measured(const render_item* scope, pixel_t top, pixel_t width, pixel_t block_size, pixel_t container_inline_size)
+{
+	// The measured-float counterpart of find_next_line_top: measure passes keep floats
+	// out of the real ledger, so a block-formatting-context child that must move below
+	// a float finds no floats there and its container's measured height loses the
+	// float's whole extent (a float followed by a grid sibling measured as tall as
+	// the grid alone). Records are in the measuring block's local frame, like top.
+	pixel_vector points;
+	for(const auto& fb : m_measure_floats)
+	{
+		if (fb.scope != scope) continue;
+		if (fb.top >= top && find(points.begin(), points.end(), fb.top) == points.end())
+			points.push_back(fb.top);
+		if (fb.bottom >= top && find(points.begin(), points.end(), fb.bottom) == points.end())
+			points.push_back(fb.bottom);
+	}
+	if (points.empty()) return top;
+	sort(points.begin(), points.end(), std::less<pixel_t>());
+	pixel_t new_top = points.back();
+	for(auto pt : points)
+	{
+		pixel_t limit_left = 0;
+		pixel_t limit_right = container_inline_size;
+		for(const auto& fb : m_measure_floats)
+		{
+			if (fb.scope != scope) continue;
+			if (pt >= fb.bottom || pt + block_size <= fb.top) continue;
+			if (fb.side == float_left)	limit_left = std::max(limit_left, fb.right);
+			else						limit_right = std::min(limit_right, fb.left);
+		}
+		if (limit_right - limit_left >= width)
+		{
+			new_top = pt;
+			break;
+		}
+	}
+	return new_top;
+}
+
 void litehtml::formatting_context::update_floats(pixel_t dy, const std::shared_ptr<render_item> &parent)
 {
 	bool reset_cache = false;
