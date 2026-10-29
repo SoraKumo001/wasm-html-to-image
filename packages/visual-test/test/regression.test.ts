@@ -9688,3 +9688,35 @@ describe("P0-80 grid item used widths, measure-mode float push-down, pushed BFC 
     expect(Math.round(boxes.find((b: any) => b.i === "g").h)).toBe(266);
   });
 });
+
+describe("P0-81 stretched flex item measured at its definite cross size", () => {
+  const page = async (body: string, width = 800) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    return layout;
+  };
+  const COL = `<div id="t" style="display:flex;flex-direction:column;flex-wrap:wrap;padding:12px"><div style="width:20px;height:25px;flex:2 1 0"></div><div style="width:420px;height:228px"></div></div>`;
+  it("a wrapped column-flex item of a definite-height row flex is measured wrapped", async () => {
+    const boxes = await page(`<div style="display:flex;height:60px;width:700px">${COL}</div>`);
+    const t = boxes.find((b: any) => b.i === "t");
+    expect(Math.round(t.w)).toBe(464);
+    expect(Math.round(t.h)).toBe(60);
+  });
+  it("an auto-height row flex leaves the item unwrapped (control)", async () => {
+    const boxes = await page(`<div style="display:flex;width:700px">${COL}</div>`);
+    const t = boxes.find((b: any) => b.i === "t");
+    expect(Math.round(t.w)).toBe(444);
+    expect(Math.round(t.h)).toBe(252);
+  });
+  it("an intrinsic (shrink-to-fit) query keeps the unwrapped measure (control)", async () => {
+    const boxes = await page(`<div style="position:absolute;left:0;top:0">${COL}</div>`);
+    const t = boxes.find((b: any) => b.i === "t");
+    expect(Math.round(t.w)).toBe(444);
+    expect(Math.round(t.h)).toBe(252);
+  });
+});
