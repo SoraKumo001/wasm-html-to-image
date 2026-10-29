@@ -48,8 +48,8 @@ describe.skipIf(!built)("wasm-html-to-image CLI with Markdown", () => {
 
   it("renders a .md file, resolving relative images against the file, from any cwd", async () => {
     fs.mkdirSync(path.join(dir, "assets"));
-    // An 8x8 #dd2222 PNG, stretched by the width/height attributes. (A 1x1 PNG is not drawn at
-    // all by the engine, so it cannot stand in here.)
+    // An 8x8 #dd2222 PNG, stretched by the width/height attributes. (Keep the CRCs valid when
+    // editing the bytes: the engine silently skips a PNG whose chunk CRC is wrong.)
     fs.writeFileSync(
       path.join(dir, "assets", "red.png"),
       Buffer.from(
