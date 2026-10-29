@@ -9570,3 +9570,28 @@ describe("P0-76 a wrap column flex item's base size is measured at its hypotheti
     expect(Math.round(s.w)).toBe(201);
   });
 });
+
+describe("P0-77 an abspos box measured provisionally is re-rendered at its solved size", () => {
+  const page = async (body: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    return layout;
+  };
+  const INNER =
+    `<div style="float:left;width:50%;height:80px"><div id="g" style="display:grid;grid-template-columns:60px min-content minmax(40px,1fr);gap:8px;padding:12px;margin:12px">` +
+    `<div style="height:24px;margin:2px"></div><div style="width:50px;height:10px"></div><div style="min-width:10px;min-height:30px;padding:8px"></div><div style="height:12px"></div></div></div>`;
+  const ABS = `<div style="position:absolute;left:30px;top:30px;width:60px;height:80px;min-width:40px;max-width:250px">${INNER}</div>`;
+  it("inside an inline-flex (measured for the container's intrinsic size)", async () => {
+    const boxes = await page(`<div style="display:inline-flex;flex-wrap:wrap;height:40px;padding:12px;margin:2px">${ABS}</div>`);
+    expect(Math.round(boxes.find((b: any) => b.i === "g").w)).toBe(24);
+  });
+  it("in a plain block parent the result is the same (control)", async () => {
+    const boxes = await page(ABS);
+    expect(Math.round(boxes.find((b: any) => b.i === "g").w)).toBe(24);
+  });
+});
