@@ -9146,3 +9146,30 @@ describe("P0-63 percentage height under a cyclic flex height", () => {
     expect(Math.abs(g.h - 11.6)).toBeLessThan(1);
   });
 });
+
+describe("P0-64 min-content contribution clamped by a definite flex-basis", () => {
+  const page = async (body: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 1000,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    return layout;
+  };
+  const wrap = (flex: string) =>
+    `<div style="display:flex;flex-wrap:wrap;gap:4px;width:600px"><div style="display:flex;padding:8px"><div style="width:50px;height:40px;flex:${flex}"></div></div></div>`;
+  it("an inflexible item contributes its basis, not its wider width", async () => {
+    const boxes = await page(wrap("0 0 40px"));
+    expect(Math.round(boxes.find((b: any) => b.p === "0.1.0.0").w)).toBe(56);
+  });
+  it("a shrinkable item's contribution is clamped by its basis too", async () => {
+    const boxes = await page(wrap("0 1 40px"));
+    expect(Math.round(boxes.find((b: any) => b.p === "0.1.0.0").w)).toBe(56);
+  });
+  it("a growable item still contributes its width", async () => {
+    const boxes = await page(wrap("1 0 40px"));
+    expect(Math.round(boxes.find((b: any) => b.p === "0.1.0.0").w)).toBe(66);
+  });
+});
