@@ -2649,6 +2649,18 @@ void litehtml::render_item_grid::place_grid_items(pixel_t x, pixel_t y, const co
                 cb.size_mode &= ~containing_block_context::size_mode_cyclic_height;
             }
         }
+        // A definite grid height makes every area height definite too,
+        // content-sized rows included: a wrapping column flex with
+        // height:30% in a 116px row of a flex-sized grid takes 34.8px even
+        // though its own content sized the row (grid-flex fuzz seed 23).
+        // With an indefinite grid height the percentage stays auto (the
+        // P0-78 guard: the row is then exactly the item's own content).
+        if (!vert && (self_size.height.type == containing_block_context::cbc_value_type_absolute ||
+                      self_size.render_height.type == containing_block_context::cbc_value_type_absolute))
+        {
+            cb.height_cyclic = false;
+            cb.size_mode &= ~containing_block_context::size_mode_cyclic_height;
+        }
         cb.size_mode |= containing_block_context::size_mode_exact_height;
         cb.size_mode |= containing_block_context::size_mode_exact_width;
         if (!vert)
