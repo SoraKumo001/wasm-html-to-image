@@ -17,6 +17,7 @@
 #include "core/container_skia.h"
 #include "include/codec/SkJpegDecoder.h"
 #include "include/core/SkCanvas.h"
+#include "include/core/SkAnnotation.h"
 #include "include/core/SkData.h"
 #include "include/core/SkStream.h"
 #include "include/docs/SkPDFDocument.h"
@@ -349,6 +350,108 @@ void collect_headings(litehtml::element* el, std::vector<HeadingInfo>& out) {
         return;  // a heading holds no further headings
     }
     for (const auto& child : el->children()) collect_headings(child.get(), out);
+}
+
+// ---- Internal links: <a href="#id"> to the element carrying that id -------------------------
+//
+// A destination is every id that some in-page link points at (named after the id), placed at the
+// element's top edge; a link is the box of the <a> (a block-level <a>, such as a table-of-contents
+// row, is the whole row; an inline one is its first box). Both are in document coordinates; the
+// page loop turns them into PDF annotations on the page they fall on.
+struct LinkBox {
+    std::string target;  // the id the link points at
+    int left = 0, top = 0, right = 0, bottom = 0;
+};
+struct DestPoint {
+    std::string name;    // the id
+    int left = 0, top = 0;
+};
+
+// A PDF destination name is written differently for the destination and for a link to it (a
+// dictionary key versus a name object, which Skia re-encodes byte by byte), so only plain ASCII
+// round-trips. Any other id is spelled as "u" + the hex of its UTF-8 bytes; an ASCII id stays as it
+// is (a leading "u" followed by hex digits only is therefore reserved, which no heading id hits).
+std::string pdf_dest_name(const std::string& id) {
+    bool plain = true;
+    for (unsigned char c : id)
+        if (c >= 0x80 || c == '#' || c == '(' || c == ')' || c == '/' || c <= 0x20) plain = false;
+    if (plain) return id;
+    static const char* kHex = "0123456789abcdef";
+    std::string out = "u";
+    for (unsigned char c : id) {
+        out.push_back(kHex[c >> 4]);
+        out.push_back(kHex[c & 15]);
+    }
+    return out;
+}
+
+void collect_link_boxes(litehtml::element* el, std::vector<LinkBox>& out) {
+    if (!el) return;
+    if (el->tag() == litehtml::_a_ && el->css().get_display() != litehtml::display_none) {
+        const char* href = el->get_attr("href", "");
+        if (href && href[0] == '#' && href[1] != ' ') {
+            auto add = [&](const litehtml::position& p) {
+                if (p.width <= 0 || p.height <= 0) return;
+                LinkBox l;
+                l.target = href + 1;
+                l.left = (int)p.x;
+                l.top = (int)p.y;
+                l.right = (int)(p.x + p.width);
+                l.bottom = (int)(p.y + p.height);
+                out.push_back(std::move(l));
+            };
+            const std::shared_ptr<litehtml::render_item> ri = el->get_render_item();
+            litehtml::position::vector inline_boxes;
+            if (ri) ri->get_inline_boxes(inline_boxes);
+            if (!inline_boxes.empty() && ri->parent()) {
+                // An inline <a> has no box of its own: one box per line it spans, in its parent's
+                // coordinates. One link per line, so a link that wraps stays clickable on every line.
+                const litehtml::position origin = ri->parent()->get_placement();
+                for (litehtml::position box : inline_boxes) {
+                    box.x += origin.x;
+                    box.y += origin.y;
+                    add(box);
+                }
+            } else {
+                add(el->get_placement());  // block-level / inline-block <a>: its own box
+            }
+        }
+    }
+    for (const auto& child : el->children()) collect_link_boxes(child.get(), out);
+}
+
+void collect_dest_points(litehtml::element* el, const std::vector<LinkBox>& links,
+                         std::vector<DestPoint>& out) {
+    if (!el) return;
+    const char* id = el->get_attr("id", "");
+    if (id && id[0] != ' ' && el->css().get_display() != litehtml::display_none) {
+        for (const auto& l : links) {
+            if (l.target == id) {
+                const litehtml::position p = el->get_placement();
+                DestPoint d;
+                d.name = id;
+                d.left = (int)p.x;
+                d.top = (int)p.y;
+                out.push_back(std::move(d));
+                break;
+            }
+        }
+    }
+    for (const auto& child : el->children()) collect_dest_points(child.get(), links, out);
+}
+
+void collect_all_ids(litehtml::element* el, std::vector<DestPoint>& out) {
+    if (!el) return;
+    const char* id = el->get_attr("id", "");
+    if (id && id[0] != ' ' && el->css().get_display() != litehtml::display_none) {
+        const litehtml::position p = el->get_placement();
+        DestPoint d;
+        d.name = id;
+        d.left = (int)p.x;
+        d.top = (int)p.y;
+        out.push_back(std::move(d));
+    }
+    for (const auto& child : el->children()) collect_all_ids(child.get(), out);
 }
 
 // ---- P3: inline (line-box) fragmentation data ---------------------------------
@@ -1085,9 +1188,12 @@ sk_sp<SkData> renderHtmlsToPdf(const std::vector<std::string>& htmls, int width,
 //   - position:sticky: litehtml has no sticky positioning (element_position only has
 //     static/relative/absolute/fixed), so a "sticky" element is laid out as normal flow and
 //     painted once, wherever it lands. Provisionally accepted.
-sk_sp<SkData> renderHtmlToPdf(const std::string& html, int width, int height,
-                              SatoruContext& context, const char* master_css, const char* user_css,
-                              const SatoruRenderOptions& options) {
+// `heading_pages`, when given, switches to a measuring pass: lay out and plan the pages, record the
+// 1-based page of every element id (see the wrapper below) and return without drawing anything.
+static sk_sp<SkData> render_html_to_pdf_impl(const std::string& html, int width, int height,
+                                             SatoruContext& context, const char* master_css,
+                                             const char* user_css, const SatoruRenderOptions& options,
+                                             std::vector<std::pair<std::string, int>>* heading_pages) {
     if (html.empty()) return nullptr;
     width = normalize_viewport_width(width);
 
@@ -1208,6 +1314,25 @@ sk_sp<SkData> renderHtmlToPdf(const std::string& html, int width, int height,
                        doc_height);
     int page_count = (int)pages.size();
     if (page_count < 1) page_count = 1;
+
+    std::vector<LinkBox> link_boxes;
+    std::vector<DestPoint> dest_points;
+    collect_link_boxes(doc->root().get(), link_boxes);
+    if (!link_boxes.empty()) collect_dest_points(doc->root().get(), link_boxes, dest_points);
+
+    if (heading_pages) {
+        // Every id in the document, with the page its top edge lands on (1-based).
+        std::vector<LinkBox> all_ids;
+        std::vector<DestPoint> id_points;
+        collect_all_ids(doc->root().get(), id_points);
+        for (const auto& d : id_points) {
+            int pg = 0;
+            for (int i = 0; i < (int)pages.size(); ++i)
+                if (pages[i].offset <= d.top) pg = i;
+            heading_pages->emplace_back(d.name, pg + 1);
+        }
+        return nullptr;
+    }
 
     // Outline: one H1..H6 structure node per heading (SkPDF builds the bookmarks from the headers of
     // the structure tree). The title is the node's alt text; the target is where marked content
@@ -1408,6 +1533,33 @@ sk_sp<SkData> renderHtmlToPdf(const std::string& html, int width, int height,
         // cull would be the wrong test.
         if (header_height > 0 && header_top >= 0) draw_band(0, header_height, header_top, false);
 
+        // Internal links: named destinations at the top of the targeted elements, and a link
+        // annotation over every <a href="#id"> box, on the page each starts on. A link to a
+        // destination that does not exist is skipped (the viewer would show a dead link).
+        {
+            const int slice_top = page_offset;
+            const int slice_bottom = (page + 1 < (int)pages.size()) ? pages[page + 1].offset : INT_MAX;
+            for (const auto& d : dest_points) {
+                if (d.top < slice_top || d.top >= slice_bottom) continue;
+                sk_sp<SkData> name = SkData::MakeWithCString(pdf_dest_name(d.name).c_str());
+                SkAnnotateNamedDestination(
+                    canvas, SkPoint::Make((SkScalar)(margin_left + d.left), (SkScalar)(margin_top + d.top - slice_top)),
+                    name.get());
+            }
+            for (const auto& l : link_boxes) {
+                if (l.top < slice_top || l.top >= slice_bottom) continue;
+                bool known = false;
+                for (const auto& d : dest_points) known = known || d.name == l.target;
+                if (!known) continue;
+                sk_sp<SkData> name = SkData::MakeWithCString(pdf_dest_name(l.target).c_str());
+                SkAnnotateLinkToDestination(
+                    canvas,
+                    SkRect::MakeLTRB((SkScalar)(margin_left + l.left), (SkScalar)(margin_top + l.top - slice_top),
+                                     (SkScalar)(margin_left + l.right), (SkScalar)(margin_top + l.bottom - slice_top)),
+                    name.get());
+            }
+        }
+
         // Outline targets: an almost invisible 1px mark tagged with each heading's node id, at the top of
         // the heading on the page it starts on (the bookmark jumps to the topmost mark of its node).
         for (size_t i = 0; i < headings.size(); ++i) {
@@ -1428,4 +1580,63 @@ sk_sp<SkData> renderHtmlToPdf(const std::string& html, int width, int height,
     pdf_doc->close();
 
     return stream.detachAsData();
+}
+
+// ---- Page numbers for a table of contents ------------------------------------------------------
+//
+// An element carrying data-toc-page="ID" (a <span> at the end of a table-of-contents row) holds the
+// 1-based page on which the element with that id starts. The page is known only once the pages are
+// planned, and the numbers can move the pages (a number is text), so the document is planned, the
+// numbers are filled in, and it is planned again until the pages stop changing (at most three
+// times). A document without data-toc-page takes the first branch and is untouched.
+
+// Replace the text of every <TAG data-toc-page="ID">...</TAG> by the page of ID. Returns true when
+// anything changed. The element must hold plain text (no nested element), as a number span does.
+static bool fill_toc_pages(std::string& html, const std::vector<std::pair<std::string, int>>& pages_of_id) {
+    static const std::string kAttr = "data-toc-page=\"";
+    bool changed = false;
+    size_t pos = 0;
+    while ((pos = html.find(kAttr, pos)) != std::string::npos) {
+        const size_t id_start = pos + kAttr.size();
+        const size_t id_end = html.find('"', id_start);
+        if (id_end == std::string::npos) break;
+        const std::string id = html.substr(id_start, id_end - id_start);
+        const size_t tag_end = html.find('>', id_end);
+        if (tag_end == std::string::npos) break;
+        const size_t close = html.find("</", tag_end);
+        if (close == std::string::npos) break;
+        std::string number = "?";
+        for (const auto& e : pages_of_id)
+            if (e.first == id) {
+                number = std::to_string(e.second);
+                break;
+            }
+        if (html.compare(tag_end + 1, close - tag_end - 1, number) != 0) {
+            html.replace(tag_end + 1, close - tag_end - 1, number);
+            changed = true;
+        }
+        pos = tag_end + 1;
+    }
+    return changed;
+}
+
+sk_sp<SkData> renderHtmlToPdf(const std::string& html, int width, int height,
+                              SatoruContext& context, const char* master_css, const char* user_css,
+                              const SatoruRenderOptions& options) {
+    if (html.find("data-toc-page=\"") == std::string::npos) {
+        return render_html_to_pdf_impl(html, width, height, context, master_css, user_css, options,
+                                       nullptr);
+    }
+    std::string filled = html;
+    std::vector<std::pair<std::string, int>> previous;
+    for (int pass = 0; pass < 3; ++pass) {
+        std::vector<std::pair<std::string, int>> pages_of_id;
+        render_html_to_pdf_impl(filled, width, height, context, master_css, user_css, options,
+                                &pages_of_id);
+        const bool changed = fill_toc_pages(filled, pages_of_id);
+        if (!changed || pages_of_id == previous) break;
+        previous = std::move(pages_of_id);
+    }
+    return render_html_to_pdf_impl(filled, width, height, context, master_css, user_css, options,
+                                   nullptr);
 }

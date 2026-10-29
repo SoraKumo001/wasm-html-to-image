@@ -1297,6 +1297,92 @@ describe("regression: layout and paint probes", () => {
     // the heading stayed on one line (the box itself is 100% of the viewport tall, as in Chromium)
     expect(boxes.find((b) => b.t === "h1")!.h).toBeLessThan(30);
   });
+  describe("PDF links, destinations and table-of-contents page numbers", () => {
+    // Read a PDF the way a viewer does (pdfjs): the page each named destination is on, every link's
+    // destination name, the bookmarks, and the text of one page.
+    const readPdf = async (data: Uint8Array) => {
+      const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+      const doc = await pdfjs.getDocument({ data: new Uint8Array(data), useSystemFonts: false, isEvalSupported: false }).promise;
+      const pageOfDest = async (dest: unknown) => {
+        const d = typeof dest === "string" ? await doc.getDestination(dest) : (dest as unknown[]);
+        return d ? (await doc.getPageIndex(d[0] as never)) + 1 : 0;
+      };
+      const destinations: Record<string, number> = {};
+      for (const [name, d] of Object.entries((await doc.getDestinations()) ?? {})) destinations[name] = await pageOfDest(d);
+      const links: { page: number; dest: string; rect: number[] }[] = [];
+      for (let p = 1; p <= doc.numPages; p++)
+        for (const a of await (await doc.getPage(p)).getAnnotations())
+          if (a.subtype === "Link" && typeof a.dest === "string") links.push({ page: p, dest: a.dest, rect: a.rect });
+      const bookmarks: [string, number][] = [];
+      const walk = async (items: { title: string; dest: unknown; items?: unknown[] }[]) => {
+        for (const it of items) {
+          bookmarks.push([it.title, await pageOfDest(it.dest)]);
+          if (it.items?.length) await walk(it.items as never);
+        }
+      };
+      await walk(((await doc.getOutline()) ?? []) as never);
+      const lines = async (page: number) => {
+        const tc = await (await doc.getPage(page)).getTextContent();
+        const rows = new Map<number, [number, string][]>();
+        for (const t of tc.items as { transform: number[]; str: string }[]) {
+          const y = Math.round(t.transform[5]);
+          rows.set(y, [...(rows.get(y) ?? []), [t.transform[4], t.str]]);
+        }
+        return [...rows.entries()]
+          .sort((a, b) => b[0] - a[0])
+          .map(([, parts]) => parts.sort((a, b) => a[0] - b[0]).map((x) => x[1]).join("").trim());
+      };
+      return { pages: doc.numPages, destinations, links, bookmarks, lines };
+    };
+    const pdf = async (html: string) => (await render({ value: html, width: 300, format: "pdf" })).data as Uint8Array;
+    const doc = (body: string) =>
+      `<html><head><style>@page{size:300px 200px;margin:0}body{margin:0;font:14px sans-serif}` +
+      `.toc a{display:block;color:#000;text-decoration:none}.pad{height:230px}</style></head><body>${body}</body></html>`;
+
+    it("fills data-toc-page with the page the id starts on, and the table of contents's own pages move the numbers", async () => {
+      // Row 1 is on page 1; the headings follow after padding. Page numbers are text, so this also
+      // checks that the numbers are filled in before the pages are planned for good.
+      const body =
+        `<nav class="toc"><a href="#a">Alpha <span data-toc-page="a">0</span></a><a href="#b">Beta <span data-toc-page="b">0</span></a></nav>` +
+        `<div class="pad"></div><h1 id="a">Alpha</h1><div class="pad"></div><h1 id="b">Beta</h1>`;
+      const r = await readPdf(await pdf(doc(body)));
+      const printed = (await r.lines(1)).filter((l) => /^(Alpha|Beta)\s*\d+$/.test(l));
+      expect(printed).toEqual([`Alpha ${r.destinations.a}`, `Beta ${r.destinations.b}`]);
+      expect(r.destinations.a).toBeGreaterThan(1);
+      expect(r.destinations.b).toBeGreaterThan(r.destinations.a);
+    });
+
+    it("links reach their destinations, ids in any script included (Skia names ASCII only)", async () => {
+      const body =
+        `<nav class="toc"><a href="#章-1">章 1</a><a href="#ascii-id">two</a><a href="#nowhere">dead</a></nav>` +
+        `<div class="pad"></div><h1 id="章-1">章 1</h1><div class="pad"></div><h1 id="ascii-id">two</h1>`;
+      const r = await readPdf(await pdf(doc(body)));
+      expect(Object.keys(r.destinations).length).toBe(2); // only ids that a link points at
+      // every link resolves to a destination (a link to a missing id is not written at all)
+      expect(r.links.length).toBe(2);
+      for (const l of r.links) expect(r.destinations[l.dest]).toBeGreaterThan(1);
+    });
+
+    it("an inline link is clickable on its own text, and a link that wraps is clickable on every line", async () => {
+      const body =
+        `<p id="top">x</p><p style="width:90px">word word <a href="#top">several words that wrap</a> end</p>`;
+      const r = await readPdf(await pdf(doc(body)));
+      expect(r.links.length).toBeGreaterThan(1); // one rectangle per line of the wrapped link
+      for (const l of r.links) {
+        expect(l.rect[2] - l.rect[0]).toBeGreaterThan(5);
+        expect(l.rect[2]).toBeLessThanOrEqual(100); // inside the 90px paragraph (plus its rounding)
+      }
+    });
+
+    it("bookmarks follow the headings, nested by level, on the page each heading starts on", async () => {
+      const body = `<h1>A</h1><div class="pad"></div><h2>A1</h2><div class="pad"></div><h1>B</h1>`;
+      const r = await readPdf(await pdf(doc(body)));
+      expect(r.bookmarks.map(([t]) => t)).toEqual(["A", "A1", "B"]);
+      expect(r.bookmarks[1][1]).toBeGreaterThan(r.bookmarks[0][1]);
+      expect(r.bookmarks[2][1]).toBeGreaterThan(r.bookmarks[1][1]);
+    });
+  });
+
   it("a PDF gets an outline (bookmarks) from h1-h6 by default, and pdfOutline: false leaves it out", async () => {
     const html =
       `<html><head><style>@page{size:300px 200px;margin:0}</style></head><body style="margin:0">` +
