@@ -1,19 +1,24 @@
-import React, { useState, useEffect } from "react";
+import React, { Suspense, lazy, useState, useEffect } from "react";
 import { HtmlPlayground } from "./HtmlPlayground";
 import { ImagePlayground } from "./ImagePlayground";
 
+// The Markdown mode brings marked, highlight.js and (on demand) KaTeX: load it only when it is opened.
+const MarkdownPlayground = lazy(() => import("./MarkdownPlayground"));
+
+type Tab = "html" | "image" | "markdown";
+
 export const App: React.FC = () => {
-  const [tab, setTab] = useState<"html" | "image">(() => {
+  const [tab, setTab] = useState<Tab>(() => {
     const params = new URLSearchParams(window.location.search);
     const mode = params.get("mode");
-    return mode === "image" ? "image" : "html";
+    return mode === "image" || mode === "markdown" ? mode : "html";
   });
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const currentMode = params.get("mode");
-    if (tab === "image" && currentMode !== "image") {
-      params.set("mode", "image");
+    if (tab !== "html" && currentMode !== tab) {
+      params.set("mode", tab);
       const url = `${window.location.pathname}?${params.toString()}`;
       window.history.replaceState({}, "", url);
     } else if (tab === "html" && currentMode) {
@@ -51,6 +56,16 @@ export const App: React.FC = () => {
             >
               Image Optimization
             </button>
+            <button
+              onClick={() => setTab("markdown")}
+              className={`px-4 py-1.5 rounded-md transition-colors cursor-pointer ${
+                tab === "markdown"
+                  ? "bg-white text-blue-600 font-semibold shadow-xs"
+                  : "text-gray-600 hover:text-gray-900"
+              }`}
+            >
+              Markdown to PDF
+            </button>
           </nav>
         </div>
         <div className="flex items-center gap-4 text-sm">
@@ -66,7 +81,13 @@ export const App: React.FC = () => {
       </header>
 
       <main className="max-w-7xl mx-auto p-4">
-        {tab === "html" ? <HtmlPlayground /> : <ImagePlayground />}
+        {tab === "html" && <HtmlPlayground />}
+        {tab === "image" && <ImagePlayground />}
+        {tab === "markdown" && (
+          <Suspense fallback={<p className="p-6 text-sm text-gray-500">Loading…</p>}>
+            <MarkdownPlayground />
+          </Suspense>
+        )}
       </main>
     </div>
   );

@@ -28,7 +28,49 @@ process.exitCode = await runCfSmoke({
       assert(text.toLowerCase().includes("<svg"), "GET /svg missing <svg marker");
       console.log(`svg: ${text.length} chars`);
     },
-    // 3. Invalid input rejected with 400
+    // 3a. Plain HTML -> PDF (reference for the size of the Markdown one below)
+    async (base) => {
+      const res = await fetch(`${base}/pdf`);
+      assert(res.status === 200, `GET /pdf status=${res.status}`);
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      const head = new TextDecoder("latin1").decode(bytes.subarray(0, 5));
+      assert(head === "%PDF-", `GET /pdf head=${head}`);
+      console.log(`pdf: ${bytes.length} bytes`);
+      // The worker must send a browser User-Agent for Google Fonts, or it serves the whole .ttf (5 MB
+      // per weight) and the PDF embeds it: a heading came out at 3.3 MB instead of a few KB.
+      assert(bytes.length < 1_000_000, `GET /pdf is ${bytes.length} bytes (whole font embedded?)`);
+    },
+    // 3. Markdown -> PDF inside the worker (the markdown subpath runs in workerd)
+    async (base) => {
+      const res = await fetch(`${base}/markdown-pdf`);
+      assert(res.status === 200, `GET /markdown-pdf status=${res.status}`);
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      const head = new TextDecoder("latin1").decode(bytes.subarray(0, 5));
+      assert(head === "%PDF-", `GET /markdown-pdf head=${head}`);
+      console.log(`markdown-pdf: ${bytes.length} bytes`);
+      assert(bytes.length < 1_000_000, `GET /markdown-pdf is ${bytes.length} bytes (whole font embedded?)`);
+    },
+    // 3b. A report template from Markdown: three pages (cover, contents, text), under 1 MB
+    async (base) => {
+      const res = await fetch(`${base}/markdown-template`);
+      assert(res.status === 200, `GET /markdown-template status=${res.status}`);
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      const text = new TextDecoder("latin1").decode(bytes);
+      assert(text.startsWith("%PDF-"), "GET /markdown-template is not a PDF");
+      const pages = (text.match(/\/Type\s*\/Page\b(?!s)/g) ?? []).length;
+      console.log(`markdown-template: ${bytes.length} bytes, ${pages} pages`);
+      assert(pages === 3, `report template should give 3 pages (cover, contents, text), got ${pages}`);
+      assert(bytes.length < 1_000_000, `GET /markdown-template is ${bytes.length} bytes`);
+    },
+    // 4. Maths in Markdown inside the worker (katex bundled, fonts fetched from the CDN)
+    async (base) => {
+      const res = await fetch(`${base}/markdown-math`);
+      assert(res.status === 200, `GET /markdown-math status=${res.status}`);
+      const { typeset, plain } = await res.json();
+      console.log(`markdown-math: typeset ${typeset}px, plain ${plain}px`);
+      assert(typeset > plain + 20, `typeset maths (${typeset}px) is not taller than its source (${plain}px)`);
+    },
+    // 5. Invalid input rejected with 400
     (base) => expectStatus(base, "/invalid", 400),
   ],
 });

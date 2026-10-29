@@ -178,10 +178,144 @@ interface RenderResult {
 | `wasm-html-to-image/react` | React integration | Directly render React JSX element trees |
 | `wasm-html-to-image/preact` | Preact integration | Directly render Preact JSX element trees |
 | `wasm-html-to-image/tailwind` | Utility styling | UnoCSS / Tailwind v4 utilities (`createCSS`, `tailwind()`) |
+| `wasm-html-to-image/markdown` | Markdown input | GitHub-flavoured Markdown to a styled HTML page (`markdownToHtml`); pure JS, runs in browsers and Workers |
+| `wasm-html-to-image/markdown-math` | Maths in Markdown | KaTeX renderer for `markdownToHtml({ math })`: `$...$` and `$$...$$` (`katexMath`); pure JS, runs in browsers and Workers |
 
 ---
 
 ## 💡 Advanced Examples
+
+<details>
+<summary><b>Markdown to image / PDF</b></summary>
+
+The [playground](https://sorakumo001.github.io/wasm-html-to-image/master/?mode=markdown) has a *Markdown to PDF* mode: edit the text, pick a template and theme, switch the cover, contents, bookmarks and maths, and see the PDF as it changes. The settings are in the URL, so a look can be shared as a link.
+
+`markdownToHtml` (from the `wasm-html-to-image/markdown` subpath, built on [marked](https://github.com/markedjs/marked)) turns GitHub-flavoured Markdown into a complete HTML page with a built-in GitHub-like stylesheet. It is plain JavaScript, so it works in Node, browsers and Cloudflare Workers alike; pass the result to `render()` as `value`:
+
+```ts
+import { render } from "wasm-html-to-image";
+import { markdownToHtml } from "wasm-html-to-image/markdown";
+
+const html = markdownToHtml("# Hello
+
+- **bold** and `code`", { theme: "dark", maxWidth: 720 });
+const { data } = await render({ value: html, width: 800, format: "pdf" });
+```
+
+Options: `theme` (`"light"` | `"dark"`), `css` (appended after the built-in sheet), `stylesheet` (replaces it), `padding`, `maxWidth`, `title`, `highlight` (fenced code with a known language is syntax-highlighted; default on), `frontMatter` (a leading `---` YAML block is dropped and its `title` becomes the page title; default on), `paged` (for PDF: `padding` becomes the margin of every page, so pages after the first keep their top and bottom margins; the CLI sets it for `.pdf` output, in code pass `paged: true` with `format: "pdf"`), `toc` (see below; on for paged output). Headings stay with the text after them and code blocks, tables and quotes are not split across pages.
+
+The CLI does the same for `.md` / `.markdown` files, and for inline text or stdin with `--markdown`:
+
+```bash
+npx wasm-html-to-image README.md -o readme.png -w 800
+npx wasm-html-to-image notes.md -o notes.pdf --markdown-theme dark --markdown-css extra.css
+npx wasm-html-to-image "# Hello" --markdown -o hello.png
+```
+
+Highlighted languages: bash/shell, c, c++, c#, css/scss, diff, dockerfile, go, html/xml/svg, ini/toml, java, javascript, json, kotlin, markdown, php, python, ruby, rust, sql, swift, typescript, yaml (and the usual aliases such as `js`, `ts`, `sh`, `py`). Other fences stay plain.
+
+**Templates.** A template is a look you pick by name and adjust with a few settings, no CSS needed. It sets the typography, the PDF page (size, margins, running header and footer) and whether the document has a cover and a contents page. Colours are separate (`theme: "light" | "dark"`), so every template comes in both.
+
+| Template | For | Look |
+| :--- | :--- | :--- |
+| `default` | images, quick PDFs | the GitHub-like page |
+| `report` | business documents | A4, cover, contents, headings and links in the accent colour, the title in the header, author and `n / N` in the footer |
+| `book` | books, long reading | A5, serif, justified, each chapter (`h1`) on a new page, a cover and contents, the page number in the footer |
+| `paper` | papers, technical notes | A4, serif, justified, tight leading, the page number in the footer |
+| `compact` | notes, cheat sheets | 12px text, 12mm margins, no cover or contents |
+
+Pick one in the front matter or the options, and set the document's own details there too:
+
+```md
+---
+title: Quarterly report<br>Q3 2026
+subtitle: Product development
+author: Taro Yamada
+date: 2026-10-29
+template: report
+accent: "#c2410c"      # links, headings and the cover rule
+font: serif            # body font (any family the renderer can load)
+page_size: A4          # A3 A4 A5 B4 B5 Letter, or two lengths: 210mm 297mm
+stamp: DRAFT           # printed in the header of every page
+cover: true            # a cover from title, subtitle, author, date and logo
+toc: false             # no contents page
+logo: https://example.com/logo.png
+lang: en               # <html lang>
+---
+```
+
+Precedence is *template defaults < front matter < options*, so a template can be a starting point that one document tweaks and one build overrides. Keys this package does not know are ignored (front matter is shared with other tools).
+
+```ts
+import { render } from "wasm-html-to-image";
+import { markdownToDocument, listTemplates } from "wasm-html-to-image/markdown";
+
+// markdownToHtml(md, opts) is the page alone; markdownToDocument also returns what a PDF needs
+// besides it: the template's header and footer, the PDF's title and author.
+const { html, renderOptions } = markdownToDocument(md, { template: "report", paged: true, settings: { stamp: "DRAFT" } });
+const { data } = await render({ value: html, format: "pdf", ...renderOptions });
+```
+
+```bash
+npx wasm-html-to-image --list-templates
+npx wasm-html-to-image report.md -o report.pdf --template report --stamp DRAFT --accent "#c2410c"
+npx wasm-html-to-image notes.md  -o notes.pdf  --template compact --page-size A5 --no-toc
+npx wasm-html-to-image book.md   -o book.pdf   --template ./my-look.json     # your own, see below
+```
+
+Your own template is data too: pass an object as `template`, or give the CLI a `.json` file with the same shape, or a `.css` file that is laid over the default look.
+
+```json
+{
+  "type": { "font": "serif", "size": 14, "lineHeight": 1.7, "justify": true, "h1Rule": false, "chapterBreak": true },
+  "page": { "size": "B5", "margin": "18mm", "footer": "<div style=\"text-align:center;font-size:10px\">{{pageNumber}}</div>" },
+  "defaults": { "cover": true, "toc": true, "accent": "#0f766e" },
+  "css": ".markdown-body blockquote { font-style: italic }"
+}
+```
+
+`type` takes `font`, `headingFont`, `mono`, `size` (px), `lineHeight`, `justify`, `h1Rule`, `h2Rule`, `headingWeight`, `accentHeadings`, `chapterBreak` and `radius`; `page` takes `size`, `margin` (a CSS `margin`), `header` and `footer` (HTML with `{{pageNumber}}`, `{{totalPages}}`, `{{title}}`, `{{author}}`, `{{date}}`, `{{stamp}}`). Anything left out comes from the default template. A cover is built from `<header class="cover">` with `cover-title`, `cover-subtitle`, `cover-meta` and `cover-logo` inside, so `css` can restyle it; its title is not an `h1`, so it stays out of the bookmarks and the contents.
+
+**Table of contents and bookmarks.** A PDF made from Markdown starts with a table of contents and carries bookmarks, both on by default:
+
+- Every heading gets an `id` (a slug of its text: any script, lower-cased, duplicates numbered `-2`, `-3`) and the contents lists the headings down to `toc.depth` (default 3). Each row is a link to its heading and shows the page the heading lands on, filled in once the pages are planned (the contents' own pages included, so the numbers are right however long the list is).
+- The bookmarks (the viewer's outline panel) come from `h1`-`h6`, nested by level; a heading that `break-after: avoid` moved is bookmarked where it ended up.
+- Links like `[see](#setup)` in the text are clickable in the PDF, wrapped lines included.
+
+```ts
+markdownToHtml(md, { paged: true });                                        // contents on (the default for PDF)
+markdownToHtml(md, { paged: true, toc: { depth: 2, title: "目次" } });      // shallower, own title ("" for none)
+markdownToHtml(md, { paged: true, toc: false });                            // no contents page
+await render({ value: html, format: "pdf", pdfOutline: false });            // no bookmarks
+```
+
+```bash
+npx wasm-html-to-image book.md -o book.pdf                  # contents + bookmarks
+npx wasm-html-to-image book.md -o book.pdf --toc-depth 2    # shallower contents
+npx wasm-html-to-image book.md -o book.pdf --no-toc         # no contents page
+npx wasm-html-to-image book.md -o book.pdf --no-outline     # no bookmarks
+```
+
+Images get no contents by default (there are no pages to number); pass `toc: true` to add one anyway.
+
+It works for plain HTML too: the renderer turns every `<a href="#id">` into a link to the element with that `id`, and replaces the text of any element with `data-toc-page="id"` by the page that element starts on, so a hand-written contents page can use `<a href="#intro">Intro <span data-toc-page="intro"></span></a>`. Destination names are spelled in ASCII inside the PDF (a non-ASCII `id` becomes `u` + its UTF-8 in hex) because Skia writes them differently for a destination and a link, which only agree for ASCII.
+
+**Maths.** `$...$` (inline) and `$$...$$` (display) are typeset with [KaTeX](https://katex.org) when you pass a renderer. It lives in its own subpath so that `markdownToHtml` stays small for those who do not need it:
+
+```ts
+import { markdownToHtml } from "wasm-html-to-image/markdown";
+import { katexMath } from "wasm-html-to-image/markdown-math";
+
+const html = markdownToHtml("Euler: $e^{i\\pi} + 1 = 0$\n\n$$\n\\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}\n$$", {
+  math: katexMath(), // { fontBase: "https://my.host/katex/fonts" } to self-host the fonts
+});
+```
+
+Prices stay prices (`It costs $5 and $10`: the closing dollar must follow a non-space and not precede a digit), `\$` is a literal dollar, and code spans and fences are left alone. TeX that KaTeX rejects is shown as its source with the error as a tooltip instead of failing the page. The output is KaTeX's HTML (no MathML), so it works in Node, browsers and Workers; its fonts are fetched while the page is drawn, from the jsDelivr copy of the matching KaTeX version unless you set `fontBase`. The CLI turns maths on whenever `katex` is installed (`--no-math` switches it off).
+
+`marked`, `highlight.js` and `katex` are optional dependencies, installed with the package by default (the Markdown subpath is about 280 kB when bundled for a browser; the KaTeX one is about 520 kB on top of it, mostly KaTeX itself).
+
+</details>
 
 <details>
 <summary><b>0. Pages that build themselves with JavaScript (jsdom, Node only)</b></summary>

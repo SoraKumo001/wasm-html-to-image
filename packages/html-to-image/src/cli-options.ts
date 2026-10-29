@@ -37,6 +37,32 @@ export interface CliFlags {
   font?: string[];
   /** `--js`: run the page's scripts (jsdom) before rendering. */
   js?: boolean;
+  /** `--markdown`: treat the input as Markdown (implied by a `.md` / `.markdown` file). */
+  markdown?: boolean;
+  /** `--markdown-theme <light|dark>`; absent means light. */
+  markdownTheme?: string;
+  /** `--template <name|file>`: a bundled template, or a .json / .css file (see `loadTemplate`). */
+  template?: string;
+  /** `--page-size <A4|A5|...|"210mm 297mm">`. */
+  pageSize?: string;
+  /** `--accent <colour>`: links, rules and the cover accent. */
+  accent?: string;
+  /** `--body-font <family>`: the body font of the page. */
+  bodyFont?: string;
+  /** `--stamp <text>`: printed in the header of every page. */
+  stamp?: string;
+  /** `--cover` / `--no-cover`. */
+  cover?: boolean;
+  /** `--no-toc` sets this to false: a PDF from Markdown gets a table of contents by default. */
+  toc?: boolean;
+  /** `--toc-depth <n>`: deepest heading level in the table of contents (default 3). */
+  tocDepth?: number;
+  /** `--no-outline` sets this to false: the PDF's bookmarks (outline) are on by default. */
+  outline?: boolean;
+  /** `--no-math` sets this to false: `$...$` / `$$...$$` are typeset when katex is installed. */
+  math?: boolean;
+  /** `--markdown-css <path>`: extra stylesheet appended after the built-in one. */
+  markdownCss?: string;
   /** `--js-wait <ms|selector>`: a number is the settle time after load, anything else a CSS selector to wait for. */
   jsWait?: string;
 }
@@ -117,6 +143,92 @@ export function inferFormat(output: string | undefined): OutputFormat | undefine
   if (!output) return undefined;
   const ext = path.extname(output).slice(1).toLowerCase();
   return EXTENSION_FORMATS[ext];
+}
+
+/** Whether `input` names an existing file (a Markdown text or HTML string is not a path). */
+export async function isFile(input: string): Promise<boolean> {
+  try {
+    return (await fs.stat(input)).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/** Markdown text passed with `--markdown` instead of a file path. */
+export async function isInlineMarkdown(input: string, flags: { markdown?: boolean }): Promise<boolean> {
+  return !!flags.markdown && input !== "-" && !isUrlInput(input) && !(await isFile(input));
+}
+
+/** A `.md` / `.markdown` file path is Markdown input without `--markdown`. */
+export function isMarkdownPath(input: string): boolean {
+  return /\.(md|markdown)$/i.test(input) && !isUrlInput(input);
+}
+
+/** Convert Markdown text to a styled HTML document (`marked` is an optional dependency). */
+export async function convertMarkdown(
+  markdown: string,
+  flags: CliFlags,
+): Promise<{ html: string; renderOptions: import("./markdown.js").MarkdownRenderOptions }> {
+  let mod: typeof import("./markdown.js");
+  try {
+    mod = await import("./markdown.js");
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "ERR_MODULE_NOT_FOUND") throw e;
+    throw new Error(
+      "Markdown input needs the optional dependency `marked`. Install it with `npm i marked`.",
+    );
+  }
+  const theme = flags.markdownTheme?.toLowerCase();
+  if (theme !== undefined && theme !== "light" && theme !== "dark") {
+    throw new Error(`unsupported markdown theme "${flags.markdownTheme}". Choose from: light, dark`);
+  }
+  const css = flags.markdownCss ? await fs.readFile(flags.markdownCss, "utf-8") : undefined;
+  const settings = {
+    ...(flags.pageSize !== undefined ? { page_size: flags.pageSize } : {}),
+    ...(flags.accent !== undefined ? { accent: flags.accent } : {}),
+    ...(flags.bodyFont !== undefined ? { font: flags.bodyFont } : {}),
+    ...(flags.stamp !== undefined ? { stamp: flags.stamp } : {}),
+    ...(flags.cover !== undefined ? { cover: flags.cover } : {}),
+  };
+  const template = flags.template !== undefined ? await loadTemplate(flags.template) : undefined;
+  return mod.markdownToDocument(markdown, {
+    theme,
+    css,
+    ...(template !== undefined ? { template } : {}),
+    ...(Object.keys(settings).length ? { settings } : {}),
+    paged: flags.format === "pdf",
+    // Default: a table of contents in a PDF (markdownToHtml's own default), none in an image.
+    ...(flags.toc === false ? { toc: false } : flags.tocDepth !== undefined ? { toc: { depth: flags.tocDepth } } : {}),
+    ...(flags.math === false ? {} : await loadMath()),
+  });
+}
+
+/**
+ * `--template`: a bundled name, or a file. A `.json` file is a {@link MarkdownTemplate} (`type`, `page`,
+ * `defaults`, `css`); a `.css` file is extra CSS laid over the default template.
+ */
+export async function loadTemplate(
+  spec: string,
+): Promise<string | import("./markdown-template.js").MarkdownTemplate> {
+  if (!/\.(json|css)$/i.test(spec)) return spec; // a name: resolveTemplate reports an unknown one
+  const text = await fs.readFile(spec, "utf-8");
+  if (/\.css$/i.test(spec)) return { description: spec, css: text };
+  try {
+    return JSON.parse(text) as import("./markdown-template.js").MarkdownTemplate;
+  } catch (e) {
+    throw new Error(`template ${spec} is not valid JSON: ${(e as Error).message}`);
+  }
+}
+
+/** KaTeX maths for the Markdown, or nothing when `katex` is not installed (it is optional). */
+async function loadMath(): Promise<{ math?: import("./markdown-math.js").MathRenderer }> {
+  try {
+    const { katexMath } = await import("./markdown-math.js");
+    return { math: katexMath() };
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ERR_MODULE_NOT_FOUND") return {};
+    throw e;
+  }
 }
 
 /** Inline markup passed on the command line (as opposed to a path or URL). */
@@ -219,13 +331,23 @@ export async function buildRenderOptions(
   input: string,
   flags: CliFlags,
 ): Promise<HtmlToImageOptions> {
-  const source = isInlineHtml(input)
+  const markdown = flags.markdown || isMarkdownPath(input);
+  // `--markdown` takes a file path, `-` (stdin) or the Markdown text itself.
+  const inlineMarkdown = await isInlineMarkdown(input, flags);
+  let source = inlineMarkdown || isInlineHtml(input)
     ? { value: input, baseUrl: process.cwd() }
     : input === "-"
       ? { value: await readStdin(), baseUrl: process.cwd() }
       : isUrlInput(input)
         ? { url: input }
         : await readInput(input);
+  // A template's running header / footer and the PDF's title and author travel with the page.
+  let templateOptions: import("./markdown.js").MarkdownRenderOptions = {};
+  if (markdown && "value" in source && typeof source.value === "string") {
+    const converted = await convertMarkdown(source.value, flags);
+    source = { ...source, value: converted.html };
+    templateOptions = converted.renderOptions;
+  }
   const fonts = flags.font?.length ? await loadFonts(flags.font) : [];
   const { animation, warning } = resolveAnimation(flags);
   if (warning) console.warn(`wasm-html-to-image: ${warning}`);
@@ -235,6 +357,7 @@ export async function buildRenderOptions(
     format: flags.format,
     quality: flags.quality,
     ...source,
+    ...templateOptions,
     ...(flags.baseUrl !== undefined ? { baseUrl: flags.baseUrl } : {}),
     ...(flags.colorSpace !== undefined ? { colorSpace: flags.colorSpace } : {}),
     ...(flags.scale !== undefined ? { scale: flags.scale } : {}),
@@ -242,5 +365,6 @@ export async function buildRenderOptions(
     ...(animation ? { animation } : {}),
     ...(fonts.length ? { fonts } : {}),
     ...(flags.js ? { javascript: resolveJavaScript(flags.jsWait) } : {}),
+    ...(flags.outline === false ? { pdfOutline: false } : {}),
   };
 }

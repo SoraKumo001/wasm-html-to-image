@@ -30,6 +30,8 @@ namespace litehtml
 		void get_table_row_boundaries( position::vector& boxes ) const override;
 		bool get_table_header_boundary( position& box ) const override;
 		std::shared_ptr<render_item> init() override;
+		pixel_t get_first_baseline() override;
+		pixel_t get_last_baseline() override;
 	};
 
 	class render_item_table_part : public render_item

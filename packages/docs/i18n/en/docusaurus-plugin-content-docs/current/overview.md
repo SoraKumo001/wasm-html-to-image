@@ -19,12 +19,12 @@ graph LR
 ## Key Features
 
 - **Single Unified WASM Module**: Parses HTML, calculates CSS layout, renders with Skia, and encodes images (WebP/AVIF/JPEG, etc.) inside one binary without passing intermediate frame buffers across JS boundaries.
-- **Versatile Inputs**: Supports HTML strings, HTML string arrays (for multi-page PDF), URLs, and raw image buffers (PNG, JPEG, WebP, GIF, AVIF, BMP, Data URLs).
+- **Versatile Inputs**: Supports HTML strings, HTML string arrays (for multi-page PDF), Markdown, URLs, and raw image buffers (PNG, JPEG, WebP, GIF, AVIF, BMP, Data URLs).
 - **Multiple Output Formats**: Direct SVG vector output, high-quality PNG, JPEG, WebP, AVIF, raw pixels, ThumbHash, and multi-page PDF generation.
 - **Zero-Config `render()`**: Import directly from `wasm-html-to-image` and render immediately without manual WASM loading or setup (automatically resolves `workerd` in Cloudflare Workers).
 - **Edge & Cloudflare Workers Ready**: Along with auto-detection, dedicated `wasm-html-to-image/workerd` and `edge-light` subpaths fit constrained serverless edge environments.
 - **Parallel Worker Pool**: Built-in multi-threaded pool in `wasm-html-to-image/workers` allows batch generation without stalling the main event loop.
-- **Rich Ecosystem Integration**: Seamless JSX rendering for React and Preact, plus UnoCSS-based Tailwind CSS utility classes.
+- **Rich Ecosystem Integration**: Seamless JSX rendering for React and Preact, UnoCSS-based Tailwind CSS utility classes, and Markdown to image / beautiful PDF documents (templates, automatic TOC, bookmarks, and KaTeX math).
 
 ---
 
@@ -155,6 +155,8 @@ const result = await htmlToImage(mod, {
 | `wasm-html-to-image/react`      | React integration            | Direct rendering wrapper for React JSX nodes                           |
 | `wasm-html-to-image/preact`     | Preact integration           | Direct rendering wrapper for Preact JSX nodes                          |
 | `wasm-html-to-image/tailwind`   | Styling pipeline             | UnoCSS / Tailwind v4 utilities as CSS (`tw` prop, `@theme`, `@apply`)                                   |
+| `wasm-html-to-image/markdown`   | Markdown input               | GitHub-flavoured Markdown to styled HTML / PDF documents (`markdownToHtml`, `markdownToDocument`, templates) |
+| `wasm-html-to-image/markdown-math` | Maths in Markdown         | KaTeX renderer for Markdown math expressions (`$...$`, `$$...$$`) via `katexMath` |
 
 ---
 

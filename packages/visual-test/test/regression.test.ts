@@ -717,6 +717,47 @@ describe("regression: layout and paint probes", () => {
     expect(smallClone.equals(smallPlain)).toBe(true);
   });
 
+  it("PDF page breaks see through the whitespace between a wrapper's blocks (pretty-printed markup)", async () => {
+    // 120px of paragraphs, then a 100px break-inside:avoid block that straddles the 200px page cut.
+    // The wrapper only groups blocks, so the avoid must be honoured whether or not the markup has
+    // newlines between them; whitespace text used to make the whole wrapper one unbreakable unit.
+    const blocks = [
+      `<p style="margin:0;height:120px;background:#9cf">a</p>`,
+      `<pre style="margin:0;height:100px;background:#fc9;break-inside:avoid">b</pre>`,
+    ];
+    const doc = (sep: string) =>
+      `<html><head><style>@page{size:300px 200px;margin:0}</style></head><body style="margin:0"><article style="padding:0">${sep}${blocks.join(sep)}${sep}</article></body></html>`;
+    // Compare whole files minus the creation/modification dates and the trailer ID.
+    const pdf = async (html: string) =>
+      Buffer.from((await render({ value: html, width: 300, format: "pdf" })).data as Uint8Array)
+        .toString("latin1")
+        .replace(/\/(CreationDate|ModDate)\s*\([^)]*\)/g, "")
+        .replace(/\/ID\s*\[[^\]]*\]/g, "");
+    await pdf(doc("")); // warm-up: a process' first PDF embeds its fonts differently from later ones
+    const tight = await pdf(doc(""));
+    expect(await pdf(doc("\n  "))).toBe(tight);
+    // ... and the avoid really moved the block to page 2: the pages differ from a no-avoid run.
+    expect(await pdf(doc("").replace(";break-inside:avoid", ""))).not.toBe(tight);
+  });
+
+  it("PDF break-inside: avoid cuts at the border-box top of a padded block, not at its content", async () => {
+    // A 100px box (20px padding + 60px content) straddles the 200px page cut. The cut must be the
+    // box's top edge (120px): at its content top (140px) the 20px of top padding stayed behind as a
+    // grey sliver on page 1.
+    const html =
+      `<html><head><style>@page{size:300px 200px;margin:0}</style></head><body style="margin:0">` +
+      `<p style="margin:0;height:120px;background:#9cf">a</p>` +
+      `<pre style="margin:0;padding:20px;height:60px;background:#fc9;break-inside:avoid">b</pre></body></html>`;
+    const data = Buffer.from((await render({ value: html, width: 300, format: "pdf" })).data as Uint8Array);
+    const text = data.toString("latin1");
+    const firstPage = /\/Contents (\d+) 0 R/.exec(text)![1];
+    const at = text.indexOf(`\n${firstPage} 0 obj\n`);
+    const start = text.indexOf("stream\n", at) + 7;
+    const content = inflateSync(data.subarray(start, text.indexOf("\nendstream", start))).toString("latin1");
+    // The page clip is in points (0.75 per px): 120px = 90pt.
+    expect(/^0 0 225 (\d+(?:\.\d+)?) re$/m.exec(content)![1]).toBe("90");
+  });
+
   it("text-fit: shrink / grow scale the font so the widest line fits the container", async () => {
     const extent = async (style: string, text: string) => {
       const { img } = await renderPng(
@@ -1256,6 +1297,229 @@ describe("regression: layout and paint probes", () => {
     // the heading stayed on one line (the box itself is 100% of the viewport tall, as in Chromium)
     expect(boxes.find((b) => b.t === "h1")!.h).toBeLessThan(30);
   });
+  it("pdfBackground paints the whole PDF page, margins included", async () => {
+    // Without it only the content area (inside the @page margin) is painted by the document's own background.
+    const html = `<html><head><style>@page{size:300px 200px;margin:20px}body{margin:0}</style></head><body><p>x</p></body></html>`;
+    const firstPageContent = async (extra: Record<string, unknown>) => {
+      const data = Buffer.from((await render({ value: html, width: 300, format: "pdf", pdfOutline: false, ...extra })).data as Uint8Array);
+      const text = data.toString("latin1");
+      const n = /\/Contents (\d+) 0 R/.exec(text)![1];
+      const at = text.indexOf(`\n${n} 0 obj\n`);
+      const start = text.indexOf("stream\n", at) + 7;
+      return inflateSync(data.subarray(start, text.indexOf("\nendstream", start))).toString("latin1");
+    };
+    // the page rectangle (300x200 px = 225x150 pt after the 0.75 scale: here 300 200 in px units) is filled in #0d1117
+    expect(await firstPageContent({ pdfBackground: "#0d1117" })).toMatch(/\.051 \.0667 \.0902 rg[\s\S]*?0 0 300 200 re\s+f/);
+    expect(await firstPageContent({})).not.toMatch(/0 0 300 200 re\s+f/);
+    await expect(render({ value: html, width: 300, format: "pdf", pdfBackground: "red" })).rejects.toThrow(/invalid colour/);
+  });
+
+  it("a break-before:page on the element that already starts the page does not print a blank page", async () => {
+    // break-after:page ends page 1; the next element's own break-before:page falls on the margin the
+    // first break left behind (the <p> inside the div). Only white space lies between the two cuts, so
+    // it must not become a page of its own.
+    const pages = async (body: string) => {
+      const html =
+        `<html><head><style>@page{size:300px 200px;margin:0}body{margin:0}h1{margin:0;break-before:page}</style></head><body>${body}</body></html>`;
+      const pdf = (await render({ value: html, width: 300, format: "pdf", pdfOutline: false })).data as Uint8Array;
+      return (Buffer.from(pdf).toString("latin1").match(/\/Type\s*\/Page\b(?!s)/g) ?? []).length;
+    };
+    expect(await pages(`<div style="break-after:page"><p>x</p></div><h1>T</h1>`)).toBe(2);
+    // A real break-before still breaks: content sits between the cut and the heading.
+    expect(await pages(`<p>a</p><h1>A</h1><p>b</p><h1>B</h1>`)).toBe(3);
+  });
+
+  describe("PDF links, destinations and table-of-contents page numbers", () => {
+    // Read a PDF the way a viewer does (pdfjs): the page each named destination is on, every link's
+    // destination name, the bookmarks, and the text of one page.
+    const readPdf = async (data: Uint8Array) => {
+      const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+      const doc = await pdfjs.getDocument({ data: new Uint8Array(data), useSystemFonts: false, isEvalSupported: false }).promise;
+      const pageOfDest = async (dest: unknown) => {
+        const d = typeof dest === "string" ? await doc.getDestination(dest) : (dest as unknown[]);
+        return d ? (await doc.getPageIndex(d[0] as never)) + 1 : 0;
+      };
+      const destinations: Record<string, number> = {};
+      for (const [name, d] of Object.entries((await doc.getDestinations()) ?? {})) destinations[name] = await pageOfDest(d);
+      const links: { page: number; dest: string; rect: number[] }[] = [];
+      for (let p = 1; p <= doc.numPages; p++)
+        for (const a of await (await doc.getPage(p)).getAnnotations())
+          if (a.subtype === "Link" && typeof a.dest === "string") links.push({ page: p, dest: a.dest, rect: a.rect });
+      const bookmarks: [string, number][] = [];
+      const walk = async (items: { title: string; dest: unknown; items?: unknown[] }[]) => {
+        for (const it of items) {
+          bookmarks.push([it.title, await pageOfDest(it.dest)]);
+          if (it.items?.length) await walk(it.items as never);
+        }
+      };
+      await walk(((await doc.getOutline()) ?? []) as never);
+      const lines = async (page: number) => {
+        const tc = await (await doc.getPage(page)).getTextContent();
+        const rows = new Map<number, [number, string][]>();
+        for (const t of tc.items as { transform: number[]; str: string }[]) {
+          const y = Math.round(t.transform[5]);
+          rows.set(y, [...(rows.get(y) ?? []), [t.transform[4], t.str]]);
+        }
+        return [...rows.entries()]
+          .sort((a, b) => b[0] - a[0])
+          .map(([, parts]) => parts.sort((a, b) => a[0] - b[0]).map((x) => x[1]).join("").trim());
+      };
+      return { pages: doc.numPages, destinations, links, bookmarks, lines };
+    };
+    const pdf = async (html: string) => (await render({ value: html, width: 300, format: "pdf" })).data as Uint8Array;
+    const doc = (body: string) =>
+      `<html><head><style>@page{size:300px 200px;margin:0}body{margin:0;font:14px sans-serif}` +
+      `.toc a{display:block;color:#000;text-decoration:none}.pad{height:230px}</style></head><body>${body}</body></html>`;
+
+    it("fills data-toc-page with the page the id starts on, and the table of contents's own pages move the numbers", async () => {
+      // Row 1 is on page 1; the headings follow after padding. Page numbers are text, so this also
+      // checks that the numbers are filled in before the pages are planned for good.
+      const body =
+        `<nav class="toc"><a href="#a">Alpha <span data-toc-page="a">0</span></a><a href="#b">Beta <span data-toc-page="b">0</span></a></nav>` +
+        `<div class="pad"></div><h1 id="a">Alpha</h1><div class="pad"></div><h1 id="b">Beta</h1>`;
+      const r = await readPdf(await pdf(doc(body)));
+      const printed = (await r.lines(1)).filter((l) => /^(Alpha|Beta)\s*\d+$/.test(l));
+      expect(printed).toEqual([`Alpha ${r.destinations.a}`, `Beta ${r.destinations.b}`]);
+      expect(r.destinations.a).toBeGreaterThan(1);
+      expect(r.destinations.b).toBeGreaterThan(r.destinations.a);
+    });
+
+    it("links reach their destinations, ids in any script included (Skia names ASCII only)", async () => {
+      const body =
+        `<nav class="toc"><a href="#章-1">章 1</a><a href="#ascii-id">two</a><a href="#nowhere">dead</a></nav>` +
+        `<div class="pad"></div><h1 id="章-1">章 1</h1><div class="pad"></div><h1 id="ascii-id">two</h1>`;
+      const r = await readPdf(await pdf(doc(body)));
+      expect(Object.keys(r.destinations).length).toBe(2); // only ids that a link points at
+      // every link resolves to a destination (a link to a missing id is not written at all)
+      expect(r.links.length).toBe(2);
+      for (const l of r.links) expect(r.destinations[l.dest]).toBeGreaterThan(1);
+    });
+
+    it("an inline link is clickable on its own text, and a link that wraps is clickable on every line", async () => {
+      const body =
+        `<p id="top">x</p><p style="width:90px">word word <a href="#top">several words that wrap</a> end</p>`;
+      const r = await readPdf(await pdf(doc(body)));
+      expect(r.links.length).toBeGreaterThan(1); // one rectangle per line of the wrapped link
+      for (const l of r.links) {
+        expect(l.rect[2] - l.rect[0]).toBeGreaterThan(5);
+        expect(l.rect[2]).toBeLessThanOrEqual(100); // inside the 90px paragraph (plus its rounding)
+      }
+    });
+
+    it("bookmarks follow the headings, nested by level, on the page each heading starts on", async () => {
+      const body = `<h1>A</h1><div class="pad"></div><h2>A1</h2><div class="pad"></div><h1>B</h1>`;
+      const r = await readPdf(await pdf(doc(body)));
+      expect(r.bookmarks.map(([t]) => t)).toEqual(["A", "A1", "B"]);
+      expect(r.bookmarks[1][1]).toBeGreaterThan(r.bookmarks[0][1]);
+      expect(r.bookmarks[2][1]).toBeGreaterThan(r.bookmarks[1][1]);
+    });
+  });
+
+  it("a PDF gets an outline (bookmarks) from h1-h6 by default, and pdfOutline: false leaves it out", async () => {
+    const html =
+      `<html><head><style>@page{size:300px 200px;margin:0}</style></head><body style="margin:0">` +
+      `<h1>First</h1><div style="height:260px"></div><h2>Second 日本語</h2></body></html>`;
+    // Bookmark titles: PDF text strings, either (ASCII) or <FEFF...> UTF-16BE.
+    const titles = (pdf: Uint8Array) => {
+      const text = Buffer.from(pdf).toString("latin1");
+      return [...text.matchAll(/\/Title\s*(?:<([0-9A-Fa-f]+)>|\(([^)]*)\))/g)].map((m) =>
+        m[1] ? Buffer.from(m[1], "hex").subarray(2).swap16().toString("utf16le") : m[2],
+      );
+    };
+    const on = (await render({ value: html, width: 300, format: "pdf" })).data as Uint8Array;
+    expect(Buffer.from(on).toString("latin1")).toContain("/Outlines");
+    expect(titles(on)).toEqual(expect.arrayContaining(["First", "Second 日本語"]));
+    const off = (await render({ value: html, width: 300, format: "pdf", pdfOutline: false })).data as Uint8Array;
+    expect(Buffer.from(off).toString("latin1")).not.toContain("/Outlines");
+    expect(titles(off)).not.toContain("First");
+    // A document without headings gets no outline at all.
+    const none = (await render({ value: `<html><body><p>x</p></body></html>`, width: 300, format: "pdf" })).data as Uint8Array;
+    expect(Buffer.from(none).toString("latin1")).not.toContain("/Outlines");
+  });
+
+  it("an auto-width table is as wide as its content when a cell holds a width:100% inline-block (KaTeX fraction line)", async () => {
+    const boxes = async (body: string) => {
+      let out: { i?: string; w: number; h: number }[] = [];
+      await render({
+        value: `<html><body style="margin:0;font:20px/1.2 sans-serif">${body}</body></html>`,
+        width: 300,
+        format: "png",
+        onLayout: (b) => {
+          out = b as typeof out;
+        },
+      });
+      return out;
+    };
+    const line = `<span style="display:block;height:0"><span style="border-bottom:2px solid #000;display:inline-block;width:100%"></span></span>`;
+    // The percentage resolved against the 300px the table could take, so the table filled it.
+    const inlineTable = await boxes(
+      `<span id="t" style="display:inline-table"><span style="display:table-row"><span style="display:table-cell"><span style="display:inline-block">ab</span>${line}</span></span></span>`,
+    );
+    expect(inlineTable.find((b) => b.i === "t")!.w).toBeLessThan(40);
+    const table = await boxes(
+      `<table id="t" style="border-collapse:collapse"><tr><td><span style="display:inline-block">ab</span>${line}</td></tr></table>`,
+    );
+    expect(table.find((b) => b.i === "t")!.w).toBeLessThan(40);
+    // A width:100% table still takes the container's width and wraps its text inside it.
+    const text = "Building an open-source and cross-platform Azure CLI with Python";
+    const full = await boxes(
+      `<div style="width:260px"><table id="t" style="width:100%;border-collapse:collapse"><tr><td>${text}</td></tr></table></div>`,
+    );
+    expect(full.find((b) => b.i === "t")!.w).toBeCloseTo(260, 0);
+    expect(full.find((b) => b.i === "t")!.h).toBeGreaterThan(40);
+  });
+
+  it("an inline-table sits on the line by its first row's baseline, through position:relative children (KaTeX column)", async () => {
+    // A zero-size marker next to the table is on the line's baseline. The first row is a 40px
+    // bottom-aligned cell holding position:relative height:0 blocks (a KaTeX vlist); a second 10px
+    // row (the descender strut) follows. Chromium puts the baseline at 40; the table used to answer
+    // with its bottom edge (50), and the blocks' position:relative hid the cell's own baseline.
+    let boxes: { i?: string; y: number }[] = [];
+    const block = `<span style="display:block;height:0;position:relative;top:-20px"><span style="display:inline-block;height:20px;width:0"></span><span style="display:inline-block">a</span></span>`;
+    await render({
+      value:
+        `<html><body style="margin:0;font:20px/1.2 sans-serif"><div>` +
+        `<span style="display:inline-table;border-collapse:collapse;table-layout:fixed">` +
+        `<span style="display:table-row"><span style="display:table-cell;position:relative;vertical-align:bottom;height:40px">${block}</span></span>` +
+        `<span style="display:table-row"><span style="display:table-cell;height:10px"></span></span></span>` +
+        `<span id="t" style="display:inline-block;width:10px;height:0"></span></div></body></html>`,
+      width: 300,
+      format: "png",
+      onLayout: (b) => {
+        boxes = b as typeof boxes;
+      },
+    });
+    const y = boxes.find((b) => b.i === "t")!.y;
+    expect(y).toBeGreaterThan(36);
+    expect(y).toBeLessThan(44);
+  });
+
+  it("a table of bottom-aligned cells sits on its first row's bottom: a raised KaTeX superscript stays raised", async () => {
+    // The superscript is a one-row inline-table whose bottom-aligned cell holds a position:relative
+    // block raised by `top`. A cell of that kind has no baseline of its own, so the table sits on the
+    // first row's bottom edge, wherever the raised content lands: reading the content's baseline
+    // instead dragged the table down by the offset and put the exponent back on the baseline.
+    let boxes: { i?: string; y: number }[] = [];
+    const sup = (top: number) =>
+      `<span style="display:inline-table;border-collapse:collapse;table-layout:fixed"><span style="display:table-row">` +
+      `<span style="display:table-cell;position:relative;vertical-align:bottom;height:10px"><span style="display:block;height:0;position:relative;top:${top}px">` +
+      `<span style="display:inline-block;height:12px;width:0"></span><span style="display:inline-block;font-size:12px">2</span></span></span></span></span>`;
+    const ys: number[] = [];
+    for (const top of [-8, -20]) {
+      await render({
+        value: `<html><body style="margin:0;font:20px/1.2 sans-serif"><div>x${sup(top)}<span id="t" style="display:inline-block;width:10px;height:0"></span></div></body></html>`,
+        width: 300,
+        format: "png",
+        onLayout: (b) => {
+          boxes = b as typeof boxes;
+        },
+      });
+      ys.push(boxes.find((b) => b.i === "t")!.y);
+    }
+    // The line's baseline does not depend on how far the exponent is raised.
+    expect(Math.abs(ys[0] - ys[1])).toBeLessThan(1);
+  });
+
   it("auto-width table with percentage cells is shrink-to-fit, not collapsed", async () => {
     const cell = (w: string) => `<td style="width:${w}">先代<br>東京府・東京市</td>`;
     for (const font of ["", "font-size:95%;"]) {

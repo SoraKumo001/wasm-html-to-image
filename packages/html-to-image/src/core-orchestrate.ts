@@ -25,7 +25,7 @@ import {
   type ResolveResourceHook,
 } from "./diagnostics.js";
 import {
-  isNodeRuntime,
+  canSetUserAgent,
   now,
   resolveHtmlResources,
   type DiagState,
@@ -100,6 +100,8 @@ export interface Orchestration {
   css: string | undefined;
   preloadFonts: { name: string; data: Uint8Array }[] | undefined;
   limits: RenderLimits;
+  pdfOutline: boolean | undefined;
+  pdfBackground: string | undefined;
   pdfTitle: string | undefined;
   pdfAuthor: string | undefined;
   pdfSubject: string | undefined;
@@ -174,6 +176,8 @@ export function createOrchestration(
     css,
     fonts: preloadFonts,
     limits = {},
+    pdfOutline,
+    pdfBackground,
     pdfTitle,
     pdfAuthor,
     pdfSubject,
@@ -337,6 +341,8 @@ export function createOrchestration(
     css,
     preloadFonts,
     limits,
+    pdfOutline,
+    pdfBackground,
     pdfTitle,
     pdfAuthor,
     pdfSubject,
@@ -377,9 +383,9 @@ export async function resolveHtmlSource(
     return value as string | string[];
   }
   if (typeof url === "string") {
-    // Same as resource fetch: User-Agent override is Node-only. In browsers
+    // Same as resource fetch: User-Agent override is Node/Workers-only. In browsers
     // it is forbidden and triggers a Firefox preflight that breaks CORS.
-    const headers = isNodeRuntime()
+    const headers = canSetUserAgent()
       ? { "User-Agent": userAgent ?? DEFAULT_USER_AGENT }
       : undefined;
     const fetchStart = now();

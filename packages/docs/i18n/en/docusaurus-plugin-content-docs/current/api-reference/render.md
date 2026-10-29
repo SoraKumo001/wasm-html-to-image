@@ -97,3 +97,18 @@ await render({
 ```
 
 Fetched resources are cached in-process (up to 256 entries / 64 MiB, least-recently-used eviction, remote entries keyed per User-Agent). Call `clearResourceCache()` if the source files changed.
+
+### PDF Metadata & Page Layout
+
+| Option | Type | Default | Description |
+| ------ | ---- | :-----: | ----------- |
+| `pdfTitle` | `string` | - | PDF document title |
+| `pdfAuthor` | `string` | - | Author name |
+| `pdfSubject` | `string` | - | Document subject |
+| `pdfKeywords` | `string` | - | Keywords |
+| `pdfCreator` | `string` | - | Generating application |
+| `pdfProducer` | `string` | - | PDF conversion engine |
+| `pdfOutline` | `boolean` | `true` | Generate PDF bookmarks (outline) from `h1`–`h6`. Pass `false` to disable |
+| `pdfMargin` | `{ top?: number, right?: number, bottom?: number, left?: number }` | - | Page margin settings (in px or pt) |
+| `pdfHeader` | `string` | - | HTML header template for each page (`{{pageNumber}}`, `{{totalPages}}` supported) |
+| `pdfFooter` | `string` | - | HTML footer template for each page (`{{pageNumber}}`, `{{totalPages}}` supported) |

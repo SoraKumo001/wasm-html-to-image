@@ -239,6 +239,16 @@ export interface HtmlToImageOptions extends RenderOptions {
    *   gamut-mapped. Other formats ignore it.
    */
   colorSpace?: "srgb" | "cmyk";
+  /**
+   * PDF outline (bookmarks) built from the document's `h1`-`h6`. On by default; `false` leaves it out.
+   */
+  pdfOutline?: boolean;
+  /**
+   * PDF page background, painted over the whole page (margins included) before the content: `#rrggbb`
+   * or `#rrggbbaa`. Without it only the content area takes the document's `background`, so a dark page
+   * would show white margins. Other formats ignore it.
+   */
+  pdfBackground?: string;
   /** PDF Title metadata. */
   pdfTitle?: string;
   /** PDF Author metadata. */
@@ -330,6 +340,8 @@ export async function htmlToImage(
     mediaTypeInt: orch.mediaTypeInt,
     colorSpace: orch.colorSpace,
     scale: orch.scale,
+    pdfOutline: orch.pdfOutline,
+    pdfBackground: orch.pdfBackground,
     pdfTitle: orch.pdfTitle,
     pdfAuthor: orch.pdfAuthor,
     pdfSubject: orch.pdfSubject,
