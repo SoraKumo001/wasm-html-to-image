@@ -244,6 +244,16 @@ void litehtml::flex_item_row_direction::direction_specific_init(const litehtml::
 	min_content_contribution = min_main_size;
 	if (!m_container_wm.is_vertical() && !size_prop.is_predefined() && size_prop.units() != css_units_percentage)
 		min_content_contribution = std::max(min_main_size, size_prop.calc_percent(parent_size) + render_offset - el->box_sizing_inline(m_container_wm));
+	// An inflexible item (flex-shrink: 0) with a definite flex-basis can never be
+	// narrower than its flex base size in any layout, so the base size is its
+	// min-content contribution — not its width property (width:20px with
+	// flex:0 0 40px contributes 40) and not its content size.
+	if (!m_container_wm.is_vertical() && shrink == 0 && !el->css().get_flex_basis().is_predefined() &&
+		el->css().get_flex_basis().units() == css_units_px)
+	{
+		min_content_contribution = std::max(min_content_contribution,
+			el->css().get_flex_basis().calc_percent(parent_size) + render_offset - el->box_sizing_inline(m_container_wm));
+	}
 	if (!max_size_prop.is_predefined())
 	{
 		max_main_size = max_size_prop.calc_percent(parent_size) + render_offset - el->box_sizing_inline(m_container_wm);
