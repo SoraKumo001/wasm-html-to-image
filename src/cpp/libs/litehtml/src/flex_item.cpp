@@ -842,6 +842,27 @@ void litehtml::flex_item_column_direction::direction_specific_init(const litehtm
 		}
 		return std::max(width, (pixel_t) fit_inline_size);
 	};
+	// The hypothetical cross size of a stretched item in a multi-line column container: the
+	// fit-content width its line is sized from, before align-content stretches the line.
+	auto hypothetical_inline_size = [&]() -> pixel_t
+	{
+		if (fit_inline_size.is_default())
+		{
+			formatting_context fmt_ctx_copy;
+			if (fmt_ctx) fmt_ctx_copy = *fmt_ctx;
+			containing_block_context fit_cb = self_size;
+			fit_cb.height.type = containing_block_context::cbc_value_type_auto;
+			fit_cb.size_mode &= ~(containing_block_context::size_mode_exact_width |
+								  containing_block_context::size_mode_exact_height);
+			fit_cb.size_mode |= containing_block_context::size_mode_measure |
+								containing_block_context::size_mode_content;
+			el->measure(fit_cb, fmt_ctx ? &fmt_ctx_copy : nullptr);
+			fit_inline_size = std::max<pixel_t>(0, el->inline_size(m_container_wm) -
+												   el->content_offset_inline(m_container_wm) +
+												   el->box_sizing_inline(m_container_wm));
+		}
+		return fit_inline_size;
+	};
 	// An auto inline size in a column that does not stretch is fit-content: min(max-content,
 	// max(min-content, available)). The content measures below answer with max-content (a ratio-only
 	// svg with a percentage width contributes the 300px default object width, so a 72px column's item
@@ -908,7 +929,12 @@ void litehtml::flex_item_column_direction::direction_specific_init(const litehtm
 			return;
 		}
 		if (!stretch_cross && !intrinsic_cross) return;
-		cb.width = intrinsic_cross ? intrinsic_inline() : stretched_inline_size();
+		// In a multi-line column container the item's base size is measured at its hypothetical
+		// (fit-content) cross size: the lines are sized from the items and only stretched
+		// afterwards, so the stretched width is not yet known while the base size is computed.
+		cb.width = intrinsic_cross ? intrinsic_inline()
+				   : (multiline_cross && !el->src_el()->is_replaced() ? hypothetical_inline_size()
+																	  : stretched_inline_size());
 		cb.width.type = containing_block_context::cbc_value_type_absolute;
 		cb.render_width = cb.width;
 		cb.size_mode |= containing_block_context::size_mode_exact_width;
