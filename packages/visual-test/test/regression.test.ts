@@ -9092,3 +9092,33 @@ describe("P0-61 a float after inline content joins or drops below its line", () 
     expect(fl.y).toBeCloseTo(30, 0);
   });
 });
+
+describe("P0-62 inflexible item min-content contribution", () => {
+  const page = async (body: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 1000,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    return layout;
+  };
+  const RESET = "";
+  it("a flex:0 0 item contributes its flex base size to min-content, not its width", async () => {
+    const boxes = await page(
+      `${RESET}<div style="display:flex;width:min-content"><div style="width:50px;height:10px"></div><div style="height:24px;margin:12px"></div><div style="height:36px"></div><div style="width:20px;height:40px;flex:0 0 40px"></div></div>`,
+    );
+    const c = boxes.find((b: any) => b.p === "0.1.0");
+    expect(Math.round(c.w)).toBe(114); // 50 + 24 margins + 0 + 40 (basis, not the 20px width)
+  });
+  it("a growing item floors at that min-content and the shrinkable sibling absorbs the rest", async () => {
+    const boxes = await page(
+      `${RESET}<div style="display:flex;width:300px;padding:4px"><div style="padding:2px;flex:0 1 auto"><div style="width:90px;height:40px"></div></div><div style="width:50px;height:10px;flex:0 1 100px"></div><div style="display:flex;margin:8px;flex:1"><div style="width:50px;height:10px"></div><div style="height:24px;margin:12px"></div><div style="height:36px"></div><div style="width:20px;height:40px;flex:0 0 40px"></div></div></div>`,
+    );
+    const grower = boxes.find((b: any) => b.p === "0.1.0.2");
+    const shrinker = boxes.find((b: any) => b.p === "0.1.0.1");
+    expect(Math.round(grower.w)).toBe(114);
+    expect(Math.round(shrinker.w)).toBe(76);
+  });
+});
