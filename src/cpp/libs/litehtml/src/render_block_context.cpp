@@ -86,7 +86,10 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
                 self_size.mode == writing_mode_horizontal_tb)
             {
                 auto* run = dynamic_cast<render_item_inline_context*>(prev_child.get());
-                if (run && std::abs(el->pos().top() - float_offset) < 1.0f)
+                // pos() is the float's content-box top; float_offset is its margin edge.
+                // A float with a top margin sits that far below the line's offset even when
+                // it stayed on the line, so compare margin edge to margin edge.
+                if (run && std::abs(el->pos().top() - wm.block_start(el->get_margins()) - float_offset) < 1.0f)
                 {
                     // The formatting context translates line queries by the
                     // current context origin, which here is this block's; the
