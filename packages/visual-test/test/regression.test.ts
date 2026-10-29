@@ -9783,3 +9783,36 @@ describe("P0-83 abspos shrink-to-fit clamps to the available width", () => {
     expect(Math.round(boxes.find((b: any) => b.i === "t").w)).toBe(50);
   });
 });
+
+describe("P0-84 grid contribution of a percentage-height item uses the row height", () => {
+  const page = async (body: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 800,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    return layout;
+  };
+  const IMG = `<img id="im" src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2220%22%20height%3D%2210%22%20viewBox%3D%220%200%2020%2010%22%3E%3Crect%20width%3D%2220%22%20height%3D%2210%22%20fill%3D%22%2369c%22%2F%3E%3C%2Fsvg%3E">`;
+  const FLEX = `<div id="t" style="display:flex;justify-content:flex-end;height:100%;padding:2px">${IMG}</div>`;
+  it("the minmax() row floor is the percentage basis during column sizing", async () => {
+    const boxes = await page(
+      `<div style="display:grid;grid-template-columns:fit-content(80px);grid-auto-rows:minmax(30px,auto);width:200px">${FLEX}</div>`,
+    );
+    const t = boxes.find((b: any) => b.i === "t");
+    const im = boxes.find((b: any) => b.i === "im");
+    expect(Math.round(t.w)).toBe(56);
+    expect(Math.round(im.w)).toBe(52);
+  });
+  it("a taller row-mate raises the basis (the track passes its fit-content limit)", async () => {
+    const boxes = await page(
+      `<div style="display:grid;grid-template-columns:fit-content(80px) auto;grid-auto-rows:minmax(30px,auto);width:400px">${FLEX}<div style="height:60px"></div></div>`,
+    );
+    const t = boxes.find((b: any) => b.i === "t");
+    const im = boxes.find((b: any) => b.i === "im");
+    expect(Math.round(t.w)).toBe(116);
+    expect(Math.round(im.w)).toBe(112);
+  });
+});
