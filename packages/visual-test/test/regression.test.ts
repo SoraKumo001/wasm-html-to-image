@@ -9720,3 +9720,38 @@ describe("P0-81 stretched flex item measured at its definite cross size", () => 
     expect(Math.round(t.h)).toBe(252);
   });
 });
+
+describe("P0-82 grid contributions of replaced items transfer from a definite row height", () => {
+  const page = async (body: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    return layout;
+  };
+  const IMG = `<img id="im" src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2280%22%20height%3D%2290%22%20viewBox%3D%220%200%2080%2090%22%3E%3Crect%20width%3D%2280%22%20height%3D%2290%22%20fill%3D%22%2369c%22%2F%3E%3C%2Fsvg%3E" style="width:10%">`;
+  const SVG = `<svg id="sv" viewBox="0 0 40 60" style="width:fit-content"><rect width="40" height="60" fill="#69c"/></svg>`;
+  it("fr tracks share what the transferred fit-content and min-content tracks leave", async () => {
+    const boxes = await page(
+      `<div style="display:grid;grid-template-columns:1fr min-content fit-content(80px) 2fr;grid-auto-rows:40px;align-items:stretch;width:104px"><div id="a" style="height:36px"></div>${SVG}${IMG}<div id="d" style="min-width:10px;min-height:10px;padding:8px"></div></div>`);
+    const g = (id: string) => boxes.find((b: any) => b.i === id);
+    expect(Math.abs(g("a").w - 13.9)).toBeLessThan(0.6);
+    expect(Math.abs(g("sv").w - 26.7)).toBeLessThan(0.6);
+    expect(Math.abs(g("im").w - 3.6)).toBeLessThan(0.6);
+    expect(Math.abs(g("im").x - 40.6)).toBeLessThan(0.6);
+    expect(Math.abs(g("d").w - 27.9)).toBeLessThan(0.6);
+  });
+  it("a fit-content track takes the transferred size as its contribution", async () => {
+    const boxes = await page(
+      `<div style="display:grid;grid-template-columns:fit-content(80px);grid-auto-rows:40px;align-items:stretch;width:104px">${IMG}</div>`);
+    expect(Math.abs(boxes.find((b: any) => b.i === "im").w - 3.6)).toBeLessThan(0.6);
+  });
+  it("an auto row leaves the contribution intrinsic (control)", async () => {
+    const boxes = await page(
+      `<div style="display:grid;grid-template-columns:fit-content(80px);width:104px">${IMG}</div>`);
+    expect(Math.round(boxes.find((b: any) => b.i === "im").w)).toBe(8);
+  });
+});
