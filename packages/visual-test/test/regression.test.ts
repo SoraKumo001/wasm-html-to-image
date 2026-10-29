@@ -9214,3 +9214,35 @@ describe("P0-65 percentage height in nested wrapping column flex containers", ()
     expect(Math.abs(t.h - 28.8)).toBeLessThan(1); // 30% of the 96px flex base height
   });
 });
+
+describe("P0-66 min-content contribution of an item with a definite min-width", () => {
+  const page = async (body: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 1000,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    return layout;
+  };
+  it("a definite min-width floors the contribution but does not replace the content size", async () => {
+    const boxes = await page(
+      `<div style="display:inline-flex"><div style="min-width:100px"><div style="width:206px;height:10px"></div></div></div>`,
+    );
+    expect(Math.round(boxes.find((b: any) => b.p === "0.1.0").w)).toBe(206);
+  });
+  it("a min-width larger than the content still floors the contribution", async () => {
+    const boxes = await page(
+      `<div style="display:inline-flex"><div style="min-width:300px"><div style="width:50px;height:10px"></div></div></div>`,
+    );
+    expect(Math.round(boxes.find((b: any) => b.p === "0.1.0").w)).toBe(300);
+  });
+  it("a percentage-width item with min-width contributes its content to a shrink-to-fit ancestor", async () => {
+    const boxes = await page(
+      `<div style="width:20px"><div style="display:inline-flex;padding:12px;margin:4px;overflow:hidden"><div style="width:106px;height:76px"></div><div style="width:16px;height:76px"></div><div style="display:inline-flex;gap:16px;width:30%;min-width:100px;margin:4px;flex:2"><div style="width:50px;height:40px"></div><div style="width:50px;height:10px"></div><div style="width:50px;height:10px"></div><div style="height:36px"></div></div><div style="height:36px"></div></div></div>`,
+    );
+    expect(Math.round(boxes.find((b: any) => b.p === "0.1.0.0").w)).toBe(352);
+    expect(Math.round(boxes.find((b: any) => b.p === "0.1.0.0.2").w)).toBe(198);
+  });
+});
