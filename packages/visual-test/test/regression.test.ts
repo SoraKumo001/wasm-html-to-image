@@ -9398,3 +9398,34 @@ describe("P0-71 min-content contribution of a scroll-container flex item", () =>
     expect(Math.round(boxes.find((b: any) => b.p === "0.1.0.0").w)).toBe(0);
   });
 });
+describe("P0-72 percentage-width abspos box is re-rendered at its solved width", () => {
+  const page = async (body: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 1000,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    return layout;
+  };
+  const root = (inner: string) =>
+    `<div style="position:absolute;left:10px;top:0px;width:120px;padding:2px;margin:8px">${inner}</div>`;
+  const child = `<div style="width:50%;margin:4px"><div style="min-width:10px;min-height:10px"></div></div>`;
+  it("a % child of a min-width-clamped abspos box resolves against the solved width", async () => {
+    const boxes = await page(root(
+      `<div style="width:20px;height:10px"></div><div style="position:absolute;left:30px;top:0px;width:25%;height:42px;min-width:40px;max-width:250px">${child}</div>`));
+    expect(Math.round(boxes.find((b: any) => b.p === "0.1.0.1.0").w)).toBe(20);
+  });
+  it("the same shape with a fit-content height on the abspos box", async () => {
+    const boxes = await page(root(
+      `<div style="width:20px;height:10px"></div><div style="position:absolute;left:30px;top:0px;width:25%;height:fit-content;min-width:40px;max-width:250px">${child}</div>`));
+    expect(Math.round(boxes.find((b: any) => b.p === "0.1.0.1.0").w)).toBe(20);
+    expect(Math.round(boxes.find((b: any) => b.p === "0.1.0.1").h)).toBe(18);
+  });
+  it("without the in-flow sibling the result is the same (control)", async () => {
+    const boxes = await page(root(
+      `<div style="position:absolute;left:30px;top:0px;width:25%;height:42px;min-width:40px;max-width:250px">${child}</div>`));
+    expect(Math.round(boxes.find((b: any) => b.p === "0.1.0.0.0").w)).toBe(20);
+  });
+});
