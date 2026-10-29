@@ -899,8 +899,14 @@ void litehtml::render_item::render_positioned(render_type rt) {
             // width from the static-position place in its parent's block layout, but its
             // children were laid out there against the measured (shrink) width, not against
             // the solved one -- the equal own width must not suppress the re-render.
+            // A box with children needs the render too when its subtree was laid out by an
+            // earlier provisional pass (a measure for a flex/grid parent's intrinsic size, or
+            // a shrink-to-fit trial): the box's own solved size can already match while the
+            // children still carry the trial geometry (a percentage-width child resolved
+            // against the trial width, an auto-width child shrink-wrapped instead of filling).
             if (el->m_pos.width != width - el->content_offset_width() || el->m_pos.width == 0 ||
-                el_width.is_predefined() || el_width.units() == css_units_percentage) {
+                el_width.is_predefined() || el_width.units() == css_units_percentage ||
+                !el->children().empty()) {
                 el->m_pos.width = width - el->content_offset_width();
                 need_render = true;
             }
