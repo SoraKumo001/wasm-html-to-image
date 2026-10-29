@@ -54,6 +54,7 @@ export interface FullSatoruOptionsInput {
   mediaTypeInt: number;
   colorSpace?: "srgb" | "cmyk";
   scale?: number;
+  pdfOutline?: boolean;
   pdfTitle?: string;
   pdfAuthor?: string;
   pdfSubject?: string;
@@ -75,6 +76,7 @@ export function buildFullSatoruOptions(
   const {
     textToPaths,
     mediaTypeInt,
+    pdfOutline,
     pdfTitle,
     pdfAuthor,
     pdfSubject,
@@ -91,6 +93,8 @@ export function buildFullSatoruOptions(
     mediaType: mediaTypeInt,
     ...(input.colorSpace === "cmyk" ? { colorSpace: 1 } : {}),
     ...(input.scale !== undefined && input.scale !== 1 ? { scale: input.scale } : {}),
+    // The engine's default is on: only an explicit false has to be sent.
+    ...(pdfOutline === false ? { pdfOutline: false } : {}),
     pdfTitle: pdfTitle ?? "",
     pdfAuthor: pdfAuthor ?? "",
     pdfSubject: pdfSubject ?? "",

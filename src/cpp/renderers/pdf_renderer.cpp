@@ -305,6 +305,52 @@ void collect_clone_boxes(const std::shared_ptr<litehtml::render_item>& ri,
     for (const auto& child : ri->children()) collect_clone_boxes(child, out);
 }
 
+// ---- Headings: PDF outline (bookmarks) and the heading list handed back to the caller -------
+//
+// Every h1-h6 in the document, in document order, with its box top in document coordinates. The
+// page it lands on follows from the planned cuts (pages[].offset), so it is the page of the
+// heading's own top edge -- after any break-inside / break-after adjustment moved the heading.
+struct HeadingInfo {
+    int level = 1;        // 1..6
+    std::string text;     // text content, whitespace collapsed
+    std::string id;       // the id attribute ("" when none)
+    int top = 0;          // border box top, document coordinates
+    int page = 0;         // 0-based page the top edge falls on (filled in after planning)
+};
+
+std::string collapse_whitespace(const std::string& in) {
+    std::string out;
+    bool space = true;  // swallows leading white space
+    for (unsigned char c : in) {
+        if (std::isspace(c)) {
+            space = true;
+            continue;
+        }
+        if (space && !out.empty()) out.push_back(' ');
+        space = false;
+        out.push_back((char)c);
+    }
+    return out;
+}
+
+void collect_headings(litehtml::element* el, std::vector<HeadingInfo>& out) {
+    if (!el) return;
+    const litehtml::string_id tag = el->tag();
+    if (tag >= litehtml::_h1_ && tag <= litehtml::_h6_ && el->css().get_display() != litehtml::display_none) {
+        HeadingInfo h;
+        h.level = (int)(tag - litehtml::_h1_) + 1;
+        std::string raw;
+        el->get_text(raw);
+        h.text = collapse_whitespace(raw);
+        h.id = el->get_attr("id", "");
+        const litehtml::position p = el->get_placement();
+        h.top = (int)p.y;
+        if (!h.text.empty()) out.push_back(std::move(h));
+        return;  // a heading holds no further headings
+    }
+    for (const auto& child : el->children()) collect_headings(child.get(), out);
+}
+
 // ---- P3: inline (line-box) fragmentation data ---------------------------------
 //
 // Line-level fragmentation is planned on top of the P2 atomic-break cuts. A text
@@ -1163,6 +1209,33 @@ sk_sp<SkData> renderHtmlToPdf(const std::string& html, int width, int height,
     int page_count = (int)pages.size();
     if (page_count < 1) page_count = 1;
 
+    // Outline: one H1..H6 structure node per heading (SkPDF builds the bookmarks from the headers of
+    // the structure tree). The title is the node's alt text; the target is where marked content
+    // tagged with the node id is drawn, so each page draws a tiny invisible mark at the top of the
+    // headings that start on it.
+    std::vector<HeadingInfo> headings;
+    SkPDF::StructureElementNode outline_root;
+    std::vector<std::unique_ptr<SkPDF::StructureElementNode>> outline_nodes;
+    if (options.pdfOutline) {
+        collect_headings(doc->root().get(), headings);
+        for (auto& h : headings) {
+            int pg = 0;
+            for (int i = 0; i < (int)pages.size(); ++i)
+                if (pages[i].offset <= h.top) pg = i;
+            h.page = pg;
+        }
+        outline_root.fTypeString = "Document";
+        outline_root.fNodeId = 1;
+        int next_id = 2;
+        for (const auto& h : headings) {
+            auto node = std::make_unique<SkPDF::StructureElementNode>();
+            node->fTypeString = SkString(("H" + std::to_string(h.level)).c_str());
+            node->fNodeId = next_id++;
+            node->fAlt = SkString(h.text.c_str());
+            outline_root.fChildVector.push_back(std::move(node));
+        }
+    }
+
     SkDynamicMemoryWStream stream;
     SkPDF::Metadata metadata;
     metadata.fTitle = options.pdfTitle.empty() ? "Satoru PDF Export" : options.pdfTitle.c_str();
@@ -1173,6 +1246,10 @@ sk_sp<SkData> renderHtmlToPdf(const std::string& html, int width, int height,
     metadata.fProducer = options.pdfProducer.c_str();
     metadata.jpegDecoder = PdfJpegDecoder;
     metadata.jpegEncoder = PdfJpegEncoder;
+    if (options.pdfOutline && !headings.empty()) {
+        metadata.fStructureElementTreeRoot = &outline_root;
+        metadata.fOutline = SkPDF::Metadata::Outline::StructureElementHeaders;
+    }
 
     auto pdf_doc = SkPDF::MakeDocument(&stream, metadata);
     if (!pdf_doc) return nullptr;
@@ -1330,6 +1407,20 @@ sk_sp<SkData> renderHtmlToPdf(const std::string& html, int width, int height,
         // document region that is not the page slice (header_top), so a page-relative
         // cull would be the wrong test.
         if (header_height > 0 && header_top >= 0) draw_band(0, header_height, header_top, false);
+
+        // Outline targets: an almost invisible 1px mark tagged with each heading's node id, at the top of
+        // the heading on the page it starts on (the bookmark jumps to the topmost mark of its node).
+        for (size_t i = 0; i < headings.size(); ++i) {
+            if (headings[i].page != page) continue;
+            canvas->save();
+            canvas->translate((SkScalar)margin_left, (SkScalar)margin_top);
+            SkPDF::SetNodeId(canvas, (int)i + 2);
+            SkPaint mark;
+            mark.setColor(SkColorSetARGB(1, 255, 255, 255));
+            canvas->drawRect(SkRect::MakeXYWH(0, (SkScalar)(headings[i].top - page_offset), 1, 1), mark);
+            SkPDF::SetNodeId(canvas, 0);
+            canvas->restore();
+        }
 
         pdf_doc->endPage();
     }

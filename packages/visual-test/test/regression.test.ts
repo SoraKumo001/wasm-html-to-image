@@ -1297,6 +1297,28 @@ describe("regression: layout and paint probes", () => {
     // the heading stayed on one line (the box itself is 100% of the viewport tall, as in Chromium)
     expect(boxes.find((b) => b.t === "h1")!.h).toBeLessThan(30);
   });
+  it("a PDF gets an outline (bookmarks) from h1-h6 by default, and pdfOutline: false leaves it out", async () => {
+    const html =
+      `<html><head><style>@page{size:300px 200px;margin:0}</style></head><body style="margin:0">` +
+      `<h1>First</h1><div style="height:260px"></div><h2>Second 日本語</h2></body></html>`;
+    // Bookmark titles: PDF text strings, either (ASCII) or <FEFF...> UTF-16BE.
+    const titles = (pdf: Uint8Array) => {
+      const text = Buffer.from(pdf).toString("latin1");
+      return [...text.matchAll(/\/Title\s*(?:<([0-9A-Fa-f]+)>|\(([^)]*)\))/g)].map((m) =>
+        m[1] ? Buffer.from(m[1], "hex").subarray(2).swap16().toString("utf16le") : m[2],
+      );
+    };
+    const on = (await render({ value: html, width: 300, format: "pdf" })).data as Uint8Array;
+    expect(Buffer.from(on).toString("latin1")).toContain("/Outlines");
+    expect(titles(on)).toEqual(expect.arrayContaining(["First", "Second 日本語"]));
+    const off = (await render({ value: html, width: 300, format: "pdf", pdfOutline: false })).data as Uint8Array;
+    expect(Buffer.from(off).toString("latin1")).not.toContain("/Outlines");
+    expect(titles(off)).not.toContain("First");
+    // A document without headings gets no outline at all.
+    const none = (await render({ value: `<html><body><p>x</p></body></html>`, width: 300, format: "pdf" })).data as Uint8Array;
+    expect(Buffer.from(none).toString("latin1")).not.toContain("/Outlines");
+  });
+
   it("an auto-width table is as wide as its content when a cell holds a width:100% inline-block (KaTeX fraction line)", async () => {
     const boxes = async (body: string) => {
       let out: { i?: string; w: number; h: number }[] = [];

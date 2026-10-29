@@ -34,6 +34,9 @@ struct SatoruRenderOptions {
     std::string pdfKeywords;
     std::string pdfCreator;
     std::string pdfProducer;
+    // PDF outline (bookmarks) from the document's h1-h6; on by default. The headings also get their
+    // text, level, id and page reported back to the caller (see SatoruHeading).
+    bool pdfOutline = true;
 
     // PDF Margins (pixels)
     int pdfMarginTop = 0;
