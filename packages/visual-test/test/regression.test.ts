@@ -1297,6 +1297,38 @@ describe("regression: layout and paint probes", () => {
     // the heading stayed on one line (the box itself is 100% of the viewport tall, as in Chromium)
     expect(boxes.find((b) => b.t === "h1")!.h).toBeLessThan(30);
   });
+  it("an auto-width table is as wide as its content when a cell holds a width:100% inline-block (KaTeX fraction line)", async () => {
+    const boxes = async (body: string) => {
+      let out: { i?: string; w: number; h: number }[] = [];
+      await render({
+        value: `<html><body style="margin:0;font:20px/1.2 sans-serif">${body}</body></html>`,
+        width: 300,
+        format: "png",
+        onLayout: (b) => {
+          out = b as typeof out;
+        },
+      });
+      return out;
+    };
+    const line = `<span style="display:block;height:0"><span style="border-bottom:2px solid #000;display:inline-block;width:100%"></span></span>`;
+    // The percentage resolved against the 300px the table could take, so the table filled it.
+    const inlineTable = await boxes(
+      `<span id="t" style="display:inline-table"><span style="display:table-row"><span style="display:table-cell"><span style="display:inline-block">ab</span>${line}</span></span></span>`,
+    );
+    expect(inlineTable.find((b) => b.i === "t")!.w).toBeLessThan(40);
+    const table = await boxes(
+      `<table id="t" style="border-collapse:collapse"><tr><td><span style="display:inline-block">ab</span>${line}</td></tr></table>`,
+    );
+    expect(table.find((b) => b.i === "t")!.w).toBeLessThan(40);
+    // A width:100% table still takes the container's width and wraps its text inside it.
+    const text = "Building an open-source and cross-platform Azure CLI with Python";
+    const full = await boxes(
+      `<div style="width:260px"><table id="t" style="width:100%;border-collapse:collapse"><tr><td>${text}</td></tr></table></div>`,
+    );
+    expect(full.find((b) => b.i === "t")!.w).toBeCloseTo(260, 0);
+    expect(full.find((b) => b.i === "t")!.h).toBeGreaterThan(40);
+  });
+
   it("auto-width table with percentage cells is shrink-to-fit, not collapsed", async () => {
     const cell = (w: string) => `<td style="width:${w}">先代<br>東京府・東京市</td>`;
     for (const font of ["", "font-size:95%;"]) {

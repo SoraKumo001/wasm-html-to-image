@@ -90,6 +90,14 @@ litehtml::pixel_t litehtml::render_item_table::layout_table(pixel_t x, pixel_t y
 
     bool is_fixed_layout = src_el()->css().get_table_layout() == table_layout_fixed;
 
+    // The widest a cell wants to be (its max-content) is measured with intrinsic sizing when the table's
+    // own width is auto: a percentage width inside the cell (KaTeX fraction lines are width:100%) must not
+    // resolve against the room the table could take, or the table grows to fill it. A table with a
+    // definite width is laid out at that width anyway, so its cells keep the measure at the available width.
+    const uint32_t max_content_mode = (self_size.width.type == containing_block_context::cbc_value_type_auto)
+                                          ? containing_block_context::size_mode_content
+                                          : containing_block_context::size_mode_normal;
+
     if (m_grid->cols_count() == 1 && self_size.width.type != containing_block_context::cbc_value_type_auto)
     {
         for (int row = 0; row < m_grid->rows_count(); row++)
@@ -99,10 +107,10 @@ litehtml::pixel_t litehtml::render_item_table::layout_table(pixel_t x, pixel_t y
             {
 				if (containing_block_size.size_mode & containing_block_context::size_mode_measure)
 				{
-					cell->min_width = cell->max_width = measure_cell_width(cell->el, self_size.new_width(self_size.render_width - table_width_spacing), fmt_ctx);
+					cell->min_width = cell->max_width = measure_cell_width(cell->el, self_size.new_width(self_size.render_width - table_width_spacing, max_content_mode), fmt_ctx);
 				} else
 				{
-					cell->min_width = cell->max_width = measure_cell_width(cell->el, self_size.new_width(self_size.render_width - table_width_spacing), fmt_ctx);
+					cell->min_width = cell->max_width = measure_cell_width(cell->el, self_size.new_width(self_size.render_width - table_width_spacing, max_content_mode), fmt_ctx);
 				}
                 cell->el->pos().width = cell->min_width - cell->el->content_offset_left() -
 						cell->el->content_offset_right();
@@ -158,7 +166,7 @@ litehtml::pixel_t litehtml::render_item_table::layout_table(pixel_t x, pixel_t y
                         cell->min_width = measure_cell_min_width(
                                 cell->el, self_size.new_width(cell->el->content_offset_width()), fmt_ctx);
                         // calculate maximum content width
-						cell->max_width = measure_cell_width(cell->el, self_size.new_width(self_size.render_width - table_width_spacing), fmt_ctx);
+						cell->max_width = measure_cell_width(cell->el, self_size.new_width(self_size.render_width - table_width_spacing, max_content_mode), fmt_ctx);
                     }
                     else
                     {
@@ -167,7 +175,7 @@ litehtml::pixel_t litehtml::render_item_table::layout_table(pixel_t x, pixel_t y
                         // calculate minimum content width
 						cell->min_width = measure_cell_width(cell->el, self_size.new_width(cell->el->content_offset_width()), fmt_ctx);
                         // calculate maximum content width
-						cell->max_width = measure_cell_width(cell->el, self_size.new_width(self_size.render_width - table_width_spacing), fmt_ctx);
+						cell->max_width = measure_cell_width(cell->el, self_size.new_width(self_size.render_width - table_width_spacing, max_content_mode), fmt_ctx);
                     }
                 }
             }
