@@ -21,6 +21,8 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
     const bool max_content_sizing = (self_size.size_mode & containing_block_context::size_mode_content) &&
                                     !(self_size.size_mode & containing_block_context::size_mode_min_content);
     pixel_t float_run_width = 0;
+    pixel_t last_run_own = -1;      // max-content sizing: the last run's own width
+    pixel_t floats_after_run = 0;   // widths of floats that joined that run's last line
     pixel_t prev_run_rw = 0, prev_run_h = 0;  // the preceding child's measured inline size and block size
     for (const auto& el : m_children)
     {
@@ -37,6 +39,7 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
             // A float right after a run of inline content (an anonymous box) joins its last line when it fits,
             // instead of starting below it.
             pixel_t float_offset = block_offset;
+            bool joined_run = false;
             if(prev_child && self_size.mode == writing_mode_horizontal_tb && el->src_el()->css().get_clear() == clear_none)
             {
                 auto* run = dynamic_cast<render_item_inline_context*>(prev_child.get());
@@ -52,11 +55,47 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
                 {
                     const pixel_t avail = self_size.render_inline_size();
                     const pixel_t float_w = el->measure(self_size.new_inline_size(avail, (self_size.size_mode & (containing_block_context::size_mode_content | containing_block_context::size_mode_min_content)) | (el->src_el()->css().get_width().is_predefined() ? containing_block_context::size_mode_content : 0)), fmt_ctx);
-                    if(used_w + float_w <= avail + 0.01f) float_offset = block_offset - line_h;
+                    if(used_w + float_w <= avail + 0.01f) { float_offset = block_offset - line_h; joined_run = true; }
                 }
             }
             pixel_t rw = place_float(el, float_offset, self_size, fmt_ctx);
-            if (max_content_sizing) float_run_width += rw;
+            if (max_content_sizing)
+            {
+                if (last_run_own >= 0)
+                {
+                    // The float joined the preceding run's line (or sits on its
+                    // own below it): the max-content width is the run and the
+                    // floats after it side by side, not each on its own. The
+                    // float_run_width path below only covers floats that come
+                    // BEFORE a run.
+                    floats_after_run += rw;
+                    if (last_run_own + floats_after_run > max_inline_size)
+                        max_inline_size = last_run_own + floats_after_run;
+                }
+            }
+            // When the float joined the preceding run's last line, that line was
+            // laid out before the float was registered: re-place its items so
+            // they flow into the segment the float leaves (Chrome moves the
+            // line's earlier content; a float inside the run gets this from
+            // place_float's fix_line_width, but a block-level float's parent is
+            // this context, whose fix_line_width is a no-op). Only when the
+            // float really stayed on that line.
+            if (joined_run && !(self_size.size_mode & containing_block_context::size_mode_measure) &&
+                self_size.mode == writing_mode_horizontal_tb)
+            {
+                auto* run = dynamic_cast<render_item_inline_context*>(prev_child.get());
+                if (run && std::abs(el->pos().top() - float_offset) < 1.0f)
+                {
+                    // The formatting context translates line queries by the
+                    // current context origin, which here is this block's; the
+                    // run's lines are laid out in the run's own frame, so push
+                    // the run's content origin for the re-placement.
+                    fmt_ctx->push_position(run->pos().x, run->pos().y);
+                    run->fix_last_line_width(el->src_el()->css().get_float(), self_size, fmt_ctx);
+                    fmt_ctx->pop_position(run->pos().x, run->pos().y);
+                }
+            }
+            if (max_content_sizing && last_run_own < 0) float_run_width += rw;
             if (rw > max_inline_size)
             {
                 max_inline_size = rw;
@@ -273,7 +312,8 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
 				{
 					const bool is_run = dynamic_cast<render_item_inline_context*>(el.get()) &&
 						(*el->src_el()->get_tagName() == 0 || std::string(el->src_el()->get_tagName()) == "anonymous");
-					if (is_run) rw += float_run_width; else float_run_width = 0;
+					if (is_run) { last_run_own = rw; floats_after_run = 0; rw += float_run_width; float_run_width = 0; }
+					else { float_run_width = 0; last_run_own = -1; floats_after_run = 0; }
 				}
                 if (rw > max_inline_size)
                 {
