@@ -9755,3 +9755,31 @@ describe("P0-82 grid contributions of replaced items transfer from a definite ro
     expect(Math.round(boxes.find((b: any) => b.i === "im").w)).toBe(8);
   });
 });
+
+describe("P0-83 abspos shrink-to-fit clamps to the available width", () => {
+  const page = async (body: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    return layout;
+  };
+  const CONTENT = `<svg viewBox="0 0 100 20" style="width:10%"><rect width="100" height="20" fill="#69c"/></svg><img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2220%22%20height%3D%2250%22%20viewBox%3D%220%200%2020%2050%22%3E%3Crect%20width%3D%2220%22%20height%3D%2250%22%20fill%3D%22%2369c%22%2F%3E%3C%2Fsvg%3E" style="width:fit-content">`;
+  const wrap = (w: number, inner: string) =>
+    `<div style="position:absolute;left:0;top:0;width:${w}px;height:200px"><div id="t" style="position:absolute;left:0;top:0">${inner}</div></div>`;
+  it("caps the preferred width at the containing block's width", async () => {
+    const boxes = await page(wrap(100, CONTENT));
+    expect(Math.round(boxes.find((b: any) => b.i === "t").w)).toBe(100);
+  });
+  it("never shrinks below the preferred minimum width", async () => {
+    const boxes = await page(wrap(6, CONTENT));
+    expect(Math.round(boxes.find((b: any) => b.i === "t").w)).toBe(20);
+  });
+  it("a definite min-content floor wins over a narrower containing block", async () => {
+    const boxes = await page(wrap(30, `<div style="width:50px;height:10px"></div>`));
+    expect(Math.round(boxes.find((b: any) => b.i === "t").w)).toBe(50);
+  });
+});
