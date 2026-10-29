@@ -9624,3 +9624,33 @@ describe("P0-78 a grid item's percentage height resolves against a fixed row und
     expect(Math.round(boxes.find((b: any) => b.i === "t").h)).toBe(30);
   });
 });
+
+describe("P0-79 a stretched ratio item's transferred size is its min-content contribution", () => {
+  const page = async (body: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    return layout;
+  };
+  const SVG = `<svg id="sv" viewBox="0 0 100 60"><rect width="100" height="60"/></svg>`;
+  it("min-content track: the flex row contributes the transferred width", async () => {
+    const boxes = await page(
+      `<div style="display:grid;grid-template-columns:min-content;width:600px"><div id="t" style="display:flex;height:120px">${SVG}</div></div>`);
+    expect(Math.round(boxes.find((b: any) => b.i === "t").w)).toBe(200);
+    expect(Math.round(boxes.find((b: any) => b.i === "sv").w)).toBe(200);
+  });
+  it("max-content track: same result (control)", async () => {
+    const boxes = await page(
+      `<div style="display:grid;grid-template-columns:max-content;width:600px"><div id="t" style="display:flex;height:120px">${SVG}</div></div>`);
+    expect(Math.round(boxes.find((b: any) => b.i === "t").w)).toBe(200);
+  });
+  it("a plain block of the same height contributes nothing (control)", async () => {
+    const boxes = await page(
+      `<div style="display:grid;grid-template-columns:min-content;width:600px"><div id="t" style="height:120px">${SVG}</div></div>`);
+    expect(Math.round(boxes.find((b: any) => b.i === "t").w)).toBe(0);
+  });
+});
