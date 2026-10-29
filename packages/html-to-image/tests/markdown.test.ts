@@ -14,7 +14,7 @@ describe("markdownToHtml", () => {
     );
     expect(html).toMatch(/^<!doctype html>/);
     expect(html).toContain("<title>A &lt;b&gt;</title>");
-    expect(html).toContain("<h1>Title</h1>");
+    expect(html).toContain("<h1 id=\"title\">Title</h1>");
     expect(html).toContain("<table>");
     expect(html).toContain('type="checkbox"');
     expect(html).toContain('<pre><code class="language-js">');
@@ -57,7 +57,7 @@ describe("markdownToHtml", () => {
     const md = '---\ntitle: "My doc"\nauthor: x\n---\n\n# Body\n';
     const html = markdownToHtml(md);
     expect(html).toContain("<title>My doc</title>");
-    expect(html).toContain("<h1>Body</h1>");
+    expect(html).toContain("<h1 id=\"body\">Body</h1>");
     expect(html).not.toContain("author");
     expect(markdownToHtml(md, { title: "Own" })).toContain("<title>Own</title>");
     expect(markdownToHtml("---\r\ntitle: A\r\n---\r\nx")).toContain("<title>A</title>");
@@ -97,7 +97,7 @@ describe("markdown CLI input", () => {
     const file = path.join(dir, "a.md");
     fs.writeFileSync(file, "# From file\n");
     const fromFile = await buildRenderOptions(file, flags);
-    expect(String(fromFile.value)).toContain("<h1>From file</h1>");
+    expect(String(fromFile.value)).toContain("<h1 id=\"from-file\">From file</h1>");
     expect(fromFile.baseUrl).toBe(dir);
     const pdf = await buildRenderOptions(file, { ...flags, format: "pdf" });
     expect(String(pdf.value)).toContain("@page { margin: 32px; }");

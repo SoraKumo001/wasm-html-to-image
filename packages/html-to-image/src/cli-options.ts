@@ -41,6 +41,12 @@ export interface CliFlags {
   markdown?: boolean;
   /** `--markdown-theme <light|dark>`; absent means light. */
   markdownTheme?: string;
+  /** `--no-toc` sets this to false: a PDF from Markdown gets a table of contents by default. */
+  toc?: boolean;
+  /** `--toc-depth <n>`: deepest heading level in the table of contents (default 3). */
+  tocDepth?: number;
+  /** `--no-outline` sets this to false: the PDF's bookmarks (outline) are on by default. */
+  outline?: boolean;
   /** `--no-math` sets this to false: `$...$` / `$$...$$` are typeset when katex is installed. */
   math?: boolean;
   /** `--markdown-css <path>`: extra stylesheet appended after the built-in one. */
@@ -166,6 +172,8 @@ export async function markdownToDocument(markdown: string, flags: CliFlags): Pro
     theme,
     css,
     paged: flags.format === "pdf",
+    // Default: a table of contents in a PDF (markdownToHtml's own default), none in an image.
+    ...(flags.toc === false ? { toc: false } : flags.tocDepth !== undefined ? { toc: { depth: flags.tocDepth } } : {}),
     ...(flags.math === false ? {} : await loadMath()),
   });
 }
@@ -310,5 +318,6 @@ export async function buildRenderOptions(
     ...(animation ? { animation } : {}),
     ...(fonts.length ? { fonts } : {}),
     ...(flags.js ? { javascript: resolveJavaScript(flags.jsWait) } : {}),
+    ...(flags.outline === false ? { pdfOutline: false } : {}),
   };
 }

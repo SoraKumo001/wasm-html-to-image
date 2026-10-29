@@ -97,6 +97,9 @@ program
     "--markdown",
     "treat the input as Markdown (implied by a .md / .markdown file; inline text and stdin need it; needs the optional dependency marked)",
   )
+  .option("--no-toc", "no table of contents in a PDF made from Markdown (there is one by default)")
+  .option("--toc-depth <n>", "deepest heading level in the table of contents (default 3)", (v) => parseInt(v, 10))
+  .option("--no-outline", "leave the bookmarks (outline) out of a PDF (they are built from the headings by default)")
   .option("--no-math", "do not typeset $...$ and $$...$$ in Markdown (done with KaTeX when it is installed)")
   .option("--markdown-theme <light|dark>", "colour scheme of the built-in Markdown stylesheet (default light)")
   .option("--markdown-css <path>", "extra CSS file appended after the built-in Markdown stylesheet")
@@ -169,6 +172,9 @@ program
         markdown: options.markdown,
         markdownTheme: options.markdownTheme,
         math: options.math,
+        toc: options.toc,
+        tocDepth: options.tocDepth,
+        outline: options.outline,
         markdownCss: options.markdownCss,
       };
 

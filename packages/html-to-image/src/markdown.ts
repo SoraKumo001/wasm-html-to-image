@@ -77,6 +77,39 @@ export interface MarkdownOptions {
   math?: MathRenderer;
   /** Replace the built-in stylesheet entirely (`theme` is then ignored). */
   stylesheet?: string;
+  /**
+   * A table of contents before the text: every heading down to `depth` (default 3), each a link to its
+   * heading with the page it lands on filled in by the PDF renderer. On by default for paged
+   * (`paged: true`, i.e. PDF) output, off otherwise; `false` switches it off, `true` or an object on.
+   */
+  toc?: boolean | TocOptions;
+}
+
+export interface TocOptions {
+  /** Deepest heading level listed, 1-6. Defaults to 3. */
+  depth?: number;
+  /** Heading above the list. Defaults to "Contents"; an empty string leaves it out. */
+  title?: string;
+}
+
+/** One heading of the document, as the table of contents sees it. */
+interface TocEntry {
+  level: number;
+  id: string;
+  /** The heading's text as HTML (inline markup kept). */
+  html: string;
+}
+
+/** A URL-fragment-safe id for a heading: letters (any script), digits, `-` and `_`, spaces as `-`. */
+function slugify(text: string): string {
+  const slug = text
+    .trim()
+    .toLowerCase()
+    .replace(/<[^>]*>/g, "")
+    .replace(/[^\p{L}\p{N}\s_-]/gu, "")
+    .replace(/\s+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || "section";
 }
 
 const escapeHtml = (text: string) =>
@@ -169,7 +202,37 @@ body { color: ${c.fg}; font-family: sans-serif; font-size: 16px; line-height: 1.
 .hljs-addition { color: ${c.tag}; background: ${c.add}; }
 .hljs-deletion { color: ${c.keyword}; background: ${c.del}; }
 .markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4, .markdown-body h5, .markdown-body h6 { break-after: avoid; }
+.markdown-body .toc { margin: 0 0 24px; break-after: page; }
+.markdown-body .toc-title { margin: 0 0 12px; font-size: 1.5em; font-weight: 600; line-height: 1.25; }
+.markdown-body .toc-item { display: flex; align-items: baseline; padding: 2px 0; color: ${c.fg}; text-decoration: none; }
+.markdown-body .toc-l1 { font-weight: 600; margin-top: 6px; }
+.markdown-body .toc-l2 { padding-left: 1.25em; }
+.markdown-body .toc-l3 { padding-left: 2.5em; }
+.markdown-body .toc-l4, .markdown-body .toc-l5, .markdown-body .toc-l6 { padding-left: 3.75em; }
+.markdown-body .toc-leader { flex: 1; min-width: 12px; margin: 0 6px; border-bottom: 1px dotted ${c.muted}; }
+.markdown-body .toc-page { min-width: 2.5em; text-align: right; color: ${c.muted}; }
 .markdown-body pre, .markdown-body table, .markdown-body blockquote, .markdown-body img, .markdown-body tr { break-inside: avoid; }
+`;
+}
+
+/**
+ * The table-of-contents block: a nav with one row per heading. A row is a block link (the whole row
+ * is clickable in the PDF) holding the heading, a dotted leader and the page number. The number is
+ * an element with data-toc-page, which the PDF renderer fills in once the pages are planned; it has
+ * a fixed width so a longer number does not rewrap the row and move the pages.
+ */
+function tocHtml(entries: TocEntry[], options: TocOptions): string {
+  const depth = Math.min(6, Math.max(1, options.depth ?? 3));
+  const title = options.title ?? "Contents";
+  const rows = entries
+    .filter((e) => e.level <= depth)
+    .map(
+      (e) =>
+        `<a class="toc-item toc-l${e.level}" href="#${e.id}"><span class="toc-text">${e.html}</span><span class="toc-leader"></span><span class="toc-page" data-toc-page="${e.id}">0</span></a>`,
+    )
+    .join("");
+  if (!rows) return "";
+  return `<nav class="toc">${title ? `<p class="toc-title">${escapeHtml(title)}</p>` : ""}${rows}</nav>
 `;
 }
 
@@ -189,6 +252,19 @@ export function markdownToHtml(markdown: string, options: MarkdownOptions = {}):
     }
   }
   const renderer = new marked.Renderer();
+  // Every heading gets an id (a link target, and what the table of contents points at).
+  const entries: TocEntry[] = [];
+  const usedIds = new Map<string, number>();
+  renderer.heading = function ({ tokens, depth, text }) {
+    const base = slugify(text);
+    const seen = usedIds.get(base) ?? 0;
+    usedIds.set(base, seen + 1);
+    const id = seen === 0 ? base : `${base}-${seen + 1}`;
+    const inner = this.parser.parseInline(tokens);
+    entries.push({ level: depth, id, html: inner });
+    return `<h${depth} id="${id}">${inner}</h${depth}>
+`;
+  };
   if (options.highlight !== false) {
     renderer.code = ({ text, lang }) => {
       const name = (lang ?? "").trim().split(/\s+/)[0];
@@ -199,7 +275,9 @@ export function markdownToHtml(markdown: string, options: MarkdownOptions = {}):
     };
   }
   const parser = options.math ? new Marked(mathExtension(options.math)) : marked;
-  const body = parser.parse(source, { async: false, gfm: true, renderer }) as string;
+  const text = parser.parse(source, { async: false, gfm: true, renderer }) as string;
+  const toc = options.toc ?? !!options.paged;
+  const body = toc && entries.length ? tocHtml(entries, toc === true ? {} : toc) + text : text;
   const sheet =
     options.stylesheet ??
     markdownStylesheet(options.theme, options.padding, options.maxWidth, options.paged);

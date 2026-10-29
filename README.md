@@ -200,7 +200,7 @@ const html = markdownToHtml("# Hello
 const { data } = await render({ value: html, width: 800, format: "pdf" });
 ```
 
-Options: `theme` (`"light"` | `"dark"`), `css` (appended after the built-in sheet), `stylesheet` (replaces it), `padding`, `maxWidth`, `title`, `highlight` (fenced code with a known language is syntax-highlighted; default on), `frontMatter` (a leading `---` YAML block is dropped and its `title` becomes the page title; default on), `paged` (for PDF: `padding` becomes the margin of every page, so pages after the first keep their top and bottom margins; the CLI sets it for `.pdf` output, in code pass `paged: true` with `format: "pdf"`). Headings stay with the text after them and code blocks, tables and quotes are not split across pages.
+Options: `theme` (`"light"` | `"dark"`), `css` (appended after the built-in sheet), `stylesheet` (replaces it), `padding`, `maxWidth`, `title`, `highlight` (fenced code with a known language is syntax-highlighted; default on), `frontMatter` (a leading `---` YAML block is dropped and its `title` becomes the page title; default on), `paged` (for PDF: `padding` becomes the margin of every page, so pages after the first keep their top and bottom margins; the CLI sets it for `.pdf` output, in code pass `paged: true` with `format: "pdf"`), `toc` (see below; on for paged output). Headings stay with the text after them and code blocks, tables and quotes are not split across pages.
 
 The CLI does the same for `.md` / `.markdown` files, and for inline text or stdin with `--markdown`:
 
@@ -211,6 +211,30 @@ npx wasm-html-to-image "# Hello" --markdown -o hello.png
 ```
 
 Highlighted languages: bash/shell, c, c++, c#, css/scss, diff, dockerfile, go, html/xml/svg, ini/toml, java, javascript, json, kotlin, markdown, php, python, ruby, rust, sql, swift, typescript, yaml (and the usual aliases such as `js`, `ts`, `sh`, `py`). Other fences stay plain.
+
+**Table of contents and bookmarks.** A PDF made from Markdown starts with a table of contents and carries bookmarks, both on by default:
+
+- Every heading gets an `id` (a slug of its text: any script, lower-cased, duplicates numbered `-2`, `-3`) and the contents lists the headings down to `toc.depth` (default 3). Each row is a link to its heading and shows the page the heading lands on, filled in once the pages are planned (the contents' own pages included, so the numbers are right however long the list is).
+- The bookmarks (the viewer's outline panel) come from `h1`-`h6`, nested by level; a heading that `break-after: avoid` moved is bookmarked where it ended up.
+- Links like `[see](#setup)` in the text are clickable in the PDF, wrapped lines included.
+
+```ts
+markdownToHtml(md, { paged: true });                                        // contents on (the default for PDF)
+markdownToHtml(md, { paged: true, toc: { depth: 2, title: "目次" } });      // shallower, own title ("" for none)
+markdownToHtml(md, { paged: true, toc: false });                            // no contents page
+await render({ value: html, format: "pdf", pdfOutline: false });            // no bookmarks
+```
+
+```bash
+npx wasm-html-to-image book.md -o book.pdf                  # contents + bookmarks
+npx wasm-html-to-image book.md -o book.pdf --toc-depth 2    # shallower contents
+npx wasm-html-to-image book.md -o book.pdf --no-toc         # no contents page
+npx wasm-html-to-image book.md -o book.pdf --no-outline     # no bookmarks
+```
+
+Images get no contents by default (there are no pages to number); pass `toc: true` to add one anyway.
+
+It works for plain HTML too: the renderer turns every `<a href="#id">` into a link to the element with that `id`, and replaces the text of any element with `data-toc-page="id"` by the page that element starts on, so a hand-written contents page can use `<a href="#intro">Intro <span data-toc-page="intro"></span></a>`. Destination names are spelled in ASCII inside the PDF (a non-ASCII `id` becomes `u` + its UTF-8 in hex) because Skia writes them differently for a destination and a link, which only agree for ASCII.
 
 **Maths.** `$...$` (inline) and `$$...$$` (display) are typeset with [KaTeX](https://katex.org) when you pass a renderer. It lives in its own subpath so that `markdownToHtml` stays small for those who do not need it:
 
