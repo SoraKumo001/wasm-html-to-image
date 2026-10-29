@@ -8937,3 +8937,48 @@ describe("P0-58 negated container queries (@container not (...))", () => {
     expect(shown(layout, "t")).toBe(true);
   });
 });
+
+describe("P0-59 lh / rlh units resolve against computed line-heights", () => {
+  const render1 = async (body: string, style = "") => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0;font-size:0;line-height:0}${style}</style></head><body>${body}</body></html>`,
+      width: 1000,
+      format: "png" as const,
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    return layout;
+  };
+  const hOf = (layout: any[], id: string) => layout.find((b: any) => b.i === id)!.h;
+
+  it("min-height: 1lh on an empty block takes the line height", async () => {
+    const layout = await render1(
+      `<div style="font-size:14px;line-height:28px"><span id="t" style="display:block;min-height:1lh"></span></div>`,
+    );
+    expect(hOf(layout, "t")).toBeCloseTo(28, 0);
+  });
+
+  it("height: 2lh scales with the element's line height", async () => {
+    const layout = await render1(`<div id="t" style="line-height:30px;height:2lh"></div>`);
+    expect(hOf(layout, "t")).toBeCloseTo(60, 0);
+  });
+
+  it("lh uses the computed value of a unitless line-height", async () => {
+    const layout = await render1(
+      `<div id="t" style="font-size:20px;line-height:1.5;min-height:1lh"></div>`,
+    );
+    expect(hOf(layout, "t")).toBeCloseTo(30, 0);
+  });
+
+  it("line-height: 1lh refers to the parent's line height", async () => {
+    const layout = await render1(
+      `<div style="line-height:40px"><div style="font-size:20px;line-height:1lh"><div id="t" style="min-height:1lh"></div></div></div>`,
+    );
+    expect(hOf(layout, "t")).toBeCloseTo(40, 0);
+  });
+
+  it("height: 1rlh takes the root element's line height", async () => {
+    const layout = await render1(`<div id="t" style="height:1rlh"></div>`, `html{line-height:32px}`);
+    expect(hOf(layout, "t")).toBeCloseTo(32, 0);
+  });
+});
