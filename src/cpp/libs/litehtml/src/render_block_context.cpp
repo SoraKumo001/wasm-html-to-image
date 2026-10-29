@@ -164,9 +164,12 @@ litehtml::pixel_t litehtml::render_item_block_context::_render_content(pixel_t /
 					for(const auto& c : el->children())
 					{
 						const auto& cc = c->src_el()->css();
-						// (an out-of-flow positioned child takes no part in the margin collapsing)
+						// (an out-of-flow child takes no part in the margin collapsing:
+						// positioned and floated children leave the box with no in-flow
+						// content, so its margins still collapse through it)
 						if(cc.get_position() == element_position_absolute || cc.get_position() == element_position_fixed) continue;
-						if(cc.get_display() != display_block || cc.get_float() != float_none || !c->collapsed_through())
+						if(cc.get_float() != float_none) continue;
+						if(cc.get_display() != display_block || !c->collapsed_through())
 						{
 							only_flow_blocks = false;
 							break;
