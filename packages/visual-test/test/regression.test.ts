@@ -9173,3 +9173,44 @@ describe("P0-64 min-content contribution clamped by a definite flex-basis", () =
     expect(Math.round(boxes.find((b: any) => b.p === "0.1.0.0").w)).toBe(66);
   });
 });
+
+describe("P0-65 percentage height in nested wrapping column flex containers", () => {
+  const page = async (body: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 1000,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    return layout;
+  };
+  const MID = (inner: string) =>
+    `<div style="display:flex;flex-direction:column;flex-wrap:wrap;gap:16px">${inner}</div>`;
+  const T = `<div style="display:flex;flex-wrap:wrap;height:30%;min-width:100px;margin:4px"><div style="width:90px;height:40px;flex:1"></div><div style="height:12px;margin:8px"></div><div style="width:20px;height:10px;flex:0 0 40px"></div></div>`;
+  const SIBS = `<div style="min-width:40px;padding:8px"><div style="height:118px"></div></div><div style="width:20px;height:40px"></div><div style="width:90px;height:10px"></div>`;
+  it("a % height stays auto through a %-width wrapping column ancestor, so the container does not wrap", async () => {
+    const boxes = await page(
+      `<div style="display:flex;flex-direction:column;gap:8px"><div style="height:12px"></div><div style="display:flex;flex-direction:column;flex-wrap:wrap;width:10%">${MID(T + SIBS)}</div></div>`,
+    );
+    const mid = boxes.find((b: any) => b.p === "0.1.0.1.0");
+    const t = boxes.find((b: any) => b.p === "0.1.0.1.0.0");
+    expect(Math.round(mid.w)).toBe(108); // one column: widest item + nothing else
+    expect(Math.round(t.w)).toBe(100);
+    expect(Math.round(t.h)).toBe(40); // content height, not 30% of the content height 280
+  });
+  it("a % height is content height when every column ancestor is content-sized", async () => {
+    const boxes = await page(
+      `<div style="display:flex;flex-direction:column"><div style="display:flex;flex-direction:column">${MID(`<div style="height:30%"><div style="width:100px;height:40px"></div></div><div style="width:20px;height:40px"></div>`)}</div></div>`,
+    );
+    const t = boxes.find((b: any) => b.p === "0.1.0.0.0.0");
+    expect(Math.round(t.h)).toBe(40);
+  });
+  it("the same % height resolves when the outer column height is definite", async () => {
+    const boxes = await page(
+      `<div style="display:flex;flex-direction:column;height:280px"><div style="display:flex;flex-direction:column">${MID(`<div style="height:30%"><div style="width:100px;height:40px"></div></div><div style="width:20px;height:40px"></div>`)}</div></div>`,
+    );
+    const t = boxes.find((b: any) => b.p === "0.1.0.0.0.0");
+    expect(Math.abs(t.h - 28.8)).toBeLessThan(1); // 30% of the 96px flex base height
+  });
+});
