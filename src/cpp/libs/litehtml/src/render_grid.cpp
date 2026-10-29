@@ -1318,6 +1318,19 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             const css_length& iw = item.el->src_el()->css().get_width();
             const css_length& imw = item.el->src_el()->css().get_min_width();
             auto definite = [](const css_length& l) { return !l.is_predefined() && !l.is_calc() && l.units() != css_units_percentage; };
+            // A definite width IS the item's size: the floor is that width clamped by
+            // min/max-width. The min-width shortcut below only replaces the contribution
+            // when the width itself is automatic or cyclic (width:200px with
+            // min-width:100px floors the track at 200, not 100).
+            if (definite(iw))
+            {
+                pixel_t wv = std::max<pixel_t>(0, iw.calc_percent(render_inline) - item.el->box_sizing_width());
+                if (definite(imw)) wv = std::max(wv, std::max<pixel_t>(0, imw.calc_percent(render_inline) - item.el->box_sizing_width()));
+                const css_length& imxw = item.el->src_el()->css().get_max_width();
+                if (definite(imxw)) wv = std::min(wv, std::max<pixel_t>(0, imxw.calc_percent(render_inline) - item.el->box_sizing_width()));
+                floors[c] = std::max(floors[c], wv + item.el->content_offset_width());
+                continue;
+            }
             // An explicit min-width switches the automatic minimum off: it is the floor itself.
             if (!imw.is_predefined())
             {
@@ -1746,8 +1759,21 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                         int c = item.pos.col_start;
                         if (c >= num_columns || (kinds[c] != 1 && kinds[c] != 4)) continue;
                         // An explicit min-width switches the automatic minimum off: it is the floor itself.
+                        // (A definite width outranks it, as in fr_track_floors: the floor is the
+                        // width clamped by min/max-width.)
                         {
+                            const css_length& iw2 = item.el->src_el()->css().get_width();
                             const css_length& imw = item.el->src_el()->css().get_min_width();
+                            auto definite2 = [](const css_length& l) { return !l.is_predefined() && !l.is_calc() && l.units() != css_units_percentage; };
+                            if (definite2(iw2))
+                            {
+                                pixel_t wv = std::max<pixel_t>(0, iw2.calc_percent(render_inline) - item.el->box_sizing_width());
+                                if (definite2(imw)) wv = std::max(wv, std::max<pixel_t>(0, imw.calc_percent(render_inline) - item.el->box_sizing_width()));
+                                const css_length& imxw2 = item.el->src_el()->css().get_max_width();
+                                if (definite2(imxw2)) wv = std::min(wv, std::max<pixel_t>(0, imxw2.calc_percent(render_inline) - item.el->box_sizing_width()));
+                                minc[c] = std::max(minc[c], std::min(wv + item.el->content_offset_width(), m_grid_layout.column_widths[c]));
+                                continue;
+                            }
                             if (!imw.is_predefined())
                             {
                                 if (!imw.is_calc() && imw.units() != css_units_percentage)
@@ -1763,7 +1789,14 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                             const css_length& iw0 = item.el->src_el()->css().get_width();
                             if ((iw0.is_predefined() && iw0.predef() == 0) ||
                                 iw0.units() == css_units_percentage ||
-                                (iw0.is_calc() && iw0.calc_percent() != 0)) continue;
+                                (iw0.is_calc() && iw0.calc_percent() != 0))
+                            {
+                                // The zero is the CONTENT size: the item's margins, padding
+                                // and borders still floor the track (a margin:2px item
+                                // keeps a 4px track, not 0).
+                                minc[c] = std::max(minc[c], std::min(item.el->content_offset_width(), m_grid_layout.column_widths[c]));
+                                continue;
+                            }
                         }
                         containing_block_context cb = self_size;
                         // The grid's own exact size describes its box, not the intrinsic size of an item.
