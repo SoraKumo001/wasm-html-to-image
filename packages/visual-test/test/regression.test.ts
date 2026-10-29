@@ -8805,3 +8805,54 @@ describe("P0-55 list box rows are block rows (selection painting) with unchanged
     expect(Math.round(c.h)).toBe(70);
   });
 });
+
+describe("P0-56 flexible grid rows resolve against the container, floored by content", () => {
+  const img621 = `<img src="data:image/svg+xml,${encodeURIComponent(
+    `<svg xmlns='http://www.w3.org/2000/svg' width='375' height='621'></svg>`,
+  )}">`;
+  const render1 = async (body: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 1000,
+      format: "png" as const,
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    return layout;
+  };
+  const grid = (rows: string, inner: string, h = "height:448px") =>
+    render1(`<div id="g" style="display:grid;width:375px;${h};grid-template-rows:${rows}"><div id="i">${inner}</div></div>`);
+  const hOf = (layout: any[], id: string) => layout.find((b: any) => b.i === id)!.h;
+
+  it("minmax(0, 1fr) in a definite-height grid takes the container height, not the content", async () => {
+    expect(hOf(await grid("minmax(0,1fr)", img621), "i")).toBeCloseTo(448, 0);
+  });
+
+  it("a plain 1fr row is floored by its content (automatic minimum)", async () => {
+    expect(hOf(await grid("1fr", img621), "i")).toBeCloseTo(621, 0);
+  });
+
+  it("minmax(0, 1fr) with an in-flow block child also stays at the container height", async () => {
+    expect(hOf(await grid("minmax(0,1fr)", `<div style="height:621px"></div>`), "i")).toBeCloseTo(448, 0);
+  });
+
+  it("minmax(0, 1fr) with an indefinite container height sizes to content", async () => {
+    expect(hOf(await grid("minmax(0,1fr)", img621, ""), "i")).toBeCloseTo(621, 0);
+  });
+
+  it("two minmax(0, 1fr) rows share the container height", async () => {
+    const layout = await render1(
+      `<div id="g" style="display:grid;width:375px;height:448px;grid-template-rows:minmax(0,1fr) minmax(0,1fr)"><div id="i">${img621}</div><div id="j">${img621}</div></div>`,
+    );
+    expect(hOf(layout, "i")).toBeCloseTo(224, 0);
+    expect(hOf(layout, "j")).toBeCloseTo(224, 0);
+  });
+
+  it("minmax(100px, 1fr) floors at its minimum when the share is smaller", async () => {
+    const layout = await render1(
+      `<div id="g" style="display:grid;width:375px;height:150px;grid-template-rows:minmax(100px,1fr) minmax(100px,1fr)"><div id="i"></div><div id="j"></div></div>`,
+    );
+    expect(hOf(layout, "i")).toBeCloseTo(100, 0);
+    expect(hOf(layout, "j")).toBeCloseTo(100, 0);
+  });
+});
