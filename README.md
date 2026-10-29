@@ -188,6 +188,8 @@ interface RenderResult {
 <details>
 <summary><b>Markdown to image / PDF</b></summary>
 
+The [playground](https://sorakumo001.github.io/wasm-html-to-image/master/?mode=markdown) has a *Markdown to PDF* mode: edit the text, pick a template and theme, switch the cover, contents, bookmarks and maths, and see the PDF as it changes. The settings are in the URL, so a look can be shared as a link.
+
 `markdownToHtml` (from the `wasm-html-to-image/markdown` subpath, built on [marked](https://github.com/markedjs/marked)) turns GitHub-flavoured Markdown into a complete HTML page with a built-in GitHub-like stylesheet. It is plain JavaScript, so it works in Node, browsers and Cloudflare Workers alike; pass the result to `render()` as `value`:
 
 ```ts
