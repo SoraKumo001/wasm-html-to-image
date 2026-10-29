@@ -97,6 +97,7 @@ program
     "--markdown",
     "treat the input as Markdown (implied by a .md / .markdown file; inline text and stdin need it; needs the optional dependency marked)",
   )
+  .option("--no-math", "do not typeset $...$ and $$...$$ in Markdown (done with KaTeX when it is installed)")
   .option("--markdown-theme <light|dark>", "colour scheme of the built-in Markdown stylesheet (default light)")
   .option("--markdown-css <path>", "extra CSS file appended after the built-in Markdown stylesheet")
   .option(
@@ -167,6 +168,7 @@ program
         jsWait: options.jsWait,
         markdown: options.markdown,
         markdownTheme: options.markdownTheme,
+        math: options.math,
         markdownCss: options.markdownCss,
       };
 

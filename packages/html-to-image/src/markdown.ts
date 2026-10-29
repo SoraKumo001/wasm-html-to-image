@@ -1,4 +1,5 @@
-import { marked } from "marked";
+import { marked, Marked } from "marked";
+import { mathExtension, type MathRenderer } from "./markdown-math-syntax.js";
 import hljs from "highlight.js/lib/core";
 import bash from "highlight.js/lib/languages/bash";
 import c from "highlight.js/lib/languages/c";
@@ -69,6 +70,11 @@ export interface MarkdownOptions {
   highlight?: boolean;
   /** Strip a leading `---` YAML front matter block (and read its `title`). Defaults to true. */
   frontMatter?: boolean;
+  /**
+   * Typeset `$...$` and `$$...$$` with this renderer (`katexMath()` from `wasm-html-to-image/markdown-math`).
+   * Without it a dollar sign is just text.
+   */
+  math?: MathRenderer;
   /** Replace the built-in stylesheet entirely (`theme` is then ignored). */
   stylesheet?: string;
 }
@@ -192,11 +198,12 @@ export function markdownToHtml(markdown: string, options: MarkdownOptions = {}):
       return `<pre><code${name ? ` class="language-${escapeHtml(name)}"` : ""}>${body}\n</code></pre>\n`;
     };
   }
-  const body = marked.parse(source, { async: false, gfm: true, renderer }) as string;
+  const parser = options.math ? new Marked(mathExtension(options.math)) : marked;
+  const body = parser.parse(source, { async: false, gfm: true, renderer }) as string;
   const sheet =
     options.stylesheet ??
     markdownStylesheet(options.theme, options.padding, options.maxWidth, options.paged);
   const titleText = options.title ?? frontTitle;
   const title = titleText ? `<title>${escapeHtml(titleText)}</title>` : "";
-  return `<!doctype html><html><head><meta charset="utf-8">${title}<style>${sheet}${options.css ?? ""}</style></head><body><article class="markdown-body">${body}</article></body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8">${title}<style>${sheet}${options.math?.css ?? ""}${options.css ?? ""}</style></head><body><article class="markdown-body">${body}</article></body></html>`;
 }

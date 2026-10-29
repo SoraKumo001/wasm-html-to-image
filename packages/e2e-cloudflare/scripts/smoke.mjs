@@ -50,7 +50,15 @@ process.exitCode = await runCfSmoke({
       console.log(`markdown-pdf: ${bytes.length} bytes`);
       assert(bytes.length < 1_000_000, `GET /markdown-pdf is ${bytes.length} bytes (whole font embedded?)`);
     },
-    // 4. Invalid input rejected with 400
+    // 4. Maths in Markdown inside the worker (katex bundled, fonts fetched from the CDN)
+    async (base) => {
+      const res = await fetch(`${base}/markdown-math`);
+      assert(res.status === 200, `GET /markdown-math status=${res.status}`);
+      const { typeset, plain } = await res.json();
+      console.log(`markdown-math: typeset ${typeset}px, plain ${plain}px`);
+      assert(typeset > plain + 20, `typeset maths (${typeset}px) is not taller than its source (${plain}px)`);
+    },
+    // 5. Invalid input rejected with 400
     (base) => expectStatus(base, "/invalid", 400),
   ],
 });

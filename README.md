@@ -179,6 +179,7 @@ interface RenderResult {
 | `wasm-html-to-image/preact` | Preact integration | Directly render Preact JSX element trees |
 | `wasm-html-to-image/tailwind` | Utility styling | UnoCSS / Tailwind v4 utilities (`createCSS`, `tailwind()`) |
 | `wasm-html-to-image/markdown` | Markdown input | GitHub-flavoured Markdown to a styled HTML page (`markdownToHtml`); pure JS, runs in browsers and Workers |
+| `wasm-html-to-image/markdown-math` | Maths in Markdown | KaTeX renderer for `markdownToHtml({ math })`: `$...$` and `$$...$$` (`katexMath`); pure JS, runs in browsers and Workers |
 
 ---
 
@@ -211,7 +212,20 @@ npx wasm-html-to-image "# Hello" --markdown -o hello.png
 
 Highlighted languages: bash/shell, c, c++, c#, css/scss, diff, dockerfile, go, html/xml/svg, ini/toml, java, javascript, json, kotlin, markdown, php, python, ruby, rust, sql, swift, typescript, yaml (and the usual aliases such as `js`, `ts`, `sh`, `py`). Other fences stay plain.
 
-`marked` and `highlight.js` are optional dependencies, installed with the package by default (about 280 kB when bundled for a browser).
+**Maths.** `$...$` (inline) and `$$...$$` (display) are typeset with [KaTeX](https://katex.org) when you pass a renderer. It lives in its own subpath so that `markdownToHtml` stays small for those who do not need it:
+
+```ts
+import { markdownToHtml } from "wasm-html-to-image/markdown";
+import { katexMath } from "wasm-html-to-image/markdown-math";
+
+const html = markdownToHtml("Euler: $e^{i\\pi} + 1 = 0$\n\n$$\n\\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}\n$$", {
+  math: katexMath(), // { fontBase: "https://my.host/katex/fonts" } to self-host the fonts
+});
+```
+
+Prices stay prices (`It costs $5 and $10`: the closing dollar must follow a non-space and not precede a digit), `\$` is a literal dollar, and code spans and fences are left alone. TeX that KaTeX rejects is shown as its source with the error as a tooltip instead of failing the page. The output is KaTeX's HTML (no MathML), so it works in Node, browsers and Workers; its fonts are fetched while the page is drawn, from the jsDelivr copy of the matching KaTeX version unless you set `fontBase`. The CLI turns maths on whenever `katex` is installed (`--no-math` switches it off).
+
+`marked`, `highlight.js` and `katex` are optional dependencies, installed with the package by default (the Markdown subpath is about 280 kB when bundled for a browser; the KaTeX one is about 520 kB on top of it, mostly KaTeX itself).
 
 </details>
 

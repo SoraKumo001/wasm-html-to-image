@@ -72,7 +72,10 @@ describe("markdownToHtml", () => {
       "utf8",
     );
     const imports = [...source.matchAll(/^import .* from "([^"]+)"/gm)].map((m) => m[1]);
-    expect(imports.every((m) => m === "marked" || m.startsWith("highlight.js/"))).toBe(true);
+    // (its own ./markdown-math-syntax.js is the maths syntax: it imports only marked's types; KaTeX is not here)
+    expect(imports.every((m) => m === "marked" || m.startsWith("highlight.js/") || m === "./markdown-math-syntax.js")).toBe(true);
+    const syntax = fs.readFileSync(fileURLToPath(new URL("../src/markdown-math-syntax.ts", import.meta.url)), "utf8");
+    expect([...syntax.matchAll(/^import .* from "([^"]+)"/gm)].map((m) => m[1])).toEqual(["marked"]);
     expect(source).not.toMatch(/\bprocess\.|\brequire\(|node:/);
   });
 });

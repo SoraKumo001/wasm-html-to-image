@@ -96,6 +96,18 @@ describe.skipIf(!built)("wasm-html-to-image CLI with Markdown", () => {
     expect((text.match(/\/Type \/Page\b(?!s)/g) ?? []).length).toBeGreaterThan(1);
   });
 
+  it("typesets $...$ / $$...$$ with KaTeX, and --no-math leaves the dollars as text", async () => {
+    // A display fraction is far taller than the plain line of text the same source gives with --no-math.
+    const md = path.join(dir, "math.md");
+    fs.writeFileSync(md, "$$\n\\frac{a}{b}\n$$\n");
+    const withMath = path.join(dir, "with-math.png");
+    const withoutMath = path.join(dir, "no-math.png");
+    await cli([md, "-o", withMath, "-w", "300"]);
+    await cli([md, "-o", withoutMath, "-w", "300", "--no-math"]);
+    const height = (file: string) => fs.readFileSync(file).readUInt32BE(20);
+    expect(height(withMath)).toBeGreaterThan(height(withoutMath) + 20);
+  });
+
   it("rejects an unknown --markdown-theme with a readable error", async () => {
     await expect(
       cli(["# Hi", "--markdown", "--markdown-theme", "blue", "-o", path.join(dir, "x.png")]),

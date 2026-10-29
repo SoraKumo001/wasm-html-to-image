@@ -41,6 +41,8 @@ export interface CliFlags {
   markdown?: boolean;
   /** `--markdown-theme <light|dark>`; absent means light. */
   markdownTheme?: string;
+  /** `--no-math` sets this to false: `$...$` / `$$...$$` are typeset when katex is installed. */
+  math?: boolean;
   /** `--markdown-css <path>`: extra stylesheet appended after the built-in one. */
   markdownCss?: string;
   /** `--js-wait <ms|selector>`: a number is the settle time after load, anything else a CSS selector to wait for. */
@@ -160,7 +162,23 @@ export async function markdownToDocument(markdown: string, flags: CliFlags): Pro
     throw new Error(`unsupported markdown theme "${flags.markdownTheme}". Choose from: light, dark`);
   }
   const css = flags.markdownCss ? await fs.readFile(flags.markdownCss, "utf-8") : undefined;
-  return mod.markdownToHtml(markdown, { theme, css, paged: flags.format === "pdf" });
+  return mod.markdownToHtml(markdown, {
+    theme,
+    css,
+    paged: flags.format === "pdf",
+    ...(flags.math === false ? {} : await loadMath()),
+  });
+}
+
+/** KaTeX maths for the Markdown, or nothing when `katex` is not installed (it is optional). */
+async function loadMath(): Promise<{ math?: import("./markdown-math.js").MathRenderer }> {
+  try {
+    const { katexMath } = await import("./markdown-math.js");
+    return { math: katexMath() };
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ERR_MODULE_NOT_FOUND") return {};
+    throw e;
+  }
 }
 
 /** Inline markup passed on the command line (as opposed to a path or URL). */
