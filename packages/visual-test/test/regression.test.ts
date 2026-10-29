@@ -9429,3 +9429,46 @@ describe("P0-72 percentage-width abspos box is re-rendered at its solved width",
     expect(Math.round(boxes.find((b: any) => b.p === "0.1.0.0.0").w)).toBe(20);
   });
 });
+
+describe("P0-73 floats sharing a line sum into intrinsic width; re-layout drops stale float entries", () => {
+  const page = async (body: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    return layout;
+  };
+  const R = `<div style="float:right"><div style="width:90px;height:10px"></div></div>`;
+  const Rb = `<div style="float:right;width:25%"><div style="width:90px;height:10px"></div></div>`;
+  const L = `<div style="float:left"><div style="min-width:10px;min-height:10px;padding:8px"></div></div>`;
+  const B = `<div style="min-width:10px;min-height:10px;padding:8px"></div>`;
+  const IB = `<div style="display:inline-block"><div style="height:12px;margin:8px"></div></div>`;
+  it("two floats in a shrink-to-fit block size it by their sum, not the widest one", async () => {
+    const boxes = await page(`<div id="w" style="width:fit-content">${R}${L}${B}</div>`);
+    expect(Math.round(boxes.find((b: any) => b.i === "w").w)).toBe(116);
+  });
+  it("floats followed by an inline-block share the line in max-content sizing", async () => {
+    const boxes = await page(
+      `<div id="w" style="width:fit-content"><div style="width:10%;margin:8px">${Rb}${L}${IB}</div></div>`);
+    expect(Math.round(boxes.find((b: any) => b.i === "w").w)).toBe(148);
+  });
+  it("a fit-content parent's trial layout does not push the final floats down", async () => {
+    const boxes = await page(
+      `<div style="width:fit-content;padding:8px"><div id="inn" style="width:14px;margin:8px">${Rb}${L}${B}</div><div style="width:132px;height:10px"></div></div>`);
+    const inn = boxes.find((b: any) => b.i === "inn");
+    const fr = boxes.find((b: any) => b.p === "0.1.0.0.0");
+    const fl = boxes.find((b: any) => b.p === "0.1.0.0.1");
+    expect(Math.round(fr.y - inn.y)).toBe(0);
+    expect(Math.round(fl.y - inn.y)).toBe(10);
+  });
+  it("an earlier float in the parent does not widen a nested fit-content measure", async () => {
+    const boxes = await page(
+      `<div><div style="float:right;max-width:150px"><div style="width:20px;height:10px"></div><div style="min-width:40px;min-height:30px"></div><div style="height:12px"></div></div>` +
+      `<div id="d2" style="width:fit-content;padding:8px"><div style="width:10%;margin:8px">${Rb}${L}${B}${IB}</div>` +
+      `<div style="min-width:40px;min-height:30px"></div><div style="min-width:10px;min-height:10px"></div></div></div>`);
+    expect(Math.round(boxes.find((b: any) => b.i === "d2").w)).toBe(148);
+  });
+});
