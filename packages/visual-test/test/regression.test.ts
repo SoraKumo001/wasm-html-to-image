@@ -9122,3 +9122,27 @@ describe("P0-62 inflexible item min-content contribution", () => {
     expect(Math.round(shrinker.w)).toBe(76);
   });
 });
+
+describe("P0-63 percentage height under a cyclic flex height", () => {
+  const page = async (body: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 1000,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    return layout;
+  };
+  const INNER = `<div style="display:flex;align-items:flex-end;padding:4px;margin:2px"><div style="padding:2px;flex:0 1 auto"><div style="height:24px;margin:12px"></div><div style="width:90px;height:40px"></div><div style="height:24px"></div></div><div style="display:grid;grid-template-columns:auto max-content minmax(40px,1fr);height:10%;min-width:100px;margin:8px"><div style="min-width:10px;min-height:30px"></div><div style="height:24px"></div><div style="width:90px;height:10px"></div></div></div>`;
+  it("a % height stays auto when the column flex ancestor's height is content-derived", async () => {
+    const boxes = await page(`<div style="display:flex;flex-direction:column;width:80px;padding:8px">${INNER}</div>`);
+    const g = boxes.find((b: any) => b.p === "0.1.0.0.1");
+    expect(Math.round(g.h)).toBe(30); // the grid's content height, not 10% of 116
+  });
+  it("the same % height resolves when the column flex height is definite", async () => {
+    const boxes = await page(`<div style="display:flex;flex-direction:column;width:80px;padding:8px;height:300px">${INNER}</div>`);
+    const g = boxes.find((b: any) => b.p === "0.1.0.0.1");
+    expect(Math.abs(g.h - 11.6)).toBeLessThan(1);
+  });
+});
