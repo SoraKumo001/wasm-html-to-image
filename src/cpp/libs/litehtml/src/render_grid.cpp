@@ -1248,7 +1248,58 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         const bool pct_h = ih.units() == css_units_percentage || (ih.is_calc() && ih.calc_percent() != 0);
         if (pct_h && (cb.height.type == containing_block_context::cbc_value_type_auto || cb.height_cyclic))
         {
-            const pixel_t basis = el->height() - el->get_margins().height();
+            pixel_t basis = el->height() - el->get_margins().height();
+            // The percentage resolves against the grid AREA, whose height is the
+            // row's height -- and the row is at least its definite track minimum
+            // (a fixed length, or a minmax() floor) and at least the content
+            // height of the other items placed in it, none of which depends on
+            // this item's inline contribution. A flex item with height:100%
+            // holding a ratio image contributes through that height: in a
+            // minmax(30px,auto) row with a 60px row-mate it contributes the
+            // image at 56 high, not at its intrinsic 10 (all fuzz seed 43).
+            if (!vert)
+            {
+                const auto& auto_rows = css().get_grid_auto_rows();
+                pixel_t row_total = 0;
+                for (int r = item.pos.row_start; r < item.pos.row_end; r++)
+                {
+                    pixel_t row_h = 0;
+                    css_length len;
+                    bool have_len = false;
+                    if (r < (int)rows_template.size()) { len = rows_template[r]; have_len = true; }
+                    else if (!auto_rows.empty()) { len = auto_rows[(r - (int)rows_template.size()) % (int)auto_rows.size()]; have_len = true; }
+                    if (have_len)
+                    {
+                        if (!len.is_predefined() && !len.is_calc() && len.units() != css_units_percentage && len.units() != css_units_fr)
+                            row_h = std::max(row_h, len.calc_percent(0));
+                        else if (len.is_calc() && len.get_op() == css_length::op_minmax && len.get_operands().size() == 2)
+                        {
+                            const css_length& mn = len.get_operands()[0];
+                            if (!mn.is_predefined() && mn.units() != css_units_percentage)
+                                row_h = std::max(row_h, mn.calc_percent(0));
+                        }
+                    }
+                    for (const auto& mate : m_grid_layout.items)
+                    {
+                        if (mate.el == el) continue;
+                        if (mate.pos.row_start > r || mate.pos.row_end <= r) continue;
+                        const auto mpos = mate.el->src_el()->css().get_position();
+                        if (mpos == element_position_absolute || mpos == element_position_fixed) continue;
+                        containing_block_context mcb = self_size;
+                        mcb.size_mode &= ~(containing_block_context::size_mode_exact_width | containing_block_context::size_mode_exact_height);
+                        mcb.size_mode |= containing_block_context::size_mode_content;
+                        mcb.size_mode |= containing_block_context::size_mode_cyclic_height;
+                        mcb.height = containing_block_context::typed_pixel(0, containing_block_context::cbc_value_type_auto);
+                        mcb.render_height = mcb.height;
+                        mcb.height_cyclic = true;
+                        mate.el->measure(mcb, fmt_ctx);
+                        row_h = std::max(row_h, mate.el->height() - mate.el->get_margins().height());
+                    }
+                    row_total += row_h;
+                    if (r > item.pos.row_start) row_total += m_grid_layout.row_gap;
+                }
+                basis = std::max(basis, row_total);
+            }
             if (basis > 0)
             {
                 containing_block_context cb2 = cb;
