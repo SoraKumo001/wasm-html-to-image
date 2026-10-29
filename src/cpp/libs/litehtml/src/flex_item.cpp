@@ -249,10 +249,33 @@ void litehtml::flex_item_row_direction::direction_specific_init(const litehtml::
 	// min-content contribution — not its width property (width:20px with
 	// flex:0 0 40px contributes 40) and not its content size.
 	if (!m_container_wm.is_vertical() && shrink == 0 && !el->css().get_flex_basis().is_predefined() &&
-		el->css().get_flex_basis().units() == css_units_px)
+		el->css().get_flex_basis().units() == css_units_px && el->css().get_flex_basis().val() > 0 &&
+		el->parent() && el->parent()->css().get_flex_wrap() == flex_wrap_nowrap)
 	{
-		min_content_contribution = std::max(min_content_contribution,
+		// The item is always exactly its base size, so that is the contribution (a
+		// definite min-width still floors it, a definite max-width still caps it).
+		// Only in a nowrap container: a wrapping container's intrinsic sizes keep the
+		// item's own min-content size, because an item alone on a line is floored by
+		// its automatic minimum (its width), not by its basis.
+		const pixel_t basis_size = el->css().get_flex_basis().calc_percent(parent_size) + render_offset - el->box_sizing_inline(m_container_wm);
+		min_content_contribution = min_size_prop.is_predefined() ? basis_size : std::max(basis_size, min_main_size);
+		if (!max_main_size.is_default())
+			min_content_contribution = std::min(min_content_contribution, (pixel_t) max_main_size);
+	}
+	// A shrinkable item's min-content contribution is clamped by a definite flex-basis:
+	// its width (or content) may be wider than the basis, but as a contribution it counts
+	// at most the base size — otherwise a parent measuring this container's min-content
+	// floors the container's automatic minimum above the size the item is laid out at
+	// (width:50px with flex:0 1 40px contributes 40).
+	if (!m_container_wm.is_vertical() && shrink > 0 && min_size_prop.is_predefined() &&
+		!el->css().get_flex_basis().is_predefined() && el->css().get_flex_basis().units() == css_units_px &&
+		el->css().get_flex_basis().val() > 0 &&
+		el->parent() && el->parent()->css().get_flex_wrap() == flex_wrap_nowrap)
+	{
+		min_content_contribution = std::min(min_content_contribution,
 			el->css().get_flex_basis().calc_percent(parent_size) + render_offset - el->box_sizing_inline(m_container_wm));
+		if (!max_main_size.is_default())
+			min_content_contribution = std::min(min_content_contribution, (pixel_t) max_main_size);
 	}
 	if (!max_size_prop.is_predefined())
 	{
