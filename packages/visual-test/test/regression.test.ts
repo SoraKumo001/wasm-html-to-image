@@ -9308,3 +9308,36 @@ describe("P0-68 percentage sizes of grid items against content-sized tracks", ()
     expect(boxes.find((b: any) => b.p === "0.1.0.0").h).toBeCloseTo(95, 0);
   });
 });
+
+describe("P0-69 track floors: margins of zero-minimum items, definite width vs min-width", () => {
+  const page = async (body: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 1000,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    return layout;
+  };
+  it("the give-back floor of a scroll item is its margin box, not zero", async () => {
+    const boxes = await page(
+      `<div style="display:grid;grid-template-columns:repeat(4,auto);width:20px;padding:4px"><div style="min-width:40px;min-height:30px;height:120px"></div><div style="display:grid;grid-template-columns:minmax(40px,1fr) 60px auto;margin:2px;overflow:hidden"><div style="min-width:10px;min-height:10px"></div></div><div style="width:80px;margin:8px;height:50px"></div></div>`);
+    expect(Math.round(boxes.find((b: any) => b.p === "0.1.0.2").x)).toBe(56);
+  });
+  it("a definite width floors an fr track at the width, not at a smaller min-width", async () => {
+    const boxes = await page(
+      `<div style="display:grid;grid-template-columns:1fr 1fr;width:80px"><div style="width:200px;min-width:100px;height:30px"></div><div style="height:36px;margin:4px"></div></div>`);
+    expect(Math.round(boxes.find((b: any) => b.p === "0.1.0.1").x)).toBe(204);
+  });
+  it("with an automatic width the min-width is the floor", async () => {
+    const boxes = await page(
+      `<div style="display:grid;grid-template-columns:1fr 1fr;width:80px"><div style="min-width:100px;height:30px"><div style="width:200px;height:10px"></div></div><div style="height:36px;margin:4px"></div></div>`);
+    expect(Math.round(boxes.find((b: any) => b.p === "0.1.0.1").x)).toBe(104);
+  });
+  it("a definite width is clamped by max-width for the floor", async () => {
+    const boxes = await page(
+      `<div style="display:grid;grid-template-columns:1fr 1fr;width:80px"><div style="width:200px;max-width:100px;height:30px"></div><div style="height:36px;margin:4px"></div></div>`);
+    expect(Math.round(boxes.find((b: any) => b.p === "0.1.0.1").x)).toBe(104);
+  });
+});
