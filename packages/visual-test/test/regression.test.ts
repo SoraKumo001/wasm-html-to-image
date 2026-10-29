@@ -8246,3 +8246,86 @@ describe("P0-50: grid row measure takes the height at the used width", () => {
     expect(at(out, "g").h).toBeCloseTo(20, 0);
   });
 });
+
+// P0-51: a ratio-only replaced item with a percentage width measured as a
+// row flex item took the "definite main size" fill even when the flex
+// container itself was being sized from its content: render_image's
+// flex_main_definite read the space on offer as a definite main size, so
+// a width:10% svg (viewBox only) in a fit-content row flex contributed
+// the full available width (1000) and the container capped out there
+// (fuzz replaced seed 37: Chrome 506, ours 1000+). A percentage width is
+// cyclic while the container's own inline size is an intrinsic keyword
+// or itself cyclic, so the container is indefinite then and the item
+// contributes the 300px default object size, as in Chrome. A container
+// with a definite inline size keeps the fill (a ratio-only item in a
+// 500px row flex is 500 wide in Chrome too).
+describe("P0-51: ratio-only percentage-width flex item in a shrink-to-fit row flex", () => {
+  type Box = { p: string; t: string; i?: string; x: number; y: number; w: number; h: number };
+
+  async function boxes(html: string): Promise<Box[]> {
+    let out: Box[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0;font-size:0;line-height:0}</style></head><body>${html}</body></html>`,
+      width: 1000,
+      format: "png",
+      onLayout: (b) => {
+        out = b as Box[];
+      },
+    });
+    return out;
+  }
+  const at = (out: Box[], id: string) => out.find((x) => x.i === id)!;
+  const C = (extra: string) =>
+    `<svg id="c" viewBox="0 0 40 20" style="${extra}"><rect width="40" height="20" fill="#69c"/></svg>`;
+  const A = `<div id="a" style="width:10%"><div style="width:150px;height:10px"></div><div style="width:120px;height:10px"></div></div>`;
+  const B = `<div id="b" style="padding:8px"><div style="width:40px;height:10px"></div></div>`;
+
+  it("a lone percentage-width ratio-only item contributes the default object width", async () => {
+    const out = await boxes(`<div id="r" style="display:flex;width:fit-content">${C("width:10%")}</div>`);
+    expect(at(out, "r").w).toBeCloseTo(300, 0);
+    expect(at(out, "c").w).toBeCloseTo(30, 0);
+    expect(at(out, "c").h).toBeCloseTo(15, 0);
+  });
+
+  it("the seed shape: row-reverse wrap fit-content sums the 300px contribution", async () => {
+    const out = await boxes(
+      `<div id="r" style="display:flex;flex-direction:row-reverse;flex-wrap:wrap;width:fit-content">${A}${B}${C("width:10%")}</div>`,
+    );
+    expect(at(out, "r").w).toBeCloseTo(506, 0);
+    expect(at(out, "c").w).toBeCloseTo(50.6, 0);
+  });
+
+  it("a max-content container takes the same contribution", async () => {
+    const out = await boxes(`<div id="r" style="display:flex;width:max-content">${A}${B}${C("width:10%")}</div>`);
+    expect(at(out, "r").w).toBeCloseTo(506, 0);
+  });
+
+  it("a definite-width container keeps the fill for an auto-width item", async () => {
+    const out = await boxes(`<div id="r" style="display:flex;width:500px">${C("")}</div>`);
+    expect(at(out, "c").w).toBeCloseTo(500, 0);
+    expect(at(out, "c").h).toBeCloseTo(250, 0);
+  });
+
+  it("an auto-width ratio-only item still contributes 0", async () => {
+    const out = await boxes(
+      `<div id="r" style="display:flex;width:fit-content">${C("")}<div style="width:50px;height:10px"></div></div>`,
+    );
+    expect(at(out, "r").w).toBeCloseTo(50, 0);
+    expect(at(out, "c").w).toBeCloseTo(25, 0);
+  });
+
+  it("a min-content container still counts the percentage item as 0", async () => {
+    const out = await boxes(
+      `<div id="r" style="display:flex;width:min-content">${C("width:10%")}<div style="width:50px;height:10px"></div></div>`,
+    );
+    expect(at(out, "r").w).toBeCloseTo(50, 0);
+  });
+
+  it("a column container is unaffected (cross axis was already indefinite)", async () => {
+    const out = await boxes(
+      `<div id="r" style="display:flex;flex-direction:column;width:fit-content">${C("width:10%")}</div>`,
+    );
+    expect(at(out, "r").w).toBeCloseTo(300, 0);
+    expect(at(out, "c").w).toBeCloseTo(30, 0);
+  });
+});
