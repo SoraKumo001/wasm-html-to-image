@@ -294,7 +294,14 @@ export async function snapshot(url: string, opts: { width?: number; refresh?: bo
         })(),
       );
     });
-    await page.goto(url, { waitUntil: "networkidle", timeout: 60000 });
+    // Progressive, bounded settle: domcontentloaded is the hard requirement (it is what
+    // layout consumes); load and networkidle are best-effort on top. Some pages never
+    // finish either -- NHK's news top keeps slow beacons and lazy resources in flight
+    // indefinitely through this network, and an unbounded wait failed its capture for
+    // days. Pages that do settle behave exactly as a plain networkidle goto did.
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
+    await page.waitForLoadState("load", { timeout: 30000 }).catch(() => {});
+    await page.waitForLoadState("networkidle", { timeout: 10000 }).catch(() => {});
     await Promise.all(pending);
     store.manifest.finalUrl = page.url();
   } finally {
