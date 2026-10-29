@@ -9654,3 +9654,37 @@ describe("P0-79 a stretched ratio item's transferred size is its min-content con
     expect(Math.round(boxes.find((b: any) => b.i === "t").w)).toBe(0);
   });
 });
+
+describe("P0-80 grid item used widths, measure-mode float push-down, pushed BFC margins", () => {
+  const page = async (body: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    return layout;
+  };
+  const IMG = (w: number, h: number, style = "") =>
+    `<img ${style ? `style="${style}" ` : ""}src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22${w}%22%20height%3D%22${h}%22%20viewBox%3D%220%200%20${w}%20${h}%22%3E%3Crect%20width%3D%22${w}%22%20height%3D%22${h}%22%20fill%3D%22%2369c%22%2F%3E%3C%2Fsvg%3E">`;
+  it("justify-items:stretch does not stretch a fit-content img; its row is sized at the placed size", async () => {
+    const boxes = await page(
+      `<div style="display:grid;grid-template-columns:1fr 60px;justify-items:stretch;height:200px;width:100px"><div id="a" style="min-width:40px;min-height:10px"></div>${IMG(120, 30)}${IMG(20, 90, "width:fit-content")}</div>`);
+    const a = boxes.find((b: any) => b.i === "a");
+    expect(Math.abs(a.h - 62.5)).toBeLessThan(0.6);
+    const imgs = boxes.filter((b: any) => b.t === "img");
+    expect(Math.round(imgs[1].w)).toBe(20);
+    expect(Math.round(imgs[1].h)).toBe(90);
+  });
+  it("a BFC block pushed below a float puts its border at the float's bottom edge", async () => {
+    const boxes = await page(
+      `<div style="overflow:hidden;width:20px"><div style="float:left;width:40px;height:50px"></div><div id="t" style="display:flex;height:80px;min-width:40px;margin:2px"></div></div>`);
+    expect(Math.round(boxes.find((b: any) => b.i === "t").y)).toBe(50);
+  });
+  it("a measure pass pushes a BFC child below measured floats (container height keeps the float)", async () => {
+    const boxes = await page(
+      `<div id="g" style="display:grid;grid-template-columns:max-content;max-width:150px;padding:8px"><div style="float:left;width:20px"><div style="float:left;width:30%;min-width:40px;max-width:250px"><div style="height:50px"></div></div><div style="display:grid;height:200px;min-width:100px"><div style="height:15px"></div><div style="height:90px"></div></div></div></div>`);
+    expect(Math.round(boxes.find((b: any) => b.i === "g").h)).toBe(266);
+  });
+});
