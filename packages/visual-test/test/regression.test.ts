@@ -1297,6 +1297,21 @@ describe("regression: layout and paint probes", () => {
     // the heading stayed on one line (the box itself is 100% of the viewport tall, as in Chromium)
     expect(boxes.find((b) => b.t === "h1")!.h).toBeLessThan(30);
   });
+  it("a break-before:page on the element that already starts the page does not print a blank page", async () => {
+    // break-after:page ends page 1; the next element's own break-before:page falls on the margin the
+    // first break left behind (the <p> inside the div). Only white space lies between the two cuts, so
+    // it must not become a page of its own.
+    const pages = async (body: string) => {
+      const html =
+        `<html><head><style>@page{size:300px 200px;margin:0}body{margin:0}h1{margin:0;break-before:page}</style></head><body>${body}</body></html>`;
+      const pdf = (await render({ value: html, width: 300, format: "pdf", pdfOutline: false })).data as Uint8Array;
+      return (Buffer.from(pdf).toString("latin1").match(/\/Type\s*\/Page\b(?!s)/g) ?? []).length;
+    };
+    expect(await pages(`<div style="break-after:page"><p>x</p></div><h1>T</h1>`)).toBe(2);
+    // A real break-before still breaks: content sits between the cut and the heading.
+    expect(await pages(`<p>a</p><h1>A</h1><p>b</p><h1>B</h1>`)).toBe(3);
+  });
+
   describe("PDF links, destinations and table-of-contents page numbers", () => {
     // Read a PDF the way a viewer does (pdfjs): the page each named destination is on, every link's
     // destination name, the bookmarks, and the text of one page.

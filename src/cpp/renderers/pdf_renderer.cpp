@@ -687,8 +687,17 @@ std::vector<PageCut> plan_page_cuts(const std::vector<BreakUnit>& units,
         // 1) Forced breaks (break-before/after: page): the earliest edge after pos
         //    that still fits on this page ends it early.
         int forced = INT_MAX;
+        // A forced break before a unit that already starts this page changes nothing: only white
+        // space (the margin the previous forced break left behind) lies between `pos` and the unit,
+        // so cutting there would print a page of nothing. (CSS drops that margin at the page top.)
+        auto starts_this_page = [&](const BreakUnit& v) {
+            for (const auto& w : units)
+                if (&w != &v && w.top < v.top && w.bottom > pos) return false;  // content in between
+            return true;
+        };
         for (const auto& u : units) {
-            if (u.before == litehtml::break_flow_page && u.top > pos) forced = std::min(forced, u.top);
+            if (u.before == litehtml::break_flow_page && u.top > pos && !(pos > 0 && starts_this_page(u)))
+                forced = std::min(forced, u.top);
             if (u.after == litehtml::break_flow_page && u.bottom > pos)
                 forced = std::min(forced, u.bottom);
         }
