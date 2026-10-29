@@ -1101,6 +1101,33 @@ litehtml::pixel_t litehtml::render_item_table::get_draw_vertical_offset()
     return 0;
 }
 
+// An inline-table sits on the line by its first row's baseline (CSS 2.1 17.5.1), whereas the line
+// box asks every atomic inline for its *last* baseline (an inline-block's rule): a table answers both
+// with the first row's.
+litehtml::pixel_t litehtml::render_item_table::get_last_baseline()
+{
+    return get_first_baseline();
+}
+
+// CSS 2.1 17.5.1: the baseline of an inline-table is the baseline of its first row, i.e. of the first
+// cell of that row that has one. Without this a table reported its bottom edge, so a table whose
+// later rows are taller than the first (a KaTeX vlist: a stacked column plus a descender row) sat on
+// the line too high or too low by the height of those rows.
+litehtml::pixel_t litehtml::render_item_table::get_first_baseline()
+{
+    if (!m_grid || m_grid->rows_count() <= 0 || get_wm_context().is_vertical()) return render_item::get_first_baseline();
+
+    for (int col = 0; col < m_grid->cols_count(); col++)
+    {
+        table_cell* cell = m_grid->cell(col, 0);
+        if (!cell || !cell->el || !cell->el->has_baseline()) continue;
+        // The cell's position is relative to the table's content box; the baseline is measured from the
+        // table's border box top, as for a block.
+        return cell->el->pos().y + content_offset_top() + cell->el->get_first_baseline() - cell->el->content_offset_top();
+    }
+    return render_item::get_first_baseline();
+}
+
 void litehtml::render_item_table::get_table_row_boundaries( position::vector& boxes ) const
 {
     if (!m_grid || m_grid->rows_count() <= 0) return;

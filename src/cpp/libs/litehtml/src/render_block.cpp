@@ -700,13 +700,17 @@ void litehtml::render_item_block::apply_vertical_align()
     }
 }
 
+// A child takes part in the baseline unless it is out of flow (float, absolute, fixed, none): a
+// position:relative / transformed / translucent box is still in the flow, and is_positioned() (which
+// also answers for stacking-context makers) dropped it -- a KaTeX vlist is a column of
+// position:relative spans, so its table had no baseline at all.
 bool litehtml::render_item_block::has_baseline()
 {
     for (const auto& el : m_children)
     {
         if (el->src_el()->css().get_display() != display_none &&
             el->src_el()->css().get_float() == float_none &&
-            !el->src_el()->is_positioned() && el->has_baseline())
+            el->src_el()->in_normal_flow() && el->has_baseline())
         {
             return true;
         }
@@ -720,7 +724,7 @@ litehtml::pixel_t litehtml::render_item_block::get_first_baseline()
     {
         if (el->src_el()->css().get_display() != display_none &&
             el->src_el()->css().get_float() == float_none &&
-            !el->src_el()->is_positioned() && el->has_baseline())
+            el->src_el()->in_normal_flow() && el->has_baseline())
         {
             return el->pos().y - el->content_offset_top() + el->get_first_baseline();
         }
@@ -735,7 +739,7 @@ litehtml::pixel_t litehtml::render_item_block::get_last_baseline()
         const auto& el = *it;
         if (el->src_el()->css().get_display() != display_none &&
             el->src_el()->css().get_float() == float_none &&
-            !el->src_el()->is_positioned())
+            el->src_el()->in_normal_flow())
         {
             return el->pos().y - el->content_offset_top() + el->get_last_baseline();
         }

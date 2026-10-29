@@ -1329,6 +1329,31 @@ describe("regression: layout and paint probes", () => {
     expect(full.find((b) => b.i === "t")!.h).toBeGreaterThan(40);
   });
 
+  it("an inline-table sits on the line by its first row's baseline, through position:relative children (KaTeX column)", async () => {
+    // A zero-size marker next to the table is on the line's baseline. The first row is a 40px
+    // bottom-aligned cell holding position:relative height:0 blocks (a KaTeX vlist); a second 10px
+    // row (the descender strut) follows. Chromium puts the baseline at 40; the table used to answer
+    // with its bottom edge (50), and the blocks' position:relative hid the cell's own baseline.
+    let boxes: { i?: string; y: number }[] = [];
+    const block = `<span style="display:block;height:0;position:relative;top:-20px"><span style="display:inline-block;height:20px;width:0"></span><span style="display:inline-block">a</span></span>`;
+    await render({
+      value:
+        `<html><body style="margin:0;font:20px/1.2 sans-serif"><div>` +
+        `<span style="display:inline-table;border-collapse:collapse;table-layout:fixed">` +
+        `<span style="display:table-row"><span style="display:table-cell;position:relative;vertical-align:bottom;height:40px">${block}</span></span>` +
+        `<span style="display:table-row"><span style="display:table-cell;height:10px"></span></span></span>` +
+        `<span id="t" style="display:inline-block;width:10px;height:0"></span></div></body></html>`,
+      width: 300,
+      format: "png",
+      onLayout: (b) => {
+        boxes = b as typeof boxes;
+      },
+    });
+    const y = boxes.find((b) => b.i === "t")!.y;
+    expect(y).toBeGreaterThan(36);
+    expect(y).toBeLessThan(44);
+  });
+
   it("auto-width table with percentage cells is shrink-to-fit, not collapsed", async () => {
     const cell = (w: string) => `<td style="width:${w}">先代<br>東京府・東京市</td>`;
     for (const font of ["", "font-size:95%;"]) {
