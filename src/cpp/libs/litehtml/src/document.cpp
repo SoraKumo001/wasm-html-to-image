@@ -896,6 +896,7 @@ pixel_t document::render( pixel_t max_width, render_type rt )
 		position viewport;
 		m_container->get_viewport(viewport);
 		containing_block_context cb_context;
+		pixel_t root_place_x = 0;
         cb_context.mode = m_root_render->src_el()->css().get_writing_mode();
 
         if (cb_context.mode == writing_mode_horizontal_tb)
@@ -915,6 +916,10 @@ pixel_t document::render( pixel_t max_width, render_type rt )
 	    {
 		    const pixel_t scrollbar_width = 15;
 		    cb_context.width.value -= scrollbar_width * (gutter == scrollbar_gutter_stable_both_edges ? 2 : 1);
+		    // stable both-edges also reserves the inline-start edge: the whole page
+		    // shifts by one gutter, not just narrows (browsers inset the scrollport
+		    // on both sides).
+		    if (gutter == scrollbar_gutter_stable_both_edges) root_place_x = scrollbar_width;
 		    if (cb_context.width.value < 0) cb_context.width.value = 0;
 	    }
         }
@@ -934,7 +939,7 @@ pixel_t document::render( pixel_t max_width, render_type rt )
 			m_root_render->render_positioned(rt);
 		} else
 		{
-			reset_measure_budget(); ret = m_root_render->measure(cb_context, nullptr); m_root_render->place(0, 0, cb_context, nullptr); anchor_vertical_rl_root(m_root_render, viewport.width);
+			reset_measure_budget(); ret = m_root_render->measure(cb_context, nullptr); m_root_render->place(root_place_x, 0, cb_context, nullptr); anchor_vertical_rl_root(m_root_render, viewport.width);
 			
 			// Container Queries support: 
 			// After the first layout, container sizes are known.
@@ -955,7 +960,7 @@ pixel_t document::render( pixel_t max_width, render_type rt )
 			}
 			
 			// Second pass
-			reset_measure_budget(); ret = m_root_render->measure(cb_context, nullptr); m_root_render->place(0, 0, cb_context, nullptr); anchor_vertical_rl_root(m_root_render, viewport.width);
+			reset_measure_budget(); ret = m_root_render->measure(cb_context, nullptr); m_root_render->place(root_place_x, 0, cb_context, nullptr); anchor_vertical_rl_root(m_root_render, viewport.width);
 			}
 
 			// text-fit: scale the font of elements whose widest line misses the available width,
@@ -993,7 +998,7 @@ pixel_t document::render( pixel_t max_width, render_type rt )
 				m_root_render = m_root->create_render_item(nullptr);
 				fix_tables_layout();
 				if (m_root_render) m_root_render = m_root_render->init();
-				reset_measure_budget(); ret = m_root_render->measure(cb_context, nullptr); m_root_render->place(0, 0, cb_context, nullptr); anchor_vertical_rl_root(m_root_render, viewport.width);
+				reset_measure_budget(); ret = m_root_render->measure(cb_context, nullptr); m_root_render->place(root_place_x, 0, cb_context, nullptr); anchor_vertical_rl_root(m_root_render, viewport.width);
 			}
 
 			if(m_root_render->fetch_positioned())

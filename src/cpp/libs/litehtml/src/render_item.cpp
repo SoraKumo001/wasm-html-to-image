@@ -467,6 +467,7 @@ void litehtml::render_item::render_positioned(render_type rt) {
 
         if (process) {
             containing_block_context containing_block_size;
+            pixel_t cb_origin_x = 0;
             if (el_position == element_position_fixed ||
                 (is_root() && !src_el()->is_positioned())) {
                 containing_block_size.height = view_port.height;
@@ -484,6 +485,12 @@ void litehtml::render_item::render_positioned(render_type rt) {
                         gutter == scrollbar_gutter_stable_both_edges) {
                         containing_block_size.width.value -=
                             15 * (gutter == scrollbar_gutter_stable_both_edges ? 2 : 1);
+                        // stable both-edges insets the scrollport on the inline-start
+                        // side too: boxes against this containing block start one
+                        // gutter in from the page edge.
+                        if (gutter == scrollbar_gutter_stable_both_edges) {
+                            cb_origin_x = 15;
+                        }
                         if (containing_block_size.width.value < 0) {
                             containing_block_size.width.value = 0;
                         }
@@ -886,7 +893,7 @@ void litehtml::render_item::render_positioned(render_type rt) {
                     }
                 }
             }
-            el->m_pos.x = left + el->content_offset_left();
+            el->m_pos.x = left + el->content_offset_left() + cb_origin_x;
             // (a zero-width box matches by accident when nothing was laid out inside it: measure it)
             if (el->m_pos.width != width - el->content_offset_width() || el->m_pos.width == 0 ||
                 el_width.is_predefined()) {
@@ -962,11 +969,11 @@ void litehtml::render_item::render_positioned(render_type rt) {
                     }
                     el->measure(measure_cb, nullptr);
                     restore_auto_margins();
-                    el->place(left, top, measure_cb, nullptr);
+                    el->place(left + cb_origin_x, top, measure_cb, nullptr);
                 } else {
                     el->measure(containing_block_size, nullptr);
                     restore_auto_margins();
-                    el->place(left, top, containing_block_size, nullptr);
+                    el->place(left + cb_origin_x, top, containing_block_size, nullptr);
                 }
             }
 
