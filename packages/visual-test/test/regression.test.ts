@@ -9533,3 +9533,40 @@ describe("P0-75 a margined float joining a run's line still displaces the line's
     expect(Math.round(boxes.find((b: any) => b.i === "ib").x - c.x)).toBe(32);
   });
 });
+
+describe("P0-76 a wrap column flex item's base size is measured at its hypothetical width", () => {
+  const page = async (body: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0;font-size:0;line-height:0}*{box-sizing:border-box}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    return layout;
+  };
+  const KIDS =
+    `<div style="height:12px"></div><div style="min-width:10px;min-height:30px;padding:2px"></div>` +
+    `<div style="display:grid;grid-template-columns:1fr min-content fit-content(80px) 2fr;min-width:40px;padding:4px"><div style="width:20px;height:10px"></div><div style="min-width:40px;min-height:10px"></div><div style="min-width:10px;min-height:10px"></div><div style="width:90px;height:10px"></div></div>` +
+    `<div style="width:25%;aspect-ratio:0.889"></div>`;
+  it("wrap: the stretched item keeps the height measured at its fit-content width", async () => {
+    const boxes = await page(
+      `<div style="display:flex;flex-direction:column;flex-wrap:wrap;gap:4px;height:20px;padding:2px"><div id="t" style="margin:12px">${KIDS}</div></div>`);
+    const t = boxes.find((b: any) => b.i === "t");
+    expect(Math.round(t.w)).toBe(572);
+    expect(Math.round(t.h)).toBe(114);
+  });
+  it("nowrap: the same item is measured at the stretched width (control)", async () => {
+    const boxes = await page(
+      `<div style="display:flex;flex-direction:column;gap:4px;height:20px;padding:2px"><div id="t" style="margin:12px">${KIDS}</div></div>`);
+    const t = boxes.find((b: any) => b.i === "t");
+    expect(Math.round(t.h)).toBe(221);
+  });
+  it("a ratio-only svg item beside the div still flexes and transfers (control)", async () => {
+    const boxes = await page(
+      `<div style="display:flex;flex-direction:column;flex-wrap:wrap;gap:4px;height:20px;padding:2px"><svg id="s" viewBox="0 0 100 60"><rect width="100" height="60"/></svg><div id="t" style="margin:12px">${KIDS}</div></div>`);
+    const s = boxes.find((b: any) => b.i === "s");
+    expect(Math.round(s.h)).toBe(16);
+    expect(Math.round(s.w)).toBe(201);
+  });
+});
