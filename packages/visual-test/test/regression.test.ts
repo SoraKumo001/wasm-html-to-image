@@ -8509,3 +8509,35 @@ describe("P0-54 a line-height on the select does not change the control's geomet
     expect(Math.round(c.h)).toBe(53);
   });
 });
+
+describe("P0-55 list box rows are block rows (selection painting) with unchanged geometry", () => {
+  const page = (body: string) => ({
+    value: `<!doctype html><html><head><style>html,body{margin:0}</style></head><body>${body}</body></html>`,
+    width: 1000,
+    format: "png" as const,
+  });
+  const render1 = async (body: string) => {
+    let layout: any[] = [];
+    await render({ ...page(body), onLayout: (l: any) => (layout = l) } as never);
+    return layout.find((b: any) => b.i === "c");
+  };
+
+  it("a selected middle row keeps the pinned height", async () => {
+    const c = await render1(
+      `<select id="c" size="3"><option>Alpha</option><option selected>Beta</option><option>Gamma</option></select>`,
+    );
+    expect(Math.round(c.h)).toBe(53);
+  });
+
+  it("an empty option still occupies its row", async () => {
+    const c = await render1(`<select id="c" size="2"><option>Alpha</option><option></option></select>`);
+    expect(Math.round(c.h)).toBe(36);
+  });
+
+  it("optgroup labels and a selected option keep the pinned height", async () => {
+    const c = await render1(
+      `<select id="c" size="4"><optgroup label="Group"><option>Alpha</option><option selected>Beta</option></optgroup><option>Gamma</option></select>`,
+    );
+    expect(Math.round(c.h)).toBe(70);
+  });
+});
