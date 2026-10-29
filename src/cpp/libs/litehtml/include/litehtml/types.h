@@ -413,6 +413,7 @@ namespace litehtml
                 pixel_t         descent = 0;            // The distance from the baseline to the bottom of a line of text.
                 pixel_t         x_height = 0;           // Height of the symbol x
                 pixel_t         ch_width = 0;           // Width of the symbol 0
+                pixel_t         line_height = 0;        // The element's computed line-height (set by css_properties::compute); the lh base
                 bool            draw_spaces = true;     // True to call draw text function for spaces. If False, just use space width without draw.
                 pixel_t         sub_shift = 0;          // The baseline shift for subscripts.
                 pixel_t         super_shift = 0;        // The baseline shift for superscripts.
@@ -898,7 +899,7 @@ namespace litehtml
                 blend_mode_luminosity
         };
 
-#define  css_units_strings      "none;%;in;cm;mm;em;ex;pt;pc;px;vw;vh;vmin;vmax;rem;ch;fr"
+#define  css_units_strings      "none;%;in;cm;mm;em;ex;pt;pc;px;vw;vh;vmin;vmax;rem;ch;fr;lh;rlh"
 
 	enum css_units : byte // see css_length
 	{
@@ -919,6 +920,8 @@ namespace litehtml
 		css_units_rem,
 		css_units_ch,
 		css_units_fr,
+		css_units_lh,
+		css_units_rlh,
 	};
 
 #define  background_attachment_strings  "scroll;fixed"

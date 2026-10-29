@@ -1129,6 +1129,17 @@ pixel_t document::to_pixels( const css_length& val, const font_metrics& metrics,
 	case css_units_ch:
 		ret = (pixel_t) (metrics.ch_width * val.val());
 		break;
+	case css_units_lh:
+		// The element's own computed line-height, carried in its font metrics;
+		// 'normal' (the font's natural height) when it was never set.
+		ret = (pixel_t) ((metrics.line_height > 0 ? metrics.line_height : metrics.height) * val.val());
+		break;
+	case css_units_rlh:
+		if (m_root && m_root->css().line_height().computed_value > 0)
+			ret = (pixel_t) (m_root->css().line_height().computed_value * val.val());
+		else
+			ret = (pixel_t) (metrics.height * val.val());
+		break;
 	default:
 		ret = (pixel_t) val.val();
 		break;
