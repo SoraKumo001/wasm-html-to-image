@@ -9371,3 +9371,30 @@ describe("P0-70 percentage height of a grid item resolves against its own conten
     expect(Math.round(boxes.find((b: any) => b.p === "0.1.0").w)).toBe(228);
   });
 });
+describe("P0-71 min-content contribution of a scroll-container flex item", () => {
+  const page = async (body: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 1000,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    return layout;
+  };
+  it("an overflow:hidden item contributes its min-content to a shrink-wrapped flex container", async () => {
+    const boxes = await page(
+      `<div style="width:min-content"><div style="display:flex"><div style="display:flex;overflow:hidden;width:30%"><div style="width:60px;height:10px"></div></div><div style="margin:12px;height:36px"></div></div></div>`);
+    expect(Math.round(boxes.find((b: any) => b.p === "0.1.0").w)).toBe(84);
+  });
+  it("a block item with overflow:hidden contributes its min-content too", async () => {
+    const boxes = await page(
+      `<div style="width:min-content"><div style="display:flex"><div style="overflow:hidden"><div style="width:60px;height:10px"></div></div><div style="margin:12px;height:36px"></div></div></div>`);
+    expect(Math.round(boxes.find((b: any) => b.p === "0.1.0").w)).toBe(84);
+  });
+  it("the item's automatic minimum stays zero: it still shrinks away in a narrow container", async () => {
+    const boxes = await page(
+      `<div style="display:flex;width:20px"><div style="overflow:hidden"><div style="width:60px;height:10px"></div></div><div style="margin:12px;height:36px"></div></div>`);
+    expect(Math.round(boxes.find((b: any) => b.p === "0.1.0.0").w)).toBe(0);
+  });
+});
