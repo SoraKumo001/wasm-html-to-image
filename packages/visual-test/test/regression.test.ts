@@ -9246,3 +9246,65 @@ describe("P0-66 min-content contribution of an item with a definite min-width", 
     expect(Math.round(boxes.find((b: any) => b.p === "0.1.0.0.2").w)).toBe(198);
   });
 });
+
+describe("P0-67 min-content contribution of a cyclic-percentage grid item with non-visible overflow", () => {
+  const page = async (body: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 1000,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    return layout;
+  };
+  const grid = (a: string) =>
+    `<div style="display:grid;grid-template-columns:auto 1fr 2fr fit-content(80px);gap:16px">${a}<div style="display:grid;grid-template-columns:1fr fit-content(80px) 60px;grid-auto-rows:40px;height:fit-content;margin:8px"><div style="width:20px;height:25px"></div></div></div>`;
+  const item = (style: string) => `<div style="${style}"><div style="width:20px;height:25px"></div></div>`;
+  it("a cyclic percentage width with overflow:hidden contributes zero at min-content", async () => {
+    const boxes = await page(`<div style="width:min-content">${grid(item("width:10%;max-width:150px;overflow:hidden"))}</div>`);
+    expect(Math.round(boxes.find((b: any) => b.p === "0.1.0").w)).toBe(144);
+  });
+  it("the same item with visible overflow contributes its content", async () => {
+    const boxes = await page(`<div style="width:min-content">${grid(item("width:10%;max-width:150px"))}</div>`);
+    expect(Math.round(boxes.find((b: any) => b.p === "0.1.0").w)).toBe(164);
+  });
+  it("at max-content the percentage item contributes its content either way", async () => {
+    const boxes = await page(`<div style="width:max-content">${grid(item("width:10%;max-width:150px;overflow:hidden"))}</div>`);
+    expect(Math.round(boxes.find((b: any) => b.p === "0.1.0").w)).toBe(356);
+  });
+});
+
+describe("P0-68 percentage sizes of grid items against content-sized tracks", () => {
+  const page = async (body: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 1000,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    return layout;
+  };
+  const G = (a: string) =>
+    `<div style="display:grid;grid-template-columns:auto 1fr 2fr fit-content(80px);gap:16px;align-items:stretch;width:144px">${a}<div style="display:grid;grid-template-columns:1fr fit-content(80px) 60px;grid-auto-rows:40px;height:fit-content;margin:8px"><div style="width:20px;height:25px"></div></div></div>`;
+  const A = (style: string) => `<div style="${style}"><div style="width:20px;height:25px"></div></div>`;
+  it("an overflowing auto track gives back down to zero for a cyclic-percentage scroll item", async () => {
+    const boxes = await page(G(A("width:10%;max-width:150px;overflow:hidden")));
+    expect(Math.round(boxes.find((b: any) => b.p === "0.1.0.0").w)).toBe(0);
+  });
+  it("with visible overflow the track keeps the content contribution", async () => {
+    const boxes = await page(G(A("width:10%;max-width:150px")));
+    expect(Math.round(boxes.find((b: any) => b.p === "0.1.0.0").w)).toBe(2);
+  });
+  it("a percentage height behaves as auto while its row is sized, then resolves against the row", async () => {
+    const boxes = await page(
+      `<div style="display:grid;height:120px;width:300px"><div style="height:10%;padding:4px;margin:12px"><div style="height:142px"></div></div></div>`);
+    expect(boxes.find((b: any) => b.p === "0.1.0.0").h).toBeCloseTo(25.4, 0);
+  });
+  it("height:50% resolves against the content-sized row too", async () => {
+    const boxes = await page(
+      `<div style="display:grid;height:120px;width:300px"><div style="height:50%;padding:4px;margin:12px"><div style="height:142px"></div></div></div>`);
+    expect(boxes.find((b: any) => b.p === "0.1.0.0").h).toBeCloseTo(95, 0);
+  });
+});
