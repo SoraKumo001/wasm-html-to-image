@@ -1354,6 +1354,32 @@ describe("regression: layout and paint probes", () => {
     expect(y).toBeLessThan(44);
   });
 
+  it("a table of bottom-aligned cells sits on its first row's bottom: a raised KaTeX superscript stays raised", async () => {
+    // The superscript is a one-row inline-table whose bottom-aligned cell holds a position:relative
+    // block raised by `top`. A cell of that kind has no baseline of its own, so the table sits on the
+    // first row's bottom edge, wherever the raised content lands: reading the content's baseline
+    // instead dragged the table down by the offset and put the exponent back on the baseline.
+    let boxes: { i?: string; y: number }[] = [];
+    const sup = (top: number) =>
+      `<span style="display:inline-table;border-collapse:collapse;table-layout:fixed"><span style="display:table-row">` +
+      `<span style="display:table-cell;position:relative;vertical-align:bottom;height:10px"><span style="display:block;height:0;position:relative;top:${top}px">` +
+      `<span style="display:inline-block;height:12px;width:0"></span><span style="display:inline-block;font-size:12px">2</span></span></span></span></span>`;
+    const ys: number[] = [];
+    for (const top of [-8, -20]) {
+      await render({
+        value: `<html><body style="margin:0;font:20px/1.2 sans-serif"><div>x${sup(top)}<span id="t" style="display:inline-block;width:10px;height:0"></span></div></body></html>`,
+        width: 300,
+        format: "png",
+        onLayout: (b) => {
+          boxes = b as typeof boxes;
+        },
+      });
+      ys.push(boxes.find((b) => b.i === "t")!.y);
+    }
+    // The line's baseline does not depend on how far the exponent is raised.
+    expect(Math.abs(ys[0] - ys[1])).toBeLessThan(1);
+  });
+
   it("auto-width table with percentage cells is shrink-to-fit, not collapsed", async () => {
     const cell = (w: string) => `<td style="width:${w}">先代<br>東京府・東京市</td>`;
     for (const font of ["", "font-size:95%;"]) {

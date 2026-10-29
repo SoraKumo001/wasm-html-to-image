@@ -1109,23 +1109,25 @@ litehtml::pixel_t litehtml::render_item_table::get_last_baseline()
     return get_first_baseline();
 }
 
-// CSS 2.1 17.5.1: the baseline of an inline-table is the baseline of its first row, i.e. of the first
-// cell of that row that has one. Without this a table reported its bottom edge, so a table whose
-// later rows are taller than the first (a KaTeX vlist: a stacked column plus a descender row) sat on
-// the line too high or too low by the height of those rows.
+// CSS 2.1 17.5.1 / CSS Tables: the baseline of a table is the baseline of its first row. That is the
+// baseline of the row's cells that are vertical-align:baseline (the first one with a baseline of its
+// own); a row without such a cell has no baseline of its own and sits on its bottom edge. Without this
+// a table reported the bottom edge of its LAST row, so a table with a tall second row (a KaTeX column:
+// a bottom-aligned cell plus a descender row) sat on the line too high by the height of that row.
 litehtml::pixel_t litehtml::render_item_table::get_first_baseline()
 {
     if (!m_grid || m_grid->rows_count() <= 0 || get_wm_context().is_vertical()) return render_item::get_first_baseline();
 
+    // Table border box top = content_offset_top() + (caption height +) the row's own top.
+    const pixel_t origin = content_offset_top() + m_grid->top_captions_height();
     for (int col = 0; col < m_grid->cols_count(); col++)
     {
         table_cell* cell = m_grid->cell(col, 0);
-        if (!cell || !cell->el || !cell->el->has_baseline()) continue;
-        // The cell's position is relative to the table's content box; the baseline is measured from the
-        // table's border box top, as for a block.
+        if (!cell || !cell->el || cell->rowspan > 1) continue;
+        if (cell->el->css().get_vertical_align() != va_baseline || !cell->el->has_baseline()) continue;
         return cell->el->pos().y + content_offset_top() + cell->el->get_first_baseline() - cell->el->content_offset_top();
     }
-    return render_item::get_first_baseline();
+    return origin + m_grid->row(0).bottom;
 }
 
 void litehtml::render_item_table::get_table_row_boundaries( position::vector& boxes ) const
