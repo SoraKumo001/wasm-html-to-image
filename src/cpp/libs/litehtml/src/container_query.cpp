@@ -54,9 +54,13 @@ bool container_query_list_list::check(const html_tag* el) const
 						auto ri = parent->get_render_item();
 						if (ri)
 						{
-							// Use the content box size of the container
-							feat.width = ri->pos().width - ri->get_paddings().width() - ri->get_borders().width();
-							feat.height = ri->pos().height - ri->get_paddings().height() - ri->get_borders().height();
+							// pos() is already the content box size in this engine
+							// (flex_item.cpp reads it as the content size), so the
+							// paddings and borders must not come off a second time:
+							// a 448px-content container failed a (min-width: 448px)
+							// query by exactly its horizontal padding.
+							feat.width = ri->pos().width;
+							feat.height = ri->pos().height;
 						}
 						else
 						{
