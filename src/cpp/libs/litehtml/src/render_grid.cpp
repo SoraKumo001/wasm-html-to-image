@@ -1538,7 +1538,9 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                 // scroll container without a specified width (its automatic minimum size).
                 if (min_content_constraint && kinds[c] == 1 && !vert &&
                     item.el->src_el()->css().get_overflow() != overflow_visible &&
-                    item.el->src_el()->css().get_width().is_predefined() && item.el->src_el()->css().get_width().predef() == 0 &&
+                    ((item.el->src_el()->css().get_width().is_predefined() && item.el->src_el()->css().get_width().predef() == 0) ||
+                     item.el->src_el()->css().get_width().units() == css_units_percentage ||
+                     (item.el->src_el()->css().get_width().is_calc() && item.el->src_el()->css().get_width().calc_percent() != 0)) &&
                     item.el->src_el()->css().get_min_width().is_predefined())
                     w = item.el->content_offset_width();
                 // Under a min-content constraint an item with a definite min-width
@@ -1759,7 +1761,9 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                             // its content-based one; a definite width still floors the track.
                             // (A non-auto min-width was already handled above.)
                             const css_length& iw0 = item.el->src_el()->css().get_width();
-                            if (iw0.is_predefined() && iw0.predef() == 0) continue;
+                            if ((iw0.is_predefined() && iw0.predef() == 0) ||
+                                iw0.units() == css_units_percentage ||
+                                (iw0.is_calc() && iw0.calc_percent() != 0)) continue;
                         }
                         containing_block_context cb = self_size;
                         // The grid's own exact size describes its box, not the intrinsic size of an item.
@@ -2077,6 +2081,16 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             cb.height = containing_block_context::cbc_value_type_auto;
         }
         cb.size_mode |= containing_block_context::size_mode_measure;
+        // A percentage height of an item is cyclic while its row is being sized: the row is
+        // the percentage basis, not the grid container, so even with a definite container
+        // height the percentage behaves as auto for the item's height contribution and only
+        // resolves against the finished row height.
+        if (!vert && (item.el->src_el()->css().get_height().units() == css_units_percentage ||
+                      (item.el->src_el()->css().get_height().is_calc() && item.el->src_el()->css().get_height().calc_percent() != 0)))
+        {
+            cb.size_mode |= containing_block_context::size_mode_cyclic_height;
+            cb.height_cyclic = true;
+        }
         // The grid's own exact-size flags (it is itself being placed into a fixed track) must not
         // leak into sizing its items: their content height has to be measured, not forced.
         cb.size_mode &= ~(containing_block_context::size_mode_exact_width | containing_block_context::size_mode_exact_height);
