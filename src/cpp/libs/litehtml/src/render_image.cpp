@@ -178,8 +178,15 @@ litehtml::pixel_t litehtml::render_item_image::_measure(
             const pixel_t avail = (pixel_t)containing_block_size.render_inline_size();
             return avail > 0 && avail < 50000;
         }();
+        // A percentage width in this branch did not resolve (the branch requires an auto used
+        // width), so it is cyclic: the container's main size is indefinite for this item even
+        // when a trial width is on offer, and the definite-main-size fill does not apply -- the
+        // item contributes its default object size to the container's intrinsic size instead.
+        // An auto width keeps the fill: at the container's resolved main size it is what lets
+        // flex sizing and the cross-size transfer produce the item's final size.
         if ((is_min_content && !positioned) ||
-            (is_content_size && !positioned && in_shrink_to_fit() && !flex_main_definite)) {
+            (is_content_size && !positioned && in_shrink_to_fit() &&
+             (!flex_main_definite || cyclic_percent_width(css().get_width())))) {
             // (a percentage width is cyclic here: it counts as auto, and a box with no natural width then
             // takes the 300px default object width for the max-content size)
             const bool percent_width = css().get_width().units() == css_units_percentage && !css().get_width().is_predefined();
