@@ -306,6 +306,8 @@ export function markdownToHtml(markdown: string, options: MarkdownOptions = {}):
 
 /** What `render()` needs besides the HTML for the template's running header and footer. */
 export interface MarkdownRenderOptions {
+  /** The theme's page colour, for a dark theme: the PDF page (margins included) takes it, not only the text area. */
+  pdfBackground?: string;
   pdfHeader?: string;
   pdfFooter?: string;
   pdfTitle?: string;
@@ -345,6 +347,9 @@ export function markdownToDocument(markdown: string, options: MarkdownOptions = 
     ...(options.title !== undefined ? { title: options.title } : {}),
     ...(options.toc !== undefined ? { toc: options.toc !== false } : {}),
   };
+  // `settings` reports what applied: the template that was used, whichever of the option and the front matter named it.
+  if (typeof options.template === "object") delete settings.template;
+  else if (named !== undefined) settings.template = named;
 
   const renderer = new marked.Renderer();
   // Every heading gets an id (a link target, and what the table of contents points at).
@@ -403,6 +408,8 @@ export function markdownToDocument(markdown: string, options: MarkdownOptions = 
     html,
     settings,
     renderOptions: {
+      // The text area takes the page's background from the CSS; the margins need the page itself painted.
+      ...(options.paged && options.theme === "dark" && options.stylesheet === undefined ? { pdfBackground: PALETTES.dark.bg } : {}),
       ...(header ? { pdfHeader: header } : {}),
       ...(hasTemplate && page.footer ? { pdfFooter: running(page.footer) } : {}),
       ...(settings.title ? { pdfTitle: settings.title.replace(/<br\s*\/?>/gi, " ") } : {}),

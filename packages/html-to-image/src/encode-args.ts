@@ -55,6 +55,7 @@ export interface FullSatoruOptionsInput {
   colorSpace?: "srgb" | "cmyk";
   scale?: number;
   pdfOutline?: boolean;
+  pdfBackground?: string;
   pdfTitle?: string;
   pdfAuthor?: string;
   pdfSubject?: string;
@@ -77,6 +78,7 @@ export function buildFullSatoruOptions(
     textToPaths,
     mediaTypeInt,
     pdfOutline,
+    pdfBackground,
     pdfTitle,
     pdfAuthor,
     pdfSubject,
@@ -95,6 +97,7 @@ export function buildFullSatoruOptions(
     ...(input.scale !== undefined && input.scale !== 1 ? { scale: input.scale } : {}),
     // The engine's default is on: only an explicit false has to be sent.
     ...(pdfOutline === false ? { pdfOutline: false } : {}),
+    ...(pdfBackground !== undefined ? { backgroundColor: parseCssColor(pdfBackground) } : {}),
     pdfTitle: pdfTitle ?? "",
     pdfAuthor: pdfAuthor ?? "",
     pdfSubject: pdfSubject ?? "",
@@ -108,4 +111,17 @@ export function buildFullSatoruOptions(
     pdfHeader: pdfHeader ?? "",
     pdfFooter: pdfFooter ?? "",
   };
+}
+
+/**
+ * `#rgb`, `#rrggbb` or `#rrggbbaa` as the engine's ARGB integer (`0xAARRGGBB`). Anything else is an error:
+ * a mistyped colour should not silently paint nothing.
+ */
+export function parseCssColor(color: string): number {
+  const m = /^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.exec(color.trim());
+  if (!m) throw new Error(`invalid colour "${color}": use #rgb, #rrggbb or #rrggbbaa`);
+  let hex = m[1];
+  if (hex.length === 3) hex = hex.split("").map((c) => c + c).join("");
+  const a = hex.length === 8 ? hex.slice(6, 8) : "ff";
+  return parseInt(a + hex.slice(0, 6), 16) >>> 0;
 }

@@ -5,6 +5,7 @@ import path from "node:path";
 import { markdownToDocument, markdownToHtml } from "../src/markdown";
 import { fillRunningText, listTemplates, parseFrontMatter, resolveTemplate, TEMPLATES } from "../src/markdown-template";
 import { buildRenderOptions, loadTemplate, type CliFlags } from "../src/cli-options";
+import { parseCssColor } from "../src/encode-args";
 
 const style = (html: string) => /<style>([\s\S]*?)<\/style>/.exec(html)![1];
 const article = (html: string) => /<article class="markdown-body">([\s\S]*)<\/article>/.exec(html)![1];
@@ -101,6 +102,15 @@ describe("settings: template defaults < front matter < options", () => {
     expect(o).toMatchObject({ cover: true, accent: "#222222", toc: false });
   });
 
+  it("settings.template names the template that was used, whichever of the option and the front matter chose it", () => {
+    const fm = "---\ntitle: T\ntemplate: report\n---\n# H";
+    expect(markdownToDocument(fm, { paged: true }).settings.template).toBe("report");
+    expect(markdownToDocument(fm, { paged: true, template: "book" }).settings.template).toBe("book");
+    // a template given as an object has no name; the front matter's is not what was used either
+    expect(markdownToDocument(fm, { paged: true, template: { css: "" } }).settings.template).toBeUndefined();
+    expect(markdownToDocument("# H", { paged: true }).settings.template).toBeUndefined();
+  });
+
   it("a front matter template: is used, and the option wins over it", () => {
     const fm = "---\ntitle: T\ntemplate: book\n---\n# H";
     expect(style(markdownToHtml(fm, { paged: true }))).toContain("@page { size: A5;");
@@ -176,6 +186,24 @@ describe("running header and footer, PDF title", () => {
   it("a stamp alone gives a header even without a template; no title or template gives no render options", () => {
     expect(markdownToDocument("# H", { settings: { stamp: "DRAFT" }, paged: true }).renderOptions.pdfHeader).toContain("DRAFT");
     expect(markdownToDocument("# H", { paged: true }).renderOptions).toEqual({});
+  });
+});
+
+describe("dark pages", () => {
+  const bg = (o: Parameters<typeof markdownToDocument>[1]) => markdownToDocument("# H", o).renderOptions.pdfBackground;
+  it("a dark PDF asks for the whole page to be painted; light, images and own stylesheets do not", () => {
+    expect(bg({ theme: "dark", paged: true })).toBe("#0d1117");
+    expect(bg({ theme: "light", paged: true })).toBeUndefined();
+    expect(bg({ theme: "dark" })).toBeUndefined();
+    expect(bg({ theme: "dark", paged: true, stylesheet: "body{}" })).toBeUndefined();
+  });
+
+  it("parseCssColor gives the engine's ARGB integer and rejects what it cannot read", () => {
+    expect(parseCssColor("#0d1117")).toBe(0xff0d1117);
+    expect(parseCssColor("#fff")).toBe(0xffffffff);
+    expect(parseCssColor("#11223380")).toBe(0x80112233);
+    expect(() => parseCssColor("red")).toThrow(/invalid colour/);
+    expect(() => parseCssColor("#12")).toThrow(/invalid colour/);
   });
 });
 

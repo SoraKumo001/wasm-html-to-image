@@ -1297,6 +1297,23 @@ describe("regression: layout and paint probes", () => {
     // the heading stayed on one line (the box itself is 100% of the viewport tall, as in Chromium)
     expect(boxes.find((b) => b.t === "h1")!.h).toBeLessThan(30);
   });
+  it("pdfBackground paints the whole PDF page, margins included", async () => {
+    // Without it only the content area (inside the @page margin) is painted by the document's own background.
+    const html = `<html><head><style>@page{size:300px 200px;margin:20px}body{margin:0}</style></head><body><p>x</p></body></html>`;
+    const firstPageContent = async (extra: Record<string, unknown>) => {
+      const data = Buffer.from((await render({ value: html, width: 300, format: "pdf", pdfOutline: false, ...extra })).data as Uint8Array);
+      const text = data.toString("latin1");
+      const n = /\/Contents (\d+) 0 R/.exec(text)![1];
+      const at = text.indexOf(`\n${n} 0 obj\n`);
+      const start = text.indexOf("stream\n", at) + 7;
+      return inflateSync(data.subarray(start, text.indexOf("\nendstream", start))).toString("latin1");
+    };
+    // the page rectangle (300x200 px = 225x150 pt after the 0.75 scale: here 300 200 in px units) is filled in #0d1117
+    expect(await firstPageContent({ pdfBackground: "#0d1117" })).toMatch(/\.051 \.0667 \.0902 rg[\s\S]*?0 0 300 200 re\s+f/);
+    expect(await firstPageContent({})).not.toMatch(/0 0 300 200 re\s+f/);
+    await expect(render({ value: html, width: 300, format: "pdf", pdfBackground: "red" })).rejects.toThrow(/invalid colour/);
+  });
+
   it("a break-before:page on the element that already starts the page does not print a blank page", async () => {
     // break-after:page ends page 1; the next element's own break-before:page falls on the margin the
     // first break left behind (the <p> inside the div). Only white space lies between the two cuts, so

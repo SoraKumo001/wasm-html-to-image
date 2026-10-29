@@ -101,6 +101,7 @@ export interface Orchestration {
   preloadFonts: { name: string; data: Uint8Array }[] | undefined;
   limits: RenderLimits;
   pdfOutline: boolean | undefined;
+  pdfBackground: string | undefined;
   pdfTitle: string | undefined;
   pdfAuthor: string | undefined;
   pdfSubject: string | undefined;
@@ -176,6 +177,7 @@ export function createOrchestration(
     fonts: preloadFonts,
     limits = {},
     pdfOutline,
+    pdfBackground,
     pdfTitle,
     pdfAuthor,
     pdfSubject,
@@ -340,6 +342,7 @@ export function createOrchestration(
     preloadFonts,
     limits,
     pdfOutline,
+    pdfBackground,
     pdfTitle,
     pdfAuthor,
     pdfSubject,
