@@ -36,6 +36,9 @@ process.exitCode = await runCfSmoke({
       const head = new TextDecoder("latin1").decode(bytes.subarray(0, 5));
       assert(head === "%PDF-", `GET /pdf head=${head}`);
       console.log(`pdf: ${bytes.length} bytes`);
+      // The worker must send a browser User-Agent for Google Fonts, or it serves the whole .ttf (5 MB
+      // per weight) and the PDF embeds it: a heading came out at 3.3 MB instead of a few KB.
+      assert(bytes.length < 1_000_000, `GET /pdf is ${bytes.length} bytes (whole font embedded?)`);
     },
     // 3. Markdown -> PDF inside the worker (the markdown subpath runs in workerd)
     async (base) => {
@@ -45,6 +48,7 @@ process.exitCode = await runCfSmoke({
       const head = new TextDecoder("latin1").decode(bytes.subarray(0, 5));
       assert(head === "%PDF-", `GET /markdown-pdf head=${head}`);
       console.log(`markdown-pdf: ${bytes.length} bytes`);
+      assert(bytes.length < 1_000_000, `GET /markdown-pdf is ${bytes.length} bytes (whole font embedded?)`);
     },
     // 4. Invalid input rejected with 400
     (base) => expectStatus(base, "/invalid", 400),
