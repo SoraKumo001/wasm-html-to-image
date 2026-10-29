@@ -9341,3 +9341,33 @@ describe("P0-69 track floors: margins of zero-minimum items, definite width vs m
     expect(Math.round(boxes.find((b: any) => b.p === "0.1.0.1").x)).toBe(104);
   });
 });
+describe("P0-70 percentage height of a grid item resolves against its own content height for contributions", () => {
+  const page = async (body: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 1000,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    return layout;
+  };
+  const grid = (h: string) =>
+    `<div style="width:fit-content"><div style="display:grid;grid-template-columns:1fr auto auto;gap:4px;width:25%"><div style="display:flex;flex-direction:column;flex-wrap:wrap;justify-content:space-around;align-items:stretch;height:${h};padding:8px;margin:12px"><div style="height:36px;margin:2px"></div><div style="height:36px;width:10px"></div><div style="width:90px;height:10px;flex:1"></div></div><div style="width:90px;height:10px"></div></div></div>`;
+  it("height:30% forms three columns in the contribution measure", async () => {
+    const boxes = await page(grid("30%"));
+    expect(Math.round(boxes.find((b: any) => b.p === "0.1.0").w)).toBe(242);
+  });
+  it("height:60% forms two columns in the contribution measure", async () => {
+    const boxes = await page(grid("60%"));
+    expect(Math.round(boxes.find((b: any) => b.p === "0.1.0").w)).toBe(232);
+  });
+  it("a definite height forms the same columns (control)", async () => {
+    const boxes = await page(grid("30px"));
+    expect(Math.round(boxes.find((b: any) => b.p === "0.1.0").w)).toBe(242);
+  });
+  it("without a height the item contributes its single-column width (control)", async () => {
+    const boxes = await page(grid("auto"));
+    expect(Math.round(boxes.find((b: any) => b.p === "0.1.0").w)).toBe(228);
+  });
+});
