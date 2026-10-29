@@ -1112,8 +1112,24 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             // minmax(min, max)
             const auto& min_len = len.get_operands()[0];
             const auto& max_len = len.get_operands()[1];
-            
+
             m_grid_layout.column_widths[i] = min_len.calc_percent(render_inline);
+            // Intrinsic sizing of a definite minmax(min, max) track (both bounds
+            // fixed lengths): there is no free space to distribute, so the track
+            // contributes its minimum to a min-content size and its maximum to a
+            // max-content size. The maximize step below is for definite
+            // containers only and must not run in this mode.
+            const bool intrinsic_mode =
+                (self_size.size_mode & (containing_block_context::size_mode_content |
+                                        containing_block_context::size_mode_min_content)) != 0 &&
+                render_inline.type == containing_block_context::cbc_value_type_auto;
+            if (intrinsic_mode && !min_len.is_predefined() && !max_len.is_predefined() &&
+                max_len.units() != css_units_fr)
+            {
+                if ((self_size.size_mode & containing_block_context::size_mode_min_content) == 0)
+                    m_grid_layout.column_widths[i] =
+                        std::max(m_grid_layout.column_widths[i], max_len.calc_percent(render_inline));
+            }
             fixed_width += m_grid_layout.column_widths[i];
 
             if (max_len.units() == css_units_fr)
@@ -1825,7 +1841,23 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             }
             pixel_t remaining = render_inline - fixed2;
             if (remaining < 0) remaining = 0;
-            remaining = maximize_definite_minmax(remaining);
+            if (!content_inline)
+            {
+                remaining = maximize_definite_minmax(remaining);
+            }
+            else
+            {
+                // fixed2 counted definite minmax tracks at their minimum; under
+                // a max-content query they sit at their maximum, so that part is
+                // not free space for the fr resolution below.
+                for (int i = 0; i < num_columns; i++)
+                {
+                    if (!is_definite_minmax(i)) continue;
+                    remaining -= m_grid_layout.column_widths[i] -
+                                 columns_template[i].get_operands()[0].calc_percent(render_inline);
+                }
+                if (remaining < 0) remaining = 0;
+            }
             // A shrink-to-fit grid is no wider than the space it is given: when its tracks add up to more,
             // the fr tracks share what the content tracks leave.
             bool over_available = false;
