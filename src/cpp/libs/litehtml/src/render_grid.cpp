@@ -1216,6 +1216,32 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
     // Sized under a min-content constraint, the flex fraction is zero (Blink DetermineFreeSpace): an fr
     // track is as wide as its items' min-content contributions, not scaled up to the largest one.
     const bool min_content_constraint = (self_size.size_mode & containing_block_context::size_mode_min_content) != 0;
+    // Measure an item's inline contribution. A percentage height resolves against the
+    // item's grid area, whose height while the tracks are sized is the item's own
+    // content height (the row is first sized with the percentage as auto): measure
+    // once that way, then again with the resulting border-box height definite, so a
+    // height-dependent item (a wrapping column flex) forms its lines at the resolved
+    // height instead of stacking everything into one line.
+    auto measure_contribution = [&](const std::shared_ptr<render_item>& el, const containing_block_context& cb) -> pixel_t
+    {
+        pixel_t measured = el->measure(cb, fmt_ctx);
+        const css_length& ih = el->src_el()->css().get_height();
+        const bool pct_h = ih.units() == css_units_percentage || (ih.is_calc() && ih.calc_percent() != 0);
+        if (pct_h && (cb.height.type == containing_block_context::cbc_value_type_auto || cb.height_cyclic))
+        {
+            const pixel_t basis = el->height() - el->get_margins().height();
+            if (basis > 0)
+            {
+                containing_block_context cb2 = cb;
+                cb2.render_height = containing_block_context::typed_pixel(basis, containing_block_context::cbc_value_type_absolute);
+                cb2.height = cb2.render_height;
+                cb2.height_cyclic = false;
+                cb2.size_mode &= ~containing_block_context::size_mode_cyclic_height;
+                measured = el->measure(cb2, fmt_ctx);
+            }
+        }
+        return measured;
+    };
     if (content_inline && total_fr > 0)
     {
         for (auto& item : m_grid_layout.items)
@@ -1225,7 +1251,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             cb.size_mode &= ~(containing_block_context::size_mode_exact_width | containing_block_context::size_mode_exact_height);
             cb.size_mode |= containing_block_context::size_mode_content;
             if (min_content_constraint) cb.size_mode |= containing_block_context::size_mode_min_content;
-            pixel_t measured = item.el->measure(cb, fmt_ctx);
+            pixel_t measured = measure_contribution(item.el, cb);
             // measure() already returns the margin-box inline size; inline_size() can still be the
             // larger of the two when the box was measured earlier, so take both into account.
             pixel_t w = std::max((pixel_t)item.el->inline_size(),
@@ -1542,7 +1568,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                     cb.render_width = containing_block_context::typed_pixel((pixel_t)cb.render_width, containing_block_context::cbc_value_type_auto);
                     cb.width = cb.render_width;
                 }
-                pixel_t measured = item.el->measure(cb, fmt_ctx);
+                pixel_t measured = measure_contribution(item.el, cb);
                 // measure() returns the margin-box inline size (padding and border included), so
                 // adding the offsets again would count them twice.
                 pixel_t w = std::max((pixel_t)item.el->inline_size(),
