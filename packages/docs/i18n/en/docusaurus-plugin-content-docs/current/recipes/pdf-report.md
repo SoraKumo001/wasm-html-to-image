@@ -54,3 +54,68 @@ footer height and the content area shrinks by the same amount, which can increas
 page count. A footer that fits inside the margin keeps the previous placement and page
 count.
 
+---
+
+## Generating Professional PDF Reports from Markdown
+
+Instead of writing HTML from scratch, you can use `wasm-html-to-image/markdown` to automatically build PDFs complete with cover pages, tables of contents, headers, footers, and bookmarks from Markdown.
+
+```typescript
+import fs from "node:fs/promises";
+import { render } from "wasm-html-to-image";
+import { markdownToDocument } from "wasm-html-to-image/markdown";
+
+const markdown = `---
+title: Project Progress Report
+subtitle: Q4 2026
+author: Engineering Directorate
+date: 2026-10-29
+template: report
+accent: "#1e40af"
+stamp: CONFIDENTIAL
+---
+
+# 1. Introduction
+
+This report summarises current system migration progress and upcoming milestones.
+
+# 2. Status
+
+| Milestone | Target Date | Status |
+| :--- | :--- | :--- |
+| Architecture Review | 2026/09/15 | Complete |
+| PoC Validation | 2026/10/20 | Complete |
+| Production Rollout | 2026/11/30 | In Progress |
+
+# 3. Risk Assessment & Mitigations
+
+Details and mitigation strategies are outlined below.
+`;
+
+// markdownToDocument provides the rendered HTML along with PDF metadata & running header/footer
+const { html, renderOptions } = markdownToDocument(markdown, {
+  paged: true, // Enable page margins and pagination optimization
+});
+
+const { data: pdfData } = await render({
+  value: html,
+  format: "pdf",
+  ...renderOptions,
+});
+
+await fs.writeFile("progress-report.pdf", Buffer.from(pdfData));
+```
+
+### CLI Quick Command
+
+You can generate the same PDF from the command line in a single command:
+
+```bash
+# Basic conversion (auto TOC & bookmarks)
+npx wasm-html-to-image progress-report.md -o progress-report.pdf
+
+# Specify template, accent colour, and stamp
+npx wasm-html-to-image progress-report.md -o progress-report.pdf --template report --accent "#1e40af" --stamp CONFIDENTIAL
+```
+
+

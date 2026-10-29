@@ -35,6 +35,20 @@ npx wasm-html-to-image <input> [options]
 | `--animation <duration-ms>` | - | 無効 | `@keyframes` の **opacity / transform / color / background-color** アニメーションをサンプリングしてアニメーション WebP / APNG / GIF を出力（1 ループの長さを ms で指定、`webp` / `apng` / `gif` 出力時のみ有効。5000ms にクランプ。CSS の `animation-duration` が優先され、この値は上限クランプ） |
 | `--animation-fps <n>` | - | `15` | アニメーションのサンプリング fps（`--animation` 指定時に有効。上限約 75 フレーム） |
 | `--animation-loop <n>` | - | `0`（無限） | アニメーション WebP / APNG / GIF の再生回数（`0` = 無限、`1` = 1 回だけ。`--animation` 指定時に有効） |
+| `--markdown` | - | 自動判別 | 入力を Markdown として処理（`.md` / `.markdown` 拡張子のファイル入力時は自動で有効） |
+| `--template <name\|file>` | - | `default` | ドキュメントのテンプレート指定（組み込みの `default`, `report`, `book`, `paper`, `compact`、または `.json` / `.css` ファイル） |
+| `--list-templates` | - | - | 利用可能なテンプレート一覧を表示して終了 |
+| `--page-size <size>` | - | テンプレート依存 | ページサイズ（`A3`, `A4`, `A5`, `B4`, `B5`, `Letter`、または `"210mm 297mm"` のような 2 つの長さ） |
+| `--accent <color>` | - | テンプレート依存 | リンク、見出し、表紙などのアクセントカラー（例: `"#c2410c"`） |
+| `--body-font <family>` | - | テンプレート依存 | 本文のフォントファミリー |
+| `--stamp <text>` | - | なし | 全ページのヘッダーに印刷するテキスト（`DRAFT`, `Confidential` 等） |
+| `--cover` / `--no-cover` | - | テンプレート依存 | 表紙ページの生成を強制有効化 / 無効化 |
+| `--no-toc` | - | - | 目次（Table of Contents）ページの出力を無効化（PDF 出力時は既定で有効） |
+| `--toc-depth <n>` | - | `3` | 目次に含める見出しの最大深度（1〜6） |
+| `--no-outline` | - | - | PDF ブックマーク（アウトライン）の生成を無効化（既定で有効） |
+| `--no-math` | - | - | KaTeX 数式処理を無効化（`katex` がインストールされている場合は既定で有効） |
+| `--markdown-theme <light\|dark>` | - | `light` | Markdown スタイルシートのカラーテーマ |
+| `--markdown-css <path>` | - | なし | 組み込みスタイルの後に追加適用する CSS ファイル |
 
 ---
 
@@ -64,13 +78,41 @@ npx wasm-html-to-image banner.png -o banner.avif -w 800 -f avif -q 80
 npx wasm-html-to-image invoice.html -o invoice.pdf -w 800 -f pdf
 ```
 
-### 5. HTML の opacity / transform / color アニメーションをアニメーション WebP に変換
+### 5. Markdown から PDF ドキュメントを作成
+
+`.md` ファイルを指定して出力先を `.pdf` にすると、自動的に改ページや余白が最適化された PDF が生成されます（目次および PDF ブックマークも既定で自動作成されます）。
+
+```bash
+npx wasm-html-to-image report.md -o report.pdf
+```
+
+### 6. テンプレート・アクセントカラー・スタンプを指定して Markdown レポートを作成
+
+ビジネスレポート向けの `report` テンプレートを適用し、アクセントカラーと透かしスタンプを設定：
+
+```bash
+npx wasm-html-to-image report.md -o report.pdf --template report --accent "#c2410c" --stamp DRAFT
+```
+
+書籍スタイルで A5 サイズ・目次オフで出力する場合：
+
+```bash
+npx wasm-html-to-image book.md -o book.pdf --template book --page-size A5 --no-toc
+```
+
+利用可能なテンプレート一覧の確認：
+
+```bash
+npx wasm-html-to-image --list-templates
+```
+
+### 7. HTML の opacity / transform / color アニメーションをアニメーション WebP に変換
 
 ```bash
 npx wasm-html-to-image loader.html -o loader.webp -f webp --animation 2000 --animation-fps 20
 ```
 
-### 6. アニメーション WebP を 1 回だけ再生する
+### 8. アニメーション WebP を 1 回だけ再生する
 
 ```bash
 npx wasm-html-to-image loader.html -o loader.webp -f webp --animation 2000 --animation-loop 1

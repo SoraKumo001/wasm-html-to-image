@@ -29,6 +29,20 @@ npx wasm-html-to-image <input> [options]
 | `--animation <duration-ms>` | - | Disabled | Sample the document's **opacity / transform / color / background-color** `@keyframes` into an animated WebP / APNG / GIF (one loop length in ms; `webp`, `apng` and `gif` output only; clamped to 5000 ms) |
 | `--animation-fps <n>` | - | `15` | Animation sampling fps (used with `--animation`; ~75 frames total cap) |
 | `--animation-loop <n>` | - | `0` (infinite) | How many times the animated WebP / APNG / GIF repeats (`0` = infinite, `1` = play once; used with `--animation`) |
+| `--markdown` | - | Auto-detect | Treat input as Markdown (implied by `.md` / `.markdown` file extension) |
+| `--template <name\|file>` | - | `default` | Document template (`default`, `report`, `book`, `paper`, `compact`, or path to `.json` / `.css`) |
+| `--list-templates` | - | - | List available bundled templates and exit |
+| `--page-size <size>` | - | From template | Page size (`A3`, `A4`, `A5`, `B4`, `B5`, `Letter`, or two lengths like `"210mm 297mm"`) |
+| `--accent <color>` | - | From template | Accent color for headings, links, and cover elements (e.g. `"#c2410c"`) |
+| `--body-font <family>` | - | From template | Body font family name |
+| `--stamp <text>` | - | None | Text stamped into the running header of every page (e.g. `DRAFT`, `Confidential`) |
+| `--cover` / `--no-cover` | - | From template | Force enable / disable the cover page |
+| `--no-toc` | - | - | Disable the table of contents page (enabled by default for PDF output) |
+| `--toc-depth <n>` | - | `3` | Deepest heading level included in the table of contents (1–6) |
+| `--no-outline` | - | - | Disable PDF bookmarks / outline generation (enabled by default) |
+| `--no-math` | - | - | Disable KaTeX math typesetting (enabled by default when `katex` is installed) |
+| `--markdown-theme <light\|dark>` | - | `light` | Theme for the built-in Markdown stylesheet |
+| `--markdown-css <path>` | - | None | Path to extra stylesheet appended after the built-in styles |
 
 ## Examples
 
@@ -38,6 +52,18 @@ npx wasm-html-to-image template.html -o card.webp -w 1200 -h 630 -f webp -q 90
 
 # Capture screenshot from URL
 npx wasm-html-to-image https://example.com -o site.png -w 1280 -h 720
+
+# Render Markdown to a PDF document (with TOC and bookmarks)
+npx wasm-html-to-image report.md -o report.pdf
+
+# Render Markdown with report template, custom accent, and DRAFT stamp
+npx wasm-html-to-image report.md -o report.pdf --template report --accent "#c2410c" --stamp DRAFT
+
+# Render Markdown with book template in A5 size without TOC
+npx wasm-html-to-image book.md -o book.pdf --template book --page-size A5 --no-toc
+
+# List available document templates
+npx wasm-html-to-image --list-templates
 
 # Turn an opacity / transform / color @keyframes animation into an animated WebP
 npx wasm-html-to-image loader.html -o loader.webp -f webp --animation 2000 --animation-fps 20

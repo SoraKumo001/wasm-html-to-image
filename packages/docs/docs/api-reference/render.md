@@ -140,12 +140,17 @@ await render({
 
 取得したリソースはプロセス内にキャッシュされます（最大 256 件 / 64 MiB、古いものから破棄、リモート取得は User-Agent ごと）。元のファイルを差し替えた場合は `clearResourceCache()` で破棄できます。
 
-### PDF メタデータ
+### PDF メタデータ & ページ設定
 
-| オプション    | 型       | 説明                       |
-| ------------- | -------- | -------------------------- |
-| `pdfTitle`    | `string` | PDF ドキュメントのタイトル |
-| `pdfAuthor`   | `string` | 作成者                     |
-| `pdfSubject`  | `string` | サブジェクト / 件名        |
-| `pdfKeywords` | `string` | キーワード                 |
-| `pdfCreator`  | `string` | 生成アプリケーション名     |
+| オプション    | 型       | 既定値 | 説明                       |
+| ------------- | -------- | :----: | -------------------------- |
+| `pdfTitle`    | `string` | - | PDF ドキュメントのタイトル |
+| `pdfAuthor`   | `string` | - | 作成者                     |
+| `pdfSubject`  | `string` | - | サブジェクト / 件名        |
+| `pdfKeywords` | `string` | - | キーワード                 |
+| `pdfCreator`  | `string` | - | 生成アプリケーション名     |
+| `pdfProducer` | `string` | - | PDF 変換エンジン名         |
+| `pdfOutline`  | `boolean` | `true` | 見出し（`h1`〜`h6`）から PDF ブックマーク（アウトライン）を生成するか。`false` で無効化 |
+| `pdfMargin`   | `{ top?: number, right?: number, bottom?: number, left?: number }` | - | 各ページの余白設定（px または pt） |
+| `pdfHeader`   | `string` | - | 全ページのヘッダーに配置する HTML テンプレート（`{{pageNumber}}`, `{{totalPages}}` 利用可） |
+| `pdfFooter`   | `string` | - | 全ページのフッターに配置する HTML テンプレート（`{{pageNumber}}`, `{{totalPages}}` 利用可） |

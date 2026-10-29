@@ -19,6 +19,8 @@ title: API Overview
 | `wasm-html-to-image/react`      | `render(options)`                                         | Wrapper for React JSX elements                         |
 | `wasm-html-to-image/preact`     | `render(options)`                                         | Wrapper for Preact JSX elements                        |
 | `wasm-html-to-image/tailwind`   | `createCSS(html, { css })` / `tailwind(html, { css })` / `convertTw(html)` | Tailwind v4 utilities as CSS (`tw` → `class`, `@theme` → `:root` variables, `@apply` expansion)                       |
+| `wasm-html-to-image/markdown`   | `markdownToHtml(md, options)`<br/>`markdownToDocument(md, options)`<br/>`listTemplates()` | GitHub-flavoured Markdown to styled HTML / PDF documents (templates, TOC, cover, pagination) |
+| `wasm-html-to-image/markdown-math` | `katexMath(options)`<br/>`katexCss(fontBase?)` | KaTeX renderer for inline `$…$` and display `$$…$$` math in Markdown |
 
 ---
 
