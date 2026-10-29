@@ -50,6 +50,18 @@ process.exitCode = await runCfSmoke({
       console.log(`markdown-pdf: ${bytes.length} bytes`);
       assert(bytes.length < 1_000_000, `GET /markdown-pdf is ${bytes.length} bytes (whole font embedded?)`);
     },
+    // 3b. A report template from Markdown: three pages (cover, contents, text), under 1 MB
+    async (base) => {
+      const res = await fetch(`${base}/markdown-template`);
+      assert(res.status === 200, `GET /markdown-template status=${res.status}`);
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      const text = new TextDecoder("latin1").decode(bytes);
+      assert(text.startsWith("%PDF-"), "GET /markdown-template is not a PDF");
+      const pages = (text.match(/\/Type\s*\/Page\b(?!s)/g) ?? []).length;
+      console.log(`markdown-template: ${bytes.length} bytes, ${pages} pages`);
+      assert(pages === 3, `report template should give 3 pages (cover, contents, text), got ${pages}`);
+      assert(bytes.length < 1_000_000, `GET /markdown-template is ${bytes.length} bytes`);
+    },
     // 4. Maths in Markdown inside the worker (katex bundled, fonts fetched from the CDN)
     async (base) => {
       const res = await fetch(`${base}/markdown-math`);

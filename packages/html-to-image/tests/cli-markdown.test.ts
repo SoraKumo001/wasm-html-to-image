@@ -108,6 +108,31 @@ describe.skipIf(!built)("wasm-html-to-image CLI with Markdown", () => {
     expect(height(withMath)).toBeGreaterThan(height(withoutMath) + 20);
   });
 
+  it("--template changes the PDF: its page size, a cover, and the header and footer on every page", async () => {
+    const md = path.join(dir, "tpl.md");
+    fs.writeFileSync(md, "---\ntitle: Quarterly\nauthor: Ann\n---\n\n# One\n\ntext\n\n# Two\n\ntext\n");
+    const plain = path.join(dir, "plain.pdf");
+    const report = path.join(dir, "report.pdf");
+    await cli([md, "-o", plain]);
+    await cli([md, "-o", report, "--template", "report", "--stamp", "DRAFT"]);
+    const pdf = (f: string) => fs.readFileSync(f).toString("latin1");
+    const pageBoxes = (f: string) => [...pdf(f).matchAll(/\/MediaBox\s*\[\s*0 0 ([\d.]+) ([\d.]+)\s*\]/g)].map((m) => [+m[1], +m[2]]);
+    // report is A4 (595 x 842 pt); the plain document takes the render width (800px -> 600pt) and 1123px (842pt).
+    expect(pageBoxes(report).every(([w, h]) => Math.abs(w - 595.3) < 1 && Math.abs(h - 841.9) < 1)).toBe(true);
+    expect(pageBoxes(report).length).toBeGreaterThan(2); // cover, contents, text
+    expect(pageBoxes(plain).length).toBeGreaterThanOrEqual(1);
+    // The report has a header and footer on every page: more text objects than the same pages without.
+    expect(fs.statSync(report).size).toBeGreaterThan(fs.statSync(plain).size);
+    await expect(cli([md, "-o", path.join(dir, "x.pdf"), "--template", "nope"])).rejects.toMatchObject({
+      stderr: expect.stringContaining("Choose from: default, report, book, paper, compact"),
+    });
+  });
+
+  it("--list-templates prints the bundled templates and needs no input", async () => {
+    const { stdout } = await cli(["--list-templates"]);
+    expect(stdout.split("\n").filter(Boolean).map((l) => l.split(/\s+/)[0])).toEqual(["default", "report", "book", "paper", "compact"]);
+  });
+
   it("rejects an unknown --markdown-theme with a readable error", async () => {
     await expect(
       cli(["# Hi", "--markdown", "--markdown-theme", "blue", "-o", path.join(dir, "x.png")]),

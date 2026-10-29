@@ -41,6 +41,18 @@ export interface CliFlags {
   markdown?: boolean;
   /** `--markdown-theme <light|dark>`; absent means light. */
   markdownTheme?: string;
+  /** `--template <name|file>`: a bundled template, or a .json / .css file (see `loadTemplate`). */
+  template?: string;
+  /** `--page-size <A4|A5|...|"210mm 297mm">`. */
+  pageSize?: string;
+  /** `--accent <colour>`: links, rules and the cover accent. */
+  accent?: string;
+  /** `--body-font <family>`: the body font of the page. */
+  bodyFont?: string;
+  /** `--stamp <text>`: printed in the header of every page. */
+  stamp?: string;
+  /** `--cover` / `--no-cover`. */
+  cover?: boolean;
   /** `--no-toc` sets this to false: a PDF from Markdown gets a table of contents by default. */
   toc?: boolean;
   /** `--toc-depth <n>`: deepest heading level in the table of contents (default 3). */
@@ -153,7 +165,10 @@ export function isMarkdownPath(input: string): boolean {
 }
 
 /** Convert Markdown text to a styled HTML document (`marked` is an optional dependency). */
-export async function markdownToDocument(markdown: string, flags: CliFlags): Promise<string> {
+export async function convertMarkdown(
+  markdown: string,
+  flags: CliFlags,
+): Promise<{ html: string; renderOptions: import("./markdown.js").MarkdownRenderOptions }> {
   let mod: typeof import("./markdown.js");
   try {
     mod = await import("./markdown.js");
@@ -168,14 +183,41 @@ export async function markdownToDocument(markdown: string, flags: CliFlags): Pro
     throw new Error(`unsupported markdown theme "${flags.markdownTheme}". Choose from: light, dark`);
   }
   const css = flags.markdownCss ? await fs.readFile(flags.markdownCss, "utf-8") : undefined;
-  return mod.markdownToHtml(markdown, {
+  const settings = {
+    ...(flags.pageSize !== undefined ? { page_size: flags.pageSize } : {}),
+    ...(flags.accent !== undefined ? { accent: flags.accent } : {}),
+    ...(flags.bodyFont !== undefined ? { font: flags.bodyFont } : {}),
+    ...(flags.stamp !== undefined ? { stamp: flags.stamp } : {}),
+    ...(flags.cover !== undefined ? { cover: flags.cover } : {}),
+  };
+  const template = flags.template !== undefined ? await loadTemplate(flags.template) : undefined;
+  return mod.markdownToDocument(markdown, {
     theme,
     css,
+    ...(template !== undefined ? { template } : {}),
+    ...(Object.keys(settings).length ? { settings } : {}),
     paged: flags.format === "pdf",
     // Default: a table of contents in a PDF (markdownToHtml's own default), none in an image.
     ...(flags.toc === false ? { toc: false } : flags.tocDepth !== undefined ? { toc: { depth: flags.tocDepth } } : {}),
     ...(flags.math === false ? {} : await loadMath()),
   });
+}
+
+/**
+ * `--template`: a bundled name, or a file. A `.json` file is a {@link MarkdownTemplate} (`type`, `page`,
+ * `defaults`, `css`); a `.css` file is extra CSS laid over the default template.
+ */
+export async function loadTemplate(
+  spec: string,
+): Promise<string | import("./markdown-template.js").MarkdownTemplate> {
+  if (!/\.(json|css)$/i.test(spec)) return spec; // a name: resolveTemplate reports an unknown one
+  const text = await fs.readFile(spec, "utf-8");
+  if (/\.css$/i.test(spec)) return { description: spec, css: text };
+  try {
+    return JSON.parse(text) as import("./markdown-template.js").MarkdownTemplate;
+  } catch (e) {
+    throw new Error(`template ${spec} is not valid JSON: ${(e as Error).message}`);
+  }
 }
 
 /** KaTeX maths for the Markdown, or nothing when `katex` is not installed (it is optional). */
@@ -299,8 +341,12 @@ export async function buildRenderOptions(
       : isUrlInput(input)
         ? { url: input }
         : await readInput(input);
+  // A template's running header / footer and the PDF's title and author travel with the page.
+  let templateOptions: import("./markdown.js").MarkdownRenderOptions = {};
   if (markdown && "value" in source && typeof source.value === "string") {
-    source = { ...source, value: await markdownToDocument(source.value, flags) };
+    const converted = await convertMarkdown(source.value, flags);
+    source = { ...source, value: converted.html };
+    templateOptions = converted.renderOptions;
   }
   const fonts = flags.font?.length ? await loadFonts(flags.font) : [];
   const { animation, warning } = resolveAnimation(flags);
@@ -311,6 +357,7 @@ export async function buildRenderOptions(
     format: flags.format,
     quality: flags.quality,
     ...source,
+    ...templateOptions,
     ...(flags.baseUrl !== undefined ? { baseUrl: flags.baseUrl } : {}),
     ...(flags.colorSpace !== undefined ? { colorSpace: flags.colorSpace } : {}),
     ...(flags.scale !== undefined ? { scale: flags.scale } : {}),

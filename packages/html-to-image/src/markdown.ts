@@ -1,5 +1,16 @@
 import { marked, Marked } from "marked";
 import { mathExtension, type MathRenderer } from "./markdown-math-syntax.js";
+import {
+  DEFAULT_PAGE,
+  DEFAULT_TYPE,
+  fillRunningText,
+  parseFrontMatter,
+  resolveTemplate,
+  titleHtml,
+  type DocumentSettings,
+  type MarkdownTemplate,
+  type TemplateType,
+} from "./markdown-template.js";
 import hljs from "highlight.js/lib/core";
 import bash from "highlight.js/lib/languages/bash";
 import c from "highlight.js/lib/languages/c";
@@ -50,6 +61,10 @@ highlighter.registerAliases(["kt"], { languageName: "kotlin" });
 highlighter.registerAliases(["toml"], { languageName: "ini" });
 
 /** Options for {@link markdownToHtml}. */
+// The template API lives beside the converter: `import { listTemplates, type MarkdownTemplate } from ".../markdown"`.
+export { listTemplates, TEMPLATES } from "./markdown-template.js";
+export type { DocumentSettings, MarkdownTemplate, TemplatePage, TemplateType } from "./markdown-template.js";
+
 export interface MarkdownOptions {
   /** Colour scheme of the built-in stylesheet. Defaults to `"light"`. */
   theme?: "light" | "dark";
@@ -83,6 +98,17 @@ export interface MarkdownOptions {
    * (`paged: true`, i.e. PDF) output, off otherwise; `false` switches it off, `true` or an object on.
    */
   toc?: boolean | TocOptions;
+  /**
+   * The look: a bundled template by name (`"default"`, `"report"`, `"book"`, `"paper"`, `"compact"`, see
+   * `listTemplates()`) or your own {@link MarkdownTemplate}. A front matter `template:` picks one too; this
+   * option wins. Without either the page is the plain GitHub-like one.
+   */
+  template?: string | MarkdownTemplate;
+  /**
+   * Document settings that override the front matter (`title`, `author`, `accent`, `font`, `page_size`,
+   * `cover`, `stamp`, ...). Precedence: template defaults < front matter < `settings` / the other options.
+   */
+  settings?: DocumentSettings;
 }
 
 export interface TocOptions {
@@ -158,16 +184,27 @@ export function markdownStylesheet(
   padding = 32,
   maxWidth?: number,
   paged = false,
+  type: TemplateType = DEFAULT_TYPE,
+  accent?: string,
+  page?: { size?: string; margin: string },
 ): string {
-  const c = PALETTES[theme];
-  return `${paged ? `@page { margin: ${padding}px; }\n` : ""}html, body { margin: 0; padding: 0; background: ${c.bg}; }
-body { color: ${c.fg}; font-family: sans-serif; font-size: 16px; line-height: 1.5; }
+  const c = { ...PALETTES[theme], ...(accent ? { link: accent } : {}) };
+  const head = type.headingFont ?? type.font;
+  const headColor = type.accentHeadings && accent ? accent : c.fg;
+  const pageRule = page
+    ? `@page { ${page.size ? `size: ${page.size}; ` : ""}margin: ${page.margin}; }\n`
+    : paged
+      ? `@page { margin: ${padding}px; }\n`
+      : "";
+  return `${pageRule}:root { --accent: ${accent ?? c.link}; }
+html, body { margin: 0; padding: 0; background: ${c.bg}; }
+body { color: ${c.fg}; font-family: ${type.font}; font-size: ${type.size}px; line-height: ${type.lineHeight};${type.justify ? " text-align: justify;" : ""} }
 .markdown-body { padding: ${paged ? 0 : padding}px;${maxWidth ? ` max-width: ${maxWidth}px; margin: 0 auto;` : ""} }
 .markdown-body > *:first-child { margin-top: 0; }
 .markdown-body > *:last-child { margin-bottom: 0; }
-.markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4, .markdown-body h5, .markdown-body h6 { margin-top: 24px; margin-bottom: 16px; font-weight: 600; line-height: 1.25; }
-.markdown-body h1 { font-size: 2em; padding-bottom: 0.3em; border-bottom: 1px solid ${c.border}; }
-.markdown-body h2 { font-size: 1.5em; padding-bottom: 0.3em; border-bottom: 1px solid ${c.border}; }
+.markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4, .markdown-body h5, .markdown-body h6 { margin-top: 24px; margin-bottom: 16px; font-family: ${head}; font-weight: ${type.headingWeight}; line-height: 1.25; text-align: left; color: ${headColor}; }
+.markdown-body h1 { font-size: 2em;${type.h1Rule ? ` padding-bottom: 0.3em; border-bottom: 1px solid ${c.border};` : ""}${type.chapterBreak ? " break-before: page;" : ""} }
+.markdown-body h2 { font-size: 1.5em;${type.h2Rule ? ` padding-bottom: 0.3em; border-bottom: 1px solid ${c.border};` : ""} }
 .markdown-body h3 { font-size: 1.25em; }
 .markdown-body h4 { font-size: 1em; }
 .markdown-body h5 { font-size: 0.875em; }
@@ -180,8 +217,8 @@ body { color: ${c.fg}; font-family: sans-serif; font-size: 16px; line-height: 1.
 .markdown-body strong { font-weight: 600; }
 .markdown-body blockquote { padding: 0 1em; color: ${c.quote}; border-left: 4px solid ${c.border}; }
 .markdown-body blockquote > *:last-child { margin-bottom: 0; }
-.markdown-body code { padding: 0.2em 0.4em; font-family: monospace; font-size: 85%; background: ${c.codeBg}; border-radius: 6px; }
-.markdown-body pre { padding: 16px; overflow: hidden; font-size: 85%; line-height: 1.45; background: ${c.codeBg}; border-radius: 6px; }
+.markdown-body code { padding: 0.2em 0.4em; font-family: ${type.mono}; font-size: 85%; background: ${c.codeBg}; border-radius: ${type.radius}px; }
+.markdown-body pre { padding: 16px; overflow: hidden; font-size: 85%; line-height: 1.45; background: ${c.codeBg}; border-radius: ${type.radius}px; text-align: left; }
 .markdown-body pre code { padding: 0; font-size: 100%; background: transparent; white-space: pre; }
 .markdown-body hr { height: 0; margin: 24px 0; border: 0; border-top: 4px solid ${c.border}; }
 .markdown-body img { max-width: 100%; }
@@ -215,6 +252,29 @@ body { color: ${c.fg}; font-family: sans-serif; font-size: 16px; line-height: 1.
 `;
 }
 
+/** The cover: a fixed structure the template's CSS dresses. Its title is not an h1, so it stays out of the outline. */
+function coverHtml(settings: DocumentSettings): string {
+  const parts = [
+    settings.logo ? `<img class="cover-logo" src="${escapeHtml(settings.logo)}" alt="">` : "",
+    `<p class="cover-title">${titleHtml(settings.title ?? "")}</p>`,
+    settings.subtitle ? `<p class="cover-subtitle">${escapeHtml(settings.subtitle)}</p>` : "",
+    settings.author || settings.date
+      ? `<p class="cover-meta">${settings.author ? `<span class="cover-author">${escapeHtml(settings.author)}</span>` : ""}${settings.date ? `<span class="cover-date">${escapeHtml(settings.date)}</span>` : ""}</p>`
+      : "",
+  ];
+  return `<header class="cover">${parts.join("")}</header>
+`;
+}
+
+/** Structure of the cover and the first page; templates tune it with their own `css`. */
+const COVER_CSS = `.cover { margin: 40mm 0 0; break-after: page; }
+.cover-logo { display: block; max-height: 22mm; max-width: 60mm; margin-bottom: 14mm; }
+.cover-title { margin: 0; font-size: 2.6em; font-weight: 700; line-height: 1.25; }
+.cover-subtitle { margin: 0.6em 0 0; font-size: 1.25em; color: #6b7280; }
+.cover-meta { margin: 3em 0 0; color: #6b7280; }
+.cover-meta span + span { margin-left: 1.5em; }
+`;
+
 /**
  * The table-of-contents block: a nav with one row per heading. A row is a block link (the whole row
  * is clickable in the PDF) holding the heading, a dotted leader and the page number. The number is
@@ -241,16 +301,51 @@ function tocHtml(entries: TocEntry[], options: TocOptions): string {
  * GitHub-like stylesheet, ready to pass to `render({ value })`.
  */
 export function markdownToHtml(markdown: string, options: MarkdownOptions = {}): string {
+  return markdownToDocument(markdown, options).html;
+}
+
+/** What `render()` needs besides the HTML for the template's running header and footer. */
+export interface MarkdownRenderOptions {
+  pdfHeader?: string;
+  pdfFooter?: string;
+  pdfTitle?: string;
+  pdfAuthor?: string;
+}
+
+export interface MarkdownDocument {
+  /** The page, ready for `render({ value })`. */
+  html: string;
+  /** The settings that applied (template defaults < front matter < options), for your own use. */
+  settings: DocumentSettings;
+  /** Spread into `render()` for a PDF: the template's header and footer, the PDF's title and author. */
+  renderOptions: MarkdownRenderOptions;
+}
+
+/**
+ * Convert Markdown (GitHub flavoured, via `marked`) to a page and the render options that go with it
+ * (a template's running header and footer, the PDF's title). {@link markdownToHtml} is the HTML alone.
+ */
+export function markdownToDocument(markdown: string, options: MarkdownOptions = {}): MarkdownDocument {
   let source = markdown;
-  let frontTitle: string | undefined;
+  let front: DocumentSettings = {};
   if (options.frontMatter !== false) {
-    const front = /^\uFEFF?---[ \t]*\r?\n([^]*?)\r?\n---[ \t]*(?:\r?\n|$)/.exec(source);
-    if (front) {
-      source = source.slice(front[0].length);
-      const t = /^title:[ \t]*(.+?)[ \t]*$/m.exec(front[1]);
-      if (t) frontTitle = t[1].replace(/^(["'])(.*)\1$/, "$2");
+    const m = /^﻿?---[ \t]*\r?\n([^]*?)\r?\n---[ \t]*(?:\r?\n|$)/.exec(source);
+    if (m) {
+      source = source.slice(m[0].length);
+      front = parseFrontMatter(m[1]);
     }
   }
+  // Template defaults < front matter < options.
+  const named = (typeof options.template === "string" ? options.template : undefined) ?? front.template;
+  const template = resolveTemplate(typeof options.template === "object" ? options.template : named);
+  const settings: DocumentSettings = {
+    ...template.defaults,
+    ...front,
+    ...options.settings,
+    ...(options.title !== undefined ? { title: options.title } : {}),
+    ...(options.toc !== undefined ? { toc: options.toc !== false } : {}),
+  };
+
   const renderer = new marked.Renderer();
   // Every heading gets an id (a link target, and what the table of contents points at).
   const entries: TocEntry[] = [];
@@ -262,8 +357,7 @@ export function markdownToHtml(markdown: string, options: MarkdownOptions = {}):
     const id = seen === 0 ? base : `${base}-${seen + 1}`;
     const inner = this.parser.parseInline(tokens);
     entries.push({ level: depth, id, html: inner });
-    return `<h${depth} id="${id}">${inner}</h${depth}>
-`;
+    return `<h${depth} id="${id}">${inner}</h${depth}>\n`;
   };
   if (options.highlight !== false) {
     renderer.code = ({ text, lang }) => {
@@ -276,12 +370,43 @@ export function markdownToHtml(markdown: string, options: MarkdownOptions = {}):
   }
   const parser = options.math ? new Marked(mathExtension(options.math)) : marked;
   const text = parser.parse(source, { async: false, gfm: true, renderer }) as string;
-  const toc = options.toc ?? !!options.paged;
-  const body = toc && entries.length ? tocHtml(entries, toc === true ? {} : toc) + text : text;
+
+  const tocOption = options.toc ?? (front.toc !== undefined || template.defaults?.toc !== undefined ? settings.toc : !!options.paged);
+  const toc = tocOption === true && typeof options.toc === "object" ? options.toc : tocOption;
+  const tocBlock = toc && entries.length ? tocHtml(entries, toc === true ? {} : toc) : "";
+  const cover = settings.cover && settings.title ? coverHtml(settings) : "";
+  const body = cover + tocBlock + text;
+
+  const type = { ...DEFAULT_TYPE, ...template.type, ...(settings.font ? { font: settings.font } : {}) };
+  const page = { ...DEFAULT_PAGE, ...template.page };
+  const hasTemplate = options.template !== undefined || front.template !== undefined;
+  // A plain document keeps the exact page it always had; a template adds its own @page (size and margins).
+  const pageSetting = hasTemplate && options.paged !== false
+    ? { size: settings.page_size ?? page.size, margin: page.margin }
+    : settings.page_size && options.paged
+      ? { size: settings.page_size, margin: `${options.padding ?? 32}px` }
+      : undefined;
   const sheet =
     options.stylesheet ??
-    markdownStylesheet(options.theme, options.padding, options.maxWidth, options.paged);
-  const titleText = options.title ?? frontTitle;
+    markdownStylesheet(options.theme, options.padding, options.maxWidth, options.paged, type, settings.accent, pageSetting);
+
+  const titleText = settings.title;
   const title = titleText ? `<title>${escapeHtml(titleText)}</title>` : "";
-  return `<!doctype html><html><head><meta charset="utf-8">${title}<style>${sheet}${options.math?.css ?? ""}${options.css ?? ""}</style></head><body><article class="markdown-body">${body}</article></body></html>`;
+  const lang = settings.lang ? ` lang="${escapeHtml(settings.lang)}"` : "";
+  const dir = settings.dir ? ` dir="${escapeHtml(settings.dir)}"` : "";
+  const html = `<!doctype html><html${lang}${dir}><head><meta charset="utf-8">${title}<style>${sheet}${COVER_CSS}${template.css ?? ""}${options.math?.css ?? ""}${options.css ?? ""}</style></head><body><article class="markdown-body">${body}</article></body></html>`;
+
+  const running = (t: string | undefined) => (t ? fillRunningText(t, settings) : undefined);
+  const stamp = settings.stamp ? `<span style="float:right">${escapeHtml(settings.stamp)}</span>` : "";
+  const header = hasTemplate ? running(page.header) : settings.stamp ? `<div style="font:11px sans-serif;color:#6b7280;padding-top:8mm;text-align:right">${stamp.replace(/<[^>]+>/g, "")}</div>` : undefined;
+  return {
+    html,
+    settings,
+    renderOptions: {
+      ...(header ? { pdfHeader: header } : {}),
+      ...(hasTemplate && page.footer ? { pdfFooter: running(page.footer) } : {}),
+      ...(settings.title ? { pdfTitle: settings.title.replace(/<br\s*\/?>/gi, " ") } : {}),
+      ...(settings.author ? { pdfAuthor: settings.author } : {}),
+    },
+  };
 }

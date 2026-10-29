@@ -212,6 +212,68 @@ npx wasm-html-to-image "# Hello" --markdown -o hello.png
 
 Highlighted languages: bash/shell, c, c++, c#, css/scss, diff, dockerfile, go, html/xml/svg, ini/toml, java, javascript, json, kotlin, markdown, php, python, ruby, rust, sql, swift, typescript, yaml (and the usual aliases such as `js`, `ts`, `sh`, `py`). Other fences stay plain.
 
+**Templates.** A template is a look you pick by name and adjust with a few settings, no CSS needed. It sets the typography, the PDF page (size, margins, running header and footer) and whether the document has a cover and a contents page. Colours are separate (`theme: "light" | "dark"`), so every template comes in both.
+
+| Template | For | Look |
+| :--- | :--- | :--- |
+| `default` | images, quick PDFs | the GitHub-like page |
+| `report` | business documents | A4, cover, contents, headings and links in the accent colour, the title in the header, author and `n / N` in the footer |
+| `book` | books, long reading | A5, serif, justified, each chapter (`h1`) on a new page, a cover and contents, the page number in the footer |
+| `paper` | papers, technical notes | A4, serif, justified, tight leading, the page number in the footer |
+| `compact` | notes, cheat sheets | 12px text, 12mm margins, no cover or contents |
+
+Pick one in the front matter or the options, and set the document's own details there too:
+
+```md
+---
+title: Quarterly report<br>Q3 2026
+subtitle: Product development
+author: Taro Yamada
+date: 2026-10-29
+template: report
+accent: "#c2410c"      # links, headings and the cover rule
+font: serif            # body font (any family the renderer can load)
+page_size: A4          # A3 A4 A5 B4 B5 Letter, or two lengths: 210mm 297mm
+stamp: DRAFT           # printed in the header of every page
+cover: true            # a cover from title, subtitle, author, date and logo
+toc: false             # no contents page
+logo: https://example.com/logo.png
+lang: en               # <html lang>
+---
+```
+
+Precedence is *template defaults < front matter < options*, so a template can be a starting point that one document tweaks and one build overrides. Keys this package does not know are ignored (front matter is shared with other tools).
+
+```ts
+import { render } from "wasm-html-to-image";
+import { markdownToDocument, listTemplates } from "wasm-html-to-image/markdown";
+
+// markdownToHtml(md, opts) is the page alone; markdownToDocument also returns what a PDF needs
+// besides it: the template's header and footer, the PDF's title and author.
+const { html, renderOptions } = markdownToDocument(md, { template: "report", paged: true, settings: { stamp: "DRAFT" } });
+const { data } = await render({ value: html, format: "pdf", ...renderOptions });
+```
+
+```bash
+npx wasm-html-to-image --list-templates
+npx wasm-html-to-image report.md -o report.pdf --template report --stamp DRAFT --accent "#c2410c"
+npx wasm-html-to-image notes.md  -o notes.pdf  --template compact --page-size A5 --no-toc
+npx wasm-html-to-image book.md   -o book.pdf   --template ./my-look.json     # your own, see below
+```
+
+Your own template is data too: pass an object as `template`, or give the CLI a `.json` file with the same shape, or a `.css` file that is laid over the default look.
+
+```json
+{
+  "type": { "font": "serif", "size": 14, "lineHeight": 1.7, "justify": true, "h1Rule": false, "chapterBreak": true },
+  "page": { "size": "B5", "margin": "18mm", "footer": "<div style=\"text-align:center;font-size:10px\">{{pageNumber}}</div>" },
+  "defaults": { "cover": true, "toc": true, "accent": "#0f766e" },
+  "css": ".markdown-body blockquote { font-style: italic }"
+}
+```
+
+`type` takes `font`, `headingFont`, `mono`, `size` (px), `lineHeight`, `justify`, `h1Rule`, `h2Rule`, `headingWeight`, `accentHeadings`, `chapterBreak` and `radius`; `page` takes `size`, `margin` (a CSS `margin`), `header` and `footer` (HTML with `{{pageNumber}}`, `{{totalPages}}`, `{{title}}`, `{{author}}`, `{{date}}`, `{{stamp}}`). Anything left out comes from the default template. A cover is built from `<header class="cover">` with `cover-title`, `cover-subtitle`, `cover-meta` and `cover-logo` inside, so `css` can restyle it; its title is not an `h1`, so it stays out of the bookmarks and the contents.
+
 **Table of contents and bookmarks.** A PDF made from Markdown starts with a table of contents and carries bookmarks, both on by default:
 
 - Every heading gets an `id` (a slug of its text: any script, lower-cased, duplicates numbered `-2`, `-3`) and the contents lists the headings down to `toc.depth` (default 3). Each row is a link to its heading and shows the page the heading lands on, filled in once the pages are planned (the contents' own pages included, so the numbers are right however long the list is).

@@ -38,7 +38,7 @@ program
     "HTML to image converter on the single unified WASM module (svg/pdf direct, png/jpeg/webp/avif/jxl/raw/thumbhash via encode or html_to_image)",
   )
   .version("0.1.0")
-  .argument("<input>", "input HTML/image file path, URL, inline HTML string (starts with <), or - for stdin")
+  .argument("[input]", "input HTML/image file path, URL, inline HTML string (starts with <), or - for stdin")
   .option("-o, --output <path>", "output file path")
   .option("-w, --width <number>", "viewport width", (v) => parseInt(v, 10), 800)
   .option("-h, --height <number>", "viewport height (omit for auto)", (v) =>
@@ -97,6 +97,14 @@ program
     "--markdown",
     "treat the input as Markdown (implied by a .md / .markdown file; inline text and stdin need it; needs the optional dependency marked)",
   )
+  .option("--template <name|file>", "look of a PDF from Markdown: a bundled template (see --list-templates) or a .json / .css file")
+  .option("--list-templates", "print the bundled templates and exit")
+  .option("--page-size <size>", "PDF page size for Markdown: A3, A4, A5, B4, B5, Letter, or e.g. '210mm 297mm'")
+  .option("--accent <colour>", "accent colour of a Markdown document (links, rules, cover), e.g. '#c2410c'")
+  .option("--body-font <family>", "body font family of a Markdown document (the renderer loads it; serif and sans-serif work)")
+  .option("--stamp <text>", "text printed in the header of every page of a Markdown PDF (DRAFT, Confidential, ...)")
+  .option("--cover", "a cover page with the title, subtitle, author and date (from the front matter)")
+  .option("--no-cover", "no cover page, whatever the template says")
   .option("--no-toc", "no table of contents in a PDF made from Markdown (there is one by default)")
   .option("--toc-depth <n>", "deepest heading level in the table of contents (default 3)", (v) => parseInt(v, 10))
   .option("--no-outline", "leave the bookmarks (outline) out of a PDF (they are built from the headings by default)")
@@ -111,8 +119,17 @@ program
     "--js-wait <ms|selector>",
     "with --js: milliseconds to wait after load (default 1000), or a CSS selector to wait for",
   )
-  .action(async (input: string, options: CliFlags) => {
+  .action(async (input: string | undefined, options: CliFlags & { listTemplates?: boolean }) => {
     try {
+      if (options.listTemplates) {
+        const { listTemplates } = await import("./markdown-template.js");
+        for (const t of listTemplates()) console.log(`${t.name.padEnd(10)} ${t.description}`);
+        return;
+      }
+      if (input === undefined) {
+        console.error("error: missing required argument 'input'");
+        process.exit(1);
+      }
       const format = String(
         options.format ?? inferFormat(options.output) ?? "png",
       ).toLowerCase();
@@ -172,6 +189,12 @@ program
         markdown: options.markdown,
         markdownTheme: options.markdownTheme,
         math: options.math,
+        template: options.template,
+        pageSize: options.pageSize,
+        accent: options.accent,
+        bodyFont: options.bodyFont,
+        stamp: options.stamp,
+        cover: options.cover,
         toc: options.toc,
         tocDepth: options.tocDepth,
         outline: options.outline,

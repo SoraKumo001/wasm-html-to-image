@@ -1,5 +1,5 @@
 import { render } from "wasm-html-to-image/workerd";
-import { markdownToHtml } from "wasm-html-to-image/markdown";
+import { markdownToDocument, markdownToHtml } from "wasm-html-to-image/markdown";
 import { katexMath } from "wasm-html-to-image/markdown-math";
 
 /**
@@ -49,6 +49,14 @@ export default {
       return new Response(out.data as BodyInit, {
         headers: { "Content-Type": "application/pdf" },
       });
+    }
+
+    // A template (cover, contents, running header and footer) from Markdown, as a PDF, inside the worker.
+    if (url.pathname === "/markdown-template") {
+      const md = ["---", "title: Worker report", "author: W", "---", "", "# One", "", "text", "", "# Two", "", "text", ""].join("\n");
+      const { html, renderOptions } = markdownToDocument(md, { template: "report", paged: true });
+      const out = await render({ value: html, format: "pdf", ...renderOptions });
+      return new Response(out.data as BodyInit, { headers: { "Content-Type": "application/pdf" } });
     }
 
     // Maths in Markdown: KaTeX bundled into the worker, its fonts fetched from the CDN while drawing.
