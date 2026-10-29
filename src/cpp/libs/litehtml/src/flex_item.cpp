@@ -508,6 +508,12 @@ void litehtml::flex_item_row_direction::direction_specific_init(const litehtml::
 		{
 			const pixel_t cross = std::max<pixel_t>(0, (pixel_t)self_size.render_height - el->content_offset_block(m_container_wm));
 			flex_base_size = cross * sz.width / sz.height + render_offset;
+			// The transferred size is the item's min-content contribution in this container
+			// too: at the definite stretched cross size the ratio leaves it no narrower
+			// size, so an intrinsic query on the container (a min-content grid track) sees
+			// the transferred width, not the size the cross-less min-content measure
+			// reports (0 for a ratio-only item).
+			min_content_contribution = std::max(min_content_contribution, flex_base_size);
 			// The automatic minimum is then the transferred size too, in both directions: an image
 			// squeezed to a container shorter than itself gets narrower, not stuck at its natural
 			// width, and one stretched to a TALLER container keeps the transferred width as its
