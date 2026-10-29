@@ -78,6 +78,19 @@ export function isNodeRuntime(): boolean {
   return typeof proc?.versions?.node === "string";
 }
 
+/**
+ * Whether `fetch` may send a `User-Agent` of our choosing: Node and Cloudflare Workers can; browsers
+ * cannot (and Firefox preflights it, which breaks Google Fonts / jsDelivr CORS). The UA decides what
+ * Google Fonts serves: a browser UA gets woff2 split by unicode-range (a few KB per page), anything
+ * else (a Worker's own UA, none) gets the whole `.ttf` per weight (about 5 MB each, embedded whole
+ * into a PDF).
+ */
+export function canSetUserAgent(): boolean {
+  if (isNodeRuntime()) return true;
+  const nav = (globalThis as { navigator?: { userAgent?: string } }).navigator;
+  return nav?.userAgent === "Cloudflare-Workers";
+}
+
 function fileUrlToFsPath(p: string): string {
   if (!p.startsWith("file://")) return p;
   let out = decodeURIComponent(p.slice("file://".length));
@@ -137,10 +150,10 @@ async function fetchResourceBytesInner(
   confineFiles?: boolean,
 ): Promise<Uint8Array | null> {
   // Browser fetch forbids overriding User-Agent (and Firefox preflights it,
-  // breaking Google Fonts/jsDelivr CORS). Spoof only in Node where we
-  // control the UA to get woff2 CSS.
+  // breaking Google Fonts/jsDelivr CORS). Spoof only where we control the UA
+  // (Node, Workers) to get woff2 CSS.
   const headers =
-    userAgent && isNodeRuntime() ? { "User-Agent": userAgent } : undefined;
+    userAgent && canSetUserAgent() ? { "User-Agent": userAgent } : undefined;
   // Abort hung connections so one stalled server cannot outlive `timeoutMs`.
   const signal =
     timeoutMs !== undefined

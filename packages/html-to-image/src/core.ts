@@ -239,6 +239,11 @@ export interface HtmlToImageOptions extends RenderOptions {
    *   gamut-mapped. Other formats ignore it.
    */
   colorSpace?: "srgb" | "cmyk";
+  /**
+   * PDF outline (bookmarks) built from the document's `h1`-`h6`. On by default; `false` leaves it out.
+   * The same headings, with their page numbers, are returned as `RenderResult.headings`.
+   */
+  pdfOutline?: boolean;
   /** PDF Title metadata. */
   pdfTitle?: string;
   /** PDF Author metadata. */
@@ -330,6 +335,7 @@ export async function htmlToImage(
     mediaTypeInt: orch.mediaTypeInt,
     colorSpace: orch.colorSpace,
     scale: orch.scale,
+    pdfOutline: orch.pdfOutline,
     pdfTitle: orch.pdfTitle,
     pdfAuthor: orch.pdfAuthor,
     pdfSubject: orch.pdfSubject,

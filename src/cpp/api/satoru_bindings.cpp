@@ -76,6 +76,9 @@ void parse_satoru_options(SatoruRenderOptions& options, val options_val) {
     if (options_val.hasOwnProperty("pdfTitle")) {
         options.pdfTitle = options_val["pdfTitle"].as<std::string>();
     }
+    if (options_val.hasOwnProperty("pdfOutline")) {
+        options.pdfOutline = options_val["pdfOutline"].as<bool>();
+    }
     if (options_val.hasOwnProperty("pdfAuthor")) {
         options.pdfAuthor = options_val["pdfAuthor"].as<std::string>();
     }
