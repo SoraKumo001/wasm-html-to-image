@@ -1915,6 +1915,10 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
     float total_row_fr = 0;
     pixel_t fixed_height = 0;
 
+    // The flexible factor of each row (0 for non-flexible rows): a plain fr and the
+    // maximum of a minmax() both count; they are resolved after the measure pass.
+    std::vector<pixel_t> row_fr_factor(num_rows, 0);
+
     // Calculate fixed and percentage rows
     for (int i = 0; i < (int)row_tracks.size(); i++)
     {
@@ -1922,6 +1926,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         if (len.units() == css_units_fr)
         {
             total_row_fr += len.val();
+            row_fr_factor[i] = len.val();
         }
         else if (len.is_calc() && len.get_op() == css_length::op_minmax && len.get_operands().size() == 2)
         {
@@ -1929,6 +1934,11 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             const auto& mn = len.get_operands()[0];
             m_grid_layout.row_heights[i] = (!mn.is_predefined() && mn.units() != css_units_fr) ? mn.calc_percent(render_block) : 0;
             fixed_height += m_grid_layout.row_heights[i];
+            if (len.get_operands()[1].units() == css_units_fr)
+            {
+                total_row_fr += len.get_operands()[1].val();
+                row_fr_factor[i] = len.get_operands()[1].val();
+            }
         }
         else
         {
@@ -1967,6 +1977,12 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         {
             const auto op = len.get_op();
             row_kinds[i] = (op == css_length::op_fit_content || op == css_length::op_minmax) ? 1 : 0;
+            // A minmax() with a flexible maximum in a definite-height container is sized
+            // by the fr resolution after the measure pass, never grown by content; with
+            // an indefinite height it keeps sizing to content like the other minmax rows.
+            if (op == css_length::op_minmax && len.get_operands().size() == 2 &&
+                len.get_operands()[1].units() == css_units_fr && definite_block)
+                row_kinds[i] = 0;
             // minmax(<min>, auto): an auto maximum is stretched like an auto track
             row_auto[i] = (op == css_length::op_minmax && len.get_operands().size() == 2 &&
                            len.get_operands()[1].is_predefined() && len.get_operands()[1].predef() == 0) ? 1 : 0;
@@ -1985,20 +2001,8 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         }
     }
 
-    // Distribute remaining space to fr rows
-    if (total_row_fr > 0 && definite_block)
-    {
-        pixel_t remaining_height = render_block - fixed_height;
-        if (remaining_height < 0) remaining_height = 0;
-        for (int i = 0; i < (int)row_tracks.size(); i++)
-        {
-            const auto& len = row_tracks[i];
-            if (len.units() == css_units_fr)
-            {
-                m_grid_layout.row_heights[i] = remaining_height * (len.val() / total_row_fr);
-            }
-        }
-    }
+    // Flexible rows are resolved after the measure pass (below): a plain fr row's
+    // automatic minimum is its items' content floor, which is only known by then.
 
     // `align-items/self: baseline`: the items of a row that share a baseline occupy the row's largest
     // ascent plus its largest descent, which can exceed every item's own height.
@@ -2123,6 +2127,10 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
     // The tallest content each row could use (its growth limit): rows grow towards it first when the
     // container leaves free space; what is left after that stretches the auto rows equally.
     std::vector<pixel_t> row_limit(num_rows, 0);
+    // The content floor of a flexible row (the automatic minimum of a plain fr /
+    // minmax(auto, fr) track): the tallest single-row item, scroll containers excluded
+    // exactly as in the growth rule below.
+    std::vector<pixel_t> row_fr_floor(num_rows, 0);
 
     // Distribute heights
     for (int span = 1; span <= num_rows; span++)
@@ -2151,6 +2159,8 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             // of definite height its row is shared out from the free space, not grown to the item's content.
             const bool scroll_item = definite_block && item.pos.row_span() == 1 &&
                 item.el->src_el()->css().get_overflow() != overflow_visible && item_block_size.is_predefined();
+            if (item.pos.row_span() == 1 && item.pos.row_start < num_rows && !scroll_item)
+                row_fr_floor[item.pos.row_start] = std::max(row_fr_floor[item.pos.row_start], total_h);
             if (total_h > current_total && !scroll_item)
             {
                 // Grow only the content-sized tracks in the item's span. A fixedly sized
@@ -2170,6 +2180,59 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                 }
             }
 
+        }
+    }
+
+    // Resolve the flexible rows now that the content heights are known (CSS Grid
+    // 12.7.1, mirroring resolve_flex_tracks for columns). A flexible row's base is
+    // its minimum: the resolved minmax() minimum, or -- for a plain fr /
+    // minmax(auto, fr), whose minimum is automatic -- its items' content floor.
+    // A row whose base exceeds its share is frozen at the base and the rest is
+    // re-shared; content never grows a length-minimum flexible row past its share
+    // (minmax(0, 1fr) in a 448px container is 448 tall however tall its items are,
+    // while a plain 1fr row is floored by its content).
+    if (definite_block && total_row_fr > 0)
+    {
+        std::vector<pixel_t> base(num_rows, 0);
+        std::vector<bool> active(num_rows, false);
+        pixel_t leftover = render_block - (num_rows > 0 ? m_grid_layout.row_gap * (num_rows - 1) : 0);
+        for (int i = 0; i < num_rows; i++)
+        {
+            if (i < (int)row_fr_factor.size() && row_fr_factor[i] > 0)
+            {
+                const auto& len = row_tracks[i];
+                const bool auto_min = len.units() == css_units_fr ||
+                    (len.get_operands().size() == 2 && len.get_operands()[0].is_predefined());
+                base[i] = auto_min ? row_fr_floor[i] : m_grid_layout.row_heights[i];
+                active[i] = true;
+            }
+            else
+            {
+                leftover -= m_grid_layout.row_heights[i];
+            }
+        }
+        for (int guard = 0; guard < num_rows + 1; guard++)
+        {
+            pixel_t sum = 0;
+            for (int i = 0; i < num_rows; i++) if (active[i]) sum += row_fr_factor[i];
+            if (sum <= 0) break;
+            // (a flex factor sum below 1 is treated as 1, as in the column resolver)
+            const pixel_t fr = std::max<pixel_t>(0, leftover) / std::max<pixel_t>(sum, 1);
+            bool frozen = false;
+            for (int i = 0; i < num_rows; i++)
+            {
+                if (active[i] && base[i] > fr * row_fr_factor[i])
+                {
+                    active[i] = false;
+                    m_grid_layout.row_heights[i] = base[i];
+                    leftover -= base[i];
+                    frozen = true;
+                }
+            }
+            if (frozen) continue;
+            for (int i = 0; i < num_rows; i++)
+                if (active[i]) m_grid_layout.row_heights[i] = fr * row_fr_factor[i];
+            break;
         }
     }
 
