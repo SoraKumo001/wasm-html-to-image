@@ -40,6 +40,25 @@ const SAMPLES = [
 ] as const;
 
 const STORAGE_KEY = "markdown-playground-text";
+const PANEL_KEY = "markdown-playground-panel";
+
+/** The settings from the URL; with none in it (a bare link), the ones used last time, kept in localStorage. */
+const initialParams = (): URLSearchParams => {
+  const params = new URLSearchParams(window.location.search);
+  if ([...params.keys()].some((k) => k !== "mode")) return params;
+  try {
+    const saved = localStorage.getItem(PANEL_KEY);
+    if (saved) {
+      const restored = new URLSearchParams(saved);
+      const mode = params.get("mode");
+      if (mode) restored.set("mode", mode);
+      return restored;
+    }
+  } catch {
+    /* storage blocked: start from the defaults */
+  }
+  return params;
+};
 
 /** The text last typed, kept across reloads (a long text does not belong in the URL). */
 const loadText = (): string => {
@@ -67,9 +86,13 @@ const TriSelect: React.FC<{ value: Tri; onChange: (v: Tri) => void; autoLabel?: 
 
 export const MarkdownPlayground: React.FC = () => {
   const [text, setText] = useState(loadText);
-  const [panel, setPanel] = useState<MarkdownPanel>(() => panelFromParams(new URLSearchParams(window.location.search)));
-  const [tab, setTab] = useState<"html" | "diagnostics" | "logs">("html");
-  const [right, setRight] = useState<"pdf" | "templates">("pdf");
+  const [start] = useState(initialParams);
+  const [panel, setPanel] = useState<MarkdownPanel>(() => panelFromParams(start));
+  const [tab, setTab] = useState<"html" | "diagnostics" | "logs">(() => {
+    const t = start.get("tab");
+    return t === "diagnostics" || t === "logs" ? t : "html";
+  });
+  const [right, setRight] = useState<"pdf" | "templates">(() => (start.get("view") === "templates" ? "templates" : "pdf"));
   const [mathRenderer, setMathRenderer] = useState<Awaited<ReturnType<typeof loadMath>> | null>(null);
   const pdf = usePdfRender();
   const templates = useMemo(() => listTemplates(), []);
@@ -87,8 +110,18 @@ export const MarkdownPlayground: React.FC = () => {
     const params = new URLSearchParams(window.location.search);
     for (const k of [...params.keys()]) if (k !== "mode") params.delete(k);
     for (const [k, v] of panelToParams(panel)) params.set(k, v);
+    if (right === "templates") params.set("view", "templates");
+    if (tab !== "html") params.set("tab", tab);
     window.history.replaceState({}, "", `${window.location.pathname}?${params.toString()}`);
-  }, [panel]);
+    // the same settings, without `mode`, are what a bare link starts from next time
+    const remembered = new URLSearchParams(params);
+    remembered.delete("mode");
+    try {
+      localStorage.setItem(PANEL_KEY, remembered.toString());
+    } catch {
+      /* storage blocked: only the URL carries the settings */
+    }
+  }, [panel, right, tab]);
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, text);
