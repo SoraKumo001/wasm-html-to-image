@@ -10043,3 +10043,35 @@ describe("P0-88 a definite-width replaced flex item's automatic minimum is the c
     expect(Math.abs(w("t") - 97.2)).toBeLessThan(1.5);
   });
 });
+
+describe("P0-89 a fit-content item in a wrapping column flex sizes its line by the resolved width", () => {
+  const page = async (body: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:content-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 800,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as any);
+    return layout;
+  };
+  const IMG = `data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22300%22%20height%3D%2230%22%20viewBox%3D%220%200%20300%2030%22%3E%3Crect%20width%3D%22300%22%20height%3D%2230%22%20fill%3D%22%2369c%22%2F%3E%3C%2Fsvg%3E`;
+  it("the following column starts after the resolved 379.4, not the 420 max-content", async () => {
+    const boxes = await page(
+      `<div style="display:flex;flex-direction:row;gap:4px;height:60px;padding:12px;margin:12px;width:473.7px">` +
+        `<div style="display:grid;grid-template-columns:60px auto;grid-auto-rows:minmax(30px,auto);align-items:stretch;margin:12px;overflow:hidden"><div style="height:36px"></div></div>` +
+        `<div style="display:flex;flex-direction:column;flex-wrap:wrap;padding:12px">` +
+        `<div style="width:20px;height:25px;flex:2 1 0"></div>` +
+        `<div id="ib" style="display:inline-block;width:fit-content"><div style="height:12px"></div><div style="height:36px"></div><svg viewBox="0 0 40 60" style="width:120px"><rect width="40" height="60" fill="#69c"/></svg><img src="${IMG}" style="width:fit-content"></div>` +
+        `<div id="third" style="margin:4px;flex:0 1 auto"><div style="width:90px;height:40px"></div><svg viewBox="0 0 100 20"><rect width="100" height="20" fill="#69c"/></svg></div>` +
+        `</div></div>`,
+    );
+    const ib = boxes.find((b: any) => b.i === "ib");
+    const third = boxes.find((b: any) => b.i === "third");
+    // Chromium: the fit-content wrapper resolves to 379.4 (its flexed container's
+    // content width) and the third column starts right after it: x = 509.7.
+    // Without the fix the line is sized by the 420 max-content: x = 550.3.
+    expect(Math.abs(ib.w - 379.4)).toBeLessThan(1.5);
+    expect(Math.abs(third.x - 509.7)).toBeLessThan(1.5);
+  });
+});
