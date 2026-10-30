@@ -10075,3 +10075,34 @@ describe("P0-89 a fit-content item in a wrapping column flex sizes its line by t
     expect(Math.abs(third.x - 509.7)).toBeLessThan(1.5);
   });
 });
+
+describe("P0-90 a percentage height inside a stretched auto-height grid item resolves against the row height for the inline contribution", () => {
+  const page = async (body: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 800,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as any);
+    return layout;
+  };
+  const IMG = `data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2220%22%20height%3D%2210%22%20viewBox%3D%220%200%2020%2010%22%3E%3Crect%20width%3D%2220%22%20height%3D%2210%22%20fill%3D%22%2369c%22%2F%3E%3C%2Fsvg%3E`;
+  it("the height:100% flex inside a plain wrapper contributes the transferred image width", async () => {
+    const boxes = await page(
+      `<div style="display:grid;grid-template-columns:fit-content(80px) auto;grid-auto-rows:minmax(30px,auto);width:400px">` +
+        `<div><div id="t" style="display:flex;justify-content:flex-end;height:100%;padding:2px"><img id="im" src="${IMG}"></div></div>` +
+        `<div style="height:60px"></div></div>`,
+    );
+    const t = boxes.find((b: any) => b.i === "t");
+    const im = boxes.find((b: any) => b.i === "im");
+    // Chromium: the row is 60 tall (the mate), the flex fills the wrapper at
+    // 60, the image stretches to 56 high and transfers to 112 wide, so the
+    // fit-content column is 116. Without the fix the percentage stays cyclic
+    // and the column is 24 (image at its intrinsic 20 wide).
+    expect(Math.round(t.w)).toBe(116);
+    expect(Math.round(t.h)).toBe(60);
+    expect(Math.round(im.w)).toBe(112);
+    expect(Math.round(im.h)).toBe(56);
+  });
+});
