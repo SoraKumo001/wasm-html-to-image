@@ -83,6 +83,11 @@ export interface MarkdownOptions {
   title?: string;
   /** Highlight fenced code blocks that name a known language. Defaults to true. */
   highlight?: boolean;
+  /**
+   * Draw ```` ```mermaid ```` fences as diagrams (flowchart, sequence and state diagrams, drawn by the engine
+   * itself). Defaults to true; `false` leaves them as code blocks.
+   */
+  mermaid?: boolean;
   /** Strip a leading `---` YAML front matter block (and read its `title`). Defaults to true. */
   frontMatter?: boolean;
   /**
@@ -219,6 +224,7 @@ body { color: ${c.fg}; font-family: ${type.font}; font-size: ${type.size}px; lin
 .markdown-body blockquote > *:last-child { margin-bottom: 0; }
 .markdown-body code { padding: 0.2em 0.4em; font-family: ${type.mono}; font-size: 85%; background: ${c.codeBg}; border-radius: ${type.radius}px; }
 .markdown-body pre { padding: 16px; overflow: hidden; font-size: 85%; line-height: 1.45; background: ${c.codeBg}; border-radius: ${type.radius}px; text-align: left; }
+.markdown-body .mermaid { margin: 0 0 16px; text-align: center; color: ${c.fg}; --mermaid-fg: ${c.fg}; --mermaid-bg: ${c.bg}; --mermaid-border: ${c.border}; --mermaid-surface: ${c.codeBg}; }
 .markdown-body pre code { padding: 0; font-size: 100%; background: transparent; white-space: pre; }
 .markdown-body hr { height: 0; margin: 24px 0; border: 0; border-top: 4px solid ${c.border}; }
 .markdown-body img { max-width: 100%; }
@@ -364,15 +370,14 @@ export function markdownToDocument(markdown: string, options: MarkdownOptions = 
     entries.push({ level: depth, id, html: inner });
     return `<h${depth} id="${id}">${inner}</h${depth}>\n`;
   };
-  if (options.highlight !== false) {
-    renderer.code = ({ text, lang }) => {
-      const name = (lang ?? "").trim().split(/\s+/)[0];
-      const body = name && highlighter.getLanguage(name)
-        ? highlighter.highlight(text, { language: name, ignoreIllegals: true }).value
-        : escapeHtml(text);
-      return `<pre><code${name ? ` class="language-${escapeHtml(name)}"` : ""}>${body}\n</code></pre>\n`;
-    };
-  }
+  renderer.code = ({ text, lang }) => {
+    const name = (lang ?? "").trim().split(/\s+/)[0];
+    if (name === "mermaid" && options.mermaid !== false) return `<div class="mermaid">${escapeHtml(text)}</div>\n`;
+    const body = options.highlight !== false && name && highlighter.getLanguage(name)
+      ? highlighter.highlight(text, { language: name, ignoreIllegals: true }).value
+      : escapeHtml(text);
+    return `<pre><code${name ? ` class="language-${escapeHtml(name)}"` : ""}>${body}\n</code></pre>\n`;
+  };
   const parser = options.math ? new Marked(mathExtension(options.math)) : marked;
   const text = parser.parse(source, { async: false, gfm: true, renderer }) as string;
 
