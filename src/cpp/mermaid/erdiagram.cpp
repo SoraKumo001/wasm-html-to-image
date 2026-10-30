@@ -5,6 +5,7 @@
 #include <map>
 
 #include "mermaid/layered.h"
+#include "mermaid/nodestyle.h"
 
 namespace mermaid {
 namespace {
@@ -36,6 +37,7 @@ struct Doc {
     std::vector<Relation> rels;
     std::map<std::string, int> index;
     Direction dir = Direction::TD;
+    StyleSheet sheet;
 };
 
 bool starts(const std::string& s, const char* p) { return s.compare(0, std::char_traits<char>::length(p), p) == 0; }
@@ -135,6 +137,7 @@ bool parse(const std::string& source, Doc& d, std::string& error) {
             d.dir = v == "LR" ? Direction::LR : v == "RL" ? Direction::RL : v == "BT" ? Direction::BT : Direction::TD;
             continue;
         }
+        if (d.sheet.take(line)) continue;
         if (starts(line, "title ") || starts(line, "style ") || starts(line, "classDef ") || starts(line, "class ")) continue;
         if (line.back() == '{') {
             open = entity_for(d, line.substr(0, line.size() - 1));
@@ -282,8 +285,7 @@ bool render_er(const std::string& source, const Options& options, std::string& s
         const Entity& e = d.entities[k];
         Pt p = at(lay.center[k]);
         double x = p.x - e.w / 2, y = p.y - e.h / 2;
-        body += "<g class=\"node\">\n<rect x=\"" + num(x) + "\" y=\"" + num(y) + "\" width=\"" + num(e.w) + "\" height=\"" + num(e.h) + "\" fill=\"" + th.surface + "\" stroke=\"" + th.border +
-                "\" stroke-width=\"1\"/>\n";
+        body += "<g class=\"node\">\n<rect x=\"" + num(x) + "\" y=\"" + num(y) + "\" width=\"" + num(e.w) + "\" height=\"" + num(e.h) + "\"" + d.sheet.paint(e.id, th.surface, th.border) + "/>\n";
         body += "<rect x=\"" + num(x) + "\" y=\"" + num(y) + "\" width=\"" + num(e.w) + "\" height=\"" + num(kHead) + "\" fill=\"" + th.group_hdr + "\" stroke=\"" + th.border + "\" stroke-width=\"1\"/>\n";
         centered_text(body, th, {e.title}, p.x, y + kHead / 2, kNodeFont, 600, th.text);
         double type_x = x + kCellPad, name_x = type_x + e.type_w + kCellPad, key_x = x + e.w - kCellPad;

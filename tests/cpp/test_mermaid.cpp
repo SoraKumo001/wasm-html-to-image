@@ -102,6 +102,15 @@ int main() {
         check(mermaid::render("---\nconfig:\n  theme: forest\n---\ngraph TD\nA-->B", on, svg, err) && has(svg, "#e8f5ec"), "front/config_theme");
     }
 
+    // --- classDef / class / style on the other box diagrams ---
+    check(has(svg_of("stateDiagram-v2\nclassDef hot fill:#aa0001\nA --> B\nclass A hot"), "#aa0001"), "style/state_class");
+    check(has(svg_of("stateDiagram-v2\nA:::hot --> B\nclassDef hot fill:#aa0002"), "#aa0002"), "style/state_triple_colon");
+    check(has(svg_of("stateDiagram-v2\nA --> B\nstyle B stroke:#aa0003,stroke-width:3px"), "stroke-width=\"3\""), "style/state_direct");
+    check(has(svg_of("classDiagram\nclass A\nclass B\nA --> B\nstyle A fill:#aa0004"), "#aa0004"), "style/class_style");
+    check(has(svg_of("classDiagram\nclass A\nclassDef hot fill:#aa0005\ncssClass \"A\" hot"), "#aa0005"), "style/class_css_class");
+    check(has(svg_of("erDiagram\nA ||--o{ B : has\nstyle A fill:#aa0006"), "#aa0006"), "style/er_style");
+    check(has(svg_of("block-beta\ncolumns 2\na b\nstyle a fill:#aa0007"), "#aa0007"), "style/block_style");
+
     // --- errors ---
     {
         std::string svg, err;

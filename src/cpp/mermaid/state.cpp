@@ -5,6 +5,7 @@
 #include <map>
 
 #include "mermaid/layered.h"
+#include "mermaid/nodestyle.h"
 
 namespace mermaid {
 namespace {
@@ -39,6 +40,7 @@ struct Doc {
     std::map<std::string, int> index;      // key -> node
     std::map<std::string, int> composite;  // id -> group
     Direction dir = Direction::TD;
+    StyleSheet sheet;
 };
 
 std::string strip_class(std::string s) {
@@ -48,6 +50,8 @@ std::string strip_class(std::string s) {
 
 int node_for(Doc& d, const std::string& raw, int scope, bool as_target) {
     std::string id = strip_class(raw);
+    size_t cls_at = raw.find(":::");
+    if (cls_at != std::string::npos) d.sheet.use(id, trim(raw.substr(cls_at + 3)));
     if (auto c = d.composite.find(id); c != d.composite.end()) return -(c->second + 2);
     std::string key = id;
     Kind kind = Kind::State;
@@ -111,7 +115,8 @@ bool parse(const std::string& source, Doc& d, std::string& error) {
             d.dir = v == "LR" ? Direction::LR : v == "RL" ? Direction::RL : v == "BT" ? Direction::BT : Direction::TD;
             continue;
         }
-        if (starts(line, "classDef ") || starts(line, "class ") || starts(line, "style ") || starts(line, "click ") || starts(line, "accTitle") ||
+        if (d.sheet.take(line)) continue;
+        if (starts(line, "click ") || starts(line, "accTitle") ||
             starts(line, "accDescr") || starts(line, "title ") || line == "--" || line == "||")
             continue;
         if (line == "}") {
@@ -360,17 +365,17 @@ bool render_state(const std::string& source, const Options& options, std::string
                 break;
             case Kind::Choice:
                 body += "<polygon points=\"" + num(c.x) + "," + num(c.y - 13) + " " + num(c.x + 13) + "," + num(c.y) + " " + num(c.x) + "," + num(c.y + 13) + " " + num(c.x - 13) + "," +
-                        num(c.y) + "\" fill=\"" + th.surface + "\" stroke=\"" + th.border + "\" stroke-width=\"1\"/>\n";
+                        num(c.y) + "\"" + d.sheet.paint(n.name, th.surface, th.border) + "/>\n";
                 break;
             case Kind::Fork:
                 body += "<rect x=\"" + num(c.x - n.w / 2) + "\" y=\"" + num(c.y - n.h / 2) + "\" width=\"" + num(n.w) + "\" height=\"" + num(n.h) + "\" rx=\"2\" fill=\"" + th.text + "\"/>\n";
                 break;
             case Kind::State: {
-                body += "<rect x=\"" + num(c.x - n.w / 2) + "\" y=\"" + num(c.y - n.h / 2) + "\" width=\"" + num(n.w) + "\" height=\"" + num(n.h) + "\" rx=\"6\" ry=\"6\" fill=\"" +
-                        th.surface + "\" stroke=\"" + th.border + "\" stroke-width=\"1\"/>\n";
+                body += "<rect x=\"" + num(c.x - n.w / 2) + "\" y=\"" + num(c.y - n.h / 2) + "\" width=\"" + num(n.w) + "\" height=\"" + num(n.h) + "\" rx=\"6\" ry=\"6\"" +
+                        d.sheet.paint(n.name, th.surface, th.border) + "/>\n";
                 double top = c.y - n.h / 2 + kPadY;
                 double title_h = n.title_lines.size() * lh;
-                centered_text(body, th, n.title_lines, c.x, top + title_h / 2, kNodeFont, kNodeWeight, th.text);
+                centered_text(body, th, n.title_lines, c.x, top + title_h / 2, kNodeFont, kNodeWeight, d.sheet.text_color(n.name, th.text));
                 if (!n.desc.empty()) {
                     double ly = top + title_h + 5;
                     body += "<line x1=\"" + num(c.x - n.w / 2) + "\" y1=\"" + num(ly) + "\" x2=\"" + num(c.x + n.w / 2) + "\" y2=\"" + num(ly) + "\" stroke=\"" + th.border +

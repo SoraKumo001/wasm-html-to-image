@@ -5,6 +5,7 @@
 #include <map>
 
 #include "mermaid/layered.h"
+#include "mermaid/nodestyle.h"
 
 namespace mermaid {
 namespace {
@@ -31,6 +32,7 @@ struct Doc {
     std::vector<Relation> rels;
     std::map<std::string, int> index;
     Direction dir = Direction::TD;
+    StyleSheet sheet;
 };
 
 bool starts(const std::string& s, const char* p) { return s.compare(0, std::char_traits<char>::length(p), p) == 0; }
@@ -47,6 +49,8 @@ std::string clean_name(std::string n) {
 
 int class_for(Doc& d, const std::string& raw) {
     std::string name = clean_name(raw);
+    size_t cls_at = raw.find(":::");
+    if (cls_at != std::string::npos) d.sheet.use(name, trim(raw.substr(cls_at + 3)));
     auto it = d.index.find(name);
     if (it != d.index.end()) return it->second;
     Class c;
@@ -153,6 +157,7 @@ bool parse(const std::string& source, Doc& d, std::string& error) {
             d.dir = v == "LR" ? Direction::LR : v == "RL" ? Direction::RL : v == "BT" ? Direction::BT : Direction::TD;
             continue;
         }
+        if (d.sheet.take(line, false)) continue;
         if (starts(line, "note") || starts(line, "style ") || starts(line, "classDef ") || starts(line, "cssClass ") || starts(line, "click ") ||
             starts(line, "link ") || starts(line, "callback ") || starts(line, "namespace ") || starts(line, "title ") || line == "}")
             continue;
@@ -306,8 +311,7 @@ bool render_class(const std::string& source, const Options& options, std::string
         const Class& c = d.classes[k];
         Pt p = at(lay.center[k]);
         double x = p.x - c.w / 2, y = p.y - c.h / 2;
-        body += "<g class=\"node\">\n<rect x=\"" + num(x) + "\" y=\"" + num(y) + "\" width=\"" + num(c.w) + "\" height=\"" + num(c.h) + "\" fill=\"" + th.surface + "\" stroke=\"" + th.border +
-                "\" stroke-width=\"1\"/>\n";
+        body += "<g class=\"node\">\n<rect x=\"" + num(x) + "\" y=\"" + num(y) + "\" width=\"" + num(c.w) + "\" height=\"" + num(c.h) + "\"" + d.sheet.paint(c.name, th.surface, th.border) + "/>\n";
         body += "<rect x=\"" + num(x) + "\" y=\"" + num(y) + "\" width=\"" + num(c.w) + "\" height=\"" + num(c.head_h) + "\" fill=\"" + th.group_hdr + "\" stroke=\"" + th.border + "\" stroke-width=\"1\"/>\n";
         double ty = y + c.head_h / 2;
         if (!c.annotation.empty()) {

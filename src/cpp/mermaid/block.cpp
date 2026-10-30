@@ -6,6 +6,7 @@
 #include <map>
 
 #include "mermaid/mermaid_internal.h"
+#include "mermaid/nodestyle.h"
 
 namespace mermaid {
 namespace {
@@ -102,6 +103,7 @@ bool parse_block(std::string tok, Block& b) {
 bool render_block(const std::string& source, const Options& options, std::string& svg, std::string& error) {
     using namespace metrics;
     std::vector<Block> blocks;
+    StyleSheet sheet;
     std::vector<Link> links;
     std::map<std::string, int> index;
     int columns = 0;
@@ -128,7 +130,7 @@ bool render_block(const std::string& source, const Options& options, std::string
             error = "nested blocks are not supported";
             return false;
         }
-        if (starts(line, "classDef ") || starts(line, "class ") || starts(line, "style ")) continue;
+        if (sheet.take(line)) continue;
         size_t arrow = line.find("-->");
         if (arrow != std::string::npos) {
             // `a --> b` or `a -- "text" --> b`
@@ -257,7 +259,7 @@ bool render_block(const std::string& source, const Options& options, std::string
     for (auto& b : blocks) {
         if (b.space) continue;
         double cx = b.x + b.w / 2, cy = b.y + b.h / 2;
-        std::string style = " fill=\"" + th.surface + "\" stroke=\"" + th.border + "\" stroke-width=\"1\"";
+        std::string style = sheet.paint(b.id, th.surface, th.border);
         body += "<g class=\"node\">\n";
         if (b.shape == Shape::Circle) body += "<ellipse cx=\"" + num(cx) + "\" cy=\"" + num(cy) + "\" rx=\"" + num(b.w / 2) + "\" ry=\"" + num(b.h / 2) + "\"" + style + "/>\n";
         else if (b.shape == Shape::Cylinder) {
@@ -271,7 +273,7 @@ bool render_block(const std::string& source, const Options& options, std::string
             double rx = b.shape == Shape::Stadium ? b.h / 2 : b.shape == Shape::Rounded ? 10 : 2;
             body += "<rect x=\"" + num(b.x) + "\" y=\"" + num(b.y) + "\" width=\"" + num(b.w) + "\" height=\"" + num(b.h) + "\" rx=\"" + num(rx) + "\"" + style + "/>\n";
         }
-        centered_text(body, th, b.lines, cx, cy, kFont, 500, th.text);
+        centered_text(body, th, b.lines, cx, cy, kFont, 500, sheet.text_color(b.id, th.text));
         body += "</g>\n";
     }
     svg = svg_document(th, W, H, body + edges);
