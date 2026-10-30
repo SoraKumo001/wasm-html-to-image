@@ -215,6 +215,9 @@ graph LR
 | ブロック図 | `block-beta`（入れ子のブロックは未対応） |
 | C4 図 | `C4Context` / `C4Container` / `C4Component` / `C4Dynamic` / `C4Deployment` |
 | アーキテクチャ図 | `architecture-beta` |
+| ベン図 | `venn-beta` |
+| 特性要因図（フィッシュボーン） | `ishikawa-beta` |
+| ツリー表示 | `treeView-beta` |
 | ツリーマップ | `treemap-beta` |
 | レーダーチャート | `radar-beta` |
 | バージョン表示 | `info` |

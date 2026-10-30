@@ -1621,6 +1621,9 @@ describe("regression: layout and paint probes", () => {
       radar: 'radar-beta\n  axis a, b, c\n  curve x{1, 2, 3}',
       info: "info\nshowInfo",
       c4: 'C4Context\n  Person(p, "User")\n  System(s, "App", "Does things")\n  Rel(p, s, "Uses")',
+      venn: 'venn-beta\n  set A\n  set B\n  union A,B["Both"]',
+      ishikawa: "ishikawa-beta\n  Effect\n    Cause\n      Detail",
+      treeview: 'treeView-beta\n  "src"\n    "a.ts"',
       architecture: "architecture-beta\n  service a(server)[A]\n  service b(database)[B]\n  a:R -- L:b",
     };
     for (const [name, src] of Object.entries(sources)) {

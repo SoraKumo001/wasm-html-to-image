@@ -153,6 +153,24 @@ int main() {
         check(has(svg_of("C4Context\nWidget(a, \"A\")"), "ERROR"), "c4/unknown_kind");
     }
 
+    // --- treeView, ishikawa, venn ---
+    {
+        std::string tv = svg_of("treeView-beta\n  \"packages\"\n    \"core\"\n      \"src\"\n    \"cli\"\n  \"README.md\"");
+        check(has(tv, ">packages<") && has(tv, ">src<") && has(tv, ">README.md<"), "treeview/labels");
+        check(count(tv, "<path") == 5, "treeview/icons");
+        check(has(svg_of("treeView-beta"), "ERROR"), "treeview/empty");
+        std::string ik = svg_of("ishikawa-beta\n  Blurry photo\n    Process\n      Out of focus\n      Slow shutter\n    User\n      Shaky hands\n    Equipment");
+        check(has(ik, ">Blurry photo<") && has(ik, ">Out of focus<") && has(ik, ">Equipment<"), "ishikawa/labels");
+        check(count(ik, "stroke-width=\"2\" stroke-linecap") == 3, "ishikawa/bones");
+        check(has(svg_of("ishikawa-beta\n  A\nB"), "ERROR"), "ishikawa/one_effect");
+        check(has(svg_of("ishikawa-beta"), "ERROR"), "ishikawa/empty");
+        std::string vn = svg_of("venn-beta\n  title Overlap\n  set A[\"Frontend\"]:20\n  set B[\"Backend\"]:30\n  union A,B[\"Fullstack\"]\n    text t1[\"TypeScript\"]");
+        check(count(vn, "class=\"set\"") == 2 && has(vn, ">Fullstack<") && has(vn, ">TypeScript<") && has(vn, ">Overlap<"), "venn/two_sets");
+        check(count(svg_of("venn-beta\n  set A\n  set B\n  set C\n  union A,B,C[\"All\"]"), "class=\"set\"") == 3, "venn/three_sets");
+        check(has(svg_of("venn-beta\n  set A\n  union A,Z"), "ERROR"), "venn/unknown_set");
+        check(has(svg_of("venn-beta\n  text x"), "ERROR"), "venn/text_without_owner");
+    }
+
     // --- errors ---
     {
         std::string svg, err;

@@ -215,6 +215,9 @@ graph LR
 | Block | `block-beta` (nested blocks are not supported) |
 | C4 | `C4Context` / `C4Container` / `C4Component` / `C4Dynamic` / `C4Deployment` |
 | Architecture | `architecture-beta` |
+| Venn | `venn-beta` |
+| Ishikawa (fishbone) | `ishikawa-beta` |
+| Tree view | `treeView-beta` |
 | Treemap | `treemap-beta` |
 | Radar | `radar-beta` |
 | Version banner | `info` |

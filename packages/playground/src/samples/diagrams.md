@@ -134,3 +134,35 @@ C4Context
   Rel(banking, ledger, "読み書きする")
   Rel(banking, mail, "通知を依頼する")
 ```
+
+## ベン図・特性要因図・ツリー表示
+
+```mermaid
+venn-beta
+  title チームの重なり
+  set A["フロントエンド"]:20
+  set B["バックエンド"]:20
+  union A,B["フルスタック"]
+```
+
+```mermaid
+ishikawa-beta
+  納期遅延
+    人
+      経験不足
+      兼務が多い
+    手順
+      レビュー待ち
+      仕様変更
+    環境
+      ビルドが遅い
+```
+
+```mermaid
+treeView-beta
+  "src"
+    "cpp"
+      "mermaid"
+    "ts"
+  "README.md"
+```
