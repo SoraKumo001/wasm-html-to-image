@@ -25,6 +25,8 @@ Runs seamlessly across **Node.js**, **Cloudflare Workers**, **Edge runtimes**, *
 | 🔗 **URL to Screenshot** | Capture remote web pages without launching a browser | PNG, WebP, JPEG, AVIF |
 | 📑 **Multi-Page Vector PDF** | Generate crisp, selectable vector PDFs from HTML or images | PDF |
 | 🖼️ **Image Resizing & Optimization** | Fast format conversion, crop, and resize (Sharp alternative) | WebP, AVIF, JXL, PNG, JPEG |
+| 📝 **Markdown to PDF** | GitHub-flavoured Markdown to a styled, paged PDF: 11 templates, cover, contents, bookmarks, maths, syntax highlighting, call-outs, footnotes | PDF, PNG, WebP |
+| 🧜 **Mermaid Diagrams** | 26 diagram types drawn by the engine itself as vectors (no browser, no Mermaid JS): in Markdown, in HTML, or alone with `renderMermaid()` | SVG, PNG, WebP, JPEG, AVIF, JXL, PDF |
 | 🪶 **ThumbHash Blur Placeholder** | Generate compact blur placeholders for instant progressive loading | ThumbHash |
 
 
@@ -179,6 +181,7 @@ interface RenderResult {
 | `wasm-html-to-image/preact` | Preact integration | Directly render Preact JSX element trees |
 | `wasm-html-to-image/tailwind` | Utility styling | UnoCSS / Tailwind v4 utilities (`createCSS`, `tailwind()`) |
 | `wasm-html-to-image/markdown` | Markdown input | GitHub-flavoured Markdown to a styled HTML page (`markdownToHtml`); pure JS, runs in browsers and Workers |
+| `wasm-html-to-image/single`, `/workers` | Mermaid diagrams | `renderMermaid(source, options)`: one diagram as an SVG string or an image (`renderMermaidWith` on `/workerd` and `/edge-light`) |
 | `wasm-html-to-image/markdown-math` | Maths in Markdown | KaTeX renderer for `markdownToHtml({ math })`: `$...$` and `$$...$$` (`katexMath`); pure JS, runs in browsers and Workers |
 
 ---
@@ -188,7 +191,7 @@ interface RenderResult {
 <details>
 <summary><b>Markdown to image / PDF</b></summary>
 
-The [playground](https://sorakumo001.github.io/wasm-html-to-image/master/?mode=markdown) has a *Markdown to PDF* mode: edit the text, pick a template and theme, switch the cover, contents, bookmarks and maths, and see the PDF as it changes. The settings are in the URL, so a look can be shared as a link.
+The [playground](https://sorakumo001.github.io/wasm-html-to-image/master/?mode=markdown) has a *Markdown to PDF* mode: edit the text, pick a template and theme, switch the cover, contents, bookmarks and maths, and see the PDF as it changes. A *Templates* view draws the same text with every bundled template side by side. The settings are in the URL (and remembered for the next visit), so a look can be shared as a link.
 
 `markdownToHtml` (from the `wasm-html-to-image/markdown` subpath, built on [marked](https://github.com/markedjs/marked)) turns GitHub-flavoured Markdown into a complete HTML page with a built-in GitHub-like stylesheet. It is plain JavaScript, so it works in Node, browsers and Cloudflare Workers alike; pass the result to `render()` as `value`:
 
@@ -196,9 +199,7 @@ The [playground](https://sorakumo001.github.io/wasm-html-to-image/master/?mode=m
 import { render } from "wasm-html-to-image";
 import { markdownToHtml } from "wasm-html-to-image/markdown";
 
-const html = markdownToHtml("# Hello
-
-- **bold** and `code`", { theme: "dark", maxWidth: 720 });
+const html = markdownToHtml("# Hello\n\n- **bold** and `code`", { theme: "dark", maxWidth: 720 });
 const { data } = await render({ value: html, width: 800, format: "pdf" });
 ```
 
@@ -224,6 +225,11 @@ Highlighted languages: bash/shell, c, c++, c#, css/scss, diff, dockerfile, go, h
 | `book` | books, long reading | A5, serif, justified, each chapter (`h1`) on a new page, a cover and contents, the page number in the footer |
 | `paper` | papers, technical notes | A4, serif, justified, tight leading, the page number in the footer |
 | `compact` | notes, cheat sheets | 12px text, 12mm margins, no cover or contents |
+| `manual` | manuals, specifications | A4, cover, contents, numbered headings, each chapter on a new page, call-outs |
+| `minutes` | meeting minutes | A4, no cover, ruled title, tinted table headers, title and date in the header |
+| `letter` | letters, notices | A4, serif, wide margins; `.right` and `.center` classes for the address block |
+| `slides` | presentations | A4 landscape, large text, each `h2` on its own page, with a cover |
+| `invoice` | invoices, quotations | A4, large right-aligned title, accent table header, emphasised last row |
 
 Pick one in the front matter or the options, and set the document's own details there too:
 
@@ -242,10 +248,25 @@ cover: true            # a cover from title, subtitle, author, date and logo
 toc: false             # no contents page
 logo: https://example.com/logo.png
 lang: en               # <html lang>
+numbering: true        # number the headings 1, 1.1, 1.1.1
+orientation: landscape # turn the page sideways
+margin: 20mm 18mm      # page margin (a CSS margin value)
+footer: "{{title}} {{pageNumber}} / {{totalPages}}"   # replaces the template's footer (header: works the same)
+toc_depth: 2           # deepest heading in the contents
+toc_title: Contents    # heading of the contents page
+cover_style: center    # band | plain | center
 ---
 ```
 
-Precedence is *template defaults < front matter < options*, so a template can be a starting point that one document tweaks and one build overrides. Keys this package does not know are ignored (front matter is shared with other tools).
+Precedence is *template defaults < front matter < options*, so a template can be a starting point that one document tweaks and one build overrides. Keys this package does not know are ignored (front matter is shared with other tools). With a cover, the cover page carries no running header or footer (it still counts as page 1).
+
+**More than plain Markdown.**
+
+- Call-outs: a block quote starting with `[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]` or `[!CAUTION]` becomes a coloured box.
+- Figures: `![alt](src "Title")` becomes a figure captioned `Figure 1  Title`.
+- `<!-- pagebreak -->` forces a new page; `[^name]` and `[^name]: text` make footnotes collected at the end.
+- Code lines wrap instead of being cut, and tables span the text width in `report`, `proposal`, `book`, `paper`, `manual`, `minutes`, `slides` and `invoice`.
+- Fenced `mermaid` blocks are drawn as diagrams (see the Mermaid section below).
 
 ```ts
 import { render } from "wasm-html-to-image";
@@ -275,7 +296,7 @@ Your own template is data too: pass an object as `template`, or give the CLI a `
 }
 ```
 
-`type` takes `font`, `headingFont`, `mono`, `size` (px), `lineHeight`, `justify`, `h1Rule`, `h2Rule`, `headingWeight`, `accentHeadings`, `chapterBreak` and `radius`; `page` takes `size`, `margin` (a CSS `margin`), `header` and `footer` (HTML with `{{pageNumber}}`, `{{totalPages}}`, `{{title}}`, `{{author}}`, `{{date}}`, `{{stamp}}`). Anything left out comes from the default template. A cover is built from `<header class="cover">` with `cover-title`, `cover-subtitle`, `cover-meta` and `cover-logo` inside, so `css` can restyle it; its title is not an `h1`, so it stays out of the bookmarks and the contents.
+`type` takes `font`, `headingFont`, `mono`, `size` (px), `lineHeight`, `justify`, `h1Rule`, `h2Rule`, `headingWeight`, `accentHeadings`, `chapterBreak`, `radius` and `wideTables`; `page` takes `size`, `margin` (a CSS `margin`), `header` and `footer` (HTML with `{{pageNumber}}`, `{{totalPages}}`, `{{title}}`, `{{author}}`, `{{date}}`, `{{stamp}}`). Anything left out comes from the default template. A template can instead start from a bundled one with `extends` (its own fields are laid over the base's, and `css` is appended); write colours as `var(--surface)`, `var(--border)`, `var(--muted)`, `var(--text)` and `var(--accent)` so it follows the dark theme too: `defineTemplate({ extends: "report", defaults: { accent: "#0f766e" } })`. A cover is built from `<header class="cover">` with `cover-title`, `cover-subtitle`, `cover-meta` and `cover-logo` inside, so `css` can restyle it; its title is not an `h1`, so it stays out of the bookmarks and the contents.
 
 **Table of contents and bookmarks.** A PDF made from Markdown starts with a table of contents and carries bookmarks, both on by default:
 
@@ -315,6 +336,41 @@ const html = markdownToHtml("Euler: $e^{i\\pi} + 1 = 0$\n\n$$\n\\frac{-b \\pm \\
 Prices stay prices (`It costs $5 and $10`: the closing dollar must follow a non-space and not precede a digit), `\$` is a literal dollar, and code spans and fences are left alone. TeX that KaTeX rejects is shown as its source with the error as a tooltip instead of failing the page. The output is KaTeX's HTML (no MathML), so it works in Node, browsers and Workers; its fonts are fetched while the page is drawn, from the jsDelivr copy of the matching KaTeX version unless you set `fontBase`. The CLI turns maths on whenever `katex` is installed (`--no-math` switches it off).
 
 `marked`, `highlight.js` and `katex` are optional dependencies, installed with the package by default (the Markdown subpath is about 280 kB when bundled for a browser; the KaTeX one is about 520 kB on top of it, mostly KaTeX itself).
+
+</details>
+
+<details>
+<summary><b>Mermaid diagrams (SVG / image / PDF)</b></summary>
+
+The engine draws Mermaid diagrams itself, as vectors: no browser, no Puppeteer, no Mermaid JavaScript. Text is measured with the real fonts, so Japanese labels fit exactly. Three ways to use it:
+
+````md
+```mermaid
+graph LR
+  A[Order] --> B{In stock?}
+  B -->|yes| C[Ship]
+```
+````
+
+```html
+<div class="mermaid">sequenceDiagram
+  A->>B: Hello</div>
+```
+
+```ts
+import { renderMermaid } from "wasm-html-to-image/single"; // also "/workers"
+
+const { data: svg } = await renderMermaid("graph LR\n  A --> B"); // an SVG string
+const { data: png } = await renderMermaid("graph LR\n  A --> B", { format: "png", theme: "nord" }); // bytes
+```
+
+- **26 diagram types**: flowchart, sequence, state, class, ER, requirement, block, C4 (five kinds), architecture, Gantt, pie, XY chart, quadrant, radar, Sankey, treemap, Venn, mind map, timeline, user journey, git graph, kanban, packet, Ishikawa, tree view and `info`. An unsupported one (`zenuml`, ...) shows an error box where the diagram would be.
+- **Themes**: `light`, `dark`, `neutral`, `forest`, `nord`, `dracula`, `solarized-light`, `solarized-dark`, `rose-pine`, `sepia`; or set `--mermaid-theme`, `--mermaid-fg`, `--mermaid-bg`, `--mermaid-accent`, ... in CSS.
+- **Formats**: SVG (a string), PNG, WebP, JPEG, AVIF, JXL and PDF; the image is sized to the diagram.
+- **Input repair** (`mode`): `strict` (default) reports every mistake, with a "did you mean" hint for a near-miss keyword; `compat` also accepts a keyword in the wrong case, CRLF and unfinished `end` / `}`; `recover` also fixes a misspelt keyword and skips lines it cannot read.
+- `classDef` / `class` / `style` (flowchart, state, class, ER, block), `accTitle` / `accDescr` (they become the SVG `<title>` / `<desc>`), and, with `directives: true`, `%%{init}%%` and frontmatter `config:`.
+
+Try every diagram, theme and format in the [playground](https://sorakumo001.github.io/wasm-html-to-image/master/?mode=mermaid); its *Gallery* draws all the samples at once. Details: the *Mermaid Conversion* page of the documentation.
 
 </details>
 
