@@ -126,6 +126,8 @@ target_sources(html_to_image_core PRIVATE
     src/cpp/mermaid/gantt.cpp
     src/cpp/mermaid/mindmap.cpp
     src/cpp/mermaid/timeline.cpp
+    src/cpp/mermaid/quadrant.cpp
+    src/cpp/mermaid/journey.cpp
     src/cpp/core/resource_manager.cpp
     src/cpp/core/font_manager.cpp
     src/cpp/renderers/svg_renderer.cpp

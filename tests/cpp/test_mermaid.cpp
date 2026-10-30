@@ -339,6 +339,32 @@ int main() {
         check(!render("timeline", e1, e2), "timeline/error_empty");
     }
 
+    // --- journey ---
+    {
+        std::string s = svg_of("journey\n  title Day\n  section Work\n    Make tea: 5: Me\n    Go upstairs: 3: Me, Cat\n  section Home\n    Sit down: 1: Me");
+        check(has(s, ">Day<") && has(s, ">Work<") && has(s, ">Home<"), "journey/title_and_sections");
+        check(count(s, "class=\"task\"") == 3 && count(s, "class=\"face\"") == 3, "journey/tasks_and_faces");
+        check(has(s, ">Me<") && has(s, ">Cat<"), "journey/actor_legend");
+        check(has(svg_of("journey\n  A: 4"), ">A<"), "journey/actors_are_optional");
+        check(has(svg_of("journey\n  \xe4\xbd\x9c\xe6\xa5\xad: 3: \xe7\xa7\x81"), ">\xe4\xbd\x9c\xe6\xa5\xad<"), "journey/cjk");
+        std::string e1, e2;
+        check(!render("journey\n  A: 9", e1, e2), "journey/error_score_out_of_range");
+        check(!render("journey\n  A", e1, e2), "journey/error_no_score");
+        check(!render("journey", e1, e2), "journey/error_empty");
+    }
+
+    // --- quadrantChart ---
+    {
+        std::string s = svg_of("quadrantChart\n  title Reach\n  x-axis Low --> High\n  y-axis Cold --> Hot\n  quadrant-1 Expand\n  quadrant-3 Rethink\n  A: [0.3, 0.6]\n  B: [0.9, 0.1]");
+        check(has(s, ">Reach<") && has(s, ">Low<") && has(s, ">High<") && has(s, ">Cold<") && has(s, ">Hot<"), "quadrant/titles_and_axes");
+        check(has(s, ">Expand<") && has(s, ">Rethink<"), "quadrant/quadrant_names");
+        check(count(s, "class=\"point\"") == 2 && has(s, ">A<") && has(s, ">B<"), "quadrant/points");
+        check(has(svg_of("quadrantChart\n  \xe7\x82\xb9: [0.5, 0.5]"), ">\xe7\x82\xb9<"), "quadrant/cjk");
+        std::string e1, e2;
+        check(!render("quadrantChart\n  A: [2, 0.5]", e1, e2), "quadrant/error_out_of_range");
+        check(!render("quadrantChart\n  nonsense", e1, e2), "quadrant/error_unrecognised");
+    }
+
     std::printf("----\n%d passed, %d failed\n", g_pass, g_fail);
     return g_fail == 0 ? 0 : 1;
 }

@@ -57,7 +57,9 @@ add_library(mermaid_core STATIC
     "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/mermaid/pie.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/mermaid/gantt.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/mermaid/mindmap.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/mermaid/timeline.cpp")
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/mermaid/timeline.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/mermaid/journey.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/mermaid/quadrant.cpp")
 target_include_directories(mermaid_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp")
 target_compile_features(mermaid_core PUBLIC cxx_std_20)
 if(MSVC)
