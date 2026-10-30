@@ -1,0 +1,84 @@
+---
+title: Mermaid 図の一覧
+author: wasm-html-to-image
+template: paper
+---
+
+# Mermaid 図の一覧
+
+` ```mermaid ` のコードブロックは、エンジンがそのままベクターで描画します。PDF にしても文字は選択でき、拡大しても粗くなりません。
+
+## フローチャート
+
+```mermaid
+graph LR
+  A[受注] --> B{在庫あり?}
+  B -->|はい| C[出荷指示]
+  B -->|いいえ| D[発注]
+  D --> C
+  C --> E[請求]
+```
+
+## シーケンス図
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant U as ユーザー
+  participant S as サーバー
+  U->>+S: ログイン要求
+  S-->>-U: トークン
+  Note over U,S: 以降はトークンで認証
+```
+
+## 状態遷移図
+
+```mermaid
+stateDiagram-v2
+  [*] --> 下書き
+  下書き --> 承認待ち : 申請
+  承認待ち --> 確定 : 承認
+  承認待ち --> 下書き : 差戻し
+  確定 --> [*]
+```
+
+## クラス図
+
+```mermaid
+classDiagram
+  class Animal {
+    <<abstract>>
+    +String name
+    +eat() void
+  }
+  Animal <|-- Dog
+  Animal <|-- Cat
+  Dog : +bark()
+```
+
+## ER 図
+
+```mermaid
+erDiagram
+  CUSTOMER ||--o{ ORDER : places
+  ORDER ||--|{ LINE_ITEM : contains
+  CUSTOMER {
+    int id PK
+    string name
+  }
+  ORDER {
+    int id PK
+    int customer_id FK
+  }
+```
+
+## グラフ
+
+```mermaid
+xychart-beta
+  title "月別売上"
+  x-axis [1月, 2月, 3月, 4月, 5月, 6月]
+  y-axis "百万円" 0 --> 120
+  bar [30, 45, 60, 80, 95, 110]
+  line [25, 50, 55, 85, 90, 100]
+```

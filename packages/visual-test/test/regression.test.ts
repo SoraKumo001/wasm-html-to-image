@@ -1537,6 +1537,115 @@ describe("regression: layout and paint probes", () => {
       expect(near(at(50, 20), RED)).toBe(true);
     }
   });
+  it("inline SVG resolves custom properties and color-mix() in attributes and stylesheet rules", async () => {
+    // Generators such as beautiful-mermaid derive every colour from --bg / --fg with color-mix().
+    const root = `style="--fg:#000000;--bg:#ffffff"`;
+    const sheet = `<style>svg{--half:color-mix(in srgb, var(--fg) 50%, var(--bg));--pick:var(--none, color-mix(in srgb, var(--fg) 50%, var(--bg)))}.bar{fill:var(--half)}</style>`;
+    const rect = (extra: string) => `<rect width="100" height="40" ${extra}/>`;
+    const gray: Rgb = [128, 128, 128];
+    for (const extra of [
+      `fill="var(--half)"`, // custom property holding a color-mix
+      `fill="var(--pick)"`, // undefined var with a color-mix fallback
+      `fill="color-mix(in srgb, #000 50%, #fff)"`, // inline function
+      `class="bar"`, // stylesheet rule
+    ]) {
+      const { at } = await renderPng(`<svg width="100" height="40" ${root}>${sheet}${rect(extra)}</svg>`, 100, 40);
+      expect(near(at(50, 20), gray, 4), extra).toBe(true);
+    }
+    // invalid at computed-value time: the attribute is dropped, not painted black via currentColor
+    const { at } = await renderPng(`<svg width="100" height="40" style="color:#f00">${rect(`fill="var(--missing)"`)}</svg>`, 100, 40);
+    expect(near(at(50, 20), [0, 0, 0], 4)).toBe(true); // an SVG shape without fill is black
+  });
+  it("inline SVG draws marker-end / marker-start on lines and polylines", async () => {
+    const marker = `<defs><marker id="m" markerWidth="8" markerHeight="8" refX="8" refY="4" orient="auto"><polygon points="0 0, 8 4, 0 8" fill="#00f"/></marker></defs>`;
+    // the head is wholly beyond the line's last point, so only the marker can paint there
+    const { at } = await renderPng(
+      `<svg width="100" height="40">${marker}<polyline points="5,20 80,20" stroke="#000" stroke-width="1" fill="none" marker-end="url(#m)"/></svg>`,
+      100,
+      40,
+    );
+    expect(near(at(75, 20), BLUE)).toBe(true); // inside the arrowhead, left of the tip at x=80
+    expect(isWhite(at(90, 20))).toBe(true); // nothing past the tip
+    const rev = await renderPng(
+      `<svg width="100" height="40">${marker.replace('orient="auto"', 'orient="auto-start-reverse"')}<line x1="20" y1="20" x2="95" y2="20" stroke="#000" marker-start="url(#m)"/></svg>`,
+      100,
+      40,
+    );
+    expect(near(rev.at(25, 20), BLUE)).toBe(true); // reversed head: tip at x=20, widening to the right
+  });
+  it('<pre class="mermaid"> is drawn as a diagram by the engine, not shown as text', async () => {
+    const countPixels = (img: { data: Uint8Array | Buffer }, test: (r: number, g: number, b: number) => boolean) => {
+      let n = 0;
+      for (let i = 0; i < img.data.length; i += 4) if (test(img.data[i], img.data[i + 1], img.data[i + 2])) n++;
+      return n;
+    };
+    const page = (body: string) => `<div style="--mermaid-accent:#0000ff;color:#000">${body}</div>`;
+    const { img } = await renderPng(page(`<pre class="mermaid">graph TD\n  A --&gt; B</pre>`), 300, 400);
+    // two boxes joined by an arrow (accent coloured head), far taller than the one line the source would take
+    expect(countPixels(img, (r, g, b) => b > 200 && r < 60 && g < 60)).toBeGreaterThan(8);
+    let lastInk = 0;
+    for (let y = 0; y < img.height; y++)
+      for (let x = 0; x < img.width; x++) {
+        const i = (img.width * y + x) * 4;
+        if (img.data[i] < 235 || img.data[i + 1] < 235 || img.data[i + 2] < 235) lastInk = y;
+      }
+    expect(lastInk).toBeGreaterThan(150);
+    // the diagram follows the page: a div works too, and a bad diagram becomes a visible error
+    const err = await renderPng(page(`<div class="mermaid">gantt title x</div>`), 300, 100);
+    expect(countPixels(err.img, (r, g, b) => r > 180 && g < 80 && b < 80)).toBeGreaterThan(20);
+    // a plain <pre> is left alone
+    const plain = await renderPng(page(`<pre>graph TD</pre>`), 300, 60);
+    expect(countPixels(plain.img, (r, g, b) => b > 200 && r < 60 && g < 60)).toBe(0);
+  });
+  it("every Mermaid diagram type is drawn (ink, no error box)", async () => {
+    const sources: Record<string, string> = {
+      flowchart: "graph LR\n  A --&gt; B",
+      sequence: "sequenceDiagram\n  A-&gt;&gt;B: hi",
+      state: "stateDiagram-v2\n  [*] --&gt; A",
+      class: "classDiagram\n  class A {\n    &lt;&lt;abstract&gt;&gt;\n    +x()\n  }\n  A &lt;|-- B",
+      er: "erDiagram\n  A ||--o{ B : has",
+      xychart: "xychart-beta\n  x-axis [a, b]\n  bar [1, 2]",
+      pie: 'pie title T\n  "a" : 1\n  "b" : 2',
+    };
+    for (const [name, src] of Object.entries(sources)) {
+      const { img } = await renderPng(`<div style="color:#000"><div class="mermaid">${src}</div></div>`, 400, 360);
+      let ink = 0;
+      let error = 0;
+      for (let i = 0; i < img.data.length; i += 4) {
+        if (img.data[i] < 200 && img.data[i + 1] < 200 && img.data[i + 2] < 200) ink++;
+        if (img.data[i] > 180 && img.data[i + 1] < 80 && img.data[i + 2] < 80) error++;
+      }
+      expect(ink, name).toBeGreaterThan(100);
+      expect(error, name).toBe(0);
+    }
+  });
+  it("inline SVG text takes the font weight and falls back per character inside one <text>", async () => {
+    const ink = async (attrs: string, text: string) => {
+      const { img } = await renderPng(`<svg width="260" height="40"><text x="4" y="28" font-size="22" ${attrs}>${text}</text></svg>`, 260, 40);
+      let dark = 0;
+      for (let i = 0; i < img.data.length; i += 4) if (img.data[i] < 128) dark++;
+      return dark;
+    };
+    expect(await ink('font-weight="800"', "Weight")).toBeGreaterThan(1.2 * (await ink('font-weight="300"', "Weight")));
+    // Kanji that live in different slices of the default CJK font, in ONE <text>: the first one used to be the only
+    // glyph drawn (Skia's primitive shaper takes the first font run for the whole string), the rest were boxes.
+    // A box is a thin frame; real glyphs have clearly more ink than boxes.
+    const word = await ink('font-family="sans-serif"', "開始判定");
+    const boxes = await ink('font-family="sans-serif"', "開始判定".replace(/./g, "͸"));
+    expect(word).toBeGreaterThan(400);
+    expect(word).toBeGreaterThan(boxes * 1.5);
+  });
+  it("inline SVG text with &lt; and &amp; does not break the drawing", async () => {
+    // The parser decodes entities; writing the text back unescaped made "<<x>>" end the XML and dropped the whole SVG.
+    const { img } = await renderPng(
+      `<svg width="200" height="40"><rect x="0" y="0" width="200" height="40" fill="#000"/><text x="5" y="25" font-size="16" fill="#fff">&lt;&lt;a&gt;&gt; &amp; b</text></svg>`,
+      200,
+      40,
+    );
+    let dark = 0;
+    for (let i = 0; i < img.data.length; i += 4) if (img.data[i] < 128) dark++;
+    expect(dark).toBeGreaterThan(5000);
+  });
   it("inline SVG <text> is drawn (needs a font manager that knows Satoru's fonts)", async () => {
     const { img } = await renderPng(
       `<svg width="200" height="40"><text x="5" y="25" font-size="16" fill="#000">Hello 世田谷区</text></svg>`,

@@ -1,0 +1,45 @@
+#ifndef SATORU_MERMAID_H
+#define SATORU_MERMAID_H
+
+// Mermaid diagrams drawn by the engine itself: source text in, a self-contained SVG out (plain colours,
+// no CSS variables, no <marker>), so the same SVG renders on every output path (PNG, PDF, SVG).
+// Standard library only, so the layout can be unit tested on the host.
+//
+// Supported: flowchart / graph. (state, sequence, class, ER and xychart follow the same shape: a parser,
+// a layout and an SVG writer behind render().)
+
+#include <functional>
+#include <string>
+
+namespace mermaid {
+
+/// Width in px of one line of @p text at @p size px. The engine passes its real font metrics; the
+/// default is a per-character estimate (CJK full width).
+using MeasureFn = std::function<double(const std::string& text, double size, int weight, bool mono)>;
+
+struct Options {
+    MeasureFn measure;  // empty: estimate_text_width
+    /// Two colours decide the whole diagram; the rest are derived from them unless given.
+    std::string bg = "#ffffff";
+    std::string fg = "#1f2328";
+    std::string accent;   // arrow heads and highlights; default: fg
+    std::string line;     // edges
+    std::string muted;    // secondary text (edge labels)
+    std::string surface;  // node fill
+    std::string border;   // node outline
+    /// Paint the background rectangle. Off by default so a diagram sits on the page it is placed on.
+    bool paint_background = false;
+    std::string font_family = "sans-serif";
+    std::string mono_family = "monospace";
+};
+
+/// Estimated width of one line of text (no font access): narrow, regular, wide and full-width classes.
+double estimate_text_width(const std::string& text, double size, int weight, bool mono);
+
+/// Render @p source (the text between the code fences). Returns false and fills @p error for text that is
+/// not a supported diagram or does not parse; @p svg is then untouched.
+bool render(const std::string& source, const Options& options, std::string& svg, std::string& error);
+
+}  // namespace mermaid
+
+#endif  // SATORU_MERMAID_H

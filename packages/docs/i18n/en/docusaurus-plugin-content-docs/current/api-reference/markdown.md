@@ -14,12 +14,13 @@ It is implemented in pure JavaScript with no Node.js platform dependencies, runn
 ## Key Capabilities
 
 - **`markdownToDocument()` & `markdownToHtml()`**: Produce HTML and complete PDF render options (headers, footers, metadata).
-- **Template System**: 5 built-in templates (`default`, `report`, `book`, `paper`, `compact`) for ready-to-use professional styling without writing CSS.
+- **Template System**: 6 built-in templates (`default`, `report`, `proposal`, `book`, `paper`, `compact`) for ready-to-use professional styling without writing CSS.
 - **Automatic Table of Contents (TOC)**: Generates a table of contents with exact destination page numbers filled in during PDF pagination.
 - **Automatic PDF Bookmarks (Outline)**: Creates nested PDF document outlines from `h1`–`h6` headings.
 - **Smart Page Break Handling**: Avoids orphan headings (`break-after: avoid`) and prevents breaking code blocks and tables across page boundaries.
 - **YAML Front Matter**: Parses document metadata (`title`, `subtitle`, `author`, `date`, `template`, `stamp`, `cover`, `accent`, etc.).
 - **Syntax Highlighting**: Built-in highlight.js covering 20+ programming languages.
+- **Mermaid diagrams**: ` ```mermaid ` blocks (flowchart, sequence, state, class, ER, bar/line chart) are drawn inside the engine.
 - **KaTeX Mathematical Typesetting (`/markdown-math`)**: High-accuracy rendering for inline `$…$` and display `$$…$$` equations.
 
 ---
@@ -101,6 +102,7 @@ Templates configure the document's typography, page size, margins, running heade
 | :--- | :--- | :--- |
 | `default` | Web images, quick PDFs | Clean GitHub-like style |
 | `report` | Business reports, specs | A4, cover page, table of contents, accent colour, title in header, author and `n / N` in footer |
+| `proposal` | Proposals, quotations | A4, cover, accent bars on sections, tinted table headers, call-out quotes, title and `n / N` in the footer |
 | `book` | Books, long-form reading | A5, serif, justified text, each chapter (`h1`) starts on a new page, cover, TOC, page numbers |
 | `paper` | Technical papers, essays | A4, serif, justified text, tight line-height, page number in footer |
 | `compact` | Notes, cheat sheets | 12px font, 12mm margins, no cover or TOC |
@@ -177,6 +179,59 @@ await render({
 ```
 
 ---
+
+## Mermaid diagrams
+
+A ` ```mermaid ` code block is drawn by the engine itself as vector graphics: no browser or extra library, and in a PDF the text stays selectable.
+
+````markdown
+```mermaid
+graph LR
+  A[Order] --> B{In stock?}
+  B -->|yes| C[Ship]
+  B -->|no| D[Reorder]
+```
+````
+
+| Diagram | Starts with |
+| :--- | :--- |
+| Flowchart | `graph` / `flowchart` |
+| Sequence | `sequenceDiagram` |
+| State | `stateDiagram-v2` |
+| Class | `classDiagram` |
+| ER | `erDiagram` |
+| Bar / line chart | `xychart-beta` |
+| Pie chart | `pie` |
+
+- Colours follow the theme (`light` / `dark`).
+- A diagram is never split across pages.
+- Pass `mermaid: false` to show them as plain code blocks.
+- An unsupported type (`gantt`, `mindmap`, ...) or a syntax error shows an error box where the diagram would be.
+
+### Getting SVG or an image from JavaScript
+
+`renderMermaid()` returns an SVG string or an image for a diagram source, sized to the diagram.
+
+```typescript
+import { renderMermaid } from "wasm-html-to-image";
+
+const { data: svg } = await renderMermaid("graph LR\n  A --> B"); // an SVG string
+const { data: png } = await renderMermaid("graph LR\n  A --> B", {
+  format: "png", // "svg" (default), "png", "webp", "pdf", ...
+  theme: "dark", // "light" (default) | "dark"
+});
+```
+
+| Option | Default | Description |
+| :--- | :--- | :--- |
+| `format` | `"svg"` | Output format: a string for `"svg"`, a `Uint8Array` otherwise |
+| `theme` | `"light"` | Colour scheme |
+| `padding` | `16` | Space around the diagram (px) |
+| `width` | diagram width + padding | Image width (px) |
+| `background` | transparent for SVG, the theme background for images | Page background (a CSS colour) |
+| `accent` | derived from the theme | Colour of arrows and bars |
+
+On the Workers entries (`/workerd`, `/edge-light`) use `renderMermaidWith((options) => render(options, wasm), source, options)`. `mermaidToHtml(source, options)` returns the HTML page that holds one diagram.
 
 ## KaTeX Math Typesetting (`/markdown-math`)
 

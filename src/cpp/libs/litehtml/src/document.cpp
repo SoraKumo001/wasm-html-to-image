@@ -295,7 +295,15 @@ void document::create_node(void* gnode, elements_list& elements, bool parseTextN
 			}
 			if (tag[0])
 			{
-				ret = create_element(tag, node->v.element.tag);
+				// A container that picks an element class by the markup (the engine draws <pre class="mermaid"> itself)
+				// needs the class before the element exists; pass it for the two tags that can carry a diagram.
+				string_map early_attrs;
+				if (!strcmp(tag, "pre") || !strcmp(tag, "div"))
+				{
+					if (GumboAttribute* cls = gumbo_get_attribute(&node->v.element.attributes, "class"))
+						early_attrs["class"] = cls->value;
+				}
+				ret = create_element(tag, node->v.element.tag, early_attrs.empty() ? nullptr : &early_attrs);
 			}
 			else
 			{
@@ -730,14 +738,14 @@ element::ptr document::create_element(const char* tag_name, const string_map& at
 	return el;
 }
 
-element::ptr document::create_element(const char* tag_name, int gumbo_tag)
+element::ptr document::create_element(const char* tag_name, int gumbo_tag, const string_map* attributes)
 {
 	element::ptr newTag;
 	document::ptr this_doc = shared_from_this();
 	if (m_container)
 	{
 		string_map empty_attrs;
-		newTag = m_container->create_element(tag_name, empty_attrs, this_doc);
+		newTag = m_container->create_element(tag_name, attributes ? *attributes : empty_attrs, this_doc);
 	}
 	if (!newTag)
 	{
