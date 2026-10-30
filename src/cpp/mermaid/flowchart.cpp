@@ -14,7 +14,7 @@ namespace {
 
 using litehtml::svgutil::trim;
 
-enum class Shape { Rect, Rounded, Stadium, Subroutine, Cylinder, Circle, DoubleCircle, Diamond, Hexagon, Asymmetric, Trapezoid, TrapezoidAlt };
+enum class Shape { Rect, Rounded, Stadium, Subroutine, Cylinder, Circle, DoubleCircle, Diamond, Hexagon, Asymmetric, Trapezoid, TrapezoidAlt, Parallel, ParallelAlt };
 
 struct Style {
     std::string fill, stroke, color, stroke_width, dash;
@@ -167,7 +167,7 @@ struct Parser {
                 if (!std::strcmp(o.open, "[\\") && s.compare(end, 2, "\\]") == 0) parallelogram = true;
             }
             if (end == std::string::npos) continue;
-            shape = parallelogram ? Shape::Rect : o.shape;
+            shape = parallelogram ? (o.open[1] == '/' ? Shape::Parallel : Shape::ParallelAlt) : o.shape;
             has_shape = true;
             label = trim(text);
             i = end + close_len;
@@ -506,7 +506,9 @@ void size_nodes(Graph& g, const Text& text) {
             case Shape::Hexagon: w += h * 0.6; break;
             case Shape::Asymmetric: w += 14; break;
             case Shape::Trapezoid:
-            case Shape::TrapezoidAlt: w += 28; break;
+            case Shape::TrapezoidAlt:
+            case Shape::Parallel:
+            case Shape::ParallelAlt: w += 28; break;
             default: break;
         }
         n.w = std::ceil(w * 100) / 100;
@@ -573,6 +575,12 @@ void draw_node(std::string& out, const Theme& th, const Node& n, Pt c) {
             break;
         case Shape::TrapezoidAlt:
             out += "<polygon points=\"" + pts({{l, t}, {r, t}, {r - 14, b}, {l + 14, b}}) + "\"" + st + "/>\n";
+            break;
+        case Shape::Parallel:
+            out += "<polygon points=\"" + pts({{l + 14, t}, {r, t}, {r - 14, b}, {l, b}}) + "\"" + st + "/>\n";
+            break;
+        case Shape::ParallelAlt:
+            out += "<polygon points=\"" + pts({{l, t}, {r - 14, t}, {r, b}, {l + 14, b}}) + "\"" + st + "/>\n";
             break;
         case Shape::Cylinder: {
             double ry = std::min(10.0, n.h * 0.14), rx = n.w / 2;

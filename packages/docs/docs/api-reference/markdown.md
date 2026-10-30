@@ -201,11 +201,12 @@ graph LR
 | クラス図 | `classDiagram` |
 | ER 図 | `erDiagram` |
 | 棒・折れ線グラフ | `xychart-beta` |
+| 円グラフ | `pie` |
 
 - 色はテーマ（`light` / `dark`）に合わせて自動で決まります。
 - 図はページをまたいで分断されません。
 - `mermaid: false` を渡すと、通常のコードブロックとして表示します。
-- 未対応の図種（`pie`、`gantt` など）や構文エラーは、図の位置にエラー枠が表示されます。
+- 未対応の図種（`gantt`、`mindmap` など）や構文エラーは、図の位置にエラー枠が表示されます。
 
 ## KaTeX 数式組版 (`/markdown-math`)
 

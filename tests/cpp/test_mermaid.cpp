@@ -94,7 +94,7 @@ int main() {
     // --- errors ---
     {
         std::string svg, err;
-        check(!render("pie title x", svg, err) && has(err, "unsupported"), "error/unsupported");
+        check(!render("gantt title x", svg, err) && has(err, "unsupported"), "error/unsupported");
         check(!render("", svg, err), "error/empty");
         check(!render("graph TD\nA -->", svg, err), "error/dangling_edge");
     }
@@ -256,6 +256,22 @@ int main() {
         check(!render("xychart-beta\nbar [a, b]", e1, e2), "xychart/error_not_a_number");
         check(!render("xychart-beta horizontal\nbar [1]", e1, e2), "xychart/error_horizontal");
     }
+
+    // --- pie ---
+    {
+        std::string s = svg_of("pie showData\n  title Pets\n  \"Dogs\" : 386\n  \"Cats\" : 85.5\n  \"Rats\" : 15");
+        check(has(s, ">Pets<") && count(s, "class=\"slice\"") == 3, "pie/slices_and_title");
+        check(has(s, ">Dogs [386]<") && has(s, ">Cats [85.5]<"), "pie/show_data_legend");
+        check(has(s, ">79.3%<"), "pie/percent_label");
+        check(count(svg_of("pie\n\"A\" : 1"), "<circle") == 1, "pie/single_slice_is_a_circle");
+        check(has(svg_of("pie title \xe6\x97\xa5\xe6\x9c\xac\n\"\xe7\x8c\xab\" : 1\n\"b\" : 1"), ">\xe7\x8c\xab<"), "pie/cjk");
+        check(!has(s, "var(") && !has(s, "color-mix"), "pie/plain_colours_only");
+        std::string e1, e2;
+        check(!render("pie\n\"A\" : x", e1, e2), "pie/error_not_a_number");
+        check(!render("pie\n\"A\" : 0", e1, e2), "pie/error_zero_total");
+        check(!render("pie", e1, e2), "pie/error_empty");
+    }
+    check(has(svg_of("graph LR\nA[/para/]"), "<polygon") && has(svg_of("graph LR\nA[\\para\\]"), "<polygon"), "shape/parallelogram");
 
     std::printf("----\n%d passed, %d failed\n", g_pass, g_fail);
     return g_fail == 0 ? 0 : 1;

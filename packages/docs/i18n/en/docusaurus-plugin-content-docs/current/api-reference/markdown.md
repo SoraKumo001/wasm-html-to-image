@@ -201,11 +201,12 @@ graph LR
 | Class | `classDiagram` |
 | ER | `erDiagram` |
 | Bar / line chart | `xychart-beta` |
+| Pie chart | `pie` |
 
 - Colours follow the theme (`light` / `dark`).
 - A diagram is never split across pages.
 - Pass `mermaid: false` to show them as plain code blocks.
-- An unsupported type (`pie`, `gantt`, ...) or a syntax error shows an error box where the diagram would be.
+- An unsupported type (`gantt`, `mindmap`, ...) or a syntax error shows an error box where the diagram would be.
 
 ## KaTeX Math Typesetting (`/markdown-math`)
 
