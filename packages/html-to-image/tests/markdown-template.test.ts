@@ -42,7 +42,7 @@ describe("templates", () => {
   });
 
   it("an unknown template name is an error that lists the choices", () => {
-    expect(() => resolveTemplate("nope")).toThrow(/Choose from: default, report, book, paper, compact/);
+    expect(() => resolveTemplate("nope")).toThrow(/Choose from: default, report, proposal, book, paper, compact/);
     expect(() => markdownToHtml("x", { template: "nope" })).toThrow(/unknown template/);
   });
 
