@@ -152,6 +152,15 @@ int main() {
         check(lab.center[1].y - lab.center[0].y > plain.center[1].y - plain.center[0].y + 29, "layout/label_gets_room");
     }
     {
+        // labels in the same gap do not overlap
+        LayoutEdge e1 = edge(0, 1), e2 = edge(0, 2);
+        e1.label_w = e2.label_w = 80;
+        e1.label_h = e2.label_h = 24;
+        auto r = mermaid::layout_layered({box(60, 30), box(60, 30), box(60, 30)}, {e1, e2}, Direction::TD);
+        double dx = std::fabs(r.label_center[0].x - r.label_center[1].x), dy = std::fabs(r.label_center[0].y - r.label_center[1].y);
+        check(dx >= 80 || dy >= 24, "layout/labels_do_not_overlap");
+    }
+    {
         check(has(svg_of("graph TD\nA[\"a < b & c\"]"), "a &lt; b &amp; c"), "svg/escapes_text");
         std::string svg = svg_of("graph TD\nA-->B");
         check(!has(svg, "var(") && !has(svg, "color-mix"), "svg/plain_colours_only");

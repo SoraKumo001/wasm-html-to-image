@@ -303,6 +303,29 @@ LayoutResult layout_layered(const std::vector<LayoutNode>& nodes, const std::vec
         abs_pts[c.edge] = std::move(clean);
     }
 
+    // labels that sit in the same gap are pushed apart along the breadth so no two overlap
+    {
+        std::vector<size_t> order;
+        for (size_t e = 0; e < edges.size(); e++)
+            if (edges[e].label_w > 0) order.push_back(e);
+        auto wb = [&](size_t e) { return horiz ? edges[e].label_h : edges[e].label_w; };
+        auto hd = [&](size_t e) { return horiz ? edges[e].label_w : edges[e].label_h; };
+        for (int pass = 0; pass < 8; pass++) {
+            std::sort(order.begin(), order.end(), [&](size_t a, size_t b) { return abs_label[a].b < abs_label[b].b; });
+            bool moved = false;
+            for (size_t k = 1; k < order.size(); k++)
+                for (size_t j = 0; j < k; j++) {
+                    size_t a = order[j], b = order[k];
+                    if (std::fabs(abs_label[a].d - abs_label[b].d) >= (hd(a) + hd(b)) / 2 + 2) continue;
+                    double need = (wb(a) + wb(b)) / 2 + 4;
+                    if (abs_label[b].b - abs_label[a].b >= need) continue;
+                    abs_label[b].b = abs_label[a].b + need;
+                    moved = true;
+                }
+            if (!moved) break;
+        }
+    }
+
     // ── 9. to the requested direction ──
     auto to_xy = [&](double b, double d) -> Pt {
         switch (dir) {

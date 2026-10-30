@@ -284,14 +284,15 @@ bool render_class(const std::string& source, const Options& options, std::string
                 (r.dashed ? " stroke-dasharray=\"5 4\"" : "") + " stroke-linejoin=\"round\"/>\n";
         draw_mark(body, m_from, tip_from, d_from, th);
         draw_mark(body, m_to, tip_to, d_to, th);
-        auto card = [&](const std::string& s, Pt tip, Dir2 dd) {
+        auto card = [&](const std::string& s, Pt tip, Dir2 dd, Mark mk) {
+            double along = mark_length(mk) + 12;
             if (s.empty()) return;
             double nx = -dd.y, ny = dd.x;
-            body += "<text x=\"" + num(tip.x - dd.x * 16 + nx * 12) + "\" y=\"" + num(tip.y - dd.y * 16 + ny * 12 + 4) + "\" text-anchor=\"middle\" font-size=\"" +
+            body += "<text x=\"" + num(tip.x - dd.x * along + nx * 11) + "\" y=\"" + num(tip.y - dd.y * along + ny * 11 + 4) + "\" text-anchor=\"middle\" font-size=\"" +
                     num(kEdgeFont) + "\" font-family=\"" + esc(th.font) + "\" fill=\"" + th.text_sec + "\">" + esc(s) + "</text>\n";
         };
-        card(card_from, tip_from, d_from);
-        card(card_to, tip_to, d_to);
+        card(card_from, tip_from, d_from, m_from);
+        card(card_to, tip_to, d_to, m_to);
     }
     for (size_t k = 0; k < d.rels.size(); k++) {
         if (label_lines[k].empty()) continue;
