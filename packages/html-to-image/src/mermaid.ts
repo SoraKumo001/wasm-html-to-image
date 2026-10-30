@@ -26,6 +26,12 @@ export interface MermaidOptions {
   background?: string;
   /** The accent colour of the diagram (arrows, bars); the theme's derived colour when omitted. */
   accent?: string;
+  /**
+   * How much a broken source is forgiven. `"strict"` (default) reports every mistake; `"compat"` also accepts a
+   * keyword in the wrong case and unfinished `end` / `}` blocks; `"recover"` also fixes a misspelt keyword and skips
+   * lines the diagram cannot read. What was repaired is left in the SVG as a leading `<!-- recovered: ... -->` comment.
+   */
+  mode?: "strict" | "compat" | "recover";
 }
 
 /** What a render function takes: `render` of `wasm-html-to-image`, or `htmlToImage` with its module applied. */
@@ -40,11 +46,11 @@ export const MERMAID_THEMES = {
 const escapeHtml = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 /** The page that holds one diagram, for `render({ value, ... })`. */
-export function mermaidToHtml(source: string, options: Pick<MermaidOptions, "theme" | "padding" | "background" | "accent"> & { raster?: boolean } = {}): string {
+export function mermaidToHtml(source: string, options: Pick<MermaidOptions, "theme" | "padding" | "background" | "accent" | "mode"> & { raster?: boolean } = {}): string {
   const c = MERMAID_THEMES[options.theme ?? "light"];
   const padding = options.padding ?? 16;
   const background = options.background ?? (options.raster ? c.bg : "transparent");
-  const accent = options.accent ? ` --mermaid-accent: ${options.accent};` : "";
+  const accent = (options.accent ? ` --mermaid-accent: ${options.accent};` : "") + (options.mode && options.mode !== "strict" ? ` --mermaid-mode: ${options.mode};` : "");
   return (
     `<!doctype html><html><head><meta charset="utf-8"><style>` +
     `html, body { margin: 0; padding: 0; background: ${background}; }` +

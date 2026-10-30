@@ -171,6 +171,28 @@ int main() {
         check(has(svg_of("venn-beta\n  text x"), "ERROR"), "venn/text_without_owner");
     }
 
+    // --- modes: strict, compat, recover ---
+    {
+        std::string svg, err;
+        std::vector<std::string> warn;
+        mermaid::Options compat, recover;
+        compat.mode = mermaid::Options::Mode::Compat;
+        recover.mode = mermaid::Options::Mode::Recover;
+        check(!render("flowchrt TD\nA-->B", svg, err) && has(err, "did you mean `flowchart`"), "mode/strict_hint");
+        check(!render("Flowchart TD\nA-->B", svg, err), "mode/strict_case");
+        check(mermaid::render("Flowchart TD\nA-->B", compat, svg, err, &warn) && has(svg, "recovered") && warn.size() == 1, "mode/compat_case");
+        check(!mermaid::render("flowchrt TD\nA-->B", compat, svg, err), "mode/compat_no_typos");
+        check(mermaid::render("flowchrt TD\nA-->B", recover, svg, err) && count(svg, "class=\"edge\"") == 1, "mode/recover_typo");
+        check(mermaid::render("\xEF\xBB\xBFgraph TD\r\nA-->B\r\n", compat, svg, err), "mode/compat_bom_crlf");
+        check(!render("stateDiagram-v2\nstate X {\nA --> B", svg, err) && has(err, "unclosed"), "mode/strict_unclosed");
+        warn.clear();
+        check(mermaid::render("stateDiagram-v2\nstate X {\nA --> B", compat, svg, err, &warn) && has(svg, "class=\"composite\"") && has(warn[0], "missing `}`"), "mode/compat_closes_block");
+        warn.clear();
+        check(!mermaid::render("pie\n\"a\" : 1\nnonsense\n\"b\" : 2", compat, svg, err), "mode/compat_keeps_bad_line_an_error");
+        check(mermaid::render("pie\n\"a\" : 1\nnonsense\n\"b\" : 2", recover, svg, err, &warn) && count(svg, "class=\"slice\"") == 2 && has(warn[0], "skipped `nonsense`"), "mode/recover_skips_line");
+        check(!mermaid::render("zzzzzz\nA-->B", recover, svg, err) && has(err, "unsupported"), "mode/recover_gives_up");
+    }
+
     // --- errors ---
     {
         std::string svg, err;

@@ -16,6 +16,17 @@ describe("renderMermaid", () => {
     expect(Number(outer[2])).toBeGreaterThan(40);
   });
 
+  it("forgives a misspelt keyword only in recover mode", async () => {
+    const source = "flowchrt LR\n  A[開始] --> B[完了]";
+    const strict = await renderMermaid(source);
+    expect(strict.data).not.toContain("<polygon"); // the red error box, no arrow head
+    const compat = await renderMermaid(source, { mode: "compat" });
+    expect(compat.data).not.toContain("<polygon");
+    const recovered = await renderMermaid(source, { mode: "recover" });
+    expect(recovered.data).toContain("<polygon");
+    expect(recovered.data).toContain("開始");
+  });
+
   it("returns a PNG that is the size of the diagram, light and dark", async () => {
     const light = await renderMermaid(GRAPH, { format: "png" });
     const dark = await renderMermaid(GRAPH, { format: "png", theme: "dark" });

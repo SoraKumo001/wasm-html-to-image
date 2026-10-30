@@ -91,6 +91,8 @@ void el_mermaid::ensure_svg() {
     opt.surface = prop("--mermaid-surface");
     opt.border = prop("--mermaid-border");
     opt.allow_directives = prop("--mermaid-directives") == "on";
+    if (auto m = prop("--mermaid-mode"); m == "compat") opt.mode = mermaid::Options::Mode::Compat;
+    else if (m == "recover") opt.mode = mermaid::Options::Mode::Recover;
     if (skia) {
         SatoruContext* ctx = &skia->get_context();
         opt.measure = [ctx](const std::string& text, double size, int weight, bool mono) {

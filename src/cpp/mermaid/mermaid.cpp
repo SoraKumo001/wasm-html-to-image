@@ -1,5 +1,6 @@
 #include "mermaid/mermaid.h"
 
+#include <algorithm>
 #include <cctype>
 
 #include "mermaid/classdiagram.h"
@@ -146,7 +147,7 @@ std::string take_directives(std::string& source) {
 
 }  // namespace
 
-bool render(const std::string& input, const Options& base, std::string& svg, std::string& error) {
+static bool render_once(const std::string& input, const Options& base, std::string& svg, std::string& error) {
     std::string source = input;
     Options options = base;
     std::string config = take_frontmatter(source) + "\n" + take_directives(source);
@@ -192,6 +193,166 @@ bool render(const std::string& input, const Options& base, std::string& svg, std
     if (keyword == "pie")return render_pie(source, options, svg, error);
     if (keyword == "sequenceDiagram") return render_sequence(source, options, svg, error);
     error = keyword.empty() ? "empty diagram" : "unsupported diagram type: " + keyword;
+    return false;
+}
+
+namespace {
+
+const char* const kKeywords[] = {"graph", "flowchart", "stateDiagram", "stateDiagram-v2", "classDiagram", "erDiagram", "xychart-beta", "xychart", "journey", "quadrantChart", "gitGraph", "kanban",
+                                 "packet-beta", "sankey-beta", "requirementDiagram", "block-beta", "timeline", "mindmap", "gantt", "pie", "sequenceDiagram", "treemap-beta", "radar-beta", "info",
+                                 "architecture-beta", "C4Context", "C4Container", "C4Component", "C4Dynamic", "C4Deployment", "venn-beta", "ishikawa-beta", "treeView-beta"};
+
+std::string lower(std::string s) {
+    for (char& c : s) c = (char)std::tolower((unsigned char)c);
+    return s;
+}
+
+size_t edit_distance(const std::string& a, const std::string& b) {
+    std::vector<size_t> prev(b.size() + 1), cur(b.size() + 1);
+    for (size_t j = 0; j <= b.size(); j++) prev[j] = j;
+    for (size_t i = 1; i <= a.size(); i++) {
+        cur[0] = i;
+        for (size_t j = 1; j <= b.size(); j++) cur[j] = std::min({prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] == b[j - 1] ? 0 : 1)});
+        std::swap(prev, cur);
+    }
+    return prev[b.size()];
+}
+
+/// The known keyword nearest to @p word: a different case counts as a match, otherwise at most two edits
+/// (one for short words) and no tie. Empty when nothing fits.
+std::string nearest_keyword(const std::string& word, bool allow_typos) {
+    std::string lw = lower(word);
+    for (const char* k : kKeywords)
+        if (lower(k) == lw) return k;
+    if (!allow_typos) return "";
+    size_t limit = word.size() <= 5 ? 1 : 2, best = limit + 1;
+    std::string found;
+    bool tie = false;
+    for (const char* k : kKeywords) {
+        size_t d = edit_distance(lw, lower(k));
+        if (d < best) best = d, found = k, tie = false;
+        else if (d == best && found != k) tie = true;
+    }
+    return best <= limit && !tie ? found : "";
+}
+
+// Replaces the diagram keyword on the first meaningful line; false when there is none.
+bool replace_keyword(std::string& source, const std::string& from, const std::string& to) {
+    size_t i = 0;
+    while (i < source.size()) {
+        size_t e = source.find('\n', i);
+        size_t end = e == std::string::npos ? source.size() : e;
+        std::string line = litehtml::svgutil::trim(source.substr(i, end - i));
+        if (!line.empty() && line.compare(0, 2, "%%") != 0 && line.compare(0, 3, "---") != 0) {
+            size_t at = source.find(from, i);
+            if (at == std::string::npos || at >= end) return false;
+            source.replace(at, from.size(), to);
+            return true;
+        }
+        if (e == std::string::npos) break;
+        i = e + 1;
+    }
+    return false;
+}
+
+bool starts_with(const std::string& s, const char* p) { return s.compare(0, std::char_traits<char>::length(p), p) == 0; }
+
+// Drops the first line (after the keyword line) whose text is @p text.
+bool drop_line(std::string& source, const std::string& text) {
+    size_t i = 0;
+    int n = 0;
+    while (i <= source.size()) {
+        size_t e = source.find('\n', i);
+        size_t end = e == std::string::npos ? source.size() : e;
+        std::string line = litehtml::svgutil::trim(source.substr(i, end - i));
+        if (!line.empty() && line.compare(0, 2, "%%") != 0) n++;
+        if (n > 1 && line == text) {
+            source.erase(i, (e == std::string::npos ? source.size() : e + 1) - i);
+            return true;
+        }
+        if (e == std::string::npos) break;
+        i = e + 1;
+    }
+    return false;
+}
+
+}  // namespace
+
+bool render(const std::string& input, const Options& options, std::string& svg, std::string& error, std::vector<std::string>* warnings) {
+    std::string source = input;
+    if (options.mode != Options::Mode::Strict) {
+        if (source.compare(0, 3, "\xEF\xBB\xBF") == 0) source.erase(0, 3);
+        std::string out;
+        for (char c : source)
+            if (c != '\r') out += c;
+        source = out;
+    }
+    std::vector<std::string> notes;
+    bool tried_close = false;
+    for (int round = 0; round < 40; round++) {
+        if (render_once(source, options, svg, error)) {
+            if (!notes.empty()) {
+                std::string comment = "<!-- recovered:";
+                for (auto& n : notes) {
+                    std::string t = n;
+                    for (size_t p = t.find("--"); p != std::string::npos; p = t.find("--", p + 1)) t.replace(p, 2, "- ");
+                    comment += " " + t + ";";
+                }
+                comment += " -->\n";
+                size_t tag = svg.find('>');
+                if (tag != std::string::npos) svg.insert(tag + 1, "\n" + comment);
+                if (warnings) *warnings = notes;
+            }
+            return true;
+        }
+        if (starts_with(error, "unsupported diagram type: ")) {
+            std::string word = error.substr(26), fix = nearest_keyword(word, options.mode == Options::Mode::Recover);
+            if (!fix.empty() && options.mode != Options::Mode::Strict && replace_keyword(source, word, fix)) {
+                notes.push_back("`" + word + "` read as `" + fix + "`");
+                continue;
+            }
+            std::string hint = nearest_keyword(word, true);
+            if (!hint.empty()) error += " (did you mean `" + hint + "`?)";
+            return false;
+        }
+        if (options.mode == Options::Mode::Strict) return false;
+        if (!tried_close) {
+            tried_close = true;
+            bool closed = false;
+            for (const char* closer : {"end", "}"}) {
+                std::string trial = source;
+                for (int n = 1; n <= 3 && !closed; n++) {
+                    trial += std::string("\n") + closer;
+                    std::string t_svg, t_err;
+                    if (render_once(trial, options, t_svg, t_err)) {
+                        source = trial;
+                        notes.push_back("added " + std::to_string(n) + " missing `" + closer + "`");
+                        closed = true;
+                    }
+                }
+                if (closed) break;
+            }
+            if (closed) continue;
+        }
+        if (options.mode == Options::Mode::Recover) {
+            static const char* const kLinePrefixes[] = {"unrecognised line: ", "cannot parse: ", "unknown element in: ", "unknown service in: ", "an edge is `a:R -- L:b`: "};
+            bool dropped = false;
+            for (const char* p : kLinePrefixes) {
+                if (!starts_with(error, p)) continue;
+                std::string line = error.substr(std::char_traits<char>::length(p));
+                if (drop_line(source, line)) {
+                    notes.push_back("skipped `" + line + "`");
+                    dropped = true;
+                }
+                break;
+            }
+            if (dropped) {
+                tried_close = false;
+                continue;
+            }
+        }
+        return false;
+    }
     return false;
 }
 

@@ -10,6 +10,7 @@
 
 #include <functional>
 #include <string>
+#include <vector>
 
 namespace mermaid {
 
@@ -34,6 +35,12 @@ struct Options {
     /// Honour `%%{init: {...}}%%` and frontmatter `config:` (theme, themeVariables). Off by default: the page
     /// that places the diagram decides the colours. The frontmatter block itself is always skipped.
     bool allow_directives = false;
+    /// How much a broken source is forgiven.
+    ///  Strict:  none; the error says what was meant when the keyword is a near miss.
+    ///  Compat:  a BOM or CRLF, a keyword in the wrong case, and unfinished `end` / `}` blocks.
+    ///  Recover: also a misspelt keyword and lines the diagram cannot read (skipped, and reported).
+    enum class Mode { Strict, Compat, Recover };
+    Mode mode = Mode::Strict;
 };
 
 /// Estimated width of one line of text (no font access): narrow, regular, wide and full-width classes.
@@ -41,7 +48,9 @@ double estimate_text_width(const std::string& text, double size, int weight, boo
 
 /// Render @p source (the text between the code fences). Returns false and fills @p error for text that is
 /// not a supported diagram or does not parse; @p svg is then untouched.
-bool render(const std::string& source, const Options& options, std::string& svg, std::string& error);
+/// With a Compat or Recover mode, what was repaired is added to @p warnings (when given) and written into the
+/// SVG as a leading comment.
+bool render(const std::string& source, const Options& options, std::string& svg, std::string& error, std::vector<std::string>* warnings = nullptr);
 
 }  // namespace mermaid
 
