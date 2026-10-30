@@ -201,7 +201,7 @@ export function markdownStylesheet(
     : paged
       ? `@page { margin: ${padding}px; }\n`
       : "";
-  return `${pageRule}:root { --accent: ${accent ?? c.link}; }
+  return `${pageRule}:root { --accent: ${accent ?? c.link}; --surface: ${c.codeBg}; --border: ${c.border}; --muted: ${c.muted}; --text: ${c.fg}; --page: ${c.bg}; }
 html, body { margin: 0; padding: 0; background: ${c.bg}; }
 body { color: ${c.fg}; font-family: ${type.font}; font-size: ${type.size}px; line-height: ${type.lineHeight};${type.justify ? " text-align: justify;" : ""} }
 .markdown-body { padding: ${paged ? 0 : padding}px;${maxWidth ? ` max-width: ${maxWidth}px; margin: 0 auto;` : ""} }
@@ -220,18 +220,18 @@ body { color: ${c.fg}; font-family: ${type.font}; font-size: ${type.size}px; lin
 .markdown-body li > ul, .markdown-body li > ol { margin-top: 0.25em; margin-bottom: 0; }
 .markdown-body a { color: ${c.link}; text-decoration: none; }
 .markdown-body strong { font-weight: 600; }
-.markdown-body blockquote { padding: 0 1em; color: ${c.quote}; border-left: 4px solid ${c.border}; }
+.markdown-body blockquote { margin-left: 0; margin-right: 0; padding: 0 1em; color: ${c.quote}; border-left: 4px solid ${c.border}; }
 .markdown-body blockquote > *:last-child { margin-bottom: 0; }
 .markdown-body code { padding: 0.2em 0.4em; font-family: ${type.mono}; font-size: 85%; background: ${c.codeBg}; border-radius: ${type.radius}px; }
-.markdown-body pre { padding: 16px; overflow: hidden; font-size: 85%; line-height: 1.45; background: ${c.codeBg}; border-radius: ${type.radius}px; text-align: left; }
+.markdown-body pre { padding: 16px; overflow: hidden; white-space: pre-wrap; word-break: break-all; font-size: 85%; line-height: 1.45; background: ${c.codeBg}; border-radius: ${type.radius}px; text-align: left; }
 .markdown-body .diagram { margin: 0 0 16px; text-align: center; }
 .markdown-body .mermaid { display: inline-block; margin: 0; color: ${c.fg}; --mermaid-fg: ${c.fg}; --mermaid-bg: ${c.bg}; --mermaid-border: ${c.border}; --mermaid-surface: ${c.codeBg}; }
-.markdown-body pre code { padding: 0; font-size: 100%; background: transparent; white-space: pre; }
+.markdown-body pre code { padding: 0; font-size: 100%; background: transparent; white-space: pre-wrap; word-break: break-all; }
 .markdown-body hr { height: 0; margin: 24px 0; border: 0; border-top: 4px solid ${c.border}; }
 .markdown-body img { max-width: 100%; }
-.markdown-body table { border-collapse: collapse; }
+.markdown-body table { border-collapse: collapse;${type.wideTables ? " width: 100%;" : ""} }
 .markdown-body th, .markdown-body td { padding: 6px 13px; border: 1px solid ${c.border}; }
-.markdown-body th { font-weight: 600; }
+.markdown-body th { font-weight: 600;${type.wideTables ? " white-space: nowrap;" : ""} }
 .markdown-body tr:nth-child(2n) { background: ${c.codeBg}; }
 .markdown-body input[type="checkbox"] { margin: 0 0.4em 0 -1.4em; }
 .hljs-keyword, .hljs-doctag, .hljs-template-tag, .hljs-type, .hljs-meta { color: ${c.keyword}; }
@@ -277,8 +277,8 @@ function coverHtml(settings: DocumentSettings): string {
 const COVER_CSS = `.cover { margin: 40mm 0 0; break-after: page; }
 .cover-logo { display: block; max-height: 22mm; max-width: 60mm; margin-bottom: 14mm; }
 .cover-title { margin: 0; font-size: 2.6em; font-weight: 700; line-height: 1.25; }
-.cover-subtitle { margin: 0.6em 0 0; font-size: 1.25em; color: #6b7280; }
-.cover-meta { margin: 3em 0 0; color: #6b7280; }
+.cover-subtitle { margin: 0.6em 0 0; font-size: 1.25em; color: var(--muted, #6b7280); }
+.cover-meta { margin: 3em 0 0; color: var(--muted, #6b7280); }
 .cover-meta span + span { margin-left: 1.5em; }
 `;
 

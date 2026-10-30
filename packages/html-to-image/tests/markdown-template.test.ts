@@ -246,3 +246,37 @@ describe("the template from the CLI", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 });
+
+describe("template colours and code, tables", () => {
+  const css = (template: string, theme: "light" | "dark" = "light") => style(markdownToDocument("---\ntitle: T\n---\n# H", { template, theme, paged: true }).html);
+
+  it("hands the page colours to templates as variables, so a dark theme reaches table stripes and quotes", () => {
+    for (const theme of ["light", "dark"] as const) {
+      const s = css("proposal", theme);
+      expect(s).toMatch(/--surface: #[0-9a-f]{6}/i);
+      expect(s).toContain("background: var(--surface");
+    }
+    // the dark palette's surface is not the light one
+    expect(css("proposal", "dark").match(/--surface: (#[0-9a-f]{6})/i)![1]).not.toBe(css("proposal").match(/--surface: (#[0-9a-f]{6})/i)![1]);
+  });
+
+  it("keeps hard-coded light colours out of the bundled templates", () => {
+    for (const [name, t] of Object.entries(TEMPLATES)) expect(t.css ?? "", name).not.toMatch(/background:\s*#(?:f1f5f9|fff)/i);
+  });
+
+  it("wraps long code lines instead of cutting them", () => {
+    const s = css("default");
+    expect(s).toMatch(/\.markdown-body pre \{[^}]*white-space: pre-wrap/);
+    expect(s).toMatch(/\.markdown-body pre code \{[^}]*white-space: pre-wrap/);
+  });
+
+  it("gives report, proposal, book and paper full-width tables with one-line headers, the others not", () => {
+    for (const name of ["report", "proposal", "book", "paper"]) expect(css(name), name).toMatch(/table \{[^}]*width: 100%/);
+    for (const name of ["default", "compact"]) expect(css(name), name).not.toMatch(/table \{[^}]*width: 100%/);
+    expect(css("report")).toMatch(/\.markdown-body th \{[^}]*white-space: nowrap/);
+  });
+
+  it("does not indent block quotes", () => {
+    expect(css("default")).toMatch(/blockquote \{ margin-left: 0; margin-right: 0;/);
+  });
+});
