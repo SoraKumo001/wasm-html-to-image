@@ -1,13 +1,22 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { MERMAID_THEMES, mermaidToHtml, renderMermaid, type MermaidOptions } from "wasm-html-to-image/workers";
 import { MERMAID_SAMPLES, type MermaidSample } from "./mermaidSamples";
+import useJxlSupport from "./useJxlSupport";
 
 const STORAGE_KEY = "mermaid-playground-text";
-const FORMATS = ["svg", "png", "webp", "jpeg", "pdf"] as const;
+const FORMATS = ["svg", "png", "webp", "jpeg", "avif", "jxl", "pdf"] as const;
 type Format = (typeof FORMATS)[number];
 type Mode = "strict" | "compat" | "recover";
 
-const MIME: Record<Format, string> = { svg: "image/svg+xml", png: "image/png", webp: "image/webp", jpeg: "image/jpeg", pdf: "application/pdf" };
+const MIME: Record<Format, string> = {
+  svg: "image/svg+xml",
+  png: "image/png",
+  webp: "image/webp",
+  jpeg: "image/jpeg",
+  avif: "image/avif",
+  jxl: "image/jxl",
+  pdf: "application/pdf",
+};
 
 interface Panel {
   theme: string;
@@ -87,7 +96,8 @@ const GROUPS: MermaidSample["group"][] = ["Diagrams", "Charts", "Structure", "Fe
 export const MermaidPlayground: React.FC = () => {
   const [text, setText] = useState(loadText);
   const [panel, setPanel] = useState<Panel>(() => panelFromParams(new URLSearchParams(window.location.search)));
-  const [view, setView] = useState<"editor" | "gallery">("editor");
+  const [view, setView] = useState<"editor" | "gallery">(() => (new URLSearchParams(window.location.search).get("view") === "gallery" ? "gallery" : "editor"));
+  const jxlSupport = useJxlSupport();
   const [out, setOut] = useState<Output | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -102,8 +112,9 @@ export const MermaidPlayground: React.FC = () => {
     const params = new URLSearchParams(window.location.search);
     for (const k of [...params.keys()]) if (k !== "mode") params.delete(k);
     for (const [k, v] of panelToParams(panel)) params.set(k, v);
+    if (view === "gallery") params.set("view", "gallery");
     window.history.replaceState({}, "", `${window.location.pathname}?${params.toString()}`);
-  }, [panel]);
+  }, [panel, view]);
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, text);
@@ -341,6 +352,8 @@ export const MermaidPlayground: React.FC = () => {
               {out ? (
                 out.format === "pdf" ? (
                   <embed src={out.url} type="application/pdf" className="h-[28rem] w-full border-0" />
+                ) : out.format === "jxl" && jxlSupport === false ? (
+                  <p className="text-sm text-gray-500">This browser cannot show JXL (Safari can). Use Download to get the file.</p>
                 ) : (
                   <img src={out.url} alt="diagram" onLoad={(e) => setSize({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })} className="max-w-none" />
                 )

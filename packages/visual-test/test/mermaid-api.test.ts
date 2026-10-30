@@ -25,6 +25,14 @@ describe("renderMermaid", () => {
     expect(svg).not.toContain("accTitle");
   });
 
+  it("encodes AVIF and JXL (the playground offers both)", async () => {
+    const avif = (await renderMermaid(GRAPH, { format: "avif" })).data as Uint8Array;
+    expect(Buffer.from(avif.subarray(4, 12)).toString("latin1")).toBe("ftypavif");
+    const jxl = (await renderMermaid(GRAPH, { format: "jxl" })).data as Uint8Array;
+    const naked = jxl[0] === 0xff && jxl[1] === 0x0a; // a bare codestream, or the ISO box container
+    expect(naked || Buffer.from(jxl.subarray(4, 8)).toString("latin1") === "JXL ").toBe(true);
+  });
+
   it("takes a named theme: its background on the page and its accent on the arrows", async () => {
     const nord = PNG.sync.read(Buffer.from((await renderMermaid(GRAPH, { format: "png", theme: "nord" })).data));
     expect([nord.data[0], nord.data[1], nord.data[2]]).toEqual([0x2e, 0x34, 0x40]);
