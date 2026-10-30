@@ -338,6 +338,7 @@ class SatoruContext {
                                                  int stretch = 100);
     bool get_image_size(const std::string &url, int &w, int &h);
     bool get_image_ratio_only(const std::string &url);
+    bool get_image_no_ratio(const std::string &url);
 
     void set_last_png(sk_sp<SkData> png) { m_lastPng = std::move(png); }
     const sk_sp<SkData> &get_last_png() const { return m_lastPng; }

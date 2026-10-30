@@ -68,14 +68,17 @@ void SatoruContext::loadImageFromData(const char *name, const uint8_t *data, siz
                                       const char *original_url) {
     int width = 0, height = 0;
     bool ratio_only = false;
+    bool no_ratio = false;
     auto image = html_to_image::ImageDecoder::decode_first(data, size, width, height,
-                                                            fontManager.getFontMgr(), &ratio_only);
+                                                            fontManager.getFontMgr(), &ratio_only,
+                                                            &no_ratio);
     if (image) {
         image_info info;
         info.data_url = original_url ? original_url : "";
         info.width = width;
         info.height = height;
         info.ratio_only = ratio_only;
+        info.no_ratio = no_ratio;
         info.skImage = image;
         imageCache[name] = info;
         m_imageVersion++;
@@ -146,4 +149,9 @@ bool SatoruContext::get_image_size(const std::string &url, int &w, int &h) {
 bool SatoruContext::get_image_ratio_only(const std::string &url) {
     auto it = imageCache.find(url);
     return it != imageCache.end() && it->second.ratio_only;
+}
+
+bool SatoruContext::get_image_no_ratio(const std::string &url) {
+    auto it = imageCache.find(url);
+    return it != imageCache.end() && it->second.no_ratio;
 }

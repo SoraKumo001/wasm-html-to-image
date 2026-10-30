@@ -26,6 +26,9 @@ struct DecodeResult {
     // SVG with a viewBox but no absolute width/height: the only intrinsic
     // property is the aspect ratio (width/height above are a raster size).
     bool ratio_only = false;
+    // SVG with neither absolute dimensions nor a viewBox: no intrinsic
+    // size and no intrinsic ratio (width/height are the raster size).
+    bool no_ratio = false;
 
     bool ok() const { return !frames.empty(); }
 };
@@ -45,7 +48,8 @@ class ImageDecoder {
     // out_width/out_height に先頭フレーム寸法を格納する。
     static sk_sp<SkImage> decode_first(const uint8_t* data, size_t size, int& out_width,
                                        int& out_height, sk_sp<SkFontMgr> font_mgr = nullptr,
-                                       bool* out_ratio_only = nullptr);
+                                       bool* out_ratio_only = nullptr,
+                                       bool* out_no_ratio = nullptr);
 
    private:
     static bool decode_jxl(const uint8_t* data, size_t size, DecodeResult& result);

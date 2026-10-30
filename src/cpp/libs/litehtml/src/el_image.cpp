@@ -26,6 +26,15 @@ bool litehtml::el_image::is_ratio_only_replaced() const
 	return get_document()->container()->get_image_ratio_only(m_src.c_str(), nullptr);
 }
 
+bool litehtml::el_image::is_no_ratio_replaced() const
+{
+	// An <img> whose source is an SVG with neither absolute dimensions nor
+	// a viewBox: no intrinsic size and no intrinsic ratio; each axis falls
+	// back to its own default object size (300 / 150) instead of a
+	// transferred size.
+	return get_document()->container()->get_image_no_ratio(m_src.c_str(), nullptr);
+}
+
 namespace {
 
 // One srcset candidate: its URL plus the width (w) or density (x)
