@@ -118,3 +118,19 @@ architecture-beta
   server:R -- L:db
   server:B -- T:disk
 ```
+
+## C4 図
+
+```mermaid
+C4Context
+  title ネットバンキングのシステム構成
+  Person(customer, "顧客", "口座を持つ個人")
+  Enterprise_Boundary(bank, "銀行") {
+    System(banking, "ネットバンキング", "残高照会と振込")
+    SystemDb(ledger, "勘定系DB", "口座と取引")
+  }
+  System_Ext(mail, "メールシステム", "通知メールを送る")
+  Rel(customer, banking, "利用する", "HTTPS")
+  Rel(banking, ledger, "読み書きする")
+  Rel(banking, mail, "通知を依頼する")
+```

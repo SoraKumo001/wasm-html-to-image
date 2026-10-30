@@ -213,6 +213,7 @@ graph LR
 | サンキー図 | `sankey-beta` |
 | 要求図 | `requirementDiagram` |
 | ブロック図 | `block-beta`（入れ子のブロックは未対応） |
+| C4 図 | `C4Context` / `C4Container` / `C4Component` / `C4Dynamic` / `C4Deployment` |
 | アーキテクチャ図 | `architecture-beta` |
 | ツリーマップ | `treemap-beta` |
 | レーダーチャート | `radar-beta` |
@@ -221,7 +222,7 @@ graph LR
 - 色はテーマ（`light` / `dark`）に合わせて自動で決まります。
 - 図はページをまたいで分断されません。
 - `mermaid: false` を渡すと、通常のコードブロックとして表示します。
-- 未対応の図種（`C4`、`zenuml` など）や構文エラーは、図の位置にエラー枠が表示されます。
+- 未対応の図種（`zenuml` など）や構文エラーは、図の位置にエラー枠が表示されます。
 
 ### JavaScript から SVG・画像として取得する
 

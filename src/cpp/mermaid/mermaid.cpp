@@ -23,6 +23,7 @@
 #include "mermaid/radar.h"
 #include "mermaid/info.h"
 #include "mermaid/architecture.h"
+#include "mermaid/c4.h"
 #include "mermaid/timeline.h"
 #include "mermaid/xychart.h"
 
@@ -178,6 +179,7 @@ bool render(const std::string& input, const Options& base, std::string& svg, std
     if (keyword == "radar-beta" || keyword == "radar") return render_radar(source, options, svg, error);
     if (keyword == "info") return render_info(source, options, svg, error);
     if (keyword == "architecture-beta" || keyword == "architecture") return render_architecture(source, options, svg, error);
+    if (keyword == "C4Context" || keyword == "C4Container" || keyword == "C4Component" || keyword == "C4Dynamic" || keyword == "C4Deployment") return render_c4(source, options, svg, error);
     if (keyword == "timeline") return render_timeline(source, options, svg, error);
     if (keyword == "mindmap")return render_mindmap(source, options, svg, error);
     if (keyword == "gantt")return render_gantt(source, options, svg, error);

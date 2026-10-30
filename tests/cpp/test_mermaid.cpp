@@ -140,6 +140,19 @@ int main() {
         check(has(svg_of("architecture-beta\nservice a[A]\nservice b[B]"), "class=\"node\""), "architecture/no_edges");
     }
 
+    // --- C4 ---
+    {
+        std::string c4 = svg_of("C4Context\ntitle Banking\nPerson(cust, \"Customer\", \"A customer, with a, comma\")\nEnterprise_Boundary(b0, \"Bank\") {\nSystem(sys, \"Internet Banking\", \"Lets customers pay\")\nSystemDb(db, \"Ledger\")\n}\nSystem_Ext(mail, \"Mail\")\nRel(cust, sys, \"Uses\", \"HTTPS\")\nRel(sys, db, \"Reads\")\nBiRel(sys, mail, \"Sends\")\nUpdateRelStyle(cust, sys, $textColor=\"red\")");
+        check(count(c4, "class=\"node\"") == 4 && count(c4, "class=\"boundary\"") == 1 && count(c4, "class=\"edge\"") == 3, "c4/items");
+        check(has(c4, ">Internet Banking<") && has(c4, ">[Person]<") && has(c4, ">[Software System]<") && has(c4, ">[HTTPS]<") && has(c4, ">Banking<"), "c4/labels");
+        check(has(c4, "[Bank]") == false && has(c4, ">[ENTERPRISE]<"), "c4/boundary_type");
+        check(has(svg_of("C4Container\nContainer(web, \"Web\", \"React\", \"UI\")\nContainerDb(d, \"DB\", \"Postgres\")\nRel(web, d, \"Reads\")"), ">[Container: React]<"), "c4/container_techn");
+        check(has(svg_of("C4Dynamic\nContainer(a, \"A\")\nContainer(b, \"B\")\nRelIndex(1, a, b, \"call\")"), ">1: call<"), "c4/dynamic_index");
+        check(has(svg_of("C4Context\nSystem(a, \"A\")\nRel(a, nope, \"x\")"), "ERROR"), "c4/unknown_element");
+        check(has(svg_of("C4Context\nEnterprise_Boundary(b, \"B\") {\nSystem(a, \"A\")"), "ERROR"), "c4/unclosed_boundary");
+        check(has(svg_of("C4Context\nWidget(a, \"A\")"), "ERROR"), "c4/unknown_kind");
+    }
+
     // --- errors ---
     {
         std::string svg, err;

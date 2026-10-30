@@ -69,7 +69,8 @@ add_library(mermaid_core STATIC
     "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/mermaid/treemap.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/mermaid/radar.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/mermaid/info.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/mermaid/architecture.cpp")
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/mermaid/architecture.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/mermaid/c4.cpp")
 target_include_directories(mermaid_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp")
 target_compile_features(mermaid_core PUBLIC cxx_std_20)
 if(MSVC)
