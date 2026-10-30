@@ -9837,3 +9837,70 @@ describe("P0-85 a grid item's percentage height resolves at final placement", ()
     expect(Math.round(t.h)).toBe(51);
   });
 });
+
+describe("P0-86 an SVG <img> with no dimensions and no viewBox uses the default object size, with no ratio transfer", () => {
+  const page = async (body: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 800,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as any);
+    return layout;
+  };
+  const NODIM = `data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Crect%20width%3D%2210%22%20height%3D%2210%22%20fill%3D%22%2369c%22%2F%3E%3C%2Fsvg%3E`;
+  it("both axes auto: 300x150 (not the 512x512 raster fallback)", async () => {
+    const boxes = await page(`<img id="t" src="${NODIM}">`);
+    const t = boxes.find((b: any) => b.i === "t");
+    expect(Math.round(t.w)).toBe(300);
+    expect(Math.round(t.h)).toBe(150);
+  });
+  it("width specified: the height stays the default 150 (no intrinsic ratio to transfer)", async () => {
+    const boxes = await page(`<img id="t" style="width:100px" src="${NODIM}">`);
+    const t = boxes.find((b: any) => b.i === "t");
+    expect(Math.round(t.w)).toBe(100);
+    expect(Math.round(t.h)).toBe(150);
+  });
+  it("height specified: the width stays the default 300", async () => {
+    const boxes = await page(`<img id="t" style="height:100px" src="${NODIM}">`);
+    const t = boxes.find((b: any) => b.i === "t");
+    expect(Math.round(t.w)).toBe(300);
+    expect(Math.round(t.h)).toBe(100);
+  });
+});
+
+describe("P0-87 cascade order between a var() shorthand and later longhand declarations", () => {
+  const page = async (css: string, cls: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>:root{--spacing:0.25rem}${css}</style></head><body><div id="t" class="${cls}"></div></body></html>`,
+      width: 800,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as any);
+    return layout;
+  };
+  const P6 = `.p-6{padding:calc(var(--spacing) * 6)}`;
+  const PB10 = `.pb-10{padding-bottom:calc(var(--spacing) * 10)}`;
+  it("a preceding universal padding rule does not make the shorthand clobber the later longhand", async () => {
+    const boxes = await page(`*{padding:0}${P6}${PB10}`, "p-6 pb-10");
+    const t = boxes.find((b: any) => b.i === "t");
+    expect(Math.round(t.h)).toBe(64);
+  });
+  it("a later plain shorthand legitimately overrides an earlier var() shorthand", async () => {
+    const boxes = await page(`.z{padding:0}${P6}`, "z p-6");
+    const t = boxes.find((b: any) => b.i === "t");
+    expect(Math.round(t.h)).toBe(48);
+  });
+  it("an earlier var() shorthand does not override a later plain shorthand", async () => {
+    const boxes = await page(`${P6}.z{padding:0}`, "p-6 z");
+    const t = boxes.find((b: any) => b.i === "t");
+    expect(Math.round(t.h)).toBe(0);
+  });
+  it("a shorthand after the longhand wins (source order), even with a universal rule present", async () => {
+    const boxes = await page(`*{padding:0}${PB10}${P6}`, "p-6 pb-10");
+    const t = boxes.find((b: any) => b.i === "t");
+    expect(Math.round(t.h)).toBe(48);
+  });
+});
