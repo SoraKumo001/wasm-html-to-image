@@ -210,7 +210,7 @@ export const TEMPLATES: Record<string, MarkdownTemplate> = {
 .markdown-body th { color: #ffffff; background: var(--accent, #0f766e); }
 .markdown-body tr:nth-child(2n) { background: #f1f5f9; }
 .markdown-body blockquote { padding: 10px 16px; border-left: 4px solid var(--accent, #0f766e); background: #f1f5f9; }
-.cover { margin: 70mm 0 0; padding: 12mm 0 12mm 14px; border-left: 8px solid var(--accent, #0f766e); }`,
+.cover { margin: 70mm 0 0; padding: 0 0 0 14px; border-left: 8px solid var(--accent, #0f766e); }`,
   },
 
   book: {
