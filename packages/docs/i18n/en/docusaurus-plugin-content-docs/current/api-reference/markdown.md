@@ -244,14 +244,14 @@ const { data: png } = await renderMermaid("graph LR\n  A --> B", {
 | Option | Default | Description |
 | :--- | :--- | :--- |
 | `format` | `"svg"` | Output format: a string for `"svg"`, a `Uint8Array` otherwise |
-| `theme` | `"light"` | Colour scheme |
+| `theme` | `"light"` | Colour scheme: `light`, `dark`, `neutral`, `forest`, `nord`, `dracula`, `solarized-light`, `solarized-dark`, `rose-pine`, `sepia` |
 | `padding` | `16` | Space around the diagram (px) |
 | `width` | diagram width + padding | Image width (px) |
 | `background` | transparent for SVG, the theme background for images | Page background (a CSS colour) |
 | `accent` | derived from the theme | Colour of arrows and bars |
 | `mode` | `"strict"` | How much a broken source is forgiven. `"compat"` accepts a keyword in the wrong case, a BOM or CRLF, and unfinished `end` / `}` blocks; `"recover"` also fixes a misspelt keyword and skips lines the diagram cannot read |
 
-Even in `strict` mode, a misspelt diagram keyword gets a "did you mean `flowchart`?" hint in the error box. From page CSS, use `--mermaid-mode: compat` (or `recover`).
+Even in `strict` mode, a misspelt diagram keyword gets a "did you mean `flowchart`?" hint in the error box. From page CSS, pick a theme with `--mermaid-theme: nord` (single `--mermaid-bg`-style colours are applied on top of it) and the mode with `--mermaid-mode: compat` (or `recover`).
 
 On the Workers entries (`/workerd`, `/edge-light`) use `renderMermaidWith((options) => render(options, wasm), source, options)`. `mermaidToHtml(source, options)` returns the HTML page that holds one diagram.
 

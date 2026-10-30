@@ -83,13 +83,18 @@ void el_mermaid::ensure_svg() {
         return svgutil::trim(get_repr(toks, 0, -1, true));
     };
     opt.fg = color_to_string(css().get_color());
-    if (auto v = prop("--mermaid-fg"); !v.empty()) opt.fg = v;
-    if (auto v = prop("--mermaid-bg"); !v.empty()) opt.bg = v;
-    opt.accent = prop("--mermaid-accent");
-    opt.line = prop("--mermaid-line");
-    opt.muted = prop("--mermaid-muted");
-    opt.surface = prop("--mermaid-surface");
-    opt.border = prop("--mermaid-border");
+    // a named theme first, then every colour the page sets itself on top of it
+    if (auto t = prop("--mermaid-theme"); !t.empty()) mermaid::apply_theme(t, opt);
+    auto over = [&](const char* name, std::string& dst) {
+        if (auto v = prop(name); !v.empty()) dst = v;
+    };
+    over("--mermaid-fg", opt.fg);
+    over("--mermaid-bg", opt.bg);
+    over("--mermaid-accent", opt.accent);
+    over("--mermaid-line", opt.line);
+    over("--mermaid-muted", opt.muted);
+    over("--mermaid-surface", opt.surface);
+    over("--mermaid-border", opt.border);
     opt.allow_directives = prop("--mermaid-directives") == "on";
     if (auto m = prop("--mermaid-mode"); m == "compat") opt.mode = mermaid::Options::Mode::Compat;
     else if (m == "recover") opt.mode = mermaid::Options::Mode::Recover;

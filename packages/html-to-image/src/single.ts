@@ -59,7 +59,7 @@ export async function render(
   return htmlToImage(await getDefaultModule(), await applyJavaScript(options));
 }
 
-export type { MermaidOptions, RenderMermaid } from "./mermaid.js";
+export type { MermaidOptions, MermaidTheme, RenderMermaid } from "./mermaid.js";
 export { MERMAID_THEMES, mermaidToHtml, renderMermaidWith } from "./mermaid.js";
 /** Render a Mermaid diagram as SVG text (default) or an image, sized to the diagram. */
 export const renderMermaid: RenderMermaid = bindRenderMermaid((options) => render(options));

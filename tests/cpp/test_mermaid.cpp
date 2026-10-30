@@ -171,6 +171,22 @@ int main() {
         check(has(svg_of("venn-beta\n  text x"), "ERROR"), "venn/text_without_owner");
     }
 
+    // --- named themes ---
+    {
+        std::string svg, err;
+        mermaid::Options o;
+        check(mermaid::apply_theme("Nord", o) && o.bg == "#2e3440" && o.accent == "#88c0d0", "theme/nord");
+        check(mermaid::apply_theme("solarized_dark", o) && o.bg == "#002b36", "theme/underscore_name");
+        check(mermaid::apply_theme("default", o) && o.bg == "#ffffff", "theme/default_is_light");
+        mermaid::Options before = o;
+        check(!mermaid::apply_theme("no-such-theme", o) && o.bg == before.bg, "theme/unknown_leaves_options");
+        check(mermaid::theme_names().size() >= 10, "theme/names");
+        mermaid::Options on;
+        on.allow_directives = true;
+        check(mermaid::render("%%{init: {\"theme\":\"dracula\"}}%%\ngraph TD\nA-->B", on, svg, err) && has(svg, "#343746"), "theme/init_directive_preset");
+        check(mermaid::render("%%{init: {\"theme\":\"dracula\",\"themeVariables\":{\"primaryColor\":\"#abcdef\"}}}%%\ngraph TD\nA-->B", on, svg, err) && has(svg, "#abcdef") && !has(svg, "#343746"), "theme/variables_override_preset");
+    }
+
     // --- modes: strict, compat, recover ---
     {
         std::string svg, err;

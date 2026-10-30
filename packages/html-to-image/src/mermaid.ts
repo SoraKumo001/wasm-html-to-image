@@ -14,8 +14,8 @@
 import type { HtmlToImageOptions, OutputFormat, RenderResult } from "./core.js";
 
 export interface MermaidOptions {
-  /** Colour scheme. Defaults to `"light"`. */
-  theme?: "light" | "dark";
+  /** Colour scheme: a key of {@link MERMAID_THEMES}. Defaults to `"light"`. */
+  theme?: MermaidTheme;
   /** Output format. Defaults to `"svg"` (a string); `"png"`, `"webp"`, `"pdf"`, ... give bytes. */
   format?: OutputFormat;
   /** Space around the diagram in px. Defaults to 16. */
@@ -41,16 +41,30 @@ export type RenderFn = (options: HtmlToImageOptions) => Promise<RenderResult<Uin
 export const MERMAID_THEMES = {
   light: { fg: "#1f2328", bg: "#ffffff", border: "#d1d9e0", surface: "#f6f8fa" },
   dark: { fg: "#e6edf3", bg: "#0d1117", border: "#3d444d", surface: "#151b23" },
+  neutral: { fg: "#222222", bg: "#ffffff", border: "#999999", surface: "#eeeeee" },
+  forest: { fg: "#1b3a2a", bg: "#ffffff", border: "#8fbf9f", surface: "#e8f5ec", accent: "#2e8b57", line: "#2e8b57" },
+  nord: { fg: "#eceff4", bg: "#2e3440", border: "#4c566a", surface: "#3b4252", accent: "#88c0d0", line: "#81a1c1" },
+  dracula: { fg: "#f8f8f2", bg: "#282a36", border: "#44475a", surface: "#343746", accent: "#bd93f9", line: "#6272a4" },
+  "solarized-light": { fg: "#586e75", bg: "#fdf6e3", border: "#d3cbb7", surface: "#eee8d5", accent: "#268bd2", line: "#93a1a1" },
+  "solarized-dark": { fg: "#93a1a1", bg: "#002b36", border: "#0f4b5b", surface: "#073642", accent: "#2aa198", line: "#586e75" },
+  "rose-pine": { fg: "#e0def4", bg: "#191724", border: "#403d52", surface: "#1f1d2e", accent: "#c4a7e7", line: "#6e6a86" },
+  sepia: { fg: "#433422", bg: "#f4ecd8", border: "#d6c7a1", surface: "#ebe0c4", accent: "#b45f06", line: "#8a7a5c" },
 } as const;
+
+export type MermaidTheme = keyof typeof MERMAID_THEMES;
+
+type ThemeColours = { fg: string; bg: string; border: string; surface: string; accent?: string; line?: string };
 
 const escapeHtml = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 /** The page that holds one diagram, for `render({ value, ... })`. */
 export function mermaidToHtml(source: string, options: Pick<MermaidOptions, "theme" | "padding" | "background" | "accent" | "mode"> & { raster?: boolean } = {}): string {
-  const c = MERMAID_THEMES[options.theme ?? "light"];
+  const c: ThemeColours = MERMAID_THEMES[options.theme ?? "light"];
+  if (!c) throw new Error(`unknown mermaid theme "${options.theme}". Choose from: ${Object.keys(MERMAID_THEMES).join(", ")}`);
   const padding = options.padding ?? 16;
   const background = options.background ?? (options.raster ? c.bg : "transparent");
-  const accent = (options.accent ? ` --mermaid-accent: ${options.accent};` : "") + (options.mode && options.mode !== "strict" ? ` --mermaid-mode: ${options.mode};` : "");
+  const accentColour = options.accent ?? c.accent;
+  const accent = (accentColour ? ` --mermaid-accent: ${accentColour};` : "") + (c.line ? ` --mermaid-line: ${c.line};` : "") + (options.mode && options.mode !== "strict" ? ` --mermaid-mode: ${options.mode};` : "");
   return (
     `<!doctype html><html><head><meta charset="utf-8"><style>` +
     `html, body { margin: 0; padding: 0; background: ${background}; }` +

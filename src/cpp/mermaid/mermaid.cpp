@@ -105,14 +105,7 @@ std::string find_value(const std::string& text, const std::string& key) {
 }
 
 void apply_config(const std::string& cfg, Options& o) {
-    std::string theme = find_value(cfg, "theme");
-    if (theme == "dark") {
-        o.fg = "#e6edf3"; o.bg = "#0d1117"; o.border = "#3d444d"; o.surface = "#151b23"; o.line = ""; o.muted = "";
-    } else if (theme == "forest") {
-        o.fg = "#1b3a2a"; o.bg = "#ffffff"; o.border = "#8fbf9f"; o.surface = "#e8f5ec"; o.accent = "#2e8b57"; o.line = "#2e8b57"; o.muted = "";
-    } else if (theme == "neutral") {
-        o.fg = "#222222"; o.bg = "#ffffff"; o.border = "#999999"; o.surface = "#eeeeee"; o.line = ""; o.muted = "";
-    }
+    apply_theme(find_value(cfg, "theme"), o);
     auto set = [&](const char* key, std::string& dst) {
         std::string v = find_value(cfg, key);
         if (!v.empty()) dst = v;
@@ -352,6 +345,57 @@ bool render(const std::string& input, const Options& options, std::string& svg, 
             }
         }
         return false;
+    }
+    return false;
+}
+
+namespace {
+
+struct Preset {
+    const char* name;
+    const char* fg;
+    const char* bg;
+    const char* border;
+    const char* surface;
+    const char* accent;  // empty: derived from fg and bg
+    const char* line;
+};
+
+const Preset kPresets[] = {
+    {"light", "#1f2328", "#ffffff", "", "", "", ""},
+    {"dark", "#e6edf3", "#0d1117", "#3d444d", "#151b23", "", ""},
+    {"neutral", "#222222", "#ffffff", "#999999", "#eeeeee", "", ""},
+    {"forest", "#1b3a2a", "#ffffff", "#8fbf9f", "#e8f5ec", "#2e8b57", "#2e8b57"},
+    {"nord", "#eceff4", "#2e3440", "#4c566a", "#3b4252", "#88c0d0", "#81a1c1"},
+    {"dracula", "#f8f8f2", "#282a36", "#44475a", "#343746", "#bd93f9", "#6272a4"},
+    {"solarized-light", "#586e75", "#fdf6e3", "#d3cbb7", "#eee8d5", "#268bd2", "#93a1a1"},
+    {"solarized-dark", "#93a1a1", "#002b36", "#0f4b5b", "#073642", "#2aa198", "#586e75"},
+    {"rose-pine", "#e0def4", "#191724", "#403d52", "#1f1d2e", "#c4a7e7", "#6e6a86"},
+    {"sepia", "#433422", "#f4ecd8", "#d6c7a1", "#ebe0c4", "#b45f06", "#8a7a5c"},
+};
+
+}  // namespace
+
+std::vector<std::string> theme_names() {
+    std::vector<std::string> out;
+    for (const Preset& p : kPresets) out.push_back(p.name);
+    return out;
+}
+
+bool apply_theme(const std::string& name, Options& o) {
+    std::string key;
+    for (char c : name) key += c == '_' ? '-' : (char)std::tolower((unsigned char)c);
+    if (key == "default" || key == "base") key = "light";
+    for (const Preset& p : kPresets) {
+        if (key != p.name) continue;
+        o.fg = p.fg;
+        o.bg = p.bg;
+        o.border = p.border;
+        o.surface = p.surface;
+        o.accent = p.accent;
+        o.line = p.line;
+        o.muted.clear();
+        return true;
     }
     return false;
 }

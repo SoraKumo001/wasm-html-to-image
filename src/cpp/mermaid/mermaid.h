@@ -43,6 +43,13 @@ struct Options {
     Mode mode = Mode::Strict;
 };
 
+/// Sets the colours of a named theme (light, dark, neutral, forest, nord, dracula, solarized-light, solarized-dark,
+/// rose-pine, sepia; `default` and `base` are light). False for an unknown name, leaving @p options alone.
+bool apply_theme(const std::string& name, Options& options);
+
+/// The names apply_theme() accepts.
+std::vector<std::string> theme_names();
+
 /// Estimated width of one line of text (no font access): narrow, regular, wide and full-width classes.
 double estimate_text_width(const std::string& text, double size, int weight, bool mono);
 

@@ -16,6 +16,14 @@ describe("renderMermaid", () => {
     expect(Number(outer[2])).toBeGreaterThan(40);
   });
 
+  it("takes a named theme: its background on the page and its accent on the arrows", async () => {
+    const nord = PNG.sync.read(Buffer.from((await renderMermaid(GRAPH, { format: "png", theme: "nord" })).data));
+    expect([nord.data[0], nord.data[1], nord.data[2]]).toEqual([0x2e, 0x34, 0x40]);
+    const svg = (await renderMermaid(GRAPH, { theme: "dracula" })).data;
+    expect(svg.toLowerCase()).toContain("#bd93f9"); // the accent colours the arrow heads
+    await expect(renderMermaid(GRAPH, { theme: "nope" as never })).rejects.toThrow(/unknown mermaid theme/);
+  });
+
   it("forgives a misspelt keyword only in recover mode", async () => {
     const source = "flowchrt LR\n  A[開始] --> B[完了]";
     const strict = await renderMermaid(source);

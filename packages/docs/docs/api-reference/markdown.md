@@ -244,14 +244,14 @@ const { data: png } = await renderMermaid("graph LR\n  A --> B", {
 | オプション | 既定値 | 説明 |
 | :--- | :--- | :--- |
 | `format` | `"svg"` | 出力形式。`"svg"` は文字列、それ以外は `Uint8Array` |
-| `theme` | `"light"` | 配色 |
+| `theme` | `"light"` | 配色。`light`、`dark`、`neutral`、`forest`、`nord`、`dracula`、`solarized-light`、`solarized-dark`、`rose-pine`、`sepia` |
 | `padding` | `16` | 図の周りの余白（px） |
 | `width` | 図の幅 + 余白 | 画像の幅（px） |
 | `background` | SVG は透明、画像はテーマの背景色 | ページの背景（CSS の色） |
 | `accent` | テーマから算出 | 矢印やバーの色 |
 | `mode` | `"strict"` | 誤りの許容度。`"compat"` は図種名の大文字小文字、BOM・CRLF、閉じ忘れた `end` / `}` を許し、`"recover"` はさらに図種名の綴り違いを直し、読めない行を飛ばします |
 
-`strict` でも、図種名が綴り違いのときは、エラー枠に「`flowchart` のことですか?」と候補が表示されます。ページの CSS から指定するときは、`--mermaid-mode: compat`（または `recover`）を使います。
+`strict` でも、図種名が綴り違いのときは、エラー枠に「`flowchart` のことですか?」と候補が表示されます。ページの CSS からテーマを選ぶときは `--mermaid-theme: nord` を使い、`--mermaid-bg` などの個別の色はその上に重ねて指定できます。モードは `--mermaid-mode: compat`（または `recover`）を使います。
 
 Workers 向けのエントリ（`/workerd`、`/edge-light`）では、`renderMermaidWith((options) => render(options, wasm), source, options)` を使います。HTML ページとして使いたい場合は `mermaidToHtml(source, options)` が、図を 1 つ含む HTML を返します。
 
