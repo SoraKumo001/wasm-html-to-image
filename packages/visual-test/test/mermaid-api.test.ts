@@ -38,7 +38,7 @@ describe("renderMermaid", () => {
   it("escapes the source and shows a bad diagram as an error box", async () => {
     const { data } = await renderMermaid("graph LR\n  A[\"a < b & c\"] --> B");
     expect(data).toContain("a &lt; b &amp; c");
-    const bad = await renderMermaid("gantt\n  title x", { format: "png" });
+    const bad = await renderMermaid("gitGraph", { format: "png" });
     const png = PNG.sync.read(Buffer.from(bad.data));
     let red = 0;
     for (let i = 0; i < png.data.length; i += 4) if (png.data[i] > 180 && png.data[i + 1] < 80 && png.data[i + 2] < 80) red++;

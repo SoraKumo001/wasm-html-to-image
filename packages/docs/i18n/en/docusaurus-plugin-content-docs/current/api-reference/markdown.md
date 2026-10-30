@@ -202,11 +202,12 @@ graph LR
 | ER | `erDiagram` |
 | Bar / line chart | `xychart-beta` |
 | Pie chart | `pie` |
+| Gantt chart | `gantt` |
 
 - Colours follow the theme (`light` / `dark`).
 - A diagram is never split across pages.
 - Pass `mermaid: false` to show them as plain code blocks.
-- An unsupported type (`gantt`, `mindmap`, ...) or a syntax error shows an error box where the diagram would be.
+- An unsupported type (`mindmap`, `gitGraph`, ...) or a syntax error shows an error box where the diagram would be.
 
 ### Getting SVG or an image from JavaScript
 

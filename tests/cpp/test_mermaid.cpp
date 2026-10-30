@@ -94,7 +94,7 @@ int main() {
     // --- errors ---
     {
         std::string svg, err;
-        check(!render("gantt title x", svg, err) && has(err, "unsupported"), "error/unsupported");
+        check(!render("gitGraph", svg, err) && has(err, "unsupported"), "error/unsupported");
         check(!render("", svg, err), "error/empty");
         check(!render("graph TD\nA -->", svg, err), "error/dangling_edge");
     }
@@ -289,6 +289,25 @@ int main() {
         check(!render("pie", e1, e2), "pie/error_empty");
     }
     check(has(svg_of("graph LR\nA[/para/]"), "<polygon") && has(svg_of("graph LR\nA[\\para\\]"), "<polygon"), "shape/parallelogram");
+
+    // --- gantt ---
+    {
+        std::string s = svg_of("gantt\n  title Plan\n  dateFormat YYYY-MM-DD\n  section A\n  Design :a1, 2024-01-01, 10d\n  Build :after a1, 20d\n  Ship :milestone, m1, 2024-02-01, 0d\n  section B\n  Docs :crit, 2024-01-05, 2w");
+        check(has(s, ">Plan<") && has(s, ">Design<") && has(s, ">Build<") && has(s, ">Docs<"), "gantt/title_and_tasks");
+        check(has(s, ">A<") && has(s, ">B<"), "gantt/sections");
+        check(count(s, "class=\"task\"") == 3, "gantt/bars");
+        check(has(s, "#e5484d"), "gantt/crit_colour");
+        check(has(s, "<polygon"), "gantt/milestone");
+        check(has(s, ">2024-01-01<"), "gantt/axis_labels");
+        check(has(svg_of("gantt\n  axisFormat %b %e\n  T :2024-03-01, 5d"), ">Mar 1<"), "gantt/axis_format");
+        check(has(svg_of("gantt\n  A :a, 2024-01-01, 2024-01-10\n  B :after a, 3d"), ">B<"), "gantt/end_date");
+        check(has(svg_of("gantt\n  \xe8\xa8\xad\xe8\xa8\x88 :2024-01-01, 3d"), ">\xe8\xa8\xad\xe8\xa8\x88<"), "gantt/cjk");
+        std::string e1, e2;
+        check(!render("gantt\n  A :after nope, 3d", e1, e2) && has(e2, "unknown task id"), "gantt/error_unknown_id");
+        check(!render("gantt\n  A :3d", e1, e2), "gantt/error_first_task_without_start");
+        check(!render("gantt\n  A :2024-01-01, soon", e1, e2), "gantt/error_bad_length");
+        check(!render("gantt\n  title x", e1, e2), "gantt/error_no_tasks");
+    }
 
     std::printf("----\n%d passed, %d failed\n", g_pass, g_fail);
     return g_fail == 0 ? 0 : 1;

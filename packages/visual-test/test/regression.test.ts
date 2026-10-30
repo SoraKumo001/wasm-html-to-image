@@ -1591,7 +1591,7 @@ describe("regression: layout and paint probes", () => {
       }
     expect(lastInk).toBeGreaterThan(150);
     // the diagram follows the page: a div works too, and a bad diagram becomes a visible error
-    const err = await renderPng(page(`<div class="mermaid">gantt title x</div>`), 300, 100);
+    const err = await renderPng(page(`<div class="mermaid">gitGraph</div>`), 300, 100);
     expect(countPixels(err.img, (r, g, b) => r > 180 && g < 80 && b < 80)).toBeGreaterThan(20);
     // a plain <pre> is left alone
     const plain = await renderPng(page(`<pre>graph TD</pre>`), 300, 60);
@@ -1605,6 +1605,7 @@ describe("regression: layout and paint probes", () => {
       class: "classDiagram\n  class A {\n    &lt;&lt;abstract&gt;&gt;\n    +x()\n  }\n  A &lt;|-- B",
       er: "erDiagram\n  A ||--o{ B : has",
       xychart: "xychart-beta\n  x-axis [a, b]\n  bar [1, 2]",
+      gantt: "gantt\n  A :a, 2024-01-01, 5d\n  B :after a, 3d",
       pie: 'pie title T\n  "a" : 1\n  "b" : 2',
     };
     for (const [name, src] of Object.entries(sources)) {
