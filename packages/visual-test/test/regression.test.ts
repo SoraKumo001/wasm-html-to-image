@@ -1591,7 +1591,7 @@ describe("regression: layout and paint probes", () => {
       }
     expect(lastInk).toBeGreaterThan(150);
     // the diagram follows the page: a div works too, and a bad diagram becomes a visible error
-    const err = await renderPng(page(`<div class="mermaid">gitGraph</div>`), 300, 100);
+    const err = await renderPng(page(`<div class="mermaid">zenuml</div>`), 300, 100);
     expect(countPixels(err.img, (r, g, b) => r > 180 && g < 80 && b < 80)).toBeGreaterThan(20);
     // a plain <pre> is left alone
     const plain = await renderPng(page(`<pre>graph TD</pre>`), 300, 60);

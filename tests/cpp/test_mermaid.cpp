@@ -94,7 +94,7 @@ int main() {
     // --- errors ---
     {
         std::string svg, err;
-        check(!render("gitGraph", svg, err) && has(err, "unsupported"), "error/unsupported");
+        check(!render("zenuml", svg, err) && has(err, "unsupported"), "error/unsupported");
         check(!render("", svg, err), "error/empty");
         check(!render("graph TD\nA -->", svg, err), "error/dangling_edge");
     }
@@ -363,6 +363,22 @@ int main() {
         std::string e1, e2;
         check(!render("quadrantChart\n  A: [2, 0.5]", e1, e2), "quadrant/error_out_of_range");
         check(!render("quadrantChart\n  nonsense", e1, e2), "quadrant/error_unrecognised");
+    }
+
+    // --- gitGraph ---
+    {
+        std::string s = svg_of("gitGraph\n  commit id: \"A\"\n  branch dev\n  checkout dev\n  commit id: \"B\" tag: \"v0\"\n  checkout main\n  merge dev id: \"M\"\n  commit type: HIGHLIGHT");
+        check(count(s, "class=\"commit\"") == 4, "git/commits");
+        check(count(s, "class=\"branch\"") == 2 && has(s, ">main<") && has(s, ">dev<"), "git/branches");
+        check(has(s, ">A<") && has(s, ">B<") && has(s, ">M<") && has(s, ">v0<"), "git/ids_and_tags");
+        check(has(s, "<path d=\""), "git/lane_change_is_a_curve");
+        check(has(svg_of("gitGraph\n  commit\n  commit type: REVERSE"), "stroke=\"#ffffff\""), "git/reverse_cross");
+        check(has(svg_of("gitGraph\n  commit id: \"\xe6\x97\xa5\xe6\x9c\xac\""), ">\xe6\x97\xa5\xe6\x9c\xac<"), "git/cjk");
+        std::string e1, e2;
+        check(!render("gitGraph\n  checkout nope", e1, e2), "git/error_unknown_branch");
+        check(!render("gitGraph\n  commit\n  branch a\n  branch a", e1, e2), "git/error_duplicate_branch");
+        check(!render("gitGraph\n  commit\n  merge main", e1, e2), "git/error_merge_into_itself");
+        check(!render("gitGraph", e1, e2), "git/error_empty");
     }
 
     std::printf("----\n%d passed, %d failed\n", g_pass, g_fail);

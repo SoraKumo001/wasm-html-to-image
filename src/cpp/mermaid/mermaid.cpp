@@ -11,6 +11,7 @@
 #include "mermaid/state.h"
 #include "mermaid/journey.h"
 #include "mermaid/quadrant.h"
+#include "mermaid/gitgraph.h"
 #include "mermaid/timeline.h"
 #include "mermaid/xychart.h"
 
@@ -67,6 +68,7 @@ bool render(const std::string& source, const Options& options, std::string& svg,
     if (keyword == "xychart-beta" || keyword == "xychart") return render_xychart(source, options, svg, error);
     if (keyword == "journey") return render_journey(source, options, svg, error);
     if (keyword == "quadrantChart") return render_quadrant(source, options, svg, error);
+    if (keyword == "gitGraph") return render_gitgraph(source, options, svg, error);
     if (keyword == "timeline") return render_timeline(source, options, svg, error);
     if (keyword == "mindmap")return render_mindmap(source, options, svg, error);
     if (keyword == "gantt")return render_gantt(source, options, svg, error);
