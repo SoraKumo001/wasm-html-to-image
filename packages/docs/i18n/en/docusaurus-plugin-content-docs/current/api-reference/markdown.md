@@ -159,7 +159,7 @@ These front matter keys also change the page:
 
 | Key | Value | Effect |
 | :--- | :--- | :--- |
-| `header` / `footer` | HTML | Running header and footer (replacing the template's). `{{title}}`, `{{author}}`, `{{date}}`, `{{stamp}}`, `{{pageNumber}}` and `{{totalPages}}` work |
+| `header` / `footer` | HTML | Running header and footer (replacing the template's). `{{title}}`, `{{author}}`, `{{date}}`, `{{stamp}}`, `{{pageNumber}}`, `{{totalPages}}` and `{{chapter}}` (the `h1` the page shows first, else the chapter before it) work. The `book` header shows the chapter |
 | `margin` | `20mm 18mm` | Page margin (a CSS `margin` value) |
 | `orientation` | `landscape` | Turn the paper sideways |
 | `toc_depth` | `1` to `6` | Deepest heading level in the contents |

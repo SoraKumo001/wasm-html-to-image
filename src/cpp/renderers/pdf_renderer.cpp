@@ -9,6 +9,7 @@
 #include <climits>
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
 #include <memory>
 #include <string>
 #include <vector>
@@ -38,8 +39,24 @@ bool PdfJpegEncoder(SkWStream* dst, const SkPixmap& src, int quality) {
     return dst->write(encoded->data(), encoded->size());
 }
 
-std::string replace_template_vars(std::string html, int pageNum, int totalPages) {
+std::string html_escape_text(const std::string& in) {
+    std::string out;
+    for (char c : in) {
+        if (c == '&') out += "&amp;";
+        else if (c == '<') out += "&lt;";
+        else if (c == '>') out += "&gt;";
+        else out += c;
+    }
+    return out;
+}
+
+// `{{pageNumber}}` and `{{totalPages}}`, and `{{chapter}}`: the text of
+// the h1 the page shows first (or the last one before it), set by the caller.
+std::string replace_template_vars(std::string html, int pageNum, int totalPages, const std::string& chapter = "") {
     size_t pos;
+    while ((pos = html.find("{{chapter}}")) != std::string::npos) {
+        html.replace(pos, 11, html_escape_text(chapter));
+    }
     std::string pageNumStr = std::to_string(pageNum);
     std::string totalPagesStr = std::to_string(totalPages);
 
@@ -504,6 +521,39 @@ void collect_table_rows(const litehtml::element* table, std::vector<FloatBox>& b
     }
 }
 
+// The h1 elements (the chapters of a book): their text and document-space top, in document order.
+struct ChapterMark {
+    int top = 0;
+    std::string text;
+};
+
+void collect_chapters(const litehtml::element* el, std::vector<ChapterMark>& out) {
+    if (!el) return;
+    const char* tag = el->get_tagName();
+    if (tag && std::strcmp(tag, "h1") == 0) {
+        std::string text;
+        el->get_text(text);
+        size_t b = text.find_first_not_of(" \t\r\n"), e = text.find_last_not_of(" \t\r\n");
+        text = b == std::string::npos ? "" : text.substr(b, e - b + 1);
+        out.push_back({(int)el->get_placement().y, text});
+    }
+    for (const auto& child : el->children()) collect_chapters(child.get(), out);
+}
+
+// The chapter a page's running header names: the first chapter that starts on the page, else the last one before it.
+std::string chapter_for_page(const std::vector<ChapterMark>& marks, int page_top, int page_bottom) {
+    std::string current;
+    for (const auto& m : marks) {
+        if (m.top < page_top) {
+            current = m.text;
+            continue;
+        }
+        if (m.top < page_bottom) return m.text;
+        break;
+    }
+    return current;
+}
+
 // Header groups of every table that carry a display:table-header-group (or a
 // <thead> tag, which the engine maps to a row group by default). The band is the
 // union of the header rows' rects, in document coordinates.
@@ -709,9 +759,11 @@ std::vector<PageCut> plan_page_cuts(const std::vector<BreakUnit>& units,
             cut = limit;
 
             // 2) break-inside: avoid — a unit straddling the cut moves down whole.
+            //    A unit taller than a whole page cannot be kept together anywhere, so it is left to
+            //    break (moving it down would only leave the rest of this page, and often a page, empty).
             for (const auto& u : units) {
                 if (u.inside == litehtml::break_inside_avoid && u.top > pos && u.top < cut &&
-                    u.bottom > cut)
+                    u.bottom > cut && u.bottom - u.top <= area_height)
                     cut = std::min(cut, u.top);
             }
 
@@ -1339,6 +1391,8 @@ static sk_sp<SkData> render_html_to_pdf_impl(const std::string& html, int width,
     collect_line_groups(doc->root().get(), line_groups, float_boxes);
     std::vector<RepeatHeader> repeat_headers;
     collect_repeat_headers(doc->root().get(), repeat_headers);
+    std::vector<ChapterMark> chapter_marks;
+    collect_chapters(doc->root().get(), chapter_marks);
     std::vector<CloneBox> clone_boxes;
     collect_clone_boxes(doc->root_render(), clone_boxes);
     std::vector<PageCut> pages =
@@ -1428,7 +1482,9 @@ static sk_sp<SkData> render_html_to_pdf_impl(const std::string& html, int width,
         // template without page-number placeholders is laid out once and only re-drawn.
         // pdfSkipRunning: the first pages (a cover, a contents page) carry no header or footer.
         if (!options.pdfHeader.empty() && page_num > options.pdfSkipRunning) {
-            std::string headerHtml = replace_template_vars(options.pdfHeader, page_num, page_count);
+            const int ch_top = (page < (int)pages.size()) ? pages[page].offset : 0;
+            const int ch_bottom = (page + 1 < (int)pages.size()) ? pages[page + 1].offset : INT_MAX;
+            std::string headerHtml = replace_template_vars(options.pdfHeader, page_num, page_count, chapter_for_page(chapter_marks, ch_top, ch_bottom));
             canvas->save();
             canvas->translate((SkScalar)margin_left, 0);
             header_cache.draw(headerHtml, content_width, margin_top, canvas, context, css.c_str(),
@@ -1437,7 +1493,9 @@ static sk_sp<SkData> render_html_to_pdf_impl(const std::string& html, int width,
         }
 
         if (!options.pdfFooter.empty() && page_num > options.pdfSkipRunning) {
-            std::string footerHtml = replace_template_vars(options.pdfFooter, page_num, page_count);
+            const int ch_top = (page < (int)pages.size()) ? pages[page].offset : 0;
+            const int ch_bottom = (page + 1 < (int)pages.size()) ? pages[page + 1].offset : INT_MAX;
+            std::string footerHtml = replace_template_vars(options.pdfFooter, page_num, page_count, chapter_for_page(chapter_marks, ch_top, ch_bottom));
             canvas->save();
             canvas->translate((SkScalar)margin_left, (SkScalar)(page_height - footer_band));
             footer_cache.draw(footerHtml, content_width, footer_band, canvas, context, css.c_str(),

@@ -159,7 +159,7 @@ lang: ja
 
 | キー | 値 | 内容 |
 | :--- | :--- | :--- |
-| `header` / `footer` | HTML | 実行ヘッダー・フッター（テンプレートのものを置き換え）。`{{title}}`、`{{author}}`、`{{date}}`、`{{stamp}}`、`{{pageNumber}}`、`{{totalPages}}` が使えます |
+| `header` / `footer` | HTML | 実行ヘッダー・フッター（テンプレートのものを置き換え）。`{{title}}`、`{{author}}`、`{{date}}`、`{{stamp}}`、`{{pageNumber}}`、`{{totalPages}}`、`{{chapter}}`（そのページにある `h1` の題名。ページに見出しが無いときは、直前の章）が使えます。`book` のヘッダーは章の題名を出します |
 | `margin` | `20mm 18mm` | ページの余白（CSS の `margin`） |
 | `orientation` | `landscape` | 用紙を横向きにする |
 | `toc_depth` | `1`〜`6` | 目次に載せる見出しの深さ |

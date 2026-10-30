@@ -1371,6 +1371,39 @@ describe("regression: layout and paint probes", () => {
       `<html><head><style>@page{size:300px 200px;margin:0}body{margin:0;font:14px sans-serif}` +
       `.toc a{display:block;color:#000;text-decoration:none}.pad{height:230px}</style></head><body>${body}</body></html>`;
 
+    it("a break-inside:avoid box taller than a page starts right after the text before it, not on a fresh page", async () => {
+      // Page 200px tall. The 450px box cannot be kept whole on any page, so it must break where it is:
+      // moving it to the next page would leave most of page 1 (and, with a repeated table header, a page) empty.
+      const body = `<p style="margin:0">intro</p><div style="break-inside:avoid;height:450px"><p style="margin:0">top of the box</p></div>`;
+      const r = await readPdf(await pdf(doc(body)));
+      expect(r.pages).toBe(3); // 20 + 450 px over 200px pages; not 4
+      expect((await r.lines(1)).join(" ")).toContain("top of the box");
+    });
+
+    it("a table taller than a page splits, repeating its header, without a blank page before it", async () => {
+      const rows = Array.from({ length: 40 }, (_, k) => `<tr><td>row ${k + 1}</td></tr>`).join("");
+      const body = `<h1 style="margin:0;font-size:14px">Title</h1><table style="break-inside:avoid;border-collapse:collapse"><thead><tr><th>Head</th></tr></thead><tbody>${rows}</tbody></table>`;
+      const r = await readPdf(await pdf(doc(body)));
+      for (let n = 1; n <= r.pages; n++) expect((await r.lines(n)).length, `page ${n}`).toBeGreaterThan(1);
+      expect((await r.lines(1)).join(" ")).toContain("row 1");
+      for (let n = 2; n <= r.pages; n++) expect((await r.lines(n))[0], `page ${n}`).toBe("Head"); // the header repeats
+    });
+
+    it("{{chapter}} in a running header names the h1 the page is in", async () => {
+      const html =
+        `<html><head><style>@page{size:300px 200px;margin:30px 0}body{margin:0;font:14px sans-serif}h1{margin:0;font-size:14px;break-before:page}.p{height:260px}</style></head>` +
+        `<body><p>front matter</p><h1>One &amp; more</h1><div class="p">a</div><h1>Two</h1><div class="p">b</div></body></html>`;
+      const r = await readPdf(
+        (await render({ value: html, width: 300, format: "pdf", pdfOutline: false, pdfHeader: `<div style="font:11px sans-serif">C[{{chapter}}]</div>` })).data as Uint8Array,
+      );
+      const headers = [];
+      for (let n = 1; n <= r.pages; n++) headers.push((await r.lines(n)).find((l) => l.startsWith("C[")));
+      expect(headers[0]).toBe("C[]"); // before the first chapter
+      expect(headers[1]).toBe("C[One & more]"); // the text is escaped into the header and back
+      expect(headers[2]).toBe("C[One & more]"); // a page without a heading keeps the chapter it is in
+      expect(headers[headers.length - 1]).toBe("C[Two]");
+    });
+
     it("pdfSkipRunning leaves the first pages without header and footer but keeps counting them", async () => {
       const html = `<html><head><style>@page{size:300px 200px;margin:30px 0}body{margin:0;font:14px sans-serif}.p{height:120px;break-after:page}</style></head><body><div class="p">one</div><div class="p">two</div><div class="p">three</div></body></html>`;
       const run = async (extra: object) =>

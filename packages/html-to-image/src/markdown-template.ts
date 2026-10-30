@@ -95,7 +95,7 @@ export interface TemplatePage {
   size: string;
   /** Page margin: a CSS `margin` value, e.g. `20mm 18mm`. */
   margin: string;
-  /** Running header HTML: `{{pageNumber}}`, `{{totalPages}}`, `{{title}}`, `{{author}}`, `{{date}}`, `{{stamp}}`. */
+  /** Running header HTML: `{{pageNumber}}`, `{{totalPages}}`, `{{chapter}}` (the h1 the page is in), `{{title}}`, `{{author}}`, `{{date}}`, `{{stamp}}`. */
   header?: string;
   /** Running footer HTML, same variables. */
   footer?: string;
@@ -261,6 +261,7 @@ export const TEMPLATES: Record<string, MarkdownTemplate> = {
     page: {
       size: "A5",
       margin: "20mm 17mm 22mm",
+      header: `<div style="${RUNNING}display:flex;justify-content:space-between;padding-top:9mm"><span>{{title}}</span><span>{{chapter}}</span></div>`,
       footer: `<div style="${RUNNING}text-align:center;padding-bottom:9mm">{{pageNumber}}</div>`,
     },
     defaults: { cover: true, toc: true, accent: "#7c2d12" },

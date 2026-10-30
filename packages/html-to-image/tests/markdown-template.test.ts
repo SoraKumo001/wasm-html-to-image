@@ -472,3 +472,12 @@ describe("Mermaid settings in the front matter", () => {
     expect(/\.markdown-body \.mermaid \{[^}]*\}/.exec(sheet("mermaid_theme: a; b {"))![0]).not.toContain("--mermaid-theme");
   });
 });
+
+describe("running chapter title", () => {
+  it("book names the chapter in its header, and a template or the front matter may use {{chapter}} anywhere", () => {
+    const d = markdownToDocument("---\ntitle: B\ntemplate: book\n---\n# One", { paged: true });
+    expect(d.renderOptions.pdfHeader).toContain("{{chapter}}"); // left for the engine: it knows the pages
+    const own = markdownToDocument("---\ntitle: B\nfooter: <i>{{chapter}} / {{pageNumber}}</i>\n---\n# One", { paged: true });
+    expect(own.renderOptions.pdfFooter).toBe("<i>{{chapter}} / {{pageNumber}}</i>");
+  });
+});
