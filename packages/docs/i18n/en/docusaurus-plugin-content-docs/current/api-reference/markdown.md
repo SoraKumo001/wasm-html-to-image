@@ -166,6 +166,7 @@ These front matter keys also change the page:
 | `toc_title` | text | Heading of the contents page (`Contents`) |
 | `cover_style` | `band` / `plain` / `center` | Look of the cover |
 | `numbering` | `true` | Number the headings `1`, `1.1`, `1.1.1` |
+| `footnotes` | `end` | Where footnotes go: `end` lists them after the text, `page` sets each at the foot of the page that refers to it (PDF; if one note is taller than a third of a page, the list stays at the end) |
 | `mermaid_theme` | a name (`nord`, ...) | Draw the diagrams with a named theme instead of the document's light / dark colours (pick one that suits the page: `dracula`, `nord` or `dark` on a dark document) |
 | `mermaid_mode` | `compat` / `recover` | How much a broken diagram is forgiven |
 | `mermaid_directives` | `true` | Honour `%%{init}%%` and frontmatter inside the diagrams |

@@ -166,6 +166,7 @@ lang: ja
 | `toc_title` | 文字列 | 目次ページの見出し（既定は `Contents`） |
 | `cover_style` | `band` / `plain` / `center` | 表紙の体裁 |
 | `numbering` | `true` | 見出しに `1`、`1.1`、`1.1.1` の番号を付ける |
+| `footnotes` | `end` | 脚注の置き場所。`end` は本文のあとに一覧、`page` は参照のあるページの下部（PDF 用。1 件がページの 3 分の 1 より高いと `end` に戻る） |
 | `mermaid_theme` | 名前（`nord` など） | 図の配色を名前付きテーマにする（文書のライト・ダークの色ではなく、テーマの色になる。ダークな文書には `dracula`、`nord`、`dark` などが合う） |
 | `mermaid_mode` | `compat` / `recover` | 壊れた図の許容度 |
 | `mermaid_directives` | `true` | 図の中の `%%{init}%%` と frontmatter を反映する |

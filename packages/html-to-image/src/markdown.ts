@@ -440,7 +440,7 @@ ${body}</blockquote>
   const parser = new Marked(footnotes.extension, options.math ? mathExtension(options.math) : {});
   const text =
     (parser.parse(source, { async: false, gfm: true, renderer }) as string) +
-    footnotes.list((t) => parser.parseInline(t, { async: false, gfm: true }) as string, settings.lang?.toLowerCase().startsWith("ja") ? "脚注" : "Notes");
+    footnotes.list((t) => parser.parseInline(t, { async: false, gfm: true }) as string, settings.lang?.toLowerCase().startsWith("ja") ? "脚注" : "Notes", !!options.paged && settings.footnotes === "page");
 
   const tocOption = options.toc ?? (front.toc !== undefined || template.defaults?.toc !== undefined ? settings.toc : !!options.paged);
   const tocExtras = { ...(settings.toc_depth ? { depth: settings.toc_depth } : {}), ...(settings.toc_title ? { title: settings.toc_title } : {}) };

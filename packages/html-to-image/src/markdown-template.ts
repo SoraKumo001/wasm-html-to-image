@@ -51,6 +51,8 @@ export interface DocumentSettings {
   toc_title?: string;
   /** Number the headings: `1`, `1.1`, `1.1.1`. */
   numbering?: boolean;
+  /** Where footnotes go in a PDF: `end` (a list after the text, the default) or `page` (the foot of the page that refers to them). */
+  footnotes?: string;
   /** Colour theme of the Mermaid diagrams (`nord`, `dracula`, ...) instead of the document's light / dark colours. */
   mermaid_theme?: string;
   /** How much a broken diagram is forgiven: `strict`, `compat` or `recover`. */
@@ -153,6 +155,7 @@ const KNOWN_KEYS = new Set<string>([
   "toc_title",
   "cover_style",
   "numbering",
+  "footnotes",
   "mermaid_theme",
   "mermaid_mode",
   "mermaid_directives",

@@ -249,6 +249,7 @@ toc: false             # no contents page
 logo: https://example.com/logo.png
 lang: en               # <html lang>
 numbering: true        # number the headings 1, 1.1, 1.1.1
+footnotes: page        # footnotes at the foot of the page that refers to them (default: end)
 orientation: landscape # turn the page sideways
 margin: 20mm 18mm      # page margin (a CSS margin value)
 footer: "{{title}} {{pageNumber}} / {{totalPages}}"   # replaces the template's footer (header: works the same; {{chapter}} is the h1 the page is in)

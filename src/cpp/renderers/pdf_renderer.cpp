@@ -684,11 +684,58 @@ int snap_cut_to_content(int cut, int pos, const std::vector<LineGroup>& groups,
 // the document bottom of the table whose header repeats: the continuation page
 // offsets only that table's slice by the header height, so the band it may paint
 // in ends there (INT_MAX: no repeated header / table).
+// ---- Footnotes at the foot of the page ------------------------------------------------------------
+//
+// An element carrying data-pdf-footnotes holds the footnote bodies (<li id>), after the content. It is
+// not printed where it lies. A footnote whose first reference (<a href="#id">) falls on a page is
+// painted again at the foot of that page, under a short rule, and the page's content gives up that
+// much height.
+struct NoteItem {
+    std::string id;
+    int top = 0, bottom = 0;
+    int call_top = -1;  // the first reference in the document, -1 when nothing refers to it
+};
+struct NoteZone {
+    int top = INT_MAX;  // where the zone starts: the printed document ends here
+    std::vector<NoteItem> items;
+};
+constexpr int kNoteRule = 14;  // the rule and its gap above the footnotes
+
+void collect_note_items(litehtml::element* el, std::vector<NoteItem>& out) {
+    if (!el) return;
+    const char* id = el->get_attr("id", "");
+    if (el->tag() == litehtml::_li_ && id && id[0] != ' ' && id[0] != 0) {
+        const litehtml::position p = el->get_placement();
+        NoteItem n;
+        n.id = id;
+        n.top = (int)p.y;
+        n.bottom = (int)(p.y + p.height);
+        out.push_back(std::move(n));
+        return;
+    }
+    for (const auto& child : el->children()) collect_note_items(child.get(), out);
+}
+
+bool collect_note_zone(litehtml::element* el, NoteZone& zone) {
+    if (!el) return false;
+    const char* mark = el->get_attr("data-pdf-footnotes", nullptr);
+    if (mark) {
+        zone.top = (int)el->get_placement().y;
+        collect_note_items(el, zone.items);
+        return true;
+    }
+    for (const auto& child : el->children())
+        if (collect_note_zone(child.get(), zone)) return true;
+    return false;
+}
+
 struct PageCut {
     int offset = 0;
     int header_top = -1;
     int header_height = 0;
     int table_bottom = INT_MAX;
+    std::vector<int> notes;  // indexes into the zone's items, painted at the foot of this page
+    int note_height = 0;     // what they take, the rule included
 };
 
 // Plan page-start offsets. With no break-* in the document this reproduces P1's
@@ -702,6 +749,7 @@ std::vector<PageCut> plan_page_cuts(const std::vector<BreakUnit>& units,
                                     const std::vector<LineGroup>& line_groups,
                                     const std::vector<FloatBox>& floats,
                                     const std::vector<RepeatHeader>& repeat_headers,
+                                    const std::vector<NoteItem>& notes,
                                     int area_height, int doc_height) {
     std::vector<PageCut> pages;
     pages.push_back(PageCut{0, -1, 0});
@@ -752,6 +800,9 @@ std::vector<PageCut> plan_page_cuts(const std::vector<BreakUnit>& units,
                 forced = std::min(forced, u.bottom);
         }
 
+        // The cut for a page that may use `limit` (a function of it, because the footnotes of the page
+        // take height from the limit, and which footnotes there are depends on the cut).
+        auto choose = [&](int limit) -> int {
         int cut;
         if (forced <= limit) {
             cut = forced;
@@ -816,8 +867,35 @@ std::vector<PageCut> plan_page_cuts(const std::vector<BreakUnit>& units,
                 cut = a->top;
             }
         }
-
+        return cut;
+        };
+        int cut = choose(limit);
         if (cut <= pos) cut = limit;  // no forward progress: fall back to the pixel cut
+
+        // Footnotes: the ones first referred to on this page sit at its foot, so the page gives up
+        // their height. Cutting earlier drops references from the page, never adds, so the second
+        // reserve is no larger than the first.
+        if (!notes.empty()) {
+            std::vector<int> ids;
+            auto reserve_for = [&](int end) {
+                ids.clear();
+                int h = 0;
+                for (size_t k = 0; k < notes.size(); k++) {
+                    if (notes[k].call_top < pos || notes[k].call_top >= std::min(end, doc_height)) continue;
+                    ids.push_back((int)k);
+                    h += notes[k].bottom - notes[k].top;
+                }
+                return h > 0 ? h + kNoteRule : 0;
+            };
+            int reserve = reserve_for(cut);
+            if (reserve > 0 && limit - reserve > pos) {
+                int smaller = choose(limit - reserve);
+                if (smaller > pos) cut = smaller;
+                reserve = reserve_for(cut);
+            }
+            pages.back().notes = ids;
+            pages.back().note_height = reserve;
+        }
         if (cut <= pos || cut >= doc_height) break;
         pages.push_back(PageCut{cut, -1, 0});
         pos = cut;
@@ -1395,9 +1473,26 @@ static sk_sp<SkData> render_html_to_pdf_impl(const std::string& html, int width,
     collect_chapters(doc->root().get(), chapter_marks);
     std::vector<CloneBox> clone_boxes;
     collect_clone_boxes(doc->root_render(), clone_boxes);
+    // Footnotes at the foot of the page. The zone is not printed where it lies, so the printed document
+    // ends at its top. A footnote too tall for a third of a page cannot sit there: then the zone is
+    // printed as it is, at the end.
+    NoteZone note_zone;
+    if (collect_note_zone(doc->root().get(), note_zone)) {
+        std::vector<LinkBox> calls;
+        collect_link_boxes(doc->root().get(), calls);
+        bool fits = !note_zone.items.empty();
+        for (auto& n : note_zone.items) {
+            for (const auto& c : calls)
+                if (c.target == n.id && c.top < note_zone.top && (n.call_top < 0 || c.top < n.call_top)) n.call_top = c.top;
+            if ((n.bottom - n.top) * 3 > content_area_height) fits = false;
+        }
+        if (!fits) note_zone = NoteZone{};
+    }
+    const bool has_notes = note_zone.top < INT_MAX;
+    const int print_height = has_notes ? std::max(1, std::min(doc_height, note_zone.top)) : doc_height;
     std::vector<PageCut> pages =
-        plan_page_cuts(break_units, line_groups, float_boxes, repeat_headers, content_area_height,
-                       doc_height);
+        plan_page_cuts(break_units, line_groups, float_boxes, repeat_headers, note_zone.items,
+                       content_area_height, print_height);
     int page_count = (int)pages.size();
     if (page_count < 1) page_count = 1;
 
@@ -1522,6 +1617,11 @@ static sk_sp<SkData> render_html_to_pdf_impl(const std::string& html, int width,
         if (page + 1 < (int)pages.size()) slice_height = pages[page + 1].offset - page_offset;
         if (slice_height < 1) slice_height = 1;
         if (slice_height > avail) slice_height = avail;
+        if (has_notes) {
+            // the footnotes take the foot of the page; the zone they come from is not printed
+            const int note_h = (page < (int)pages.size()) ? pages[page].note_height : 0;
+            slice_height = std::max(1, std::min({slice_height, avail - note_h, print_height - page_offset}));
+        }
 
         // Draw one clip band of the document with a page offset. The bands partition the page
         // (a 2px overlap at the table's closing border aside), so no pixel is painted twice —
@@ -1624,13 +1724,37 @@ static sk_sp<SkData> render_html_to_pdf_impl(const std::string& html, int width,
         // cull would be the wrong test.
         if (header_height > 0 && header_top >= 0) draw_band(0, header_height, header_top, false);
 
+        // Footnotes: a rule and each footnote that this page refers to first, painted again from the zone.
+        std::vector<std::pair<int, int>> note_spots;  // (item, y on the page)
+        if (has_notes && page < (int)pages.size() && pages[page].note_height > 0) {
+            int y = content_area_height - pages[page].note_height;
+            canvas->save();
+            canvas->translate((SkScalar)margin_left, (SkScalar)margin_top);
+            SkPaint rule;
+            rule.setColor(SkColorSetARGB(255, 136, 136, 136));
+            canvas->drawRect(SkRect::MakeXYWH(0, (SkScalar)(y + kNoteRule / 2 - 1), (SkScalar)(content_width / 3), 1), rule);
+            canvas->restore();
+            y += kNoteRule;
+            for (int k : pages[page].notes) {
+                const NoteItem& n = note_zone.items[k];
+                draw_band(y, y + (n.bottom - n.top), n.top - y, false);
+                note_spots.emplace_back(k, y);
+                y += n.bottom - n.top;
+            }
+        }
+
         // Internal links: named destinations at the top of the targeted elements, and a link
         // annotation over every <a href="#id"> box, on the page each starts on. A link to a
         // destination that does not exist is skipped (the viewer would show a dead link).
         {
             const int slice_top = page_offset;
             const int slice_bottom = (page + 1 < (int)pages.size()) ? pages[page + 1].offset : INT_MAX;
+            for (const auto& s : note_spots) {
+                sk_sp<SkData> name = SkData::MakeWithCString(pdf_dest_name(note_zone.items[s.first].id).c_str());
+                SkAnnotateNamedDestination(canvas, SkPoint::Make((SkScalar)margin_left, (SkScalar)(margin_top + s.second)), name.get());
+            }
             for (const auto& d : dest_points) {
+                if (has_notes && d.top >= note_zone.top) continue;  // inside the zone: set where it was painted
                 if (d.top < slice_top || d.top >= slice_bottom) continue;
                 sk_sp<SkData> name = SkData::MakeWithCString(pdf_dest_name(d.name).c_str());
                 SkAnnotateNamedDestination(
@@ -1639,6 +1763,7 @@ static sk_sp<SkData> render_html_to_pdf_impl(const std::string& html, int width,
             }
             for (const auto& l : link_boxes) {
                 if (l.top < slice_top || l.top >= slice_bottom) continue;
+                if (has_notes && l.top >= note_zone.top) continue;
                 bool known = false;
                 for (const auto& d : dest_points) known = known || d.name == l.target;
                 if (!known) continue;

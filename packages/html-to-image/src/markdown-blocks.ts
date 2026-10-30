@@ -41,7 +41,7 @@ export interface Footnotes {
   /** Takes the `[^id]: text` definitions out of the source (code fences are left alone) and returns the rest. */
   extract(source: string): string;
   /** The footnotes list for the references seen so far, or an empty string. @p inline renders a footnote's text. */
-  list(inline: (text: string) => string, heading?: string): string;
+  list(inline: (text: string) => string, heading?: string, page?: boolean): string;
 }
 
 /** Footnotes collected at the end of the document: `[^1]` in the text, `[^1]: the note` anywhere. */
@@ -101,9 +101,11 @@ export function createFootnotes(): Footnotes {
         },
       ],
     },
-    list(inline, heading) {
+    list(inline, heading, page) {
       if (!order.length) return "";
       const items = order.map((id) => `<li id="fn-${numbers.get(id)}">${inline(defs.get(id) ?? "")}</li>`).join("");
+      // `page`: the PDF engine sets each footnote at the foot of the page that refers to it, and does not print the list itself
+      if (page) return `<section class="footnotes" data-pdf-footnotes><ol>${items}</ol></section>\n`;
       return `<section class="footnotes">${heading ? `<p class="footnotes-title">${escapeHtml(heading)}</p>` : ""}<ol>${items}</ol></section>\n`;
     },
   };

@@ -373,6 +373,16 @@ describe("call-outs, figures, page breaks, heading numbers and footnotes", () =>
     expect(h).toContain('<p class="footnotes-title">Notes</p>');
     expect(html("a[^q]")).not.toContain('class="footnotes"');
   });
+
+  it("marks the list for the PDF engine only with footnotes: page on a paged document", () => {
+    const md = "---\nfootnotes: page\n---\nText[^a].\n\n[^a]: note\n";
+    const paged = markdownToDocument(md, { paged: true }).html;
+    expect(paged).toContain("data-pdf-footnotes");
+    expect(paged).not.toContain(`<p class="footnotes-title">`); // the list itself is not printed
+    expect(paged).toContain('<li id="fn-1">note</li>');
+    expect(markdownToDocument(md).html).not.toContain("data-pdf-footnotes");
+    expect(markdownToDocument(md.replace("page", "end"), { paged: true }).html).not.toContain("data-pdf-footnotes");
+  });
 });
 
 describe("the manual, minutes, letter, slides and invoice templates", () => {
