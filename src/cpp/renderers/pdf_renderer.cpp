@@ -740,6 +740,29 @@ std::vector<PageCut> plan_page_cuts(const std::vector<BreakUnit>& units,
             //    With no straddling content this is a no-op, so a document without
             //    fragmentation CSS still cuts exactly as P1/P2 did.
             cut = snap_cut_to_content(cut, pos, line_groups, floats);
+
+            // 5) The snap can leave a heading alone at the foot of the page: its paragraph did not
+            //    fit its orphan lines and moved down. Apply break-after/before: avoid again, so
+            //    the heading goes with it (a chain of headings moves together).
+            for (int guard = 0; guard < 8; guard++) {
+                bool straddles = false;
+                for (const auto& u : units)
+                    if (u.top < cut && cut < u.bottom) {
+                        straddles = true;
+                        break;
+                    }
+                if (straddles) break;
+                const BreakUnit* a = nullptr;
+                const BreakUnit* b = nullptr;
+                for (const auto& u : units) {
+                    if (u.bottom <= cut && (!a || u.bottom > a->bottom)) a = &u;
+                    if (u.top >= cut && (!b || u.top < b->top)) b = &u;
+                }
+                const bool avoid_between = (a && a->after == litehtml::break_flow_avoid) ||
+                                           (b && b->before == litehtml::break_flow_avoid);
+                if (!avoid_between || !a || a->top <= pos) break;
+                cut = a->top;
+            }
         }
 
         if (cut <= pos) cut = limit;  // no forward progress: fall back to the pixel cut

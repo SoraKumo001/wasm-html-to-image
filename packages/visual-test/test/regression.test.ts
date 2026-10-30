@@ -1371,6 +1371,18 @@ describe("regression: layout and paint probes", () => {
       `<html><head><style>@page{size:300px 200px;margin:0}body{margin:0;font:14px sans-serif}` +
       `.toc a{display:block;color:#000;text-decoration:none}.pad{height:230px}</style></head><body>${body}</body></html>`;
 
+    it("a heading goes with its paragraph when the paragraph's orphan lines do not fit under it", async () => {
+      // Page 200px tall: the heading ends at 184px, so one line of the paragraph fits but not the two its
+      // orphans need. The paragraph moves to page 2; the heading (break-after:avoid) must follow it.
+      const body =
+        `<div style="height:168px"></div><h2 style="margin:0;font-size:14px;line-height:16px;break-after:avoid">Heading</h2>` +
+        `<p style="margin:0;line-height:16px;orphans:2;widows:2">${"word ".repeat(80)}</p>`;
+      const r = await readPdf(await pdf(doc(body)));
+      expect(r.pages).toBe(2);
+      expect(await r.lines(1)).not.toContain("Heading");
+      expect((await r.lines(2))[0]).toBe("Heading");
+    });
+
     it("fills data-toc-page with the page the id starts on, and the table of contents's own pages move the numbers", async () => {
       // Row 1 is on page 1; the headings follow after padding. Page numbers are text, so this also
       // checks that the numbers are filled in before the pages are planned for good.
