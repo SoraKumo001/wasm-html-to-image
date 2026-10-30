@@ -381,6 +381,33 @@ int main() {
         check(!render("gitGraph", e1, e2), "git/error_empty");
     }
 
+    // --- kanban ---
+    {
+        std::string s = svg_of("kanban\n  Todo\n    [Write docs]\n    t1[Fix bug]@{ ticket: 'MC-1', assigned: 'ann', priority: 'High' }\n  [Done]\n    d1[Ship it]");
+        check(count(s, "class=\"column\"") == 2 && has(s, ">Todo<") && has(s, ">Done<"), "kanban/columns");
+        check(count(s, "class=\"card\"") == 3, "kanban/cards");
+        check(has(s, ">Write docs<") && has(s, ">Fix bug<") && has(s, ">Ship it<"), "kanban/card_text");
+        check(has(s, ">MC-1<") && has(s, ">ann<"), "kanban/ticket_and_assignee");
+        check(has(s, "#f28e2b"), "kanban/priority_mark");
+        check(has(svg_of("kanban\n  \xe5\x88\x97\n    \xe3\x82\xbf\xe3\x82\xb9\xe3\x82\xaf"), ">\xe5\x88\x97<"), "kanban/cjk");
+        std::string e1, e2;
+        check(!render("kanban", e1, e2), "kanban/error_empty");
+    }
+
+    // --- packet ---
+    {
+        std::string s = svg_of("packet-beta\n  title TCP\n  0-15: \"Source Port\"\n  16-31: \"Destination Port\"\n  32-63: \"Sequence Number\"\n  64-71: \"Flag\"");
+        check(has(s, ">TCP<") && has(s, ">Source Port<") && has(s, ">Sequence Number<") && has(s, ">Flag<"), "packet/title_and_fields");
+        check(count(s, "class=\"field\"") == 4, "packet/fields");
+        check(count(svg_of("packet-beta\n  0-39: \"Wide\""), "class=\"field\"") == 2, "packet/field_wraps_over_rows");
+        check(has(s, ">15<") && has(s, ">16<"), "packet/bit_numbers");
+        check(has(svg_of("packet\n  0-7: \"\xe3\x83\x98\xe3\x83\x83\xe3\x83\x80\""), ">\xe3\x83\x98\xe3\x83\x83\xe3\x83\x80<"), "packet/cjk_and_plain_keyword");
+        std::string e1, e2;
+        check(!render("packet-beta\n  0-7: \"a\"\n  10-15: \"b\"", e1, e2) && has(e2, "without gaps"), "packet/error_gap");
+        check(!render("packet-beta\n  x: \"a\"", e1, e2), "packet/error_bad_range");
+        check(!render("packet-beta", e1, e2), "packet/error_empty");
+    }
+
     std::printf("----\n%d passed, %d failed\n", g_pass, g_fail);
     return g_fail == 0 ? 0 : 1;
 }
