@@ -215,10 +215,8 @@ graph LR
 ```typescript
 import { renderMermaid } from "wasm-html-to-image";
 
-const { data: svg } = await renderMermaid("graph LR
-  A --> B"); // SVG 文字列
-const { data: png } = await renderMermaid("graph LR
-  A --> B", {
+const { data: svg } = await renderMermaid("graph LR\n  A --> B"); // SVG 文字列
+const { data: png } = await renderMermaid("graph LR\n  A --> B", {
   format: "png", // "svg"（既定）, "png", "webp", "pdf" など
   theme: "dark", // "light"（既定）| "dark"
 });
