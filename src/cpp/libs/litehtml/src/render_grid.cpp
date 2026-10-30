@@ -1252,8 +1252,22 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         // against it instead of staying cyclic -- the wrapper contributes the
         // resolved content (an image transferred to 52 wide at the 30px row
         // height), not the percentage-as-auto content (24).
+        // The basis only matters when something in the subtree can resolve
+        // against the item's height; without a percentage-height descendant
+        // the pinned re-measure below would change nothing but the item's own
+        // measured height, which must not leak into the row sizing (an empty
+        // stretched item in a definite-height grid lost its height that way).
+        std::function<bool(const std::shared_ptr<element>&)> has_pct_h =
+            [&](const std::shared_ptr<element>& elm) -> bool {
+                for (const auto& child : elm->children())
+                {
+                    if (child->css().get_height().units() == css_units_percentage) return true;
+                    if (has_pct_h(child)) return true;
+                }
+                return false;
+            };
         bool stretch_auto_h = false;
-        if (!pct_h && ih.is_predefined() && ih.predef() == 0 && !el->src_el()->is_replaced())
+        if (!pct_h && ih.is_predefined() && ih.predef() == 0 && !el->src_el()->is_replaced() && has_pct_h(el->src_el()))
         {
             flex_align_items aln = el->src_el()->css().get_align_self();
             if (aln == flex_align_items_auto) aln = css().get_flex_align_items();
