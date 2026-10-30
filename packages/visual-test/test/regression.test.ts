@@ -10178,3 +10178,44 @@ describe("P0-92 a keyword-width item contributes its resolved size to its flex c
     expect(a.w).toBeLessThan(10);
   });
 });
+
+describe("P0-93 a grid item's percentage height resolves against the area (margin-box) height", () => {
+  const page = async (h: string) => {
+    let layout: any[] = [];
+    const a = `<div style="display:flex;flex-direction:column;flex-wrap:wrap;justify-content:space-around;align-items:stretch;height:${h};padding:8px;margin:12px"><div style="height:36px;margin:2px"></div><div style="height:36px;width:10px"></div><div style="width:90px;height:10px;flex:1"></div></div>`;
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body><div id="w" style="width:fit-content"><div style="display:grid;grid-template-columns:1fr auto auto;gap:4px;width:25%">${a}<div style="width:90px;height:10px"></div></div></div></body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as any);
+    return layout.find((b: any) => b.i === "w");
+  };
+  it("height:80% resolves against 116 (margin box), so the flex stays in one column", async () => {
+    // Chromium: the wrapper is 228 wide. Resolving against the border-box
+    // height (92) wraps the flex into two columns and widens it to 232.
+    expect(Math.round((await page("80%")).w)).toBe(228);
+  });
+  it("height:60% still wraps under either basis", async () => {
+    expect(Math.round((await page("60%")).w)).toBe(232);
+  });
+});
+
+describe("P0-93b the percentage re-measure is not served from the cyclic measure's memo", () => {
+  it("a height:30% item inside a grid > column-flex > grid chain contributes its wrapped width", async () => {
+    let layout: any[] = [];
+    const a = `<div style="display:flex;flex-direction:column;flex-wrap:wrap;justify-content:space-around;align-items:stretch;height:30%;padding:8px;margin:12px"><div style="height:36px;margin:2px"></div><div style="height:36px"></div><div style="width:90px;height:10px;flex:1"></div></div>`;
+    const inner = `<div style="display:grid;grid-template-columns:1fr auto auto;gap:4px;width:25%">${a}<div style="width:90px;height:10px"></div></div>`;
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:content-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body><div style="display:grid;grid-template-columns:auto auto 2fr;align-items:end;padding:4px"><div id="cf" style="display:flex;flex-direction:column">${inner}</div></div></body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as any);
+    const cf = layout.find((b: any) => b.i === "cf");
+    // Chromium: the column flex is 232 wide (the item wraps at 30% of the
+    // 116px area). Serving the re-measure from the cyclic pass's memo
+    // returns the unwrapped contribution and the flex comes out 228.
+    expect(Math.round(cf.w)).toBe(232);
+  });
+});
