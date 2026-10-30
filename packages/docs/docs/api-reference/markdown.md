@@ -205,11 +205,19 @@ graph LR
 | ガントチャート | `gantt` |
 | マインドマップ | `mindmap` |
 | タイムライン | `timeline` |
+| ユーザージャーニー | `journey` |
+| 四象限チャート | `quadrantChart` |
+| Git グラフ | `gitGraph` |
+| カンバン | `kanban` |
+| パケット図 | `packet-beta` |
+| サンキー図 | `sankey-beta` |
+| 要求図 | `requirementDiagram` |
+| ブロック図 | `block-beta`（入れ子のブロックは未対応） |
 
 - 色はテーマ（`light` / `dark`）に合わせて自動で決まります。
 - 図はページをまたいで分断されません。
 - `mermaid: false` を渡すと、通常のコードブロックとして表示します。
-- 未対応の図種（`journey`、`gitGraph` など）や構文エラーは、図の位置にエラー枠が表示されます。
+- 未対応の図種（`architecture-beta`、`C4`、`zenuml` など）や構文エラーは、図の位置にエラー枠が表示されます。
 
 ### JavaScript から SVG・画像として取得する
 

@@ -438,6 +438,22 @@ int main() {
         check(!render("requirementDiagram", e1, e2), "requirement/error_empty");
     }
 
+    // --- block ---
+    {
+        std::string s = svg_of("block-beta\n  columns 3\n  a b c\n  d:2 e[\"Eee\"]\n  f(\"Round\") g((\"Circle\")) h{\"Dia\"}\n  a --> b\n  b -- \"link\" --> e");
+        check(count(s, "class=\"node\"") == 8, "block/blocks");
+        check(has(s, ">Eee<") && has(s, ">Round<") && has(s, ">Circle<") && has(s, ">Dia<"), "block/labels");
+        check(has(s, "<ellipse") && has(s, "<polygon"), "block/shapes");
+        check(count(s, "class=\"edge\"") == 2 && has(s, ">link<"), "block/links");
+        check(count(svg_of("block-beta\n  columns 2\n  a space b"), "class=\"node\"") == 2, "block/space_is_empty");
+        check(has(svg_of("block\n  \xe5\x9b\xb3[\"\xe6\x97\xa5\xe6\x9c\xac\"]"), ">\xe6\x97\xa5\xe6\x9c\xac<"), "block/cjk_and_plain_keyword");
+        std::string e1, e2;
+        check(!render("block-beta\n  a --> b", e1, e2), "block/error_unknown_block");
+        check(!render("block-beta\n  block:g\n  a\n  end", e1, e2), "block/error_nested");
+        check(!render("block-beta\n  columns 0", e1, e2), "block/error_columns");
+        check(!render("block-beta", e1, e2), "block/error_empty");
+    }
+
     std::printf("----\n%d passed, %d failed\n", g_pass, g_fail);
     return g_fail == 0 ? 0 : 1;
 }

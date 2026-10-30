@@ -1608,6 +1608,14 @@ describe("regression: layout and paint probes", () => {
       gantt: "gantt\n  A :a, 2024-01-01, 5d\n  B :after a, 3d",
       mindmap: "mindmap\n  r\n    a\n    b",
       timeline: "timeline\n  2020 : a : b\n  2021 : c",
+      journey: "journey\n  section S\n    A: 5: Me\n    B: 2: Me",
+      quadrant: "quadrantChart\n  x-axis L --> R\n  y-axis D --> U\n  p: [0.3, 0.6]",
+      git: 'gitGraph\n  commit\n  branch b\n  checkout b\n  commit\n  checkout main\n  merge b',
+      kanban: "kanban\n  Todo\n    [a]\n  Done\n    [b]",
+      packet: 'packet-beta\n  0-15: "a"\n  16-31: "b"',
+      sankey: "sankey-beta\n\nA,B,5\nA,C,3",
+      requirement: "requirementDiagram\n  requirement r {\n    id: 1\n  }\n  element e {\n    type: x\n  }\n  e - satisfies -> r",
+      block: 'block-beta\n  columns 2\n  a b\n  a --> b',
       pie: 'pie title T\n  "a" : 1\n  "b" : 2',
     };
     for (const [name, src] of Object.entries(sources)) {
