@@ -429,10 +429,14 @@ int main() {
         check(has(svg_of("xychart-beta\nx-axis \"n\" 1 --> 3\nline [1, 2, 3]"), ">2<"), "xychart/numeric_x_axis");
         check(has(svg_of("xychart-beta\nx-axis [\xe6\x97\xa5, \xe6\x9c\x88]\nbar [1, 2]"), ">\xe6\x97\xa5<"), "xychart/cjk");
         check(has(svg_of("xychart-beta\nbar [3, -2]"), "<rect"), "xychart/negative_values");
+        {
+            std::string h = svg_of("xychart-beta horizontal\n  title \"T\"\n  x-axis [jan, feb, mar]\n  y-axis \"Rev\" 0 --> 100\n  bar [10, 50, 90]\n  line [20, 40, 60]");
+            check(has(h, ">jan<") && has(h, ">Rev<") && has(h, ">100<") && count(h, "<rect x=") >= 3 && count(h, "<circle") == 3, "xychart/horizontal");
+            check(!has(h, "#cf222e"), "xychart/horizontal_no_error");
+        }
         std::string e1, e2;
         check(!render("xychart-beta\nx-axis [a]", e1, e2), "xychart/error_no_series");
         check(!render("xychart-beta\nbar [a, b]", e1, e2), "xychart/error_not_a_number");
-        check(!render("xychart-beta horizontal\nbar [1]", e1, e2), "xychart/error_horizontal");
     }
 
     // --- pie ---
@@ -610,7 +614,15 @@ int main() {
         check(has(svg_of("block\n  \xe5\x9b\xb3[\"\xe6\x97\xa5\xe6\x9c\xac\"]"), ">\xe6\x97\xa5\xe6\x9c\xac<"), "block/cjk_and_plain_keyword");
         std::string e1, e2;
         check(render("block-beta\n  a --> b", e1, e2) && count(e1, "class=\"node\"") == 2 && count(e1, "class=\"edge\"") == 1, "block/edge_creates_missing_blocks");
-        check(!render("block-beta\n  block:g\n  a\n  end", e1, e2), "block/error_nested");
+        {
+            std::string n = svg_of("block-beta\n  columns 3\n  a:3\n  block:g:2\n    columns 2\n    d e\n  end\n  f");
+            check(count(n, "class=\"node\"") == 4 && count(n, "class=\"group\"") == 1, "block/nested_group");
+            check(!has(n, "#cf222e"), "block/nested_no_error");
+            check(has(svg_of("block-beta\n  block:outer\n    block:inner\n      x y\n    end\n    z\n  end"), "class=\"group\""), "block/nested_twice");
+            check(count(svg_of("block-beta\n  block:g\n    a\n  end\n  b\n  a --> b"), "class=\"edge\"") == 1, "block/nested_link_across_groups");
+        }
+        check(!render("block-beta\n  end", e1, e2), "block/error_end_without_block");
+        check(!render("block-beta\n  block:g\n  a", e1, e2), "block/error_unclosed");
         check(!render("block-beta\n  columns 0", e1, e2), "block/error_columns");
         check(!render("block-beta", e1, e2), "block/error_empty");
     }

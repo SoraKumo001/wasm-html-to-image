@@ -175,7 +175,7 @@ CLI では、同じ内容が標準エラー出力に出ます。図が読めな�
 | クラス図 | `classDiagram` |
 | ER 図 | `erDiagram` |
 | 要求図 | `requirementDiagram` |
-| ブロック図 | `block-beta`（入れ子のブロックは未対応） |
+| ブロック図 | `block-beta`（`block:id ... end` の入れ子に対応） |
 | C4 図 | `C4Context` / `C4Container` / `C4Component` / `C4Dynamic` / `C4Deployment` |
 | アーキテクチャ図 | `architecture-beta` |
 | ガントチャート | `gantt` |

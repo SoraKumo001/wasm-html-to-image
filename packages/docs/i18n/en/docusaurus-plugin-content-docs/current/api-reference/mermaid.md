@@ -175,7 +175,7 @@ The CLI prints the same on stderr. When a diagram cannot be read it still writes
 | Class | `classDiagram` |
 | ER | `erDiagram` |
 | Requirement | `requirementDiagram` |
-| Block | `block-beta` (nested blocks are not supported) |
+| Block | `block-beta` (`block:id ... end` groups nest) |
 | C4 | `C4Context` / `C4Container` / `C4Component` / `C4Dynamic` / `C4Deployment` |
 | Architecture | `architecture-beta` |
 | Gantt | `gantt` |
