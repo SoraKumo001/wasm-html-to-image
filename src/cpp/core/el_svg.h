@@ -104,6 +104,9 @@ class el_svg : public html_tag {
    private:
     std::string reconstruct_xml(int x, int y, int width, int height) const;
     void write_element(std::ostream& os, const element::ptr& el) const;
+    void write_markers(std::ostream& os, const element::ptr& el, const std::string& tag_name) const;
+    using element_list_t = std::list<std::shared_ptr<element>>;
+    const element* find_marker(const element_list_t& list, const std::string& id) const;
 };
 }  // namespace litehtml
 

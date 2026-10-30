@@ -36,3 +36,10 @@ target_include_directories(test_animation_sampler PRIVATE "${CMAKE_CURRENT_SOURC
 target_compile_features(test_animation_sampler PRIVATE cxx_std_20)
 
 add_test(NAME animation_sampler COMMAND test_animation_sampler)
+
+# core/svg_paint_utils.h (color-mix evaluation, marker geometry) is standard-library only
+add_executable(test_svg_paint_utils test_svg_paint_utils.cpp)
+target_include_directories(test_svg_paint_utils PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp")
+target_compile_features(test_svg_paint_utils PRIVATE cxx_std_20)
+
+add_test(NAME svg_paint_utils COMMAND test_svg_paint_utils)

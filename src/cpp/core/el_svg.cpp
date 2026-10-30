@@ -16,6 +16,7 @@
 #include "libs/litehtml/include/litehtml/render_item.h"
 #include "modules/skresources/include/SkResources.h"
 #include "modules/svg/include/SkSVGDOM.h"
+#include "svg_paint_utils.h"
 #include "svg_tag_utils.h"
 
 namespace litehtml {
@@ -240,6 +241,14 @@ std::string trim_copy(const std::string& v) {
     return v.substr(b, e - b + 1);
 }
 
+// The text of a custom property's tokens. The stylesheet drops whitespace tokens, so a value whose parts
+// need a separator (`color-mix(in srgb, #000 50%, #fff)`) is written back with spaces; anything else keeps
+// the compact form that plain colours (`rgb(1,2,3)`) need.
+std::string custom_property_text(const css_token_vector& toks) {
+    std::string compact = get_repr(toks);
+    return compact.find("color-mix(") != std::string::npos ? get_repr(toks, 0, -1, true) : compact;
+}
+
 // Resolve var() and light-dark() in a fill/stroke value the way the cascade would. Returns false
 // when the value is invalid at computed-value time (an undefined variable without a fallback), in
 // which case the declaration is dropped. light-dark() picks its light branch.
@@ -276,7 +285,7 @@ bool resolve_paint(const element* el, const std::string& in, std::string& out, i
             bool ok = false;
             css_token_vector toks;
             if (first.rfind("--", 0) == 0 && el->get_custom_property(_id(first), toks)) {
-                ok = resolve_paint(el, get_repr(toks), piece, depth + 1);
+                ok = resolve_paint(el, custom_property_text(toks), piece, depth + 1);
             }
             if (!ok) {
                 if (comma == std::string::npos) return false;
@@ -296,8 +305,40 @@ bool resolve_paint(const element* el, const std::string& in, std::string& out, i
 std::string css_paint(const element* el, string_id property) {
     const property_value& pv = el->get_property_value(property);
     if (!pv.is<string>()) return "";
+    std::string resolved, out;
+    if (!resolve_paint(el, pv.get<string>(), resolved)) return "";
+    return svgutil::eval_color_functions(resolved, out) ? out : "";
+}
+
+std::string svg_escape_attr(const std::string& v) {
+    std::string out;
+    for (char c : v) {
+        if (c == '&') out += "&amp;";
+        else if (c == '"') out += "&quot;";
+        else if (c == '<') out += "&lt;";
+        else out += c;
+    }
+    return out;
+}
+
+// An attribute value with var(), light-dark() and color-mix() evaluated, since SkSVGDOM reads none of
+// them (SVG generators such as beautiful-mermaid put `fill="var(--_node-fill)"` on every shape).
+// Returns false when the value is invalid at computed-value time: the attribute is then dropped.
+bool resolve_attr(const element* el, const std::string& value, std::string& out) {
+    auto has = [&](const char* f) { return value.find(f) != std::string::npos; };
+    if (!has("var(") && !has("light-dark(") && !has("color-mix(")) {
+        out = value;
+        return true;
+    }
     std::string resolved;
-    return resolve_paint(el, pv.get<string>(), resolved) ? resolved : "";
+    if (!resolve_paint(el, value, resolved)) return false;
+    return svgutil::eval_color_functions(resolved, out);
+}
+
+// The font-family the stylesheets give a text element (`text { font-family: ... }`), or empty.
+std::string css_font_family(const element* el) {
+    const property_value& pv = el->get_property_value(_font_family_);
+    return pv.is<string>() ? pv.get<string>() : "";
 }
 
 }  // namespace
@@ -352,6 +393,7 @@ void el_svg::write_element(std::ostream& os, const element::ptr& el) const {
             attr_val.erase(std::remove(attr_val.begin(), attr_val.end(), '\n'), attr_val.end());
             attr_val.erase(std::remove(attr_val.begin(), attr_val.end(), '\r'), attr_val.end());
             attr_val.erase(std::remove(attr_val.begin(), attr_val.end(), '\t'), attr_val.end());
+            if (!resolve_attr(el.get(), attr_val, attr_val)) continue;
 
             if (attr_name == "stroke") {
                 if (stroke_width_is_zero) {
@@ -374,6 +416,10 @@ void el_svg::write_element(std::ostream& os, const element::ptr& el) const {
         if (stroke_width_is_zero && !stroke_attr_written) {
             os << " stroke=\"none\"";
         }
+        if ((tag_name == "text" || tag_name == "tspan") && !el->get_attr("font-family")) {
+            std::string family = css_font_family(el.get());
+            if (!family.empty()) os << " font-family=\"" << svg_escape_attr(family) << "\"";
+        }
     }
 
     auto children = el->children();
@@ -386,6 +432,93 @@ void el_svg::write_element(std::ostream& os, const element::ptr& el) const {
         }
         os << "</" << tag_name << ">";
     }
+    write_markers(os, el, tag_name);
+}
+
+// SkSVGDOM draws no <marker>, so marker-start / marker-end of a line, polyline or polygon are drawn
+// here: the marker's content is copied into a group placed on the first / last vertex.
+const element* el_svg::find_marker(const element_list_t& list, const std::string& id) const {
+    for (auto const& e : list) {
+        if (e->is_text() || e->is_comment()) continue;
+        if (std::string(e->get_tagName()) == "marker") {
+            const char* mid = e->get_attr("id");
+            if (mid && id == mid) return e.get();
+        }
+        if (auto found = find_marker(e->children(), id)) return found;
+    }
+    return nullptr;
+}
+
+void el_svg::write_markers(std::ostream& os, const element::ptr& el, const std::string& tag_name) const {
+    if (tag_name != "line" && tag_name != "polyline" && tag_name != "polygon") return;
+    const char* start_ref = el->get_attr("marker-start");
+    const char* end_ref = el->get_attr("marker-end");
+    if (!start_ref && !end_ref) return;
+
+    std::vector<svgutil::Point> pts;
+    auto num = [&](const char* name) {
+        const char* v = el->get_attr(name);
+        return v ? std::strtod(v, nullptr) : 0.0;
+    };
+    if (tag_name == "line") {
+        pts = {{num("x1"), num("y1")}, {num("x2"), num("y2")}};
+    } else if (const char* points = el->get_attr("points")) {
+        pts = svgutil::parse_points(points);
+    }
+    if (pts.size() < 2) return;
+    const char* sw = el->get_attr("stroke-width");
+    double stroke_width = sw ? std::strtod(sw, nullptr) : 1.0;
+    if (!(stroke_width > 0)) stroke_width = 1.0;
+
+    auto place = [&](const char* ref, bool at_end) {
+        if (!ref) return;
+        std::string r = svgutil::trim(ref);
+        if (r.rfind("url(#", 0) != 0) return;
+        size_t close = r.find(')');
+        if (close == std::string::npos) return;
+        std::string id = svgutil::trim(r.substr(5, close - 5));
+        if (id.size() >= 2 && (id.back() == '"' || id.back() == '\'')) id = id.substr(0, id.size() - 1);
+        const element* marker = find_marker(m_children, id);
+        if (!marker) return;
+
+        auto attr = [&](const char* name, double def) {
+            const char* v = marker->get_attr(name);
+            return v ? std::strtod(v, nullptr) : def;
+        };
+        svgutil::MarkerDef def;
+        def.refX = attr("refx", 0);
+        def.refY = attr("refy", 0);
+        def.markerWidth = attr("markerwidth", 3);
+        def.markerHeight = attr("markerheight", 3);
+        if (const char* vb = marker->get_attr("viewbox")) {
+            auto nums = svgutil::parse_points(vb);  // x y w h as two pairs
+            if (nums.size() == 2) {
+                def.has_viewBox = true;
+                def.vbX = nums[0].x;
+                def.vbY = nums[0].y;
+                def.vbW = nums[1].x;
+                def.vbH = nums[1].y;
+            }
+        }
+        const char* units = marker->get_attr("markerunits");
+        def.stroke_units = !(units && std::string(units) == "userSpaceOnUse");
+
+        double angle = 0;
+        const char* orient = marker->get_attr("orient");
+        std::string o = orient ? svgutil::trim(orient) : "";
+        if (o == "auto" || o == "auto-start-reverse") {
+            angle = svgutil::segment_angle(pts, at_end);
+            if (!at_end && o == "auto-start-reverse") angle += 180;
+        } else if (!o.empty()) {
+            angle = std::strtod(o.c_str(), nullptr);
+        }
+        os << "<g transform=\"" << svgutil::marker_transform(def, at_end ? pts.back() : pts.front(), angle, stroke_width)
+           << "\">";
+        for (auto const& child : marker->children()) write_element(os, child);
+        os << "</g>";
+    };
+    place(start_ref, false);
+    place(end_ref, true);
 }
 
 std::string el_svg::reconstruct_xml(int x, int y, int width, int height) const {
@@ -422,6 +555,7 @@ std::string el_svg::reconstruct_xml(int x, int y, int width, int height) const {
         attr_val.erase(std::remove(attr_val.begin(), attr_val.end(), '\n'), attr_val.end());
         attr_val.erase(std::remove(attr_val.begin(), attr_val.end(), '\r'), attr_val.end());
         attr_val.erase(std::remove(attr_val.begin(), attr_val.end(), '\t'), attr_val.end());
+        if (!resolve_attr(this, attr_val, attr_val)) continue;
 
         if (attr_name == "xmlns" || attr_name == "xmlns:xlink" || attr_name == "x" ||
             attr_name == "y" || attr_name == "width" || attr_name == "height" ||

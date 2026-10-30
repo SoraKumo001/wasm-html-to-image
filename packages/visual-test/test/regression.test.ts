@@ -1537,6 +1537,42 @@ describe("regression: layout and paint probes", () => {
       expect(near(at(50, 20), RED)).toBe(true);
     }
   });
+  it("inline SVG resolves custom properties and color-mix() in attributes and stylesheet rules", async () => {
+    // Generators such as beautiful-mermaid derive every colour from --bg / --fg with color-mix().
+    const root = `style="--fg:#000000;--bg:#ffffff"`;
+    const sheet = `<style>svg{--half:color-mix(in srgb, var(--fg) 50%, var(--bg));--pick:var(--none, color-mix(in srgb, var(--fg) 50%, var(--bg)))}.bar{fill:var(--half)}</style>`;
+    const rect = (extra: string) => `<rect width="100" height="40" ${extra}/>`;
+    const gray: Rgb = [128, 128, 128];
+    for (const extra of [
+      `fill="var(--half)"`, // custom property holding a color-mix
+      `fill="var(--pick)"`, // undefined var with a color-mix fallback
+      `fill="color-mix(in srgb, #000 50%, #fff)"`, // inline function
+      `class="bar"`, // stylesheet rule
+    ]) {
+      const { at } = await renderPng(`<svg width="100" height="40" ${root}>${sheet}${rect(extra)}</svg>`, 100, 40);
+      expect(near(at(50, 20), gray, 4), extra).toBe(true);
+    }
+    // invalid at computed-value time: the attribute is dropped, not painted black via currentColor
+    const { at } = await renderPng(`<svg width="100" height="40" style="color:#f00">${rect(`fill="var(--missing)"`)}</svg>`, 100, 40);
+    expect(near(at(50, 20), [0, 0, 0], 4)).toBe(true); // an SVG shape without fill is black
+  });
+  it("inline SVG draws marker-end / marker-start on lines and polylines", async () => {
+    const marker = `<defs><marker id="m" markerWidth="8" markerHeight="8" refX="8" refY="4" orient="auto"><polygon points="0 0, 8 4, 0 8" fill="#00f"/></marker></defs>`;
+    // the head is wholly beyond the line's last point, so only the marker can paint there
+    const { at } = await renderPng(
+      `<svg width="100" height="40">${marker}<polyline points="5,20 80,20" stroke="#000" stroke-width="1" fill="none" marker-end="url(#m)"/></svg>`,
+      100,
+      40,
+    );
+    expect(near(at(75, 20), BLUE)).toBe(true); // inside the arrowhead, left of the tip at x=80
+    expect(isWhite(at(90, 20))).toBe(true); // nothing past the tip
+    const rev = await renderPng(
+      `<svg width="100" height="40">${marker.replace('orient="auto"', 'orient="auto-start-reverse"')}<line x1="20" y1="20" x2="95" y2="20" stroke="#000" marker-start="url(#m)"/></svg>`,
+      100,
+      40,
+    );
+    expect(near(rev.at(25, 20), BLUE)).toBe(true); // reversed head: tip at x=20, widening to the right
+  });
   it("inline SVG <text> is drawn (needs a font manager that knows Satoru's fonts)", async () => {
     const { img } = await renderPng(
       `<svg width="200" height="40"><text x="5" y="25" font-size="16" fill="#000">Hello 世田谷区</text></svg>`,
