@@ -271,8 +271,60 @@ bool drop_line(std::string& source, const std::string& text) {
 
 }  // namespace
 
+/// Removes `accTitle` / `accDescr` statements (`accDescr { ... }` may span lines) and returns their text.
+static void take_accessibility(std::string& source, std::string& title, std::string& descr) {
+    using litehtml::svgutil::trim;
+    auto keyword = [](const std::string& line, const char* word) {
+        size_t n = std::char_traits<char>::length(word);
+        return line.compare(0, n, word) == 0 && (line.size() == n || line[n] == ':' || line[n] == ' ' || line[n] == '{');
+    };
+    std::string out;
+    size_t i = 0;
+    while (i <= source.size()) {
+        size_t e = source.find('\n', i);
+        size_t end = e == std::string::npos ? source.size() : e;
+        std::string raw = source.substr(i, end - i), line = trim(raw);
+        i = e == std::string::npos ? source.size() + 1 : e + 1;
+        if (keyword(line, "accTitle")) {
+            std::string v = trim(line.substr(8));
+            if (!v.empty() && v[0] == ':') v = trim(v.substr(1));
+            title = v;
+            continue;
+        }
+        if (keyword(line, "accDescr")) {
+            std::string v = trim(line.substr(8));
+            if (!v.empty() && v[0] == ':') {
+                descr = trim(v.substr(1));
+            } else if (!v.empty() && v[0] == '{') {
+                v = trim(v.substr(1));
+                std::string text;
+                bool closed = false;
+                for (;;) {
+                    size_t brace = v.find('}');
+                    if (brace != std::string::npos) {
+                        v = trim(v.substr(0, brace));
+                        closed = true;
+                    }
+                    if (!v.empty()) text += (text.empty() ? "" : "\n") + v;
+                    if (closed || i > source.size()) break;
+                    size_t e2 = source.find('\n', i);
+                    v = trim(source.substr(i, e2 == std::string::npos ? std::string::npos : e2 - i));
+                    i = e2 == std::string::npos ? source.size() + 1 : e2 + 1;
+                }
+                descr = text;
+            }
+            continue;
+        }
+        out += raw;
+        if (e != std::string::npos) out += '\n';
+    }
+    source = out;
+}
+
 bool render(const std::string& input, const Options& options, std::string& svg, std::string& error, std::vector<std::string>* warnings) {
     std::string source = input;
+    std::string acc_title, acc_descr;
+    take_accessibility(source, acc_title, acc_descr);
     if (options.mode != Options::Mode::Strict) {
         if (source.compare(0, 3, "\xEF\xBB\xBF") == 0) source.erase(0, 3);
         std::string out;
@@ -284,6 +336,13 @@ bool render(const std::string& input, const Options& options, std::string& svg, 
     bool tried_close = false;
     for (int round = 0; round < 40; round++) {
         if (render_once(source, options, svg, error)) {
+            size_t root_end = svg.find('>');
+            if ((!acc_title.empty() || !acc_descr.empty()) && root_end != std::string::npos) {
+                std::string text;
+                if (!acc_title.empty()) text += "<title>" + esc(acc_title) + "</title>\n";
+                if (!acc_descr.empty()) text += "<desc>" + esc(acc_descr) + "</desc>\n";
+                svg.insert(root_end + 1, "\n" + text);
+            }
             if (!notes.empty()) {
                 std::string comment = "<!-- recovered:";
                 for (auto& n : notes) {

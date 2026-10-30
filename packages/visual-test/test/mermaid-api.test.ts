@@ -16,6 +16,15 @@ describe("renderMermaid", () => {
     expect(Number(outer[2])).toBeGreaterThan(40);
   });
 
+  it("keeps accTitle and accDescr out of the picture and in the SVG", async () => {
+    const plain = await renderMermaid(GRAPH, { format: "png" });
+    const described = await renderMermaid(`graph LR\n  accTitle: 判定の流れ\n  accDescr {\n  開始から完了まで\n  }\n${GRAPH.split("\n").slice(1).join("\n")}`, { format: "png" });
+    expect(Buffer.from(described.data).equals(Buffer.from(plain.data))).toBe(true);
+    const svg = (await renderMermaid(`graph LR\n  accTitle: 判定の流れ\n${GRAPH.split("\n").slice(1).join("\n")}`)).data;
+    expect(svg).toContain("開始");
+    expect(svg).not.toContain("accTitle");
+  });
+
   it("takes a named theme: its background on the page and its accent on the arrows", async () => {
     const nord = PNG.sync.read(Buffer.from((await renderMermaid(GRAPH, { format: "png", theme: "nord" })).data));
     expect([nord.data[0], nord.data[1], nord.data[2]]).toEqual([0x2e, 0x34, 0x40]);

@@ -171,6 +171,17 @@ int main() {
         check(has(svg_of("venn-beta\n  text x"), "ERROR"), "venn/text_without_owner");
     }
 
+    // --- accTitle / accDescr ---
+    {
+        std::string a = svg_of("graph TD\naccTitle: Order flow\naccDescr: A leads to B\nA-->B");
+        check(has(a, "<title>Order flow</title>") && has(a, "<desc>A leads to B</desc>") && count(a, "class=\"edge\"") == 1, "acc/single_line");
+        std::string m = svg_of("sequenceDiagram\naccTitle Sign in\naccDescr {\nThe user signs in.\nThen sees the home page.\n}\nA->>B: hi");
+        check(has(m, "<title>Sign in</title>") && has(m, "<desc>The user signs in.\nThen sees the home page.</desc>") && has(m, ">hi<"), "acc/multi_line");
+        check(has(svg_of("pie\naccTitle: <Pets> & more\n\"a\": 1"), "<title>&lt;Pets&gt; &amp; more</title>"), "acc/escaped");
+        check(!has(svg_of("graph TD\nA-->B"), "<title>"), "acc/absent_means_no_title");
+        check(has(svg_of("stateDiagram-v2\naccDescr: only a description\nA --> B"), "<desc>only a description</desc>"), "acc/descr_only");
+    }
+
     // --- named themes ---
     {
         std::string svg, err;

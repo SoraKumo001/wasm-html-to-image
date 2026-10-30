@@ -224,6 +224,7 @@ graph LR
 
 - Colours follow the theme (`light` / `dark`).
 - A diagram is never split across pages.
+- `accTitle: Title` and `accDescr: Description` (`accDescr { ... }` for several lines) are not drawn; they become the SVG `<title>` and `<desc>`, which screen readers announce.
 - Pass `mermaid: false` to show them as plain code blocks.
 - An unsupported type (`architecture-beta`, `C4`, `zenuml`, ...) or a syntax error shows an error box where the diagram would be.
 
