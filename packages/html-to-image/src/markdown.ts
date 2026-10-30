@@ -84,7 +84,7 @@ export interface MarkdownOptions {
   /** Highlight fenced code blocks that name a known language. Defaults to true. */
   highlight?: boolean;
   /**
-   * Draw ```` ```mermaid ```` fences as diagrams (flowchart, sequence and state diagrams, drawn by the engine
+   * Draw ```` ```mermaid ```` fences as diagrams (flowchart, sequence, state, class, ER and xy charts, drawn by the engine
    * itself). Defaults to true; `false` leaves them as code blocks.
    */
   mermaid?: boolean;

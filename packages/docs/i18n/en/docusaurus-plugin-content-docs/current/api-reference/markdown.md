@@ -20,6 +20,7 @@ It is implemented in pure JavaScript with no Node.js platform dependencies, runn
 - **Smart Page Break Handling**: Avoids orphan headings (`break-after: avoid`) and prevents breaking code blocks and tables across page boundaries.
 - **YAML Front Matter**: Parses document metadata (`title`, `subtitle`, `author`, `date`, `template`, `stamp`, `cover`, `accent`, etc.).
 - **Syntax Highlighting**: Built-in highlight.js covering 20+ programming languages.
+- **Mermaid diagrams**: ` ```mermaid ` blocks (flowchart, sequence, state, class, ER, bar/line chart) are drawn inside the engine.
 - **KaTeX Mathematical Typesetting (`/markdown-math`)**: High-accuracy rendering for inline `$…$` and display `$$…$$` equations.
 
 ---
@@ -178,6 +179,33 @@ await render({
 ```
 
 ---
+
+## Mermaid diagrams
+
+A ` ```mermaid ` code block is drawn by the engine itself as vector graphics: no browser or extra library, and in a PDF the text stays selectable.
+
+````markdown
+```mermaid
+graph LR
+  A[Order] --> B{In stock?}
+  B -->|yes| C[Ship]
+  B -->|no| D[Reorder]
+```
+````
+
+| Diagram | Starts with |
+| :--- | :--- |
+| Flowchart | `graph` / `flowchart` |
+| Sequence | `sequenceDiagram` |
+| State | `stateDiagram-v2` |
+| Class | `classDiagram` |
+| ER | `erDiagram` |
+| Bar / line chart | `xychart-beta` |
+
+- Colours follow the theme (`light` / `dark`).
+- A diagram is never split across pages.
+- Pass `mermaid: false` to show them as plain code blocks.
+- An unsupported type (`pie`, `gantt`, ...) or a syntax error shows an error box where the diagram would be.
 
 ## KaTeX Math Typesetting (`/markdown-math`)
 

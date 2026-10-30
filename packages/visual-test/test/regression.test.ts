@@ -1597,6 +1597,27 @@ describe("regression: layout and paint probes", () => {
     const plain = await renderPng(page(`<pre>graph TD</pre>`), 300, 60);
     expect(countPixels(plain.img, (r, g, b) => b > 200 && r < 60 && g < 60)).toBe(0);
   });
+  it("every Mermaid diagram type is drawn (ink, no error box)", async () => {
+    const sources: Record<string, string> = {
+      flowchart: "graph LR\n  A --&gt; B",
+      sequence: "sequenceDiagram\n  A-&gt;&gt;B: hi",
+      state: "stateDiagram-v2\n  [*] --&gt; A",
+      class: "classDiagram\n  class A {\n    &lt;&lt;abstract&gt;&gt;\n    +x()\n  }\n  A &lt;|-- B",
+      er: "erDiagram\n  A ||--o{ B : has",
+      xychart: "xychart-beta\n  x-axis [a, b]\n  bar [1, 2]",
+    };
+    for (const [name, src] of Object.entries(sources)) {
+      const { img } = await renderPng(`<div style="color:#000"><div class="mermaid">${src}</div></div>`, 400, 360);
+      let ink = 0;
+      let error = 0;
+      for (let i = 0; i < img.data.length; i += 4) {
+        if (img.data[i] < 200 && img.data[i + 1] < 200 && img.data[i + 2] < 200) ink++;
+        if (img.data[i] > 180 && img.data[i + 1] < 80 && img.data[i + 2] < 80) error++;
+      }
+      expect(ink, name).toBeGreaterThan(100);
+      expect(error, name).toBe(0);
+    }
+  });
   it("inline SVG text takes the font weight and falls back per character inside one <text>", async () => {
     const ink = async (attrs: string, text: string) => {
       const { img } = await renderPng(`<svg width="260" height="40"><text x="4" y="28" font-size="22" ${attrs}>${text}</text></svg>`, 260, 40);
