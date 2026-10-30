@@ -1275,7 +1275,14 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         }
         if ((pct_h || stretch_auto_h) && (cb.height.type == containing_block_context::cbc_value_type_auto || cb.height_cyclic))
         {
-            pixel_t basis = el->height() - el->get_margins().height();
+            // A percentage height resolves against the grid AREA, and the
+            // area spans the item's margin box: when this item is the row's
+            // tallest, the row (and so the area) is its margin-box height,
+            // not its border-box height. A height:80% wrapping column flex
+            // with 12px margins resolves against 116, not 92, and stays in
+            // one column. The stretched item's pin below is its own height,
+            // which stays border-box.
+            pixel_t basis = pct_h ? el->height() : el->height() - el->get_margins().height();
             // The percentage resolves against the grid AREA, whose height is the
             // row's height -- and the row is at least its definite track minimum
             // (a fixed length, or a minmax() floor) and at least the content
@@ -1320,7 +1327,8 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                         mcb.render_height = mcb.height;
                         mcb.height_cyclic = true;
                         mate.el->measure(mcb, fmt_ctx);
-                        row_h = std::max(row_h, mate.el->height() - mate.el->get_margins().height());
+                        row_h = std::max(row_h, pct_h ? mate.el->height()
+                                                      : mate.el->height() - mate.el->get_margins().height());
                     }
                     row_total += row_h;
                     if (r > item.pos.row_start) row_total += m_grid_layout.row_gap;
