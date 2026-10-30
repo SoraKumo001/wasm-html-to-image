@@ -863,6 +863,28 @@ void litehtml::flex_item_column_direction::direction_specific_init(const litehtm
 		}
 		return intrinsic_inline_size;
 	};
+	// The content measure answers an item's max-content width; the fit-content
+	// width it feeds is min(max-content, max(min-content, available)), so a
+	// 420px max-content inside a 379.4px column is 379.4, not 420 -- measured
+	// at 420 the item's block size is frozen for a box it never gets.
+	auto clamp_fit_measure = [&](containing_block_context& fit_cb, formatting_context* ctx) -> pixel_t
+	{
+		el->measure(fit_cb, ctx);
+		pixel_t measured = std::max<pixel_t>(0, el->inline_size(m_container_wm) -
+												el->content_offset_inline(m_container_wm) +
+												el->box_sizing_inline(m_container_wm));
+		const pixel_t available = self_size.render_width.value - el->content_offset_width() + el->box_sizing_width();
+		if (measured > available && self_size.render_width.value > 0)
+		{
+			fit_cb.size_mode |= containing_block_context::size_mode_min_content;
+			el->measure(fit_cb, ctx);
+			const pixel_t min_measured = std::max<pixel_t>(0, el->inline_size(m_container_wm) -
+															  el->content_offset_inline(m_container_wm) +
+															  el->box_sizing_inline(m_container_wm));
+			measured = std::max(min_measured, available);
+		}
+		return measured;
+	};
 	auto stretched_inline_size = [&]() -> pixel_t
 	{
 		pixel_t width = self_size.render_width.value - el->content_offset_width() + el->box_sizing_width();
@@ -879,18 +901,13 @@ void litehtml::flex_item_column_direction::direction_specific_init(const litehtm
 		{
 			formatting_context fmt_ctx_copy;
 			if (fmt_ctx) fmt_ctx_copy = *fmt_ctx;
-			// Width auto with the content mode is the fit-content measure (available width, floored by
-			// the item's min-content width and clamped by its max-width).
 			containing_block_context fit_cb = self_size;
 			fit_cb.height.type = containing_block_context::cbc_value_type_auto;
 			fit_cb.size_mode &= ~(containing_block_context::size_mode_exact_width |
 								  containing_block_context::size_mode_exact_height);
 			fit_cb.size_mode |= containing_block_context::size_mode_measure |
 								containing_block_context::size_mode_content;
-			el->measure(fit_cb, fmt_ctx ? &fmt_ctx_copy : nullptr);
-			fit_inline_size = std::max<pixel_t>(0, el->inline_size(m_container_wm) -
-												   el->content_offset_inline(m_container_wm) +
-												   el->box_sizing_inline(m_container_wm));
+			fit_inline_size = clamp_fit_measure(fit_cb, fmt_ctx ? &fmt_ctx_copy : nullptr);
 		}
 		return std::max(width, (pixel_t) fit_inline_size);
 	};
@@ -908,10 +925,7 @@ void litehtml::flex_item_column_direction::direction_specific_init(const litehtm
 								  containing_block_context::size_mode_exact_height);
 			fit_cb.size_mode |= containing_block_context::size_mode_measure |
 								containing_block_context::size_mode_content;
-			el->measure(fit_cb, fmt_ctx ? &fmt_ctx_copy : nullptr);
-			fit_inline_size = std::max<pixel_t>(0, el->inline_size(m_container_wm) -
-												   el->content_offset_inline(m_container_wm) +
-												   el->box_sizing_inline(m_container_wm));
+			fit_inline_size = clamp_fit_measure(fit_cb, fmt_ctx ? &fmt_ctx_copy : nullptr);
 		}
 		return fit_inline_size;
 	};
@@ -1264,6 +1278,24 @@ void litehtml::flex_item_column_direction::layout_item(litehtml::flex_line &ln,
 	// that does not stretch is the same fit-content size (CSS Flexbox 9.4: an item with no cross-size
 	// stretch is sized from its content), so it is clamped the same way.
 	const int cross_predef = cross_prop.is_predefined() ? (int) cross_prop.predef() : -1;
+	// A min-content inline size is the item's smallest content width: the
+	// content measure above answers max-content, so re-measure at min-content
+	// and pin the item there.
+	if (!m_container_wm.is_vertical() && cross_predef == 3)
+	{
+		containing_block_context min_cb = child_cb;
+		min_cb.size_mode |= containing_block_context::size_mode_min_content;
+		el->measure(min_cb, fmt_ctx);
+		containing_block_context pin_cb = child_cb;
+		pin_cb.width = el->inline_size(m_container_wm) - el->content_offset_inline(m_container_wm) +
+					   el->box_sizing_inline(m_container_wm);
+		pin_cb.width.type = containing_block_context::cbc_value_type_absolute;
+		pin_cb.render_width = pin_cb.width;
+		pin_cb.size_mode |= containing_block_context::size_mode_exact_width;
+		pin_cb.size_mode &= ~(containing_block_context::size_mode_content |
+							  containing_block_context::size_mode_min_content);
+		el->measure(pin_cb, fmt_ctx);
+	}
 	if (!m_container_wm.is_vertical() && (cross_predef == 1 || (cross_predef == 0 && !stretch)))
 	{
 		const pixel_t available = self_size.render_width.value - el->content_offset_width() + el->box_sizing_width();
