@@ -617,7 +617,9 @@ void litehtml::render_item_inline_context::place_inline(std::unique_ptr<line_box
 		   self_size.mode == writing_mode_horizontal_tb &&
 		   item->get_el()->src_el()->css().get_clear() == clear_none)
 		{
-			m_measure_float_width += ret;
+			// ret is the float's line extent, not its own width: the latest float's
+			// extent is the line's float total.
+			m_measure_float_width = ret;
 		}
 		if(ret > m_max_line_width)
 		{

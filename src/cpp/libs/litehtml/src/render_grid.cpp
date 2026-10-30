@@ -1222,14 +1222,84 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
     // once that way, then again with the resulting border-box height definite, so a
     // height-dependent item (a wrapping column flex) forms its lines at the resolved
     // height instead of stacking everything into one line.
-    auto measure_contribution = [&](const std::shared_ptr<render_item>& el, const containing_block_context& cb) -> pixel_t
+    // The definite height of the rows an item spans, when every spanned row is a
+    // fixed length (template or grid-auto-rows pattern); -1 otherwise.
+    auto definite_row_height = [&](const grid_item& item) -> pixel_t
     {
+        const auto& auto_rows = css().get_grid_auto_rows();
+        pixel_t total = 0;
+        for (int r = item.pos.row_start; r < item.pos.row_end; r++)
+        {
+            css_length len;
+            if (r < (int)rows_template.size()) len = rows_template[r];
+            else if (!auto_rows.empty()) len = auto_rows[(r - (int)rows_template.size()) % (int)auto_rows.size()];
+            else return -1;
+            if (len.is_predefined() || len.is_calc() || len.units() == css_units_percentage || len.units() == css_units_fr) return -1;
+            total += len.calc_percent(0);
+            if (r > item.pos.row_start) total += m_grid_layout.row_gap;
+        }
+        return total;
+    };
+    auto measure_contribution = [&](const grid_item& item, const containing_block_context& cb) -> pixel_t
+    {
+        const auto& el = item.el;
         pixel_t measured = el->measure(cb, fmt_ctx);
         const css_length& ih = el->src_el()->css().get_height();
         const bool pct_h = ih.units() == css_units_percentage || (ih.is_calc() && ih.calc_percent() != 0);
         if (pct_h && (cb.height.type == containing_block_context::cbc_value_type_auto || cb.height_cyclic))
         {
-            const pixel_t basis = el->height() - el->get_margins().height();
+            pixel_t basis = el->height() - el->get_margins().height();
+            // The percentage resolves against the grid AREA, whose height is the
+            // row's height -- and the row is at least its definite track minimum
+            // (a fixed length, or a minmax() floor) and at least the content
+            // height of the other items placed in it, none of which depends on
+            // this item's inline contribution. A flex item with height:100%
+            // holding a ratio image contributes through that height: in a
+            // minmax(30px,auto) row with a 60px row-mate it contributes the
+            // image at 56 high, not at its intrinsic 10 (all fuzz seed 43).
+            if (!vert)
+            {
+                const auto& auto_rows = css().get_grid_auto_rows();
+                pixel_t row_total = 0;
+                for (int r = item.pos.row_start; r < item.pos.row_end; r++)
+                {
+                    pixel_t row_h = 0;
+                    css_length len;
+                    bool have_len = false;
+                    if (r < (int)rows_template.size()) { len = rows_template[r]; have_len = true; }
+                    else if (!auto_rows.empty()) { len = auto_rows[(r - (int)rows_template.size()) % (int)auto_rows.size()]; have_len = true; }
+                    if (have_len)
+                    {
+                        if (!len.is_predefined() && !len.is_calc() && len.units() != css_units_percentage && len.units() != css_units_fr)
+                            row_h = std::max(row_h, len.calc_percent(0));
+                        else if (len.is_calc() && len.get_op() == css_length::op_minmax && len.get_operands().size() == 2)
+                        {
+                            const css_length& mn = len.get_operands()[0];
+                            if (!mn.is_predefined() && mn.units() != css_units_percentage)
+                                row_h = std::max(row_h, mn.calc_percent(0));
+                        }
+                    }
+                    for (const auto& mate : m_grid_layout.items)
+                    {
+                        if (mate.el == el) continue;
+                        if (mate.pos.row_start > r || mate.pos.row_end <= r) continue;
+                        const auto mpos = mate.el->src_el()->css().get_position();
+                        if (mpos == element_position_absolute || mpos == element_position_fixed) continue;
+                        containing_block_context mcb = self_size;
+                        mcb.size_mode &= ~(containing_block_context::size_mode_exact_width | containing_block_context::size_mode_exact_height);
+                        mcb.size_mode |= containing_block_context::size_mode_content;
+                        mcb.size_mode |= containing_block_context::size_mode_cyclic_height;
+                        mcb.height = containing_block_context::typed_pixel(0, containing_block_context::cbc_value_type_auto);
+                        mcb.render_height = mcb.height;
+                        mcb.height_cyclic = true;
+                        mate.el->measure(mcb, fmt_ctx);
+                        row_h = std::max(row_h, mate.el->height() - mate.el->get_margins().height());
+                    }
+                    row_total += row_h;
+                    if (r > item.pos.row_start) row_total += m_grid_layout.row_gap;
+                }
+                basis = std::max(basis, row_total);
+            }
             if (basis > 0)
             {
                 containing_block_context cb2 = cb;
@@ -1237,6 +1307,46 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                 cb2.height = cb2.render_height;
                 cb2.height_cyclic = false;
                 cb2.size_mode &= ~containing_block_context::size_mode_cyclic_height;
+                measured = el->measure(cb2, fmt_ctx);
+            }
+        }
+        // A replaced item stretched into a definite-height row takes its inline
+        // size from that height through its ratio, but this measure leaves its
+        // height indefinite: a percentage width is cyclic and reports the
+        // intrinsic width, and a fit-content width reports 0 at min-content. An
+        // 80x90 image with width:10% in a fit-content(80px) track of a 40px row
+        // contributes 80*40/90 = 35.6, not 80 (all fuzz seed 42); a fit-content
+        // svg in a min-content track contributes its transferred width likewise.
+        // Re-measure with the row height definite, mirroring the
+        // percentage-height pass above.
+        const css_length& ih2 = el->src_el()->css().get_height();
+        if (!vert && el->src_el()->is_replaced() &&
+            ih2.is_predefined() && ih2.predef() == 0)
+        {
+            flex_align_items aln = el->src_el()->css().get_align_self();
+            if (aln == flex_align_items_auto) aln = css().get_flex_align_items();
+            // Placement's rule (place_grid_items): a replaced item under a normal
+            // alignment is NOT stretched -- its height comes from its width through
+            // the ratio -- so only an explicit stretch makes the row height the
+            // item's block size. (Aligning by the looser rule broke replaced-mode
+            // seeds whose images sit in definite rows under the default alignment.)
+            const bool a_stretch = (aln & 0xFF) == flex_align_items_stretch;
+            const pixel_t row_h = a_stretch ? definite_row_height(item) : -1;
+            if (row_h > 0)
+            {
+                containing_block_context cb2 = cb;
+                cb2.render_height = containing_block_context::typed_pixel(row_h, containing_block_context::cbc_value_type_absolute);
+                cb2.height = cb2.render_height;
+                cb2.height_cyclic = false;
+                cb2.size_mode &= ~containing_block_context::size_mode_cyclic_height;
+                // The exact bit is what makes the height definite for the item: a
+                // replaced element keys its ratio transfer off the height TYPE, and
+                // an auto height property leaves the type auto however the value is set.
+                cb2.size_mode |= containing_block_context::size_mode_exact_height;
+                // At a definite height a replaced item's min-content inline size is
+                // its transferred size (min == max for replaced), not the cyclic 0 a
+                // percentage width reports under a min-content query.
+                cb2.size_mode &= ~containing_block_context::size_mode_min_content;
                 measured = el->measure(cb2, fmt_ctx);
             }
         }
@@ -1251,7 +1361,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
             cb.size_mode &= ~(containing_block_context::size_mode_exact_width | containing_block_context::size_mode_exact_height);
             cb.size_mode |= containing_block_context::size_mode_content;
             if (min_content_constraint) cb.size_mode |= containing_block_context::size_mode_min_content;
-            pixel_t measured = measure_contribution(item.el, cb);
+            pixel_t measured = measure_contribution(item, cb);
             // measure() already returns the margin-box inline size; inline_size() can still be the
             // larger of the two when the box was measured earlier, so take both into account.
             pixel_t w = std::max((pixel_t)item.el->inline_size(),
@@ -1540,7 +1650,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                         containing_block_context mcb = self_size;
                         mcb.size_mode &= ~(containing_block_context::size_mode_exact_width | containing_block_context::size_mode_exact_height);
                         mcb.size_mode |= containing_block_context::size_mode_content | containing_block_context::size_mode_min_content;
-                        fit_floor[c] = std::max(fit_floor[c], (pixel_t)ceil_layout_unit(item.el->measure(mcb, fmt_ctx)));
+                        fit_floor[c] = std::max(fit_floor[c], (pixel_t)ceil_layout_unit(measure_contribution(item, mcb)));
                     }
                 }
                 containing_block_context cb = self_size;
@@ -1568,7 +1678,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
                     cb.render_width = containing_block_context::typed_pixel((pixel_t)cb.render_width, containing_block_context::cbc_value_type_auto);
                     cb.width = cb.render_width;
                 }
-                pixel_t measured = measure_contribution(item.el, cb);
+                pixel_t measured = measure_contribution(item, cb);
                 // measure() returns the margin-box inline size (padding and border included), so
                 // adding the offsets again would count them twice.
                 pixel_t w = std::max((pixel_t)item.el->inline_size(),
@@ -2096,6 +2206,10 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         }
     }
 
+    m_grid_layout.row_definite.assign(num_rows, 0);
+    for (int i = 0; i < num_rows; i++)
+        m_grid_layout.row_definite[i] = row_kinds[i] == 0;
+
     // Flexible rows are resolved after the measure pass (below): a plain fr row's
     // automatic minimum is its items' content floor, which is only known by then.
 
@@ -2160,15 +2274,38 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         // whose tracks only open up at the wider size reports the wide height (116.8 for
         // a row that renders 16 tall once the item shrinks to 32 -- fuzz replaced 14).
         bool measured_at_used_width = false;
-        if (!vert && !item.el->src_el()->is_replaced() &&
-            item.el->src_el()->css().get_width().is_predefined())
+        if (!vert && item.el->src_el()->css().get_width().is_predefined())
         {
             flex_justify_content jst_h = item.el->src_el()->css().get_justify_self();
             if (jst_h == flex_justify_content_auto) jst_h = css().get_justify_items();
             const bool j_normal_h = jst_h == flex_justify_content_auto || jst_h == flex_justify_content_normal;
             const bool intrinsic_width_h = item.el->src_el()->css().get_width().predef() > 0;
-            const bool j_stretch_h = (j_normal_h && !intrinsic_width_h) || jst_h == flex_justify_content_stretch;
-            if (!j_stretch_h)
+            // Mirroring place_grid_items: a replaced item with a natural size is not
+            // stretched by normal alignment, and no alignment stretches a
+            // content-keyword width.
+            const bool replaced_start_h = item.el->src_el()->is_replaced() &&
+                                          !item.el->src_el()->is_ratio_only_replaced();
+            const bool j_stretch_h = ((j_normal_h && !replaced_start_h) && !intrinsic_width_h) ||
+                                     (jst_h == flex_justify_content_stretch && !intrinsic_width_h);
+            if (item.el->src_el()->is_replaced())
+            {
+                // A replaced item ignores the area width in the measure above: with an
+                // auto width it reports its natural size. When placement will stretch
+                // it to the area (or fill it, for a ratio-only box), its height
+                // contribution is the height at the area width instead -- an img with
+                // a natural 120x30 in a 60px stretched column contributed 30 to its
+                // row where the placed height is 15 (all fuzz seed 33).
+                if (j_stretch_h)
+                {
+                    containing_block_context wcb = cb;
+                    wcb.size_mode |= containing_block_context::size_mode_exact_width;
+                    wcb.render_width = cell_width;
+                    wcb.width = wcb.render_width;
+                    item.el->measure(wcb, fmt_ctx);
+                    measured_at_used_width = true;
+                }
+            }
+            else if (!j_stretch_h)
             {
                 containing_block_context mcb = cb;
                 mcb.size_mode |= containing_block_context::size_mode_content;
@@ -2206,6 +2343,7 @@ void litehtml::render_item_grid::calculate_grid_layout(const containing_block_co
         }
         if (!measured_at_used_width)
             item.el->measure(cb, fmt_ctx);
+
 
         if (!vert && item.pos.row_span() == 1)
         {
@@ -2496,6 +2634,33 @@ void litehtml::render_item_grid::place_grid_items(pixel_t x, pixel_t y, const co
         cb.width = cb.render_width;
         cb.render_height = cell_h - item.el->content_offset_height() + item.el->box_sizing_height();
         cb.height = cb.render_height;
+        // The item's percentage basis is its grid area, not the grid container: when every
+        // spanned row is a fixed track, the area height is definite even when the
+        // container's own height is cyclic (content-derived), so the inherited cyclic flag
+        // must not make the item's percentage height behave as auto.
+        if (!vert && !m_grid_layout.row_definite.empty())
+        {
+            bool span_definite = true;
+            for (int i = item.pos.row_start; i < item.pos.row_end && i < num_rows; i++)
+                if (!m_grid_layout.row_definite[i]) { span_definite = false; break; }
+            if (span_definite && item.pos.row_end <= num_rows)
+            {
+                cb.height_cyclic = false;
+                cb.size_mode &= ~containing_block_context::size_mode_cyclic_height;
+            }
+        }
+        // A definite grid height makes every area height definite too,
+        // content-sized rows included: a wrapping column flex with
+        // height:30% in a 116px row of a flex-sized grid takes 34.8px even
+        // though its own content sized the row (grid-flex fuzz seed 23).
+        // With an indefinite grid height the percentage stays auto (the
+        // P0-78 guard: the row is then exactly the item's own content).
+        if (!vert && (self_size.height.type == containing_block_context::cbc_value_type_absolute ||
+                      self_size.render_height.type == containing_block_context::cbc_value_type_absolute))
+        {
+            cb.height_cyclic = false;
+            cb.size_mode &= ~containing_block_context::size_mode_cyclic_height;
+        }
         cb.size_mode |= containing_block_context::size_mode_exact_height;
         cb.size_mode |= containing_block_context::size_mode_exact_width;
         if (!vert)
@@ -2549,7 +2714,13 @@ void litehtml::render_item_grid::place_grid_items(pixel_t x, pixel_t y, const co
         // keyword the width still comes from the content measure -- the ratio transfer from a
         // definite block size -- not from the area)
         const bool intrinsic_width = item.el->src_el()->css().get_width().is_predefined() && item.el->src_el()->css().get_width().predef() > 0;
-        const bool j_stretch = ((j_normal && !replaced_start_x) && !intrinsic_width) || jst == flex_justify_content_stretch;
+        // An explicit stretch does not override a content-keyword width either: stretch
+        // sizing applies to an auto inline size only, so a fit-content / max-content /
+        // min-content item keeps its keyword size under justify-items:stretch (an
+        // intrinsic-width img measured the full track width and transferred a huge
+        // height through its ratio -- all fuzz seed 33).
+        const bool j_stretch = ((j_normal && !replaced_start_x) && !intrinsic_width) ||
+                               (jst == flex_justify_content_stretch && !intrinsic_width);
         const bool intrinsic_height = item.el->src_el()->css().get_height().is_predefined() && item.el->src_el()->css().get_height().predef() > 0;
         const bool a_stretch = !intrinsic_height && ((a_normal && !replaced_item) || (aln & 0xFF) == flex_align_items_stretch);
         // A replaced item with an aspect ratio does not stretch in both axes: when its block

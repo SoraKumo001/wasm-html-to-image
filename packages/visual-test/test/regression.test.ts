@@ -9429,3 +9429,411 @@ describe("P0-72 percentage-width abspos box is re-rendered at its solved width",
     expect(Math.round(boxes.find((b: any) => b.p === "0.1.0.0.0").w)).toBe(20);
   });
 });
+
+describe("P0-73 floats sharing a line sum into intrinsic width; re-layout drops stale float entries", () => {
+  const page = async (body: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    return layout;
+  };
+  const R = `<div style="float:right"><div style="width:90px;height:10px"></div></div>`;
+  const Rb = `<div style="float:right;width:25%"><div style="width:90px;height:10px"></div></div>`;
+  const L = `<div style="float:left"><div style="min-width:10px;min-height:10px;padding:8px"></div></div>`;
+  const B = `<div style="min-width:10px;min-height:10px;padding:8px"></div>`;
+  const IB = `<div style="display:inline-block"><div style="height:12px;margin:8px"></div></div>`;
+  it("two floats in a shrink-to-fit block size it by their sum, not the widest one", async () => {
+    const boxes = await page(`<div id="w" style="width:fit-content">${R}${L}${B}</div>`);
+    expect(Math.round(boxes.find((b: any) => b.i === "w").w)).toBe(116);
+  });
+  it("floats followed by an inline-block share the line in max-content sizing", async () => {
+    const boxes = await page(
+      `<div id="w" style="width:fit-content"><div style="width:10%;margin:8px">${Rb}${L}${IB}</div></div>`);
+    expect(Math.round(boxes.find((b: any) => b.i === "w").w)).toBe(148);
+  });
+  it("a fit-content parent's trial layout does not push the final floats down", async () => {
+    const boxes = await page(
+      `<div style="width:fit-content;padding:8px"><div id="inn" style="width:14px;margin:8px">${Rb}${L}${B}</div><div style="width:132px;height:10px"></div></div>`);
+    const inn = boxes.find((b: any) => b.i === "inn");
+    const fr = boxes.find((b: any) => b.p === "0.1.0.0.0");
+    const fl = boxes.find((b: any) => b.p === "0.1.0.0.1");
+    expect(Math.round(fr.y - inn.y)).toBe(0);
+    expect(Math.round(fl.y - inn.y)).toBe(10);
+  });
+  it("an earlier float in the parent does not widen a nested fit-content measure", async () => {
+    const boxes = await page(
+      `<div><div style="float:right;max-width:150px"><div style="width:20px;height:10px"></div><div style="min-width:40px;min-height:30px"></div><div style="height:12px"></div></div>` +
+      `<div id="d2" style="width:fit-content;padding:8px"><div style="width:10%;margin:8px">${Rb}${L}${B}${IB}</div>` +
+      `<div style="min-width:40px;min-height:30px"></div><div style="min-width:10px;min-height:10px"></div></div></div>`);
+    expect(Math.round(boxes.find((b: any) => b.i === "d2").w)).toBe(148);
+  });
+});
+
+describe("P0-74 margins collapse through a block whose only content is a float", () => {
+  const page = async (body: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    return layout;
+  };
+  const A = `<div style="height:24px;margin:12px"></div>`;
+  const FL = `<div style="float:right"><div style="width:50px;height:40px"></div><div style="min-width:10px;min-height:30px"></div></div>`;
+  const FL2 = `<div style="float:left"><div style="height:36px;margin:8px"></div><div style="display:inline-block;height:fit-content"><div style="min-width:40px;min-height:30px"></div></div></div>`;
+  it("the trailing margin leaves through the float-only block and out of the parent", async () => {
+    const boxes = await page(`<div id="p" style="width:200px">${A}<div>${FL}</div>${FL2}</div>`);
+    expect(Math.round(boxes.find((b: any) => b.i === "p").h)).toBe(24);
+  });
+  it("the same without the trailing float", async () => {
+    const boxes = await page(`<div id="p" style="width:200px">${A}<div>${FL}</div></div>`);
+    expect(Math.round(boxes.find((b: any) => b.i === "p").h)).toBe(24);
+  });
+  it("an actually empty block behaves the same (control)", async () => {
+    const boxes = await page(`<div id="p" style="width:200px">${A}<div></div>${FL2}</div>`);
+    expect(Math.round(boxes.find((b: any) => b.i === "p").h)).toBe(24);
+  });
+});
+
+describe("P0-75 a margined float joining a run's line still displaces the line's content", () => {
+  const page = async (body: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    return layout;
+  };
+  const IB = `<div id="ib" style="display:inline-block;width:20px;height:80px"></div>`;
+  const FL = `<div id="fl" style="float:left;width:20px;margin:2px;height:30px"></div>`;
+  const BK = `<div style="min-width:40px;min-height:30px;padding:4px"></div>`;
+  it("with a block after the float, the inline-block moves right of the float", async () => {
+    const boxes = await page(`<div style="width:48px">${IB}${FL}${BK}</div>`);
+    expect(Math.round(boxes.find((b: any) => b.i === "ib").x)).toBe(24);
+    expect(Math.round(boxes.find((b: any) => b.i === "fl").x)).toBe(2);
+  });
+  it("without the trailing block the result is the same (control)", async () => {
+    const boxes = await page(`<div style="width:48px">${IB}${FL}</div>`);
+    expect(Math.round(boxes.find((b: any) => b.i === "ib").x)).toBe(24);
+  });
+  it("inside a floated fit-content box with nested inline-blocks", async () => {
+    const boxes = await page(
+      `<div id="c" style="float:left;width:fit-content;padding:8px;margin:2px">` +
+      `<div id="ib" style="display:inline-block;max-width:250px"><div style="display:inline-block;width:20px;height:80px"><div style="min-width:40px;min-height:10px;padding:12px"></div><div style="min-width:10px;min-height:30px"></div></div></div>` +
+      `<div id="fl" style="float:left;width:20px;margin:2px"><div style="min-width:40px;min-height:30px"></div><div style="height:12px"></div></div>${BK}</div>`);
+    const c = boxes.find((b: any) => b.i === "c");
+    expect(Math.round(boxes.find((b: any) => b.i === "ib").x - c.x)).toBe(32);
+  });
+});
+
+describe("P0-76 a wrap column flex item's base size is measured at its hypothetical width", () => {
+  const page = async (body: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0;font-size:0;line-height:0}*{box-sizing:border-box}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    return layout;
+  };
+  const KIDS =
+    `<div style="height:12px"></div><div style="min-width:10px;min-height:30px;padding:2px"></div>` +
+    `<div style="display:grid;grid-template-columns:1fr min-content fit-content(80px) 2fr;min-width:40px;padding:4px"><div style="width:20px;height:10px"></div><div style="min-width:40px;min-height:10px"></div><div style="min-width:10px;min-height:10px"></div><div style="width:90px;height:10px"></div></div>` +
+    `<div style="width:25%;aspect-ratio:0.889"></div>`;
+  it("wrap: the stretched item keeps the height measured at its fit-content width", async () => {
+    const boxes = await page(
+      `<div style="display:flex;flex-direction:column;flex-wrap:wrap;gap:4px;height:20px;padding:2px"><div id="t" style="margin:12px">${KIDS}</div></div>`);
+    const t = boxes.find((b: any) => b.i === "t");
+    expect(Math.round(t.w)).toBe(572);
+    expect(Math.round(t.h)).toBe(114);
+  });
+  it("nowrap: the same item is measured at the stretched width (control)", async () => {
+    const boxes = await page(
+      `<div style="display:flex;flex-direction:column;gap:4px;height:20px;padding:2px"><div id="t" style="margin:12px">${KIDS}</div></div>`);
+    const t = boxes.find((b: any) => b.i === "t");
+    expect(Math.round(t.h)).toBe(221);
+  });
+  it("a ratio-only svg item beside the div still flexes and transfers (control)", async () => {
+    const boxes = await page(
+      `<div style="display:flex;flex-direction:column;flex-wrap:wrap;gap:4px;height:20px;padding:2px"><svg id="s" viewBox="0 0 100 60"><rect width="100" height="60"/></svg><div id="t" style="margin:12px">${KIDS}</div></div>`);
+    const s = boxes.find((b: any) => b.i === "s");
+    expect(Math.round(s.h)).toBe(16);
+    expect(Math.round(s.w)).toBe(201);
+  });
+});
+
+describe("P0-77 an abspos box measured provisionally is re-rendered at its solved size", () => {
+  const page = async (body: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    return layout;
+  };
+  const INNER =
+    `<div style="float:left;width:50%;height:80px"><div id="g" style="display:grid;grid-template-columns:60px min-content minmax(40px,1fr);gap:8px;padding:12px;margin:12px">` +
+    `<div style="height:24px;margin:2px"></div><div style="width:50px;height:10px"></div><div style="min-width:10px;min-height:30px;padding:8px"></div><div style="height:12px"></div></div></div>`;
+  const ABS = `<div style="position:absolute;left:30px;top:30px;width:60px;height:80px;min-width:40px;max-width:250px">${INNER}</div>`;
+  it("inside an inline-flex (measured for the container's intrinsic size)", async () => {
+    const boxes = await page(`<div style="display:inline-flex;flex-wrap:wrap;height:40px;padding:12px;margin:2px">${ABS}</div>`);
+    expect(Math.round(boxes.find((b: any) => b.i === "g").w)).toBe(24);
+  });
+  it("in a plain block parent the result is the same (control)", async () => {
+    const boxes = await page(ABS);
+    expect(Math.round(boxes.find((b: any) => b.i === "g").w)).toBe(24);
+  });
+});
+
+describe("P0-78 a grid item's percentage height resolves against a fixed row under a cyclic container", () => {
+  const page = async (body: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    return layout;
+  };
+  const IMG = `<img id="im" src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2220%22%20height%3D%2210%22%20viewBox%3D%220%200%2020%2010%22%3E%3Crect%20width%3D%2220%22%20height%3D%2210%22%20fill%3D%22%2369c%22%2F%3E%3C%2Fsvg%3E">`;
+  const wrap = (grid: string) =>
+    `<div style="display:flex;flex-wrap:wrap;gap:4px;width:120px;height:100%;margin:4px">${grid}</div>`;
+  it("fixed 40px row: height:50% resolves to 20 and the stretched img transfers", async () => {
+    const boxes = await page(wrap(
+      `<div style="display:grid;grid-template-columns:max-content;grid-auto-rows:40px;gap:16px"><div id="t" style="display:flex;height:50%">${IMG}</div></div>`));
+    expect(Math.round(boxes.find((b: any) => b.i === "t").h)).toBe(20);
+    const im = boxes.find((b: any) => b.i === "im");
+    expect(Math.round(im.w)).toBe(40);
+    expect(Math.round(im.h)).toBe(20);
+  });
+  it("content-sized row: the percentage resolves against the used row height", async () => {
+    // Chrome-verified (cycle 76): at final placement the grid area is a
+    // definite size once the tracks are sized, so height:50% of the 30px
+    // row is 15 -- the earlier guard expectation (auto, 30) enshrined the
+    // pre-fix engine behaviour, not Chrome's.
+    const boxes = await page(wrap(
+      `<div style="display:grid;grid-template-columns:max-content;grid-auto-rows:auto;gap:16px"><div id="t" style="height:50%"><div style="height:30px"></div></div></div>`));
+    expect(Math.round(boxes.find((b: any) => b.i === "t").h)).toBe(15);
+  });
+});
+
+describe("P0-79 a stretched ratio item's transferred size is its min-content contribution", () => {
+  const page = async (body: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    return layout;
+  };
+  const SVG = `<svg id="sv" viewBox="0 0 100 60"><rect width="100" height="60"/></svg>`;
+  it("min-content track: the flex row contributes the transferred width", async () => {
+    const boxes = await page(
+      `<div style="display:grid;grid-template-columns:min-content;width:600px"><div id="t" style="display:flex;height:120px">${SVG}</div></div>`);
+    expect(Math.round(boxes.find((b: any) => b.i === "t").w)).toBe(200);
+    expect(Math.round(boxes.find((b: any) => b.i === "sv").w)).toBe(200);
+  });
+  it("max-content track: same result (control)", async () => {
+    const boxes = await page(
+      `<div style="display:grid;grid-template-columns:max-content;width:600px"><div id="t" style="display:flex;height:120px">${SVG}</div></div>`);
+    expect(Math.round(boxes.find((b: any) => b.i === "t").w)).toBe(200);
+  });
+  it("a plain block of the same height contributes nothing (control)", async () => {
+    const boxes = await page(
+      `<div style="display:grid;grid-template-columns:min-content;width:600px"><div id="t" style="height:120px">${SVG}</div></div>`);
+    expect(Math.round(boxes.find((b: any) => b.i === "t").w)).toBe(0);
+  });
+});
+
+describe("P0-80 grid item used widths, measure-mode float push-down, pushed BFC margins", () => {
+  const page = async (body: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    return layout;
+  };
+  const IMG = (w: number, h: number, style = "") =>
+    `<img ${style ? `style="${style}" ` : ""}src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22${w}%22%20height%3D%22${h}%22%20viewBox%3D%220%200%20${w}%20${h}%22%3E%3Crect%20width%3D%22${w}%22%20height%3D%22${h}%22%20fill%3D%22%2369c%22%2F%3E%3C%2Fsvg%3E">`;
+  it("justify-items:stretch does not stretch a fit-content img; its row is sized at the placed size", async () => {
+    const boxes = await page(
+      `<div style="display:grid;grid-template-columns:1fr 60px;justify-items:stretch;height:200px;width:100px"><div id="a" style="min-width:40px;min-height:10px"></div>${IMG(120, 30)}${IMG(20, 90, "width:fit-content")}</div>`);
+    const a = boxes.find((b: any) => b.i === "a");
+    expect(Math.abs(a.h - 62.5)).toBeLessThan(0.6);
+    const imgs = boxes.filter((b: any) => b.t === "img");
+    expect(Math.round(imgs[1].w)).toBe(20);
+    expect(Math.round(imgs[1].h)).toBe(90);
+  });
+  it("a BFC block pushed below a float puts its border at the float's bottom edge", async () => {
+    const boxes = await page(
+      `<div style="overflow:hidden;width:20px"><div style="float:left;width:40px;height:50px"></div><div id="t" style="display:flex;height:80px;min-width:40px;margin:2px"></div></div>`);
+    expect(Math.round(boxes.find((b: any) => b.i === "t").y)).toBe(50);
+  });
+  it("a measure pass pushes a BFC child below measured floats (container height keeps the float)", async () => {
+    const boxes = await page(
+      `<div id="g" style="display:grid;grid-template-columns:max-content;max-width:150px;padding:8px"><div style="float:left;width:20px"><div style="float:left;width:30%;min-width:40px;max-width:250px"><div style="height:50px"></div></div><div style="display:grid;height:200px;min-width:100px"><div style="height:15px"></div><div style="height:90px"></div></div></div></div>`);
+    expect(Math.round(boxes.find((b: any) => b.i === "g").h)).toBe(266);
+  });
+});
+
+describe("P0-81 stretched flex item measured at its definite cross size", () => {
+  const page = async (body: string, width = 800) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    return layout;
+  };
+  const COL = `<div id="t" style="display:flex;flex-direction:column;flex-wrap:wrap;padding:12px"><div style="width:20px;height:25px;flex:2 1 0"></div><div style="width:420px;height:228px"></div></div>`;
+  it("a wrapped column-flex item of a definite-height row flex is measured wrapped", async () => {
+    const boxes = await page(`<div style="display:flex;height:60px;width:700px">${COL}</div>`);
+    const t = boxes.find((b: any) => b.i === "t");
+    expect(Math.round(t.w)).toBe(464);
+    expect(Math.round(t.h)).toBe(60);
+  });
+  it("an auto-height row flex leaves the item unwrapped (control)", async () => {
+    const boxes = await page(`<div style="display:flex;width:700px">${COL}</div>`);
+    const t = boxes.find((b: any) => b.i === "t");
+    expect(Math.round(t.w)).toBe(444);
+    expect(Math.round(t.h)).toBe(252);
+  });
+  it("an intrinsic (shrink-to-fit) query keeps the unwrapped measure (control)", async () => {
+    const boxes = await page(`<div style="position:absolute;left:0;top:0">${COL}</div>`);
+    const t = boxes.find((b: any) => b.i === "t");
+    expect(Math.round(t.w)).toBe(444);
+    expect(Math.round(t.h)).toBe(252);
+  });
+});
+
+describe("P0-82 grid contributions of replaced items transfer from a definite row height", () => {
+  const page = async (body: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    return layout;
+  };
+  const IMG = `<img id="im" src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2280%22%20height%3D%2290%22%20viewBox%3D%220%200%2080%2090%22%3E%3Crect%20width%3D%2280%22%20height%3D%2290%22%20fill%3D%22%2369c%22%2F%3E%3C%2Fsvg%3E" style="width:10%">`;
+  const SVG = `<svg id="sv" viewBox="0 0 40 60" style="width:fit-content"><rect width="40" height="60" fill="#69c"/></svg>`;
+  it("fr tracks share what the transferred fit-content and min-content tracks leave", async () => {
+    const boxes = await page(
+      `<div style="display:grid;grid-template-columns:1fr min-content fit-content(80px) 2fr;grid-auto-rows:40px;align-items:stretch;width:104px"><div id="a" style="height:36px"></div>${SVG}${IMG}<div id="d" style="min-width:10px;min-height:10px;padding:8px"></div></div>`);
+    const g = (id: string) => boxes.find((b: any) => b.i === id);
+    expect(Math.abs(g("a").w - 13.9)).toBeLessThan(0.6);
+    expect(Math.abs(g("sv").w - 26.7)).toBeLessThan(0.6);
+    expect(Math.abs(g("im").w - 3.6)).toBeLessThan(0.6);
+    expect(Math.abs(g("im").x - 40.6)).toBeLessThan(0.6);
+    expect(Math.abs(g("d").w - 27.9)).toBeLessThan(0.6);
+  });
+  it("a fit-content track takes the transferred size as its contribution", async () => {
+    const boxes = await page(
+      `<div style="display:grid;grid-template-columns:fit-content(80px);grid-auto-rows:40px;align-items:stretch;width:104px">${IMG}</div>`);
+    expect(Math.abs(boxes.find((b: any) => b.i === "im").w - 3.6)).toBeLessThan(0.6);
+  });
+  it("an auto row leaves the contribution intrinsic (control)", async () => {
+    const boxes = await page(
+      `<div style="display:grid;grid-template-columns:fit-content(80px);width:104px">${IMG}</div>`);
+    expect(Math.round(boxes.find((b: any) => b.i === "im").w)).toBe(8);
+  });
+});
+
+describe("P0-83 abspos shrink-to-fit clamps to the available width", () => {
+  const page = async (body: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    return layout;
+  };
+  const CONTENT = `<svg viewBox="0 0 100 20" style="width:10%"><rect width="100" height="20" fill="#69c"/></svg><img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2220%22%20height%3D%2250%22%20viewBox%3D%220%200%2020%2050%22%3E%3Crect%20width%3D%2220%22%20height%3D%2250%22%20fill%3D%22%2369c%22%2F%3E%3C%2Fsvg%3E" style="width:fit-content">`;
+  const wrap = (w: number, inner: string) =>
+    `<div style="position:absolute;left:0;top:0;width:${w}px;height:200px"><div id="t" style="position:absolute;left:0;top:0">${inner}</div></div>`;
+  it("caps the preferred width at the containing block's width", async () => {
+    const boxes = await page(wrap(100, CONTENT));
+    expect(Math.round(boxes.find((b: any) => b.i === "t").w)).toBe(100);
+  });
+  it("never shrinks below the preferred minimum width", async () => {
+    const boxes = await page(wrap(6, CONTENT));
+    expect(Math.round(boxes.find((b: any) => b.i === "t").w)).toBe(20);
+  });
+  it("a definite min-content floor wins over a narrower containing block", async () => {
+    const boxes = await page(wrap(30, `<div style="width:50px;height:10px"></div>`));
+    expect(Math.round(boxes.find((b: any) => b.i === "t").w)).toBe(50);
+  });
+});
+
+describe("P0-84 grid contribution of a percentage-height item uses the row height", () => {
+  const page = async (body: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 800,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    return layout;
+  };
+  const IMG = `<img id="im" src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2220%22%20height%3D%2210%22%20viewBox%3D%220%200%2020%2010%22%3E%3Crect%20width%3D%2220%22%20height%3D%2210%22%20fill%3D%22%2369c%22%2F%3E%3C%2Fsvg%3E">`;
+  const FLEX = `<div id="t" style="display:flex;justify-content:flex-end;height:100%;padding:2px">${IMG}</div>`;
+  it("the minmax() row floor is the percentage basis during column sizing", async () => {
+    const boxes = await page(
+      `<div style="display:grid;grid-template-columns:fit-content(80px);grid-auto-rows:minmax(30px,auto);width:200px">${FLEX}</div>`,
+    );
+    const t = boxes.find((b: any) => b.i === "t");
+    const im = boxes.find((b: any) => b.i === "im");
+    expect(Math.round(t.w)).toBe(56);
+    expect(Math.round(im.w)).toBe(52);
+  });
+  it("a taller row-mate raises the basis (the track passes its fit-content limit)", async () => {
+    const boxes = await page(
+      `<div style="display:grid;grid-template-columns:fit-content(80px) auto;grid-auto-rows:minmax(30px,auto);width:400px">${FLEX}<div style="height:60px"></div></div>`,
+    );
+    const t = boxes.find((b: any) => b.i === "t");
+    const im = boxes.find((b: any) => b.i === "im");
+    expect(Math.round(t.w)).toBe(116);
+    expect(Math.round(im.w)).toBe(112);
+  });
+});
+
+describe("P0-85 a grid item's percentage height resolves at final placement", () => {
+  it("a height:30% item in a content-sized row under a cyclic ancestor takes the row height", async () => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:content-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body><div style="display:flex;flex-direction:column"><div style="width:fit-content;flex:0 1 auto"><div id="g" style="display:grid;grid-template-columns:1fr auto auto;gap:4px;width:200px"><div id="t" style="display:flex;flex-direction:column;flex-wrap:wrap;height:30%;padding:8px;margin:12px"><div style="height:36px;margin:2px"></div><div style="height:36px"></div><div style="width:90px;height:10px;flex:1"></div></div><div style="width:90px;height:10px"></div></div></div></div></body></html>`,
+      width: 800,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as never);
+    const g = layout.find((b: any) => b.i === "g");
+    const t = layout.find((b: any) => b.i === "t");
+    expect(Math.round(g.h)).toBe(116);
+    // 30% of the 116px row = 34.8 content + 16 padding (content-box)
+    expect(Math.round(t.h)).toBe(51);
+  });
+});
