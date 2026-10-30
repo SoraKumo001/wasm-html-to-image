@@ -31,6 +31,9 @@ struct Options {
     bool paint_background = false;
     std::string font_family = "sans-serif";
     std::string mono_family = "monospace";
+    /// Honour `%%{init: {...}}%%` and frontmatter `config:` (theme, themeVariables). Off by default: the page
+    /// that places the diagram decides the colours. The frontmatter block itself is always skipped.
+    bool allow_directives = false;
 };
 
 /// Estimated width of one line of text (no font access): narrow, regular, wide and full-width classes.

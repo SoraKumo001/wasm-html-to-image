@@ -1,5 +1,7 @@
 #include "mermaid/mermaid.h"
 
+#include <cctype>
+
 #include "mermaid/classdiagram.h"
 #include "mermaid/erdiagram.h"
 #include "mermaid/flowchart.h"
@@ -51,7 +53,96 @@ double estimate_text_width(const std::string& text, double size, int weight, boo
     return em * size * (weight >= 600 ? 1.05 : 1.0);
 }
 
-bool render(const std::string& source, const Options& options, std::string& svg, std::string& error) {
+namespace {
+
+// `---` ... `---` at the very top; returns the text between the fences and removes the block from @p source.
+std::string take_frontmatter(std::string& source) {
+    size_t i = 0;
+    while (i < source.size() && (source[i] == ' ' || source[i] == '\n' || source[i] == '\r' || source[i] == '\t')) i++;
+    if (source.compare(i, 3, "---") != 0) return "";
+    size_t eol = source.find('\n', i);
+    if (eol == std::string::npos || !litehtml::svgutil::trim(source.substr(i + 3, eol - i - 3)).empty()) return "";
+    size_t pos = eol + 1;
+    while (pos <= source.size()) {
+        size_t e = source.find('\n', pos);
+        std::string line = litehtml::svgutil::trim(source.substr(pos, e == std::string::npos ? std::string::npos : e - pos));
+        if (line == "---") {
+            std::string body = source.substr(eol + 1, pos - eol - 1);
+            source = e == std::string::npos ? "" : source.substr(e + 1);
+            return body;
+        }
+        if (e == std::string::npos) break;
+        pos = e + 1;
+    }
+    return "";
+}
+
+// The value of `key` in JSON-ish ("key": "v"), YAML-ish (key: v) or quoted-key text; empty when absent.
+std::string find_value(const std::string& text, const std::string& key) {
+    for (size_t at = text.find(key); at != std::string::npos; at = text.find(key, at + 1)) {
+        size_t b = at, e = at + key.size();
+        if (b > 0 && (std::isalnum((unsigned char)text[b - 1]) || text[b - 1] == '_')) continue;
+        if (e < text.size() && text[e] == '"') e++;
+        while (e < text.size() && text[e] == ' ') e++;
+        if (e >= text.size() || text[e] != ':') continue;
+        e++;
+        while (e < text.size() && (text[e] == ' ' || text[e] == '"' || text[e] == '\'')) e++;
+        size_t end = e;
+        while (end < text.size() && text[end] != '"' && text[end] != '\'' && text[end] != ',' && text[end] != '}' && text[end] != '\n' && text[end] != '\r') end++;
+        std::string v = litehtml::svgutil::trim(text.substr(e, end - e));
+        if (!v.empty()) return v;
+    }
+    return "";
+}
+
+void apply_config(const std::string& cfg, Options& o) {
+    std::string theme = find_value(cfg, "theme");
+    if (theme == "dark") {
+        o.fg = "#e6edf3"; o.bg = "#0d1117"; o.border = "#3d444d"; o.surface = "#151b23"; o.line = ""; o.muted = "";
+    } else if (theme == "forest") {
+        o.fg = "#1b3a2a"; o.bg = "#ffffff"; o.border = "#8fbf9f"; o.surface = "#e8f5ec"; o.accent = "#2e8b57"; o.line = "#2e8b57"; o.muted = "";
+    } else if (theme == "neutral") {
+        o.fg = "#222222"; o.bg = "#ffffff"; o.border = "#999999"; o.surface = "#eeeeee"; o.line = ""; o.muted = "";
+    }
+    auto set = [&](const char* key, std::string& dst) {
+        std::string v = find_value(cfg, key);
+        if (!v.empty()) dst = v;
+    };
+    set("textColor", o.fg);
+    set("primaryTextColor", o.fg);
+    set("background", o.bg);
+    set("primaryColor", o.surface);
+    set("primaryBorderColor", o.border);
+    set("lineColor", o.line);
+    set("secondaryTextColor", o.muted);
+    set("accentColor", o.accent);
+}
+
+// Drops `%%{ ... }%%` directives (they may span lines) and returns their text.
+std::string take_directives(std::string& source) {
+    std::string found, out;
+    size_t i = 0;
+    while (i < source.size()) {
+        size_t at = source.find("%%{", i);
+        if (at == std::string::npos) break;
+        size_t end = source.find("}%%", at);
+        if (end == std::string::npos) break;
+        out += source.substr(i, at - i);
+        found += source.substr(at + 3, end - at - 3) + "\n";
+        i = end + 3;
+    }
+    out += source.substr(i);
+    source = out;
+    return found;
+}
+
+}  // namespace
+
+bool render(const std::string& input, const Options& base, std::string& svg, std::string& error) {
+    std::string source = input;
+    Options options = base;
+    std::string config = take_frontmatter(source) + "\n" + take_directives(source);
+    if (options.allow_directives) apply_config(config, options);
     // the first line that is not blank or a comment names the diagram
     size_t i = 0;
     std::string keyword;

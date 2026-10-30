@@ -91,6 +91,17 @@ int main() {
     check(has(svg_of("graph TD\nsubgraph one [First]\nA-->B\nend"), "class=\"subgraph\""), "subgraph/frame");
     check(has(svg_of("graph TD\nsubgraph one [First]\nA-->B\nend"), ">First<"), "subgraph/title");
 
+    // --- frontmatter and init directives ---
+    {
+        std::string svg, err;
+        mermaid::Options on;
+        on.allow_directives = true;
+        check(render("---\ntitle: T\n---\ngraph TD\nA-->B", svg, err), "front/skipped");
+        check(render("%%{init: {\"theme\":\"dark\"}}%%\ngraph TD\nA-->B", svg, err) && !has(svg, "#0d1117"), "init/off_by_default");
+        check(mermaid::render("%%{init: {\"theme\":\"dark\",\"themeVariables\":{\"primaryColor\":\"#123456\"}}}%%\ngraph TD\nA-->B", on, svg, err) && has(svg, "#123456"), "init/theme_variables");
+        check(mermaid::render("---\nconfig:\n  theme: forest\n---\ngraph TD\nA-->B", on, svg, err) && has(svg, "#e8f5ec"), "front/config_theme");
+    }
+
     // --- errors ---
     {
         std::string svg, err;

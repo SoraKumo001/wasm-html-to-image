@@ -90,6 +90,7 @@ void el_mermaid::ensure_svg() {
     opt.muted = prop("--mermaid-muted");
     opt.surface = prop("--mermaid-surface");
     opt.border = prop("--mermaid-border");
+    opt.allow_directives = prop("--mermaid-directives") == "on";
     if (skia) {
         SatoruContext* ctx = &skia->get_context();
         opt.measure = [ctx](const std::string& text, double size, int weight, bool mono) {
