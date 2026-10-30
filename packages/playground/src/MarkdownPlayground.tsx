@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { listTemplates, markdownToDocument } from "wasm-html-to-image/markdown";
 import { PdfPreview } from "./PdfPreview";
+import { TemplateGallery } from "./TemplateGallery";
 import { usePdfRender } from "./usePdfRender";
 import {
   PAGE_SIZES,
@@ -68,6 +69,7 @@ export const MarkdownPlayground: React.FC = () => {
   const [text, setText] = useState(loadText);
   const [panel, setPanel] = useState<MarkdownPanel>(() => panelFromParams(new URLSearchParams(window.location.search)));
   const [tab, setTab] = useState<"html" | "diagnostics" | "logs">("html");
+  const [right, setRight] = useState<"pdf" | "templates">("pdf");
   const [mathRenderer, setMathRenderer] = useState<Awaited<ReturnType<typeof loadMath>> | null>(null);
   const pdf = usePdfRender();
   const templates = useMemo(() => listTemplates(), []);
@@ -288,15 +290,46 @@ export const MarkdownPlayground: React.FC = () => {
           </fieldset>
         </section>
 
-        <section className="flex min-h-[560px] min-w-0 flex-col">
-          <PdfPreview
-            url={pdf.url}
-            bytes={pdf.bytes}
-            busy={pdf.busy}
-            error={conversionError ?? pdf.error}
-            time={pdf.time}
-            fileName="document.pdf"
-          />
+        <section className="flex min-h-[560px] min-w-0 flex-col gap-2">
+          <div className="flex gap-2 text-sm">
+            {(
+              [
+                ["pdf", "PDF"],
+                ["templates", `Templates (${templates.length})`],
+              ] as const
+            ).map(([id, text_]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setRight(id)}
+                className={`cursor-pointer rounded-md border px-3 py-1 ${
+                  right === id ? "border-blue-600 bg-blue-50 font-semibold text-blue-700" : "border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                {text_}
+              </button>
+            ))}
+          </div>
+          {right === "pdf" ? (
+            <PdfPreview
+              url={pdf.url}
+              bytes={pdf.bytes}
+              busy={pdf.busy}
+              error={conversionError ?? pdf.error}
+              time={pdf.time}
+              fileName="document.pdf"
+            />
+          ) : (
+            <TemplateGallery
+              text={text}
+              panel={panel}
+              math={mathRenderer ?? undefined}
+              onPick={(name) => {
+                set("template", name);
+                setRight("pdf");
+              }}
+            />
+          )}
         </section>
       </div>
 
