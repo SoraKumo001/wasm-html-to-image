@@ -280,3 +280,51 @@ describe("template colours and code, tables", () => {
     expect(css("default")).toMatch(/blockquote \{ margin-left: 0; margin-right: 0;/);
   });
 });
+
+describe("page settings in the front matter", () => {
+  const doc = (front: string, options = {}) => markdownToDocument(`---\n${front}\n---\n# H\n\ntext`, { paged: true, ...options });
+
+  it("reads header, footer, margin, orientation, toc_depth, toc_title and cover_style", () => {
+    expect(parseFrontMatter(["header: <b>{{title}}</b>", "footer: {{pageNumber}} / {{totalPages}}", "margin: 20mm 18mm", "orientation: landscape", "toc_depth: 2", "toc_title: 目次", "cover_style: center"].join("\n"))).toEqual({
+      header: "<b>{{title}}</b>",
+      footer: "{{pageNumber}} / {{totalPages}}",
+      margin: "20mm 18mm",
+      orientation: "landscape",
+      toc_depth: 2,
+      toc_title: "目次",
+      cover_style: "center",
+    });
+    expect(parseFrontMatter("toc_depth: 9\ntoc_depth: x")).toEqual({}); // not 1 to 6
+  });
+
+  it("replaces the template's footer and margin, and fills the title variable", () => {
+    const d = doc("title: Doc\ntemplate: report\nfooter: <i>{{title}} p{{pageNumber}}</i>\nmargin: 10mm");
+    expect(d.renderOptions.pdfFooter).toBe("<i>Doc p{{pageNumber}}</i>");
+    expect(style(d.html)).toContain("margin: 10mm;");
+  });
+
+  it("makes a document without a template paged when it asks for a footer", () => {
+    const d = doc("title: Doc\nfooter: {{pageNumber}}");
+    expect(d.renderOptions.pdfFooter).toBe("{{pageNumber}}");
+    expect(style(d.html)).toContain("@page {");
+  });
+
+  it("turns the page to landscape, for a named size and for two lengths", () => {
+    expect(style(doc("template: report\norientation: landscape").html)).toContain("size: A4 landscape;");
+    expect(style(doc("template: report\npage_size: 210mm 297mm\norientation: landscape").html)).toContain("size: 210mm 297mm landscape;");
+  });
+
+  it("limits the contents to toc_depth and titles it with toc_title", () => {
+    const md = "---\ntitle: T\ntoc: true\ntoc_depth: 1\ntoc_title: 目次\n---\n# A\n\n## B\n\n# C\n";
+    const html = markdownToDocument(md, { paged: true }).html;
+    expect(html).toContain('<p class="toc-title">目次</p>');
+    expect(html.match(/class="toc-item/g)).toHaveLength(2);
+  });
+
+  it("dresses the cover by cover_style, and leaves the first page without header and footer", () => {
+    expect(doc("title: T\ncover: true\ncover_style: center").html).toContain('<header class="cover cover-center">');
+    expect(doc("title: T\ncover: true\ncover_style: nope").html).toContain('<header class="cover">');
+    expect(doc("title: T\ntemplate: report").renderOptions.pdfSkipRunning).toBe(1);
+    expect(doc("title: T\ntemplate: compact").renderOptions.pdfSkipRunning).toBeUndefined(); // no cover
+  });
+});

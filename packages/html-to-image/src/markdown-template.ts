@@ -37,6 +37,20 @@ export interface DocumentSettings {
   lang?: string;
   /** `ltr`, `rtl` or `auto`. */
   dir?: string;
+  /** Running header HTML for this document (replaces the template's); `{{title}}`, `{{pageNumber}}`, ... work. */
+  header?: string;
+  /** Running footer HTML for this document (replaces the template's). */
+  footer?: string;
+  /** Page margin: a CSS `margin` value such as `20mm 18mm`. */
+  margin?: string;
+  /** `portrait` or `landscape`. */
+  orientation?: string;
+  /** Deepest heading level listed in the contents (1 to 6). */
+  toc_depth?: number;
+  /** Heading of the contents page (`Contents`). */
+  toc_title?: string;
+  /** Look of the cover: `band` (a bar at the left), `plain`, or `center`. A template picks its own. */
+  cover_style?: string;
 }
 
 /** Typography and structure of a template. Every field has a default, so a template lists only what differs. */
@@ -121,8 +135,16 @@ const KNOWN_KEYS = new Set<string>([
   "stamp",
   "lang",
   "dir",
+  "header",
+  "footer",
+  "margin",
+  "orientation",
+  "toc_depth",
+  "toc_title",
+  "cover_style",
 ]);
 const BOOLEAN_KEYS = new Set(["toc", "cover"]);
+const NUMBER_KEYS = new Set(["toc_depth"]);
 
 /**
  * The flat `key: value` lines of a front matter block. Values may be quoted; `toc` and `cover` take
@@ -131,7 +153,7 @@ const BOOLEAN_KEYS = new Set(["toc", "cover"]);
  * `page_size`.
  */
 export function parseFrontMatter(block: string): DocumentSettings {
-  const out: Record<string, string | boolean> = {};
+  const out: Record<string, string | boolean | number> = {};
   for (const line of block.split(/\r?\n/)) {
     const m = /^([A-Za-z_][\w-]*):[ \t]*(.*?)[ \t]*$/.exec(line);
     if (!m) continue; // blank, comment, indented (nested) or a list item
@@ -144,6 +166,9 @@ export function parseFrontMatter(block: string): DocumentSettings {
     if (value === "") continue;
     if (BOOLEAN_KEYS.has(key)) {
       if (!quoted && (value === "true" || value === "false")) out[key] = value === "true";
+    } else if (NUMBER_KEYS.has(key)) {
+      const n = Number(value);
+      if (Number.isInteger(n) && n >= 1 && n <= 6) out[key] = n;
     } else out[key] = value;
   }
   return out as DocumentSettings;

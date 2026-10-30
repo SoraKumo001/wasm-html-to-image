@@ -269,7 +269,8 @@ function coverHtml(settings: DocumentSettings): string {
       ? `<p class="cover-meta">${settings.author ? `<span class="cover-author">${escapeHtml(settings.author)}</span>` : ""}${settings.date ? `<span class="cover-date">${escapeHtml(settings.date)}</span>` : ""}</p>`
       : "",
   ];
-  return `<header class="cover">${parts.join("")}</header>
+  const style = settings.cover_style && /^(band|plain|center)$/.test(settings.cover_style) ? ` cover-${settings.cover_style}` : "";
+  return `<header class="cover${style}">${parts.join("")}</header>
 `;
 }
 
@@ -280,6 +281,9 @@ const COVER_CSS = `.cover { margin: 40mm 0 0; break-after: page; }
 .cover-subtitle { margin: 0.6em 0 0; font-size: 1.25em; color: var(--muted, #6b7280); }
 .cover-meta { margin: 3em 0 0; color: var(--muted, #6b7280); }
 .cover-meta span + span { margin-left: 1.5em; }
+.cover.cover-plain { padding: 0; border: 0; }
+.cover.cover-center { padding: 0; border: 0; text-align: center; }
+.cover.cover-band { padding-left: 14px; border-left: 6px solid var(--accent, #1d4ed8); text-align: left; }
 `;
 
 /**
@@ -317,6 +321,8 @@ export interface MarkdownRenderOptions {
   pdfBackground?: string;
   pdfHeader?: string;
   pdfFooter?: string;
+  /** The cover page is printed without header and footer (its number is still counted). */
+  pdfSkipRunning?: number;
   pdfTitle?: string;
   pdfAuthor?: string;
 }
@@ -383,19 +389,31 @@ export function markdownToDocument(markdown: string, options: MarkdownOptions = 
   const text = parser.parse(source, { async: false, gfm: true, renderer }) as string;
 
   const tocOption = options.toc ?? (front.toc !== undefined || template.defaults?.toc !== undefined ? settings.toc : !!options.paged);
-  const toc = tocOption === true && typeof options.toc === "object" ? options.toc : tocOption;
+  const tocExtras = { ...(settings.toc_depth ? { depth: settings.toc_depth } : {}), ...(settings.toc_title ? { title: settings.toc_title } : {}) };
+  const toc = tocOption === true && typeof options.toc === "object" ? options.toc : tocOption === true && Object.keys(tocExtras).length ? tocExtras : tocOption;
   const tocBlock = toc && entries.length ? tocHtml(entries, toc === true ? {} : toc) : "";
   const cover = settings.cover && settings.title ? coverHtml(settings) : "";
   const body = cover + tocBlock + text;
 
   const type = { ...DEFAULT_TYPE, ...template.type, ...(settings.font ? { font: settings.font } : {}) };
-  const page = { ...DEFAULT_PAGE, ...template.page };
-  const hasTemplate = options.template !== undefined || front.template !== undefined;
+  const page = {
+    ...DEFAULT_PAGE,
+    ...template.page,
+    ...(settings.margin ? { margin: settings.margin } : {}),
+    ...(settings.header !== undefined ? { header: settings.header } : {}),
+    ...(settings.footer !== undefined ? { footer: settings.footer } : {}),
+  };
+  // Asking for a page of its own (a header, a footer, a margin or an orientation) makes the document paged like a template does.
+  const hasTemplate =
+    options.template !== undefined ||
+    front.template !== undefined ||
+    [settings.header, settings.footer, settings.margin, settings.orientation].some((v) => v !== undefined);
+  const withOrientation = (size: string) => (settings.orientation === "landscape" && !/landscape/.test(size) ? `${size} landscape` : size);
   // A plain document keeps the exact page it always had; a template adds its own @page (size and margins).
   const pageSetting = hasTemplate && options.paged !== false
-    ? { size: settings.page_size ?? page.size, margin: page.margin }
+    ? { size: withOrientation(settings.page_size ?? page.size), margin: page.margin }
     : settings.page_size && options.paged
-      ? { size: settings.page_size, margin: `${options.padding ?? 32}px` }
+      ? { size: withOrientation(settings.page_size), margin: `${options.padding ?? 32}px` }
       : undefined;
   const sheet =
     options.stylesheet ??
@@ -418,6 +436,7 @@ export function markdownToDocument(markdown: string, options: MarkdownOptions = 
       ...(options.paged && options.theme === "dark" && options.stylesheet === undefined ? { pdfBackground: PALETTES.dark.bg } : {}),
       ...(header ? { pdfHeader: header } : {}),
       ...(hasTemplate && page.footer ? { pdfFooter: running(page.footer) } : {}),
+      ...(cover && hasTemplate && (header || page.footer) ? { pdfSkipRunning: 1 } : {}),
       ...(settings.title ? { pdfTitle: settings.title.replace(/<br\s*\/?>/gi, " ") } : {}),
       ...(settings.author ? { pdfAuthor: settings.author } : {}),
     },

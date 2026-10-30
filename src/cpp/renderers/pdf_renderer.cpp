@@ -1426,7 +1426,8 @@ static sk_sp<SkData> render_html_to_pdf_impl(const std::string& html, int width,
 
         // Header / footer: the document is cached per distinct template HTML, so a
         // template without page-number placeholders is laid out once and only re-drawn.
-        if (!options.pdfHeader.empty()) {
+        // pdfSkipRunning: the first pages (a cover, a contents page) carry no header or footer.
+        if (!options.pdfHeader.empty() && page_num > options.pdfSkipRunning) {
             std::string headerHtml = replace_template_vars(options.pdfHeader, page_num, page_count);
             canvas->save();
             canvas->translate((SkScalar)margin_left, 0);
@@ -1435,7 +1436,7 @@ static sk_sp<SkData> render_html_to_pdf_impl(const std::string& html, int width,
             canvas->restore();
         }
 
-        if (!options.pdfFooter.empty()) {
+        if (!options.pdfFooter.empty() && page_num > options.pdfSkipRunning) {
             std::string footerHtml = replace_template_vars(options.pdfFooter, page_num, page_count);
             canvas->save();
             canvas->translate((SkScalar)margin_left, (SkScalar)(page_height - footer_band));

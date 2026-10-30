@@ -111,6 +111,7 @@ export interface Orchestration {
   pdfMargin: HtmlToImageOptions["pdfMargin"];
   pdfHeader: string | undefined;
   pdfFooter: string | undefined;
+  pdfSkipRunning: number | undefined;
   fmtInt: number;
   /** Output color space of `tiff` / `pdf`. */
   colorSpace: "srgb" | "cmyk";
@@ -187,6 +188,7 @@ export function createOrchestration(
     pdfMargin,
     pdfHeader,
     pdfFooter,
+    pdfSkipRunning,
   } = options;
   // `animation` accepts a boolean (image input: keep frames) or, for HTML
   // input, an object requesting keyframe sampling. The object form turns on
@@ -352,6 +354,7 @@ export function createOrchestration(
     pdfMargin,
     pdfHeader,
     pdfFooter,
+    pdfSkipRunning,
     fmtInt,
     colorSpace,
     scale,

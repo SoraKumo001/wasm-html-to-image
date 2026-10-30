@@ -109,6 +109,9 @@ void parse_satoru_options(SatoruRenderOptions& options, val options_val) {
     if (options_val.hasOwnProperty("pdfHeader")) {
         options.pdfHeader = options_val["pdfHeader"].as<std::string>();
     }
+    if (options_val.hasOwnProperty("pdfSkipRunning")) {
+        options.pdfSkipRunning = options_val["pdfSkipRunning"].as<int>();
+    }
     if (options_val.hasOwnProperty("pdfFooter")) {
         options.pdfFooter = options_val["pdfFooter"].as<std::string>();
     }

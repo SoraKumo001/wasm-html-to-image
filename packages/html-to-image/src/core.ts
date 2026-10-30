@@ -267,6 +267,8 @@ export interface HtmlToImageOptions extends RenderOptions {
   pdfHeader?: string;
   /** PDF footer HTML template. */
   pdfFooter?: string;
+  /** Number of leading PDF pages printed without header and footer (a cover, a contents page). Defaults to 0. */
+  pdfSkipRunning?: number;
   /** Extra keys are forwarded to the WASM render options object. */
   [key: string]: unknown;
 }
@@ -351,6 +353,7 @@ export async function htmlToImage(
     pdfMargin: orch.pdfMargin,
     pdfHeader: orch.pdfHeader,
     pdfFooter: orch.pdfFooter,
+    pdfSkipRunning: orch.pdfSkipRunning,
   });
 
   const inst = await tryRunHtmlInstance(

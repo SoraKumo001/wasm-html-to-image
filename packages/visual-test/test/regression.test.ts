@@ -1371,6 +1371,20 @@ describe("regression: layout and paint probes", () => {
       `<html><head><style>@page{size:300px 200px;margin:0}body{margin:0;font:14px sans-serif}` +
       `.toc a{display:block;color:#000;text-decoration:none}.pad{height:230px}</style></head><body>${body}</body></html>`;
 
+    it("pdfSkipRunning leaves the first pages without header and footer but keeps counting them", async () => {
+      const html = `<html><head><style>@page{size:300px 200px;margin:30px 0}body{margin:0;font:14px sans-serif}.p{height:120px;break-after:page}</style></head><body><div class="p">one</div><div class="p">two</div><div class="p">three</div></body></html>`;
+      const run = async (extra: object) =>
+        readPdf(
+          (await render({ value: html, width: 300, format: "pdf", pdfOutline: false, pdfHeader: `<div style="font:11px sans-serif">H{{pageNumber}}</div>`, pdfFooter: `<div style="font:11px sans-serif">F{{pageNumber}}/{{totalPages}}</div>`, ...extra })).data as Uint8Array,
+        );
+      const all = await run({});
+      expect((await all.lines(1)).join(" ")).toContain("F1/3");
+      const skipped = await run({ pdfSkipRunning: 1 });
+      expect((await skipped.lines(1)).join(" ")).not.toMatch(/[HF]\d/);
+      expect((await skipped.lines(2)).join(" ")).toContain("H2");
+      expect((await skipped.lines(2)).join(" ")).toContain("F2/3"); // the cover still counts as page 1
+    });
+
     it("a heading goes with its paragraph when the paragraph's orphan lines do not fit under it", async () => {
       // Page 200px tall: the heading ends at 184px, so one line of the paragraph fits but not the two its
       // orphans need. The paragraph moves to page 2; the heading (break-after:avoid) must follow it.
