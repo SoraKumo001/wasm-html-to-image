@@ -19,6 +19,7 @@ struct Task {
     bool has_start = false, has_end = false;
     double start = 0, end = 0, duration = 1;
     std::vector<std::string> after;
+    std::string until;  // `until id`: the end is the start of that task
 };
 
 struct Chart {
@@ -159,6 +160,7 @@ bool parse(const std::string& source, Chart& c, std::string& error) {
                 at = 1;
             }
             if (parse_date(rest[at], v)) t.has_end = true, t.end = v;
+            else if (starts(rest[at], "until ")) t.until = trim(rest[at].substr(6));
             else if (!parse_duration(rest[at], t.duration)) {
                 error = "cannot read the length of a task: " + rest[at];
                 return false;
@@ -236,6 +238,16 @@ bool render_gantt(const std::string& source, const Options& options, std::string
         if (!t.id.empty()) by_id[t.id] = k;
         prev_end = t.end;
         have_prev = true;
+    }
+
+    for (Task& t : c.tasks) {
+        if (t.until.empty()) continue;
+        auto it = by_id.find(t.until);
+        if (it == by_id.end()) {
+            error = "unknown task id: " + t.until;
+            return false;
+        }
+        t.end = std::max(t.start, c.tasks[it->second].start);
     }
 
     Theme th = make_theme(options);

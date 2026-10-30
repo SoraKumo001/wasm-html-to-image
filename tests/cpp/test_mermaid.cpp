@@ -162,7 +162,7 @@ int main() {
         std::string ik = svg_of("ishikawa-beta\n  Blurry photo\n    Process\n      Out of focus\n      Slow shutter\n    User\n      Shaky hands\n    Equipment");
         check(has(ik, ">Blurry photo<") && has(ik, ">Out of focus<") && has(ik, ">Equipment<"), "ishikawa/labels");
         check(count(ik, "stroke-width=\"2\" stroke-linecap") == 3, "ishikawa/bones");
-        check(has(svg_of("ishikawa-beta\n  A\nB"), "ERROR"), "ishikawa/one_effect");
+        check(count(svg_of("ishikawa-beta\n  A\nB\nC"), "stroke-linecap") == 3, "ishikawa/effect_and_categories_at_one_indent");
         check(has(svg_of("ishikawa-beta"), "ERROR"), "ishikawa/empty");
         std::string vn = svg_of("venn-beta\n  title Overlap\n  set A[\"Frontend\"]:20\n  set B[\"Backend\"]:30\n  union A,B[\"Fullstack\"]\n    text t1[\"TypeScript\"]");
         check(count(vn, "class=\"set\"") == 2 && has(vn, ">Fullstack<") && has(vn, ">TypeScript<") && has(vn, ">Overlap<"), "venn/two_sets");
@@ -218,6 +218,16 @@ int main() {
         check(!mermaid::render("pie\n\"a\" : 1\nnonsense\n\"b\" : 2", compat, svg, err), "mode/compat_keeps_bad_line_an_error");
         check(mermaid::render("pie\n\"a\" : 1\nnonsense\n\"b\" : 2", recover, svg, err, &warn) && count(svg, "class=\"slice\"") == 2 && has(warn[0], "skipped `nonsense`"), "mode/recover_skips_line");
         check(!mermaid::render("zzzzzz\nA-->B", recover, svg, err) && has(err, "unsupported"), "mode/recover_gives_up");
+    }
+
+    // --- syntax found in the Mermaid documentation ---
+    {
+        std::string bx = svg_of("sequenceDiagram\nbox Purple Team\nparticipant A\nparticipant B\nend\nparticipant C\nA->>B: hi\nB->>C: yo");
+        check(has(bx, ">Team<") && !has(bx, ">Purple Team<") && has(bx, ">C<"), "seq/box_title_without_colour");
+        check(has(svg_of("sequenceDiagram\ncreate participant D as Dee\nA->>D: hi\ndestroy D\nlink A: Dash @ https://x.example\nA->>A: self"), ">Dee<"), "seq/create_destroy_link");
+        check(!has(svg_of("gantt\ndateFormat YYYY-MM-DD\nsection S\nA :a1, 2020-01-01, 3d\nB :until z\nZ :z, 2020-01-10, 1d"), "ERROR"), "gantt/until");
+        check(has(svg_of("quadrantChart\nx-axis L --> R\nP:::c1: [0.5, 0.5] radius: 10\nclassDef c1 color: #109060"), ">P<"), "quadrant/class_def_and_style");
+        check(count(svg_of("flowchart LR\nA o--o B\nC x--x D"), "class=\"edge\"") == 2, "flowchart/start_markers");
     }
 
     // --- errors ---
@@ -577,7 +587,7 @@ int main() {
         check(count(svg_of("block-beta\n  columns 2\n  a space b"), "class=\"node\"") == 2, "block/space_is_empty");
         check(has(svg_of("block\n  \xe5\x9b\xb3[\"\xe6\x97\xa5\xe6\x9c\xac\"]"), ">\xe6\x97\xa5\xe6\x9c\xac<"), "block/cjk_and_plain_keyword");
         std::string e1, e2;
-        check(!render("block-beta\n  a --> b", e1, e2), "block/error_unknown_block");
+        check(render("block-beta\n  a --> b", e1, e2) && count(e1, "class=\"node\"") == 2 && count(e1, "class=\"edge\"") == 1, "block/edge_creates_missing_blocks");
         check(!render("block-beta\n  block:g\n  a\n  end", e1, e2), "block/error_nested");
         check(!render("block-beta\n  columns 0", e1, e2), "block/error_columns");
         check(!render("block-beta", e1, e2), "block/error_empty");

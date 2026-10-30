@@ -140,9 +140,15 @@ bool render_block(const std::string& source, const Options& options, std::string
                 label = unquote(left.substr(dd + 2));
                 left = trim(left.substr(0, dd));
             }
-            if (!index.count(left) || !index.count(right)) {
-                error = "unknown block in: " + line;
-                return false;
+            for (const std::string* side : {&left, &right}) {
+                if (index.count(*side)) continue;
+                Block b;
+                if (side->empty() || !parse_block(*side, b)) {
+                    error = "unknown block in: " + line;
+                    return false;
+                }
+                blocks.push_back(b);
+                index[b.id] = (int)blocks.size() - 1;
             }
             links.push_back({index[left], index[right], label});
             continue;

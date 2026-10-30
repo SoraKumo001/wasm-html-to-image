@@ -30,9 +30,15 @@ struct Participant {
     std::string id, name;
 };
 
+struct BoxGroup {
+    std::string label;
+    int first = 0, last = 0;  // participant indices
+};
+
 struct Doc {
     std::vector<Participant> ps;
     std::vector<Event> ev;
+    std::vector<BoxGroup> boxes;
 };
 
 std::string lower(std::string s) {
@@ -47,6 +53,22 @@ bool word(const std::string& line, const char* w, std::string& rest) {
     if (line.size() > n && line[n] != ' ' && line[n] != '\t') return false;
     rest = trim(line.substr(n));
     return true;
+}
+
+/// A leading colour (`Purple`, `rgb(1,2,3)`, `#fa0`, `transparent`) of a `box` line is dropped: the frame uses the theme.
+std::string without_colour(const std::string& s) {
+    static const char* names[] = {"aqua", "black", "blue", "fuchsia", "gray", "grey", "green", "lime", "maroon", "navy", "olive", "orange", "purple", "red", "silver", "teal", "white", "yellow", "pink", "transparent"};
+    std::string head = lower(s.substr(0, s.find(' ')));
+    if (head.compare(0, 4, "rgb(") == 0 || head.compare(0, 5, "rgba(") == 0 || head.compare(0, 4, "hsl(") == 0) {
+        size_t close = s.find(')');
+        return close == std::string::npos ? "" : trim(s.substr(close + 1));
+    }
+    bool colour = head.compare(0, 1, "#") == 0;
+    for (const char* n : names)
+        if (head == n) colour = true;
+    if (!colour) return s;
+    size_t sp = s.find(' ');
+    return sp == std::string::npos ? "" : trim(s.substr(sp + 1));
 }
 
 int find_or_add(Doc& d, const std::string& id) {
@@ -65,8 +87,9 @@ const ArrowTok kArrows[] = {{"-->>", true, kArrow}, {"->>", false, kArrow}, {"--
                             {"--)", true, kAsync},  {"-)", false, kAsync},   {"-->", true, kNone},   {"->", false, kNone}};
 
 bool parse(const std::string& source, Doc& d, std::string& error) {
-    bool autonumber = false;
-    int counter = 0, depth = 0;
+    bool autonumber = false, in_box = false;
+    int counter = 0, depth = 0, box_first = 0;
+    std::string box_label;
     bool first = true;
     size_t i = 0;
     while (i <= source.size()) {
@@ -80,6 +103,31 @@ bool parse(const std::string& source, Doc& d, std::string& error) {
             continue;
         }
         std::string rest;
+        // `create participant X` / `create actor X as Y` declare the participant (it is drawn at the top like any other)
+        if (word(line, "create", rest)) {
+            std::string r2;
+            if (word(rest, "participant", r2) || word(rest, "actor", r2)) line = "participant " + r2;
+        }
+        // `destroy X`, `link X: ...` and `links X: ...` need no drawing
+        if (word(line, "destroy", rest)) {
+            find_or_add(d, rest);
+            continue;
+        }
+        if (word(line, "links", rest) || word(line, "link", rest)) {
+            find_or_add(d, trim(rest.substr(0, rest.find(':'))));
+            continue;
+        }
+        if (word(line, "box", rest)) {
+            in_box = true;
+            box_first = (int)d.ps.size();
+            box_label = without_colour(rest);
+            continue;
+        }
+        if (in_box && depth == 0 && word(line, "end", rest) && rest.empty()) {
+            in_box = false;
+            if ((int)d.ps.size() > box_first) d.boxes.push_back({box_label, box_first, (int)d.ps.size() - 1});
+            continue;
+        }
         if (word(line, "participant", rest) || word(line, "actor", rest)) {
             std::string id = rest, name = rest;
             size_t as = lower(rest).find(" as ");
@@ -316,6 +364,7 @@ bool render_sequence(const std::string& source, const Options& options, std::str
         open[p].pop_back();
     };
 
+    const double box_top = d.boxes.empty() ? 0 : 26;  // room above the headers for the box titles
     double y = hh + 24;
     for (auto& e : d.ev) {
         switch (e.kind) {
@@ -436,8 +485,15 @@ bool render_sequence(const std::string& source, const Options& options, std::str
     for (auto& b : bars) bars_svg += rect(cx[b.p] - kBarW / 2 + b.level * 4, b.y0, kBarW, std::max(4.0, b.y1 - b.y0), th.group_hdr, th.border);
 
     const double margin = 24;
-    std::string body = "<g transform=\"translate(" + num(margin - minx) + "," + num(margin) + ")\">\n" + lifelines + frames + bars_svg + msgs + boxes + "</g>\n";
-    svg = svg_document(th, maxx - minx + 2 * margin, bottom + hh + 2 * margin, body);
+    std::string groups;
+    for (const BoxGroup& b : d.boxes) {
+        double x0 = cx[b.first] - w[b.first] / 2 - 10, x1 = cx[b.last] + w[b.last] / 2 + 10;
+        ext(x0, x1);
+        groups += rect(x0, -box_top, x1 - x0, bottom + hh + box_top + 8, mix(th.fg, th.bg, 5), th.border, 6);
+        if (!b.label.empty()) centered_text(groups, th, {b.label}, (x0 + x1) / 2, -box_top / 2 - 2, metrics::kNodeFont, 600, th.text);
+    }
+    std::string body = "<g transform=\"translate(" + num(margin - minx) + "," + num(margin + box_top) + ")\">\n" + groups + lifelines + frames + bars_svg + msgs + boxes + "</g>\n";
+    svg = svg_document(th, maxx - minx + 2 * margin, bottom + hh + 2 * margin + box_top + (d.boxes.empty() ? 0 : 8), body);
     return true;
 }
 

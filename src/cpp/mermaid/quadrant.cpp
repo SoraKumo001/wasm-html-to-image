@@ -49,6 +49,7 @@ bool render_quadrant(const std::string& source, const Options& options, std::str
         if (starts(line, "title ")) title = trim(line.substr(6));
         else if (starts(line, "x-axis ")) ends_of(line.substr(7), x_lo, x_hi);
         else if (starts(line, "y-axis ")) ends_of(line.substr(7), y_lo, y_hi);
+        else if (starts(line, "classDef ")) continue;
         else if (starts(line, "quadrant-") && line.size() > 10 && line[9] >= '1' && line[9] <= '4') quad[line[9] - '1'] = trim(line.substr(10));
         else {
             size_t open = line.find('['), close = line.rfind(']'), colon = line.rfind(':', open);
@@ -65,7 +66,9 @@ bool render_quadrant(const std::string& source, const Options& options, std::str
                 error = "a point is `name: [x, y]` with both between 0 and 1: " + line;
                 return false;
             }
-            points.push_back({trim(line.substr(0, colon)), x, y});
+            std::string pname = trim(line.substr(0, colon));
+            if (size_t cls = pname.find(":::"); cls != std::string::npos) pname = trim(pname.substr(0, cls));
+            points.push_back({pname, x, y});
         }
     }
     Theme th = make_theme(options);

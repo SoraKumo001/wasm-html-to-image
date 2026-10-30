@@ -1,0 +1,4 @@
+{
+  "block/widths": "nested blocks (block:id ... end) are not supported",
+  "xychart/horizontal": "horizontal xychart is not supported"
+}

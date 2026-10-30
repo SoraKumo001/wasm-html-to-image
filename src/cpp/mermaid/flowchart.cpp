@@ -199,10 +199,15 @@ struct Parser {
 
     // The connector after a node: `-->`, `---`, `-.->`, `==>`, `--x`, `<-->`, `-- text -->`, `-->|text|` ...
     bool parse_link(const std::string& s, size_t& i, Link& link) {
+        size_t before = i;
         while (i < s.size() && s[i] == ' ') i++;
         size_t j = i;
         if (j >= s.size()) return false;
         if (s[j] == '<') {
+            link.arrow_start = true;
+            j++;
+        } else if ((s[j] == 'o' || s[j] == 'x') && j > before && j + 1 < s.size() && (s[j + 1] == '-' || s[j + 1] == '=')) {
+            // `A o--o B` / `A x--x B`: a circle or cross at the start (after a space, so it is not part of a name)
             link.arrow_start = true;
             j++;
         }
