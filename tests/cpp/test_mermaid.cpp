@@ -423,6 +423,21 @@ int main() {
         check(!render("sankey-beta", e1, e2), "sankey/error_empty");
     }
 
+    // --- requirementDiagram ---
+    {
+        std::string s = svg_of("requirementDiagram\n  requirement req {\n    id: 1\n    text: the test text.\n    risk: high\n    verifymethod: test\n  }\n  element ent {\n    type: simulation\n  }\n  ent - satisfies -> req\n  req <- contains - ent");
+        check(count(s, "class=\"node\"") == 2 && has(s, ">req<") && has(s, ">ent<"), "requirement/nodes");
+        check(has(s, ">&lt;&lt;Requirement&gt;&gt;<") && has(s, ">&lt;&lt;Element&gt;&gt;<"), "requirement/stereotypes");
+        check(has(s, ">Id: 1<") && has(s, ">Text: the test text.<") && has(s, ">Type: simulation<"), "requirement/fields");
+        check(has(s, ">Risk: High<") && has(s, ">Verification: Test<"), "requirement/capitalised_enum_values");
+        check(count(s, "class=\"edge\"") == 2 && has(s, ">&lt;&lt;satisfies&gt;&gt;<") && has(s, ">&lt;&lt;contains&gt;&gt;<"), "requirement/relations");
+        check(has(s, "stroke-dasharray=\"6 4\""), "requirement/dashed_except_contains");
+        std::string e1, e2;
+        check(!render("requirementDiagram\n  a - satisfies -> b", e1, e2), "requirement/error_unknown_item");
+        check(!render("requirementDiagram\n  requirement r {\n id: 1", e1, e2), "requirement/error_unclosed");
+        check(!render("requirementDiagram", e1, e2), "requirement/error_empty");
+    }
+
     std::printf("----\n%d passed, %d failed\n", g_pass, g_fail);
     return g_fail == 0 ? 0 : 1;
 }

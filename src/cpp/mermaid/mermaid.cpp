@@ -15,6 +15,7 @@
 #include "mermaid/kanban.h"
 #include "mermaid/packet.h"
 #include "mermaid/sankey.h"
+#include "mermaid/requirement.h"
 #include "mermaid/timeline.h"
 #include "mermaid/xychart.h"
 
@@ -75,6 +76,7 @@ bool render(const std::string& source, const Options& options, std::string& svg,
     if (keyword == "kanban") return render_kanban(source, options, svg, error);
     if (keyword == "packet-beta" || keyword == "packet") return render_packet(source, options, svg, error);
     if (keyword == "sankey-beta" || keyword == "sankey") return render_sankey(source, options, svg, error);
+    if (keyword == "requirementDiagram") return render_requirement(source, options, svg, error);
     if (keyword == "timeline") return render_timeline(source, options, svg, error);
     if (keyword == "mindmap")return render_mindmap(source, options, svg, error);
     if (keyword == "gantt")return render_gantt(source, options, svg, error);
