@@ -21,6 +21,7 @@ title: API 概要
 | `wasm-html-to-image/preact`     | `render(options)`                                         | Preact JSX エレメントを直接渡して描画するラッパー                                 |
 | `wasm-html-to-image/tailwind`   | `createCSS(html, { css })` / `tailwind(html, { css })` / `convertTw(html)` | Tailwind v4 のユーティリティ CSS を生成（`tw` prop → `class`、`@theme` → `:root` 変数、`@apply` 展開） |
 | `wasm-html-to-image/markdown`   | `markdownToHtml(md, options)`<br/>`markdownToDocument(md, options)`<br/>`listTemplates()` | GitHub 形式 Markdown を装飾済み HTML / PDF 用ドキュメントに変換（テンプレート、目次、表紙、改ページ最適化） |
+| `wasm-html-to-image/single`、`/workers` | `renderMermaid(source, options)` | Mermaid の図だけを SVG 文字列や画像として取得（[Mermaid 変換](./mermaid.md)） |
 | `wasm-html-to-image/markdown-math` | `katexMath(options)`<br/>`katexCss(fontBase?)` | Markdown 内のインライン `$…$` およびブロック `$$…$$` 数式を KaTeX でレンダリング |
 
 ---

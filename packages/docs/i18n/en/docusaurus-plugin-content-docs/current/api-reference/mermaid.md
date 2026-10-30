@@ -1,0 +1,195 @@
+---
+sidebar_position: 8
+title: Mermaid Conversion (SVG / Image / PDF)
+---
+
+# Mermaid Conversion
+
+The engine draws Mermaid diagrams itself, as vectors. No browser, Puppeteer or Mermaid JavaScript is needed. There are three ways to use it.
+
+| Way | Entry | Good for |
+| :--- | :--- | :--- |
+| A ` ```mermaid ` fence in Markdown | `wasm-html-to-image/markdown` | Diagrams inside a document; they go into the PDF as they are |
+| `<pre class="mermaid">` / `<div class="mermaid">` in HTML | `render()` | A diagram inside an HTML page |
+| The diagram alone | `renderMermaid()` | An SVG string or a PNG (or other image) of one diagram |
+
+All three use the same engine and the same diagram types. Text is measured with the real fonts, so Japanese labels fit exactly.
+
+---
+
+## 1. Usage
+
+### Inside Markdown
+
+````markdown
+```mermaid
+graph LR
+  A[Order] --> B{In stock?}
+  B -->|yes| C[Ship]
+  B -->|no| D[Reorder]
+```
+````
+
+In a PDF a diagram is never split across pages, and its text stays selectable vector text. Pass `mermaid: false` to show it as an ordinary code block. See [Markdown Conversion](./markdown.md) for more.
+
+### Inside HTML
+
+```html
+<div class="mermaid">
+  sequenceDiagram
+    A->>B: Hello
+</div>
+```
+
+`<pre class="mermaid">` works the same. The element's text is the diagram source. Colours come from the page's CSS ([CSS control](#3-css-control)).
+
+### The diagram alone (`renderMermaid`)
+
+```typescript
+import { renderMermaid } from "wasm-html-to-image/single";
+
+const { data: svg } = await renderMermaid("graph LR\n  A --> B"); // an SVG string
+const { data: png } = await renderMermaid("graph LR\n  A --> B", {
+  format: "png",
+  theme: "dark",
+});
+```
+
+The output is sized to the diagram (plus the padding). `data` is a string for `format: "svg"` and a `Uint8Array` for everything else.
+
+| Entry | `renderMermaid` |
+| :--- | :--- |
+| `wasm-html-to-image/single` (and `wasm-html-to-image` on Node.js and similar) | Yes |
+| `wasm-html-to-image/workers` | Yes (drawn on the worker pool) |
+| `/workerd`, `/edge-light` (on Cloudflare Workers `wasm-html-to-image` resolves here too) | No `renderMermaid`; use `renderMermaidWith((options) => render(options, wasm), source, options)` |
+
+`mermaidToHtml(source, options)` returns an HTML string with one diagram, for when you want a page.
+
+---
+
+## 2. Options (`renderMermaid` / `mermaidToHtml`)
+
+| Option | Default | Description |
+| :--- | :--- | :--- |
+| `format` | `"svg"` | `svg`, `png`, `webp`, `jpeg`, `avif`, `jxl`, `pdf`, ... |
+| `theme` | `"light"` | Colour scheme (see [Themes](#4-themes)); a key of `MERMAID_THEMES` |
+| `accent` | the theme's | Colour of arrows and bars (any CSS colour) |
+| `padding` | `16` | Space around the diagram, px |
+| `width` | diagram width + padding | Image width, px |
+| `background` | transparent for SVG, the theme's background for images | Page background (a CSS colour or `"transparent"`) |
+| `mode` | `"strict"` | How much a broken source is forgiven (see [Input repair](#5-input-repair)) |
+| `directives` | `false` | Honour `%%{init: {...}}%%` and frontmatter `config:` written in the source |
+
+---
+
+## 3. CSS control
+
+A `<div class="mermaid">` or a Markdown diagram takes its colours and behaviour from CSS custom properties on the element or an ancestor.
+
+| Property | Meaning |
+| :--- | :--- |
+| `color` | Text colour (when there is no `--mermaid-fg`) |
+| `--mermaid-theme` | A named theme (for example `nord`). The single colours below are applied on top of it |
+| `--mermaid-fg` / `--mermaid-bg` | Text and background colour. Every other colour is derived from these two |
+| `--mermaid-accent` | Colour of arrows and bars |
+| `--mermaid-line` | Colour of lines |
+| `--mermaid-muted` | Secondary text (edge labels, ...) |
+| `--mermaid-surface` | Node fill |
+| `--mermaid-border` | Node outline |
+| `--mermaid-mode` | `compat` or `recover` |
+| `--mermaid-directives` | `on` honours `%%{init}%%` and frontmatter |
+
+```html
+<style>
+  .mermaid { --mermaid-theme: dracula; --mermaid-accent: #ff79c6; }
+</style>
+```
+
+---
+
+## 4. Themes
+
+| Name | Text | Background | Note |
+| :--- | :--- | :--- | :--- |
+| `light` (default) | `#1f2328` | `#ffffff` | |
+| `dark` | `#e6edf3` | `#0d1117` | |
+| `neutral` | `#222222` | `#ffffff` | Mostly grey |
+| `forest` | `#1b3a2a` | `#ffffff` | Green accent |
+| `nord` | `#eceff4` | `#2e3440` | |
+| `dracula` | `#f8f8f2` | `#282a36` | |
+| `solarized-light` | `#586e75` | `#fdf6e3` | |
+| `solarized-dark` | `#93a1a1` | `#002b36` | |
+| `rose-pine` | `#e0def4` | `#191724` | |
+| `sepia` | `#433422` | `#f4ecd8` | |
+
+The same names work in `%%{init: {"theme": "dark"}}%%` (`default` and `base` mean `light`). `themeVariables` keys `primaryColor`, `primaryBorderColor`, `lineColor`, `textColor`, `background` and `secondaryTextColor` are applied on top of the theme. Directives only take effect with `directives: true` (or `--mermaid-directives: on`): the page that places a diagram decides its colours, not the author of the diagram.
+
+---
+
+## 5. Input repair
+
+`mode` chooses how much a broken source is forgiven.
+
+| Mode | Forgives |
+| :--- | :--- |
+| `strict` (default) | Nothing. A mistake shows as an error box. A near-miss diagram keyword gets a hint: `did you mean 'flowchart'?` |
+| `compat` | A keyword in the wrong case, a leading BOM, CRLF, and unfinished `end` / `}` blocks (up to 3) |
+| `recover` | Everything in `compat`, plus a misspelt keyword (1 to 2 edits, when one keyword fits) and lines the diagram cannot read (skipped) |
+
+What was repaired is left in the diagram's SVG as a leading `<!-- recovered: ... -->` comment. The C++ API also returns the list of warnings.
+
+---
+
+## 6. Supported diagrams
+
+| Diagram | Starts with |
+| :--- | :--- |
+| Flowchart | `graph` / `flowchart` |
+| Sequence | `sequenceDiagram` |
+| State | `stateDiagram-v2` |
+| Class | `classDiagram` |
+| ER | `erDiagram` |
+| Requirement | `requirementDiagram` |
+| Block | `block-beta` (nested blocks are not supported) |
+| C4 | `C4Context` / `C4Container` / `C4Component` / `C4Dynamic` / `C4Deployment` |
+| Architecture | `architecture-beta` |
+| Gantt | `gantt` |
+| Pie | `pie` |
+| Bar / line chart | `xychart-beta` |
+| Quadrant | `quadrantChart` |
+| Radar | `radar-beta` |
+| Sankey | `sankey-beta` |
+| Treemap | `treemap-beta` |
+| Venn | `venn-beta` |
+| Mind map | `mindmap` |
+| Timeline | `timeline` |
+| User journey | `journey` |
+| Git graph | `gitGraph` |
+| Kanban | `kanban` |
+| Packet | `packet-beta` |
+| Ishikawa (fishbone) | `ishikawa-beta` |
+| Tree view | `treeView-beta` |
+| Version banner | `info` |
+
+An unsupported type (`zenuml`, `wardley-beta`, `eventmodeling`, ...) shows as an error box where the diagram would be.
+
+:::note
+The syntax of the `-beta` diagrams changes often in Mermaid itself. `venn-beta`, `ishikawa-beta`, `treeView-beta`, `treemap-beta`, `radar-beta` and `architecture-beta` may differ from the latest Mermaid in details. If you find a difference, use `recover` mode to see which lines were skipped, and open an issue.
+:::
+
+### Syntax shared by the diagrams
+
+- **Styling**: `classDef`, `class`, `:::` and `style` work in flowcharts, state, class (with `cssClass`), ER and block diagrams. `linkStyle` is flowcharts only.
+- **Accessibility**: `accTitle: Title` and `accDescr: Description` (`accDescr { ... }` for several lines) are not drawn; they become the SVG `<title>` and `<desc>`.
+- **Frontmatter**: a leading `---` block is skipped. With `directives` on, its `config:` (`theme`, `themeVariables`) is applied.
+- **Comments**: lines starting with `%%` are ignored.
+
+---
+
+## 7. Errors
+
+A syntax error or an unsupported diagram shows as a one-line error box (`Mermaid: ...`) where the diagram would be; the rest of the document still converts. `renderMermaid()` returns an SVG of the same box.
+
+## 8. Try it in the playground
+
+The playground's "Mermaid" tab switches the sample (one per diagram type, 26 in all), theme, input repair, output format (SVG / PNG / WebP / JPEG / AVIF / JXL / PDF), accent colour and directives on the spot. "Gallery" draws every sample with the current settings. The settings live in the URL, so a link shares them (for example `?mode=mermaid&theme=nord&format=png&view=gallery`).
