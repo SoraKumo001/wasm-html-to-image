@@ -5,6 +5,7 @@
 #include "mermaid/flowchart.h"
 #include "mermaid/mermaid_internal.h"
 #include "mermaid/gantt.h"
+#include "mermaid/mindmap.h"
 #include "mermaid/pie.h"
 #include "mermaid/sequence.h"
 #include "mermaid/state.h"
@@ -61,7 +62,8 @@ bool render(const std::string& source, const Options& options, std::string& svg,
     if (keyword == "classDiagram" || keyword == "classDiagram-v2") return render_class(source, options, svg, error);
     if (keyword == "erDiagram") return render_er(source, options, svg, error);
     if (keyword == "xychart-beta" || keyword == "xychart") return render_xychart(source, options, svg, error);
-    if (keyword == "gantt") return render_gantt(source, options, svg, error);
+    if (keyword == "mindmap") return render_mindmap(source, options, svg, error);
+    if (keyword == "gantt")return render_gantt(source, options, svg, error);
     if (keyword == "pie")return render_pie(source, options, svg, error);
     if (keyword == "sequenceDiagram") return render_sequence(source, options, svg, error);
     error = keyword.empty() ? "empty diagram" : "unsupported diagram type: " + keyword;

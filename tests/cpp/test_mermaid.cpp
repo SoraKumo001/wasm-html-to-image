@@ -309,6 +309,21 @@ int main() {
         check(!render("gantt\n  title x", e1, e2), "gantt/error_no_tasks");
     }
 
+    // --- mindmap ---
+    {
+        std::string s = svg_of("mindmap\n  root((Centre))\n    A\n      A1\n      A2\n    B[Square]\n    C(Round)\n    D{{Hex}}\n");
+        check(count(s, "class=\"node\"") == 7, "mindmap/nodes");
+        check(count(s, "class=\"edge\"") == 6, "mindmap/connectors");
+        check(has(s, ">Centre<") && has(s, ">Square<") && has(s, ">Round<") && has(s, ">Hex<"), "mindmap/shapes_use_the_text_only");
+        check(has(s, "<ellipse") && has(s, "<polygon"), "mindmap/circle_and_hexagon");
+        check(has(svg_of("mindmap\n  r\n    \xe6\x97\xa5\xe6\x9c\xac"), ">\xe6\x97\xa5\xe6\x9c\xac<"), "mindmap/cjk");
+        check(has(svg_of("mindmap\n  r\n    a\n    ::icon(fa fa-book)\n    b"), ">b<"), "mindmap/icon_lines_are_skipped");
+        check(!has(s, "var(") && !has(s, "color-mix"), "mindmap/plain_colours_only");
+        std::string e1, e2;
+        check(!render("mindmap\n  a\n  b", e1, e2) && has(e2, "one root"), "mindmap/error_two_roots");
+        check(!render("mindmap", e1, e2), "mindmap/error_empty");
+    }
+
     std::printf("----\n%d passed, %d failed\n", g_pass, g_fail);
     return g_fail == 0 ? 0 : 1;
 }
