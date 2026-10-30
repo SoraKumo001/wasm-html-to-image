@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { markdownToDocument, markdownToHtml } from "../src/markdown";
-import { fillRunningText, listTemplates, parseFrontMatter, resolveTemplate, TEMPLATES } from "../src/markdown-template";
+import { defineTemplate, fillRunningText, listTemplates, parseFrontMatter, resolveTemplate, TEMPLATES } from "../src/markdown-template";
 import { buildRenderOptions, loadTemplate, type CliFlags } from "../src/cli-options";
 import { parseCssColor } from "../src/encode-args";
 
@@ -413,5 +413,33 @@ describe("the manual, minutes, letter, slides and invoice templates", () => {
     const css = resolveTemplate("invoice").css!;
     expect(css).toContain("text-align: right");
     expect(css).toMatch(/th \{ color: #ffffff; background: var\(--accent/);
+  });
+});
+
+describe("templates that extend a bundled one", () => {
+  it("lays the fields over the base field by field and appends the css", () => {
+    const t = resolveTemplate(defineTemplate({ extends: "report", type: { size: 17 }, page: { margin: "9mm" }, defaults: { accent: "#ff0000" }, css: ".x { color: red }" }));
+    expect(t.type).toMatchObject({ size: 17, lineHeight: 1.65, accentHeadings: true }); // size replaced, the rest from report
+    expect(t.page).toMatchObject({ margin: "9mm" });
+    expect(t.page?.footer).toContain("{{pageNumber}}"); // report's footer kept
+    expect(t.defaults).toMatchObject({ cover: true, toc: true, accent: "#ff0000" });
+    expect(t.css).toContain("--accent"); // report's css first
+    expect(t.css!.endsWith(".x { color: red }")).toBe(true);
+  });
+
+  it("works through markdownToDocument, and an unknown base lists the choices", () => {
+    const d = markdownToDocument("---\ntitle: T\n---\n# H", { paged: true, template: { extends: "book", defaults: { cover: false } } });
+    expect(d.settings.cover).toBe(false);
+    expect(style(d.html)).toContain("size: A5;");
+    expect(() => resolveTemplate({ extends: "nope" })).toThrow(/unknown template "nope"/);
+  });
+
+  it("is what a JSON template file says through the CLI", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ext-"));
+    const json = path.join(dir, "mine.json");
+    fs.writeFileSync(json, JSON.stringify({ extends: "proposal", defaults: { accent: "#123456" } }));
+    const o = await buildRenderOptions("---\ntitle: T\n---\n# H", { width: 800, format: "pdf", quality: 85, markdown: true, template: json });
+    expect(style(String(o.value))).toContain("--accent: #123456");
+    fs.rmSync(dir, { recursive: true, force: true });
   });
 });

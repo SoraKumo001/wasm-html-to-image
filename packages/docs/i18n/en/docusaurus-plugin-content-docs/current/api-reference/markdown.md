@@ -339,3 +339,26 @@ const myTemplate = {
 
 const doc = markdownToDocument(md, { template: myTemplate, paged: true });
 ```
+
+### Build on a bundled template (`extends`)
+
+Put the name of a bundled template in `extends` and override its `type`, `page` and `defaults` field by field; your `css` is appended after the base's. `defineTemplate()` only type-checks and returns the value unchanged.
+
+```typescript
+import { defineTemplate, markdownToDocument } from "wasm-html-to-image/markdown";
+
+const mine = defineTemplate({
+  extends: "report",
+  type: { size: 13 },
+  defaults: { accent: "#0f766e" },
+  css: ".markdown-body h2 { border-bottom-style: dashed; }",
+});
+
+const doc = markdownToDocument(md, { template: mine, paged: true });
+```
+
+From the CLI, a JSON file such as `{ "extends": "report", "defaults": { "accent": "#0f766e" } }` works with `--template mine.json`.
+
+### Write colours as CSS variables
+
+In a template's `css`, use `var(--surface)`, `var(--border)`, `var(--muted)`, `var(--text)` and `var(--accent)` instead of fixed colours, so the template follows both the light and the dark theme.

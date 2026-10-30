@@ -63,7 +63,7 @@ highlighter.registerAliases(["toml"], { languageName: "ini" });
 
 /** Options for {@link markdownToHtml}. */
 // The template API lives beside the converter: `import { listTemplates, type MarkdownTemplate } from ".../markdown"`.
-export { listTemplates, TEMPLATES } from "./markdown-template.js";
+export { defineTemplate, listTemplates, TEMPLATES } from "./markdown-template.js";
 export type { DocumentSettings, MarkdownTemplate, TemplatePage, TemplateType } from "./markdown-template.js";
 
 export interface MarkdownOptions {

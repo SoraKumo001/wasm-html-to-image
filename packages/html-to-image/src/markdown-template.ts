@@ -96,6 +96,8 @@ export interface TemplatePage {
 }
 
 export interface MarkdownTemplate {
+  /** Start from a bundled template (`"report"`): this one's `type`, `page` and `defaults` are laid over it field by field, and its `css` follows the base's. */
+  extends?: string;
   /** One line for `listTemplates()`. */
   description?: string;
   type?: Partial<TemplateType>;
@@ -376,10 +378,25 @@ export function listTemplates(): { name: string; description: string }[] {
   return Object.entries(TEMPLATES).map(([name, t]) => ({ name, description: t.description ?? "" }));
 }
 
+/** A template that `extends` a bundled one, flattened: its own fields laid over the base's. */
+function extend(t: MarkdownTemplate): MarkdownTemplate {
+  const base = resolveTemplate(t.extends);
+  return {
+    description: t.description ?? base.description,
+    type: { ...base.type, ...t.type },
+    page: { ...base.page, ...t.page },
+    defaults: { ...base.defaults, ...t.defaults },
+    css: [base.css, t.css].filter(Boolean).join("\n"),
+  };
+}
+
+/** Type-checks a template you write (`extends`, `type`, `page`, `defaults`, `css`) and returns it unchanged. */
+export const defineTemplate = (template: MarkdownTemplate): MarkdownTemplate => template;
+
 /** A template by name (a bundled one) or as given. An unknown name is an error that lists the choices. */
 export function resolveTemplate(template: string | MarkdownTemplate | undefined): MarkdownTemplate {
   if (template === undefined) return TEMPLATES.default;
-  if (typeof template !== "string") return template;
+  if (typeof template !== "string") return template.extends === undefined ? template : extend(template);
   const found = TEMPLATES[template];
   if (!found) throw new Error(`unknown template "${template}". Choose from: ${Object.keys(TEMPLATES).join(", ")}`);
   return found;

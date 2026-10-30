@@ -343,3 +343,26 @@ const myTemplate = {
 
 const doc = markdownToDocument(md, { template: myTemplate, paged: true });
 ```
+
+### 組み込みテンプレートを土台にする（`extends`）
+
+`extends` に組み込みテンプレートの名前を書くと、その `type`、`page`、`defaults` を項目ごとに上書きできます。`css` は土台のものの後ろに足されます。`defineTemplate()` は型を確認するだけで、値はそのまま返します。
+
+```typescript
+import { defineTemplate, markdownToDocument } from "wasm-html-to-image/markdown";
+
+const mine = defineTemplate({
+  extends: "report",
+  type: { size: 13 },
+  defaults: { accent: "#0f766e" },
+  css: ".markdown-body h2 { border-bottom-style: dashed; }",
+});
+
+const doc = markdownToDocument(md, { template: mine, paged: true });
+```
+
+CLI では、JSON ファイルに `{ "extends": "report", "defaults": { "accent": "#0f766e" } }` と書いて `--template mine.json` で渡せます。
+
+### 色は CSS 変数で書く
+
+テンプレートの `css` では、色を直書きせず、`var(--surface)`、`var(--border)`、`var(--muted)`、`var(--text)`、`var(--accent)` を使ってください。ライトとダークのどちらのテーマでも、配色が追従します。
