@@ -43,3 +43,21 @@ target_include_directories(test_svg_paint_utils PRIVATE "${CMAKE_CURRENT_SOURCE_
 target_compile_features(test_svg_paint_utils PRIVATE cxx_std_20)
 
 add_test(NAME svg_paint_utils COMMAND test_svg_paint_utils)
+
+# mermaid/: diagrams drawn by the engine (standard library only)
+add_library(mermaid_core STATIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/mermaid/mermaid.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/mermaid/flowchart.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/mermaid/layered.cpp")
+target_include_directories(mermaid_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp")
+target_compile_features(mermaid_core PUBLIC cxx_std_20)
+if(MSVC)
+    target_compile_options(mermaid_core PRIVATE /utf-8)
+endif()
+
+add_executable(mermaid_cli mermaid_cli.cpp)
+target_link_libraries(mermaid_cli PRIVATE mermaid_core)
+
+add_executable(test_mermaid test_mermaid.cpp)
+target_link_libraries(test_mermaid PRIVATE mermaid_core)
+add_test(NAME mermaid COMMAND test_mermaid)

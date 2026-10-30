@@ -1573,6 +1573,42 @@ describe("regression: layout and paint probes", () => {
     );
     expect(near(rev.at(25, 20), BLUE)).toBe(true); // reversed head: tip at x=20, widening to the right
   });
+  it('<pre class="mermaid"> is drawn as a diagram by the engine, not shown as text', async () => {
+    const countPixels = (img: { data: Uint8Array | Buffer }, test: (r: number, g: number, b: number) => boolean) => {
+      let n = 0;
+      for (let i = 0; i < img.data.length; i += 4) if (test(img.data[i], img.data[i + 1], img.data[i + 2])) n++;
+      return n;
+    };
+    const page = (body: string) => `<div style="--mermaid-accent:#0000ff;color:#000">${body}</div>`;
+    const { img } = await renderPng(page(`<pre class="mermaid">graph TD\n  A --&gt; B</pre>`), 300, 400);
+    // two boxes joined by an arrow (accent coloured head), far taller than the one line the source would take
+    expect(countPixels(img, (r, g, b) => b > 200 && r < 60 && g < 60)).toBeGreaterThan(8);
+    let lastInk = 0;
+    for (let y = 0; y < img.height; y++)
+      for (let x = 0; x < img.width; x++) {
+        const i = (img.width * y + x) * 4;
+        if (img.data[i] < 235 || img.data[i + 1] < 235 || img.data[i + 2] < 235) lastInk = y;
+      }
+    expect(lastInk).toBeGreaterThan(150);
+    // the diagram follows the page: a div works too, and a bad diagram becomes a visible error
+    const err = await renderPng(page(`<div class="mermaid">pie title x</div>`), 300, 100);
+    expect(countPixels(err.img, (r, g, b) => r > 180 && g < 80 && b < 80)).toBeGreaterThan(20);
+    // a plain <pre> is left alone
+    const plain = await renderPng(page(`<pre>graph TD</pre>`), 300, 60);
+    expect(countPixels(plain.img, (r, g, b) => b > 200 && r < 60 && g < 60)).toBe(0);
+  });
+  it("inline SVG text takes the font weight and draws CJK runs in one <text>", async () => {
+    const ink = async (attrs: string, text: string) => {
+      const { img } = await renderPng(`<svg width="260" height="40"><text x="4" y="28" font-size="22" ${attrs}>${text}</text></svg>`, 260, 40);
+      let dark = 0;
+      for (let i = 0; i < img.data.length; i += 4) if (img.data[i] < 128) dark++;
+      return dark;
+    };
+    expect(await ink('font-weight="800"', "Weight")).toBeGreaterThan(1.2 * (await ink('font-weight="300"', "Weight")));
+    // a boxed (.notdef) glyph has a frame of ink; real kanji of the same count have clearly less
+    const kanji = await ink('font-family="sans-serif"', "<tspan>開</tspan><tspan>始</tspan><tspan>判</tspan><tspan>定</tspan>");
+    expect(kanji).toBeGreaterThan(200);
+  });
   it("inline SVG <text> is drawn (needs a font manager that knows Satoru's fonts)", async () => {
     const { img } = await renderPng(
       `<svg width="200" height="40"><text x="5" y="25" font-size="16" fill="#000">Hello 世田谷区</text></svg>`,

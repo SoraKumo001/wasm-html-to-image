@@ -113,6 +113,10 @@ target_sources(html_to_image_core PRIVATE
     src/cpp/core/text/text_geometry.cpp
     src/cpp/core/litehtml_extensions.cpp
     src/cpp/core/el_svg.cpp
+    src/cpp/core/el_mermaid.cpp
+    src/cpp/mermaid/mermaid.cpp
+    src/cpp/mermaid/flowchart.cpp
+    src/cpp/mermaid/layered.cpp
     src/cpp/core/resource_manager.cpp
     src/cpp/core/font_manager.cpp
     src/cpp/renderers/svg_renderer.cpp

@@ -2,6 +2,9 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <list>
+#include <memory>
+#include <set>
 #include <sstream>
 
 #include "bridge/magic_tags.h"
@@ -17,11 +20,34 @@
 #include "modules/skresources/include/SkResources.h"
 #include "modules/svg/include/SkSVGDOM.h"
 #include "svg_paint_utils.h"
+#include "text_utils.h"
 #include "svg_tag_utils.h"
 
 namespace litehtml {
 
 namespace {
+
+// The characters of the <text> inside an svg. Layout never sees them (SkSVGDOM draws them), so without this
+// the font slices that cover them (Noto Sans JP comes in unicode-range slices) are never fetched and the
+// glyphs come out as boxes.
+void collect_svg_text_codepoints(const std::list<std::shared_ptr<element>>& list, std::set<char32_t>& out) {
+    for (auto const& e : list) {
+        if (e->is_comment()) continue;
+        if (e->is_text()) {
+            string text;
+            e->get_text(text);
+            const char* p = text.c_str();
+            while (*p) {
+                char32_t cp = satoru::decode_utf8_char(&p);
+                if (cp == 0) break;
+                out.insert(cp);
+            }
+            continue;
+        }
+        if (std::string(e->get_tagName()) == "style") continue;
+        collect_svg_text_codepoints(e->children(), out);
+    }
+}
 
 class SatoruImageAsset : public skresources::ImageAsset {
    public:
@@ -58,11 +84,16 @@ class SatoruSvgFontMgr final : public SkFontMgr {
     }
     sk_sp<SkTypeface> onMatchFamilyStyleCharacter(const char family[], const SkFontStyle& style,
                                                   const char*[], int, SkUnichar c) const override {
-        // Prefer the requested family, then any loaded typeface that covers the character (e.g. a
-        // CJK face after a Latin-only one).
-        auto tf = lookup(family, style);
-        if (tf && tf->unicharToGlyph(c) != 0) return tf;
-        if (auto any = m_ctx.fontManager.findTypefaceForCodepoint(c)) return any;
+        // The requested family, then sans-serif: every face of each (the default fonts come in
+        // unicode-range slices, so the first face covers only part of the Latin letters or of the
+        // kanji), then any loaded typeface that covers the character.
+        for (const char* name : {family, "sans-serif"}) {
+            if (!name || !*name) continue;
+            bool fake_bold = false;
+            for (auto& tf : m_ctx.get_typefaces(name, style.weight(), style.slant(), fake_bold))
+                if (tf && tf->unicharToGlyph(c) != 0) return weighted(tf, style.weight());
+        }
+        if (auto any = m_ctx.fontManager.findTypefaceForCodepoint(c)) return weighted(any, style.weight());
         return lookup(family, style);
     }
     sk_sp<SkTypeface> onMakeFromData(sk_sp<SkData> d, int i) const override {
@@ -89,11 +120,19 @@ class SatoruSvgFontMgr final : public SkFontMgr {
         std::string name = family ? family : "";
         if (!name.empty()) {
             auto tfs = m_ctx.get_typefaces(name, style.weight(), slant, fake_bold);
-            if (!tfs.empty() && tfs.front()) return tfs.front();
+            if (!tfs.empty() && tfs.front()) return weighted(tfs.front(), style.weight());
         }
         auto tfs = m_ctx.get_typefaces("sans-serif", style.weight(), slant, fake_bold);
-        if (!tfs.empty() && tfs.front()) return tfs.front();
+        if (!tfs.empty() && tfs.front()) return weighted(tfs.front(), style.weight());
         return m_ctx.fontManager.getDefaultTypeface();
+    }
+
+    // The default fonts are variable: the face for a weight is a clone with that wght (what the HTML text
+    // path does through createSkFont); SkSVGDOM would otherwise draw every weight at the default one.
+    sk_sp<SkTypeface> weighted(sk_sp<SkTypeface> tf, int weight) const {
+        if (!tf) return tf;
+        std::unique_ptr<SkFont> font(m_ctx.fontManager.createSkFont(tf, 12.0f, weight));
+        return font ? font->refTypeface() : tf;
     }
 
     SatoruContext& m_ctx;
@@ -227,6 +266,11 @@ void el_svg::get_content_size(size& sz, pixel_t max_width) {
 
 std::shared_ptr<render_item> el_svg::create_render_item(
     const std::shared_ptr<render_item>& parent_ri) {
+    if (auto* skia = dynamic_cast<container_skia*>(get_document()->container())) {
+        std::set<char32_t> codepoints;
+        collect_svg_text_codepoints(m_children, codepoints);
+        if (!codepoints.empty()) skia->add_used_codepoints(codepoints);
+    }
     auto ret = std::make_shared<render_item_image>(shared_from_this());
     ret->parent(parent_ri);
     return ret;
@@ -591,30 +635,10 @@ std::string el_svg::reconstruct_xml(int x, int y, int width, int height) const {
     return ss.str();
 }
 
-void el_svg::draw(uint_ptr hdc, pixel_t x, pixel_t y, const position* clip,
-                  const std::shared_ptr<render_item>& ri) {
-    container_skia* container = dynamic_cast<container_skia*>(get_document()->container());
-    if (!container) return;
-
+// Draw finished SVG XML (absolute position when tagging) at pos; shared with el_mermaid.
+void draw_svg_xml(container_skia* container, const std::string& xml, const position& pos) {
     SkCanvas* canvas = container->get_canvas();
     if (!canvas) return;
-
-    position pos = ri->pos();
-    pos.x += x;
-    pos.y += y;
-
-    // For tagging (SVG output), we need absolute coordinates in the reconstructed XML
-    // because svg_renderer will replace a magic-colored rect with this XML string.
-    std::string xml =
-        reconstruct_xml(container->is_tagging() ? (int)pos.x : 0,
-                        container->is_tagging() ? (int)pos.y : 0, (int)pos.width, (int)pos.height);
-
-    xml = replace_css_vars(xml);
-
-    // Replace "currentColor" with actual computed color
-    litehtml::web_color color = css().get_color();
-    xml = replace_current_color(xml, color);
-
     if (container->is_tagging()) {
         int index = container->add_inline_svg(xml, pos);
         SkPaint p;
@@ -646,6 +670,33 @@ void el_svg::draw(uint_ptr hdc, pixel_t x, pixel_t y, const position* clip,
             canvas->restore();
         }
     }
+}
+
+void el_svg::draw(uint_ptr hdc, pixel_t x, pixel_t y, const position* clip,
+                  const std::shared_ptr<render_item>& ri) {
+    container_skia* container = dynamic_cast<container_skia*>(get_document()->container());
+    if (!container) return;
+
+    SkCanvas* canvas = container->get_canvas();
+    if (!canvas) return;
+
+    position pos = ri->pos();
+    pos.x += x;
+    pos.y += y;
+
+    // For tagging (SVG output), we need absolute coordinates in the reconstructed XML
+    // because svg_renderer will replace a magic-colored rect with this XML string.
+    std::string xml =
+        reconstruct_xml(container->is_tagging() ? (int)pos.x : 0,
+                        container->is_tagging() ? (int)pos.y : 0, (int)pos.width, (int)pos.height);
+
+    xml = replace_css_vars(xml);
+
+    // Replace "currentColor" with actual computed color
+    litehtml::web_color color = css().get_color();
+    xml = replace_current_color(xml, color);
+
+    draw_svg_xml(container, xml, pos);
 }
 
 }  // namespace litehtml
