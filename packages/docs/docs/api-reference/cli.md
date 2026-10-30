@@ -49,6 +49,10 @@ npx wasm-html-to-image <input> [options]
 | `--no-math` | - | - | KaTeX 数式処理を無効化（`katex` がインストールされている場合は既定で有効） |
 | `--markdown-theme <light\|dark>` | - | `light` | Markdown スタイルシートのカラーテーマ |
 | `--markdown-css <path>` | - | なし | 組み込みスタイルの後に追加適用する CSS ファイル |
+| `--mermaid` | - | `.mmd` / `.mermaid` なら自動 | 入力を Mermaid の図として扱う（インラインの文字列や標準入力には必要） |
+| `--mermaid-theme <name>` | - | `light` | 図の配色（`light`、`dark`、`neutral`、`forest`、`nord`、`dracula`、`solarized-light`、`solarized-dark`、`rose-pine`、`sepia`） |
+| `--mermaid-mode <mode>` | - | `strict` | 壊れたソースの許容度: `strict`、`compat`、`recover` |
+| `--mermaid-directives` | - | 無効 | 本文の `%%{init}%%` と frontmatter の `config:` を反映 |
 
 ---
 

@@ -43,6 +43,19 @@ PDF では、図がページをまたいで分断されず、文字は選択で�
 
 `<pre class="mermaid">` でも同じです。要素の文字列が図のソースになります。色はページの CSS から決まります（[CSS からの指定](#3-css-からの指定)）。
 
+### コマンドラインから
+
+`.mmd` / `.mermaid` ファイルを渡すと、図の大きさに合わせた画像（または SVG、PDF）になります。出力の形式は `-o` の拡張子で決まります。
+
+```bash
+npx wasm-html-to-image flow.mmd -o flow.svg
+npx wasm-html-to-image flow.mmd -o flow.png --mermaid-theme nord
+npx wasm-html-to-image "graph LR; A-->B" --mermaid -o ab.png          # インラインの文字列
+cat flow.mmd | npx wasm-html-to-image - --mermaid -o flow.webp --mermaid-mode recover
+```
+
+`-w` を付けたときだけ、画像の幅が決まります。`--accent` で矢印の色、`--mermaid-directives` で本文の `%%{init}%%` を反映できます。
+
 ### 図だけを取り出す（`renderMermaid`）
 
 ```typescript

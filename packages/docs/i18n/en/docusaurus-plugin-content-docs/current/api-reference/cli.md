@@ -43,6 +43,10 @@ npx wasm-html-to-image <input> [options]
 | `--no-math` | - | - | Disable KaTeX math typesetting (enabled by default when `katex` is installed) |
 | `--markdown-theme <light\|dark>` | - | `light` | Theme for the built-in Markdown stylesheet |
 | `--markdown-css <path>` | - | None | Path to extra stylesheet appended after the built-in styles |
+| `--mermaid` | - | automatic for `.mmd` / `.mermaid` | Treat the input as a Mermaid diagram (needed for inline text and stdin) |
+| `--mermaid-theme <name>` | - | `light` | Colour theme of the diagram (`light`, `dark`, `neutral`, `forest`, `nord`, `dracula`, `solarized-light`, `solarized-dark`, `rose-pine`, `sepia`) |
+| `--mermaid-mode <mode>` | - | `strict` | How much a broken source is forgiven: `strict`, `compat`, `recover` |
+| `--mermaid-directives` | - | off | Honour `%%{init}%%` and frontmatter `config:` in the source |
 
 ## Examples
 

@@ -370,6 +370,8 @@ const { data: png } = await renderMermaid("graph LR\n  A --> B", { format: "png"
 - **Input repair** (`mode`): `strict` (default) reports every mistake, with a "did you mean" hint for a near-miss keyword; `compat` also accepts a keyword in the wrong case, CRLF and unfinished `end` / `}`; `recover` also fixes a misspelt keyword and skips lines it cannot read.
 - `classDef` / `class` / `style` (flowchart, state, class, ER, block), `accTitle` / `accDescr` (they become the SVG `<title>` / `<desc>`), and, with `directives: true`, `%%{init}%%` and frontmatter `config:`.
 
+From the command line: `npx wasm-html-to-image flow.mmd -o flow.png --mermaid-theme nord` (a `.mmd` / `.mermaid` file, or `--mermaid` for inline text and stdin).
+
 Try every diagram, theme and format in the [playground](https://sorakumo001.github.io/wasm-html-to-image/master/?mode=mermaid); its *Gallery* draws all the samples at once. Details: the *Mermaid Conversion* page of the documentation.
 
 </details>

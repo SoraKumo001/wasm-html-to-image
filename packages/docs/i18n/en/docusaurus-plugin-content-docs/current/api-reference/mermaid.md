@@ -43,6 +43,19 @@ In a PDF a diagram is never split across pages, and its text stays selectable ve
 
 `<pre class="mermaid">` works the same. The element's text is the diagram source. Colours come from the page's CSS ([CSS control](#3-css-control)).
 
+### From the command line
+
+Give a `.mmd` / `.mermaid` file and the output is an image (or SVG, or PDF) sized to the diagram; the extension of `-o` picks the format.
+
+```bash
+npx wasm-html-to-image flow.mmd -o flow.svg
+npx wasm-html-to-image flow.mmd -o flow.png --mermaid-theme nord
+npx wasm-html-to-image "graph LR; A-->B" --mermaid -o ab.png          # inline text
+cat flow.mmd | npx wasm-html-to-image - --mermaid -o flow.webp --mermaid-mode recover
+```
+
+The image width is fixed only when you pass `-w`. `--accent` sets the arrow colour and `--mermaid-directives` honours `%%{init}%%` in the source.
+
 ### The diagram alone (`renderMermaid`)
 
 ```typescript
