@@ -10144,3 +10144,37 @@ describe("P0-91 a column-flex item's keyword inline size resolves in line sizing
     expect(Math.round(max.w)).toBe(420);
   });
 });
+
+describe("P0-92 a keyword-width item contributes its resolved size to its flex container's base and minimum", () => {
+  const BODY = `<div style="background:#ddf;display:flex;flex-direction:row;justify-content:flex-start;gap:4px;height:60px;min-width:100px;padding:12px;margin:12px;width:473.7px"><div style="background:#fdf;display:grid;grid-template-columns:60px auto;grid-auto-rows:minmax(30px,auto);align-items:stretch;margin:12px;overflow:hidden"><div style="background:#dff;height:36px;"></div></div><div style="background:#fdf;display:flex;flex-direction:column;flex-wrap:wrap;padding:12px"><div style="background:#fed;width:20px;height:25px;flex:2 1 0;"></div><div style="background:#ddf;display:inline-block;width:max-content"><div style="background:#ffd;height:12px;"></div><div style="background:#fdd;height:36px;"></div><svg viewBox="0 0 40 60" style="width:120px;"><rect width="40" height="60" fill="#69c"/></svg><img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22300%22%20height%3D%2230%22%20viewBox%3D%220%200%20300%2030%22%3E%3Crect%20width%3D%22300%22%20height%3D%2230%22%20fill%3D%22%2369c%22%2F%3E%3C%2Fsvg%3E" style="width:fit-content"></div><div style="background:#eee;margin:4px;flex:0 1 auto"><div style="background:#fdd;width:90px;height:40px;"></div><svg viewBox="0 0 100 20" style=""><rect width="100" height="20" fill="#69c"/></svg></div></div></div>`;
+  const page = async (kw: string, rootW: number) => {
+    let layout: any[] = [];
+    const body = BODY.replace("width:max-content", `width:${kw}`).replace("width:473.7px", `width:${rootW}px`);
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:content-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 2400,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as any);
+    return {
+      a: layout.find((b: any) => b.p === "0.1.0.0"),
+      b: layout.find((b: any) => b.p === "0.1.0.1"),
+    };
+  };
+  it("the container's flex base uses a min-content item at its min-content size", async () => {
+    const { b } = await page("min-content", 2000);
+    // Chromium: B's base is 442 (the item at 300), not 562 (item at max-content).
+    expect(Math.round(b.w)).toBe(442);
+  });
+  it("the container's automatic minimum uses a max-content item at its max-content size", async () => {
+    const { b } = await page("max-content", 100);
+    // Chromium: B's minimum is 444 (the item at 420), not 324 (item at min-content).
+    expect(Math.round(b.w)).toBe(444);
+  });
+  it("the final distribution freezes the container at that minimum", async () => {
+    const { a, b } = await page("max-content", 473.7);
+    // Chromium: B stays 444 and the grid sibling is crushed to ~2 wide.
+    expect(Math.round(b.w)).toBe(444);
+    expect(a.w).toBeLessThan(10);
+  });
+});
