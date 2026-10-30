@@ -10106,3 +10106,41 @@ describe("P0-90 a percentage height inside a stretched auto-height grid item res
     expect(Math.round(im.h)).toBe(56);
   });
 });
+
+describe("P0-91 a column-flex item's keyword inline size resolves in line sizing and final layout", () => {
+  const page = async (kw: string) => {
+    let layout: any[] = [];
+    const SVG = `data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22120%22%20height%3D%2290%22%3E%3Crect%20width%3D%22120%22%20height%3D%2290%22%20fill%3D%22%23666%22%2F%3E%3C%2Fsvg%3E`;
+    const IMG = `data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22300%22%20height%3D%22246%22%3E%3Crect%20width%3D%22300%22%20height%3D%22246%22%20fill%3D%22%23999%22%2F%3E%3C%2Fsvg%3E`;
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>` +
+        `<div style="display:flex;flex-direction:column;flex-wrap:wrap;width:403.4px;height:84px;padding:12px">` +
+        `<div style="width:20px;height:36px"></div>` +
+        `<div id="ib" style="display:inline-block;width:${kw}"><img src="${SVG}"><img src="${IMG}"></div>` +
+        `<div style="width:90px;height:58px"></div></div></body></html>`,
+      width: 800,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as any);
+    return layout.find((b: any) => b.i === "ib");
+  };
+  it("width:auto is the fit-content size (max-content clamped to the column)", async () => {
+    const ib = await page("auto");
+    // Chromium: 379.4 wide (the column's content width), the images wrap and
+    // the item is 336 high. The engine used the raw max-content 420 x 246.
+    expect(Math.round(ib.w)).toBe(379);
+    expect(Math.round(ib.h)).toBe(336);
+  });
+  it("width:min-content is the widest unbreakable piece", async () => {
+    const ib = await page("min-content");
+    // Chromium: 300 wide (the img), 336 high. The engine used max-content 420.
+    expect(Math.round(ib.w)).toBe(300);
+    expect(Math.round(ib.h)).toBe(336);
+  });
+  it("width:fit-content and max-content are unchanged", async () => {
+    const fit = await page("fit-content");
+    expect(Math.round(fit.w)).toBe(379);
+    const max = await page("max-content");
+    expect(Math.round(max.w)).toBe(420);
+  });
+});
