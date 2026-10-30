@@ -62,7 +62,8 @@ add_library(mermaid_core STATIC
     "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/mermaid/quadrant.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/mermaid/gitgraph.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/mermaid/kanban.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/mermaid/packet.cpp")
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/mermaid/packet.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/mermaid/sankey.cpp")
 target_include_directories(mermaid_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp")
 target_compile_features(mermaid_core PUBLIC cxx_std_20)
 if(MSVC)

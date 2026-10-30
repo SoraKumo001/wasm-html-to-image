@@ -408,6 +408,21 @@ int main() {
         check(!render("packet-beta", e1, e2), "packet/error_empty");
     }
 
+    // --- sankey ---
+    {
+        std::string s = svg_of("sankey-beta\n\nA,B,10\nA,C,5\nB,D,10\n\"x, y\",D,2");
+        check(count(s, "class=\"flow\"") == 4, "sankey/flows");
+        check(count(s, "class=\"node\"") == 5, "sankey/nodes");
+        check(has(s, ">A  15<") && has(s, ">D  12<"), "sankey/node_values");
+        check(has(s, ">x, y  2<"), "sankey/quoted_name");
+        check(has(svg_of("sankey\n\xe5\x85\xa5,\xe5\x87\xba,3"), ">\xe5\x85\xa5  3<"), "sankey/cjk_and_plain_keyword");
+        std::string e1, e2;
+        check(!render("sankey-beta\nA,B", e1, e2), "sankey/error_missing_value");
+        check(!render("sankey-beta\nA,B,-1", e1, e2), "sankey/error_negative");
+        check(!render("sankey-beta\nA,A,1", e1, e2), "sankey/error_self_flow");
+        check(!render("sankey-beta", e1, e2), "sankey/error_empty");
+    }
+
     std::printf("----\n%d passed, %d failed\n", g_pass, g_fail);
     return g_fail == 0 ? 0 : 1;
 }
