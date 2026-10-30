@@ -111,6 +111,22 @@ int main() {
     check(has(svg_of("erDiagram\nA ||--o{ B : has\nstyle A fill:#aa0006"), "#aa0006"), "style/er_style");
     check(has(svg_of("block-beta\ncolumns 2\na b\nstyle a fill:#aa0007"), "#aa0007"), "style/block_style");
 
+    // --- treemap, radar, info ---
+    {
+        std::string tm = svg_of("treemap-beta\n\"A\"\n  \"a1\": 10\n  \"a2\": 30\n\"B\"\n  \"b1\": 20\n");
+        check(count(tm, "class=\"leaf\"") == 3 && count(tm, "class=\"section\"") == 2, "treemap/items");
+        check(has(tm, ">a2<"), "treemap/label");
+        check(has(svg_of("treemap\n\"Only\": 5"), "class=\"leaf\""), "treemap/leaf_at_top");
+        check(has(svg_of("treemap-beta\n\"A\": 1\n  \"b\": 2"), "ERROR"), "treemap/leaf_with_children");
+        check(has(svg_of("treemap-beta\n\"A\"\n  \"b\": x"), "ERROR"), "treemap/bad_value");
+        std::string rd = svg_of("radar-beta\naxis m[\"Math\"], s[\"Sci\"], e[\"Eng\"]\ncurve a[\"Alice\"]{85, 90, 80}\ncurve b[\"Bob\"]{s: 70, m: 75, e: 85}\nmax 100\ngraticule circle\nticks 4");
+        check(count(rd, "class=\"curve\"") == 2 && count(rd, "<circle") == 4, "radar/curves_and_graticule");
+        check(has(rd, ">Math<") && has(rd, ">Alice<"), "radar/labels");
+        check(has(svg_of("radar-beta\naxis a, b\ncurve c{1,2}"), "ERROR"), "radar/needs_three_axes");
+        check(has(svg_of("radar-beta\naxis a, b, c\ncurve c{1,2,3,4}"), "ERROR"), "radar/too_many_values");
+        check(has(svg_of("info\nshowInfo"), ">v11<"), "info/banner");
+    }
+
     // --- errors ---
     {
         std::string svg, err;

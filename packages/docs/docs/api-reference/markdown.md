@@ -213,6 +213,9 @@ graph LR
 | サンキー図 | `sankey-beta` |
 | 要求図 | `requirementDiagram` |
 | ブロック図 | `block-beta`（入れ子のブロックは未対応） |
+| ツリーマップ | `treemap-beta` |
+| レーダーチャート | `radar-beta` |
+| バージョン表示 | `info` |
 
 - 色はテーマ（`light` / `dark`）に合わせて自動で決まります。
 - 図はページをまたいで分断されません。

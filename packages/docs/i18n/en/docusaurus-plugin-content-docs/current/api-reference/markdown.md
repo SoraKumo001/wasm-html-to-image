@@ -213,6 +213,9 @@ graph LR
 | Sankey | `sankey-beta` |
 | Requirement | `requirementDiagram` |
 | Block | `block-beta` (nested blocks are not supported) |
+| Treemap | `treemap-beta` |
+| Radar | `radar-beta` |
+| Version banner | `info` |
 
 - Colours follow the theme (`light` / `dark`).
 - A diagram is never split across pages.

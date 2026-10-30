@@ -1617,6 +1617,9 @@ describe("regression: layout and paint probes", () => {
       requirement: "requirementDiagram\n  requirement r {\n    id: 1\n  }\n  element e {\n    type: x\n  }\n  e - satisfies -> r",
       block: 'block-beta\n  columns 2\n  a b\n  a --> b',
       pie: 'pie title T\n  "a" : 1\n  "b" : 2',
+      treemap: 'treemap-beta\n"A"\n  "a1": 10\n  "a2": 30\n"B": 20',
+      radar: 'radar-beta\n  axis a, b, c\n  curve x{1, 2, 3}',
+      info: "info\nshowInfo",
     };
     for (const [name, src] of Object.entries(sources)) {
       const { img } = await renderPng(`<div style="color:#000"><div class="mermaid">${src}</div></div>`, 400, 360);
