@@ -10024,3 +10024,163 @@ describe("P0-85 a grid item's percentage height resolves at final placement", ()
     expect(Math.round(t.h)).toBe(51);
   });
 });
+
+describe("P0-86 an SVG <img> with no dimensions and no viewBox uses the default object size, with no ratio transfer", () => {
+  const page = async (body: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 800,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as any);
+    return layout;
+  };
+  const NODIM = `data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Crect%20width%3D%2210%22%20height%3D%2210%22%20fill%3D%22%2369c%22%2F%3E%3C%2Fsvg%3E`;
+  it("both axes auto: 300x150 (not the 512x512 raster fallback)", async () => {
+    const boxes = await page(`<img id="t" src="${NODIM}">`);
+    const t = boxes.find((b: any) => b.i === "t");
+    expect(Math.round(t.w)).toBe(300);
+    expect(Math.round(t.h)).toBe(150);
+  });
+  it("width specified: the height stays the default 150 (no intrinsic ratio to transfer)", async () => {
+    const boxes = await page(`<img id="t" style="width:100px" src="${NODIM}">`);
+    const t = boxes.find((b: any) => b.i === "t");
+    expect(Math.round(t.w)).toBe(100);
+    expect(Math.round(t.h)).toBe(150);
+  });
+  it("height specified: the width stays the default 300", async () => {
+    const boxes = await page(`<img id="t" style="height:100px" src="${NODIM}">`);
+    const t = boxes.find((b: any) => b.i === "t");
+    expect(Math.round(t.w)).toBe(300);
+    expect(Math.round(t.h)).toBe(100);
+  });
+});
+
+describe("P0-87 cascade order between a var() shorthand and later longhand declarations", () => {
+  const page = async (css: string, cls: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>:root{--spacing:0.25rem}${css}</style></head><body><div id="t" class="${cls}"></div></body></html>`,
+      width: 800,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as any);
+    return layout;
+  };
+  const P6 = `.p-6{padding:calc(var(--spacing) * 6)}`;
+  const PB10 = `.pb-10{padding-bottom:calc(var(--spacing) * 10)}`;
+  it("a preceding universal padding rule does not make the shorthand clobber the later longhand", async () => {
+    const boxes = await page(`*{padding:0}${P6}${PB10}`, "p-6 pb-10");
+    const t = boxes.find((b: any) => b.i === "t");
+    expect(Math.round(t.h)).toBe(64);
+  });
+  it("a later plain shorthand legitimately overrides an earlier var() shorthand", async () => {
+    const boxes = await page(`.z{padding:0}${P6}`, "z p-6");
+    const t = boxes.find((b: any) => b.i === "t");
+    expect(Math.round(t.h)).toBe(48);
+  });
+  it("an earlier var() shorthand does not override a later plain shorthand", async () => {
+    const boxes = await page(`${P6}.z{padding:0}`, "p-6 z");
+    const t = boxes.find((b: any) => b.i === "t");
+    expect(Math.round(t.h)).toBe(0);
+  });
+  it("a shorthand after the longhand wins (source order), even with a universal rule present", async () => {
+    const boxes = await page(`*{padding:0}${PB10}${P6}`, "p-6 pb-10");
+    const t = boxes.find((b: any) => b.i === "t");
+    expect(Math.round(t.h)).toBe(48);
+  });
+});
+
+describe("P0-88 a definite-width replaced flex item's automatic minimum is the cross-size ratio transfer", () => {
+  const page = async (body: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:content-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 800,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as any);
+    return layout;
+  };
+  const IMG = `data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2280%22%20height%3D%2290%22%20viewBox%3D%220%200%2080%2090%22%3E%3Crect%20width%3D%2280%22%20height%3D%2290%22%20fill%3D%22%2369c%22%2F%3E%3C%2Fsvg%3E`;
+  it("flex-shrink freezes the width:200px img at the transferred 97.2, not its intrinsic 80", async () => {
+    const boxes = await page(
+      `<div style="display:flex;width:200px;height:109.3px">` +
+        `<svg id="a" viewBox="0 0 100 60"><rect width="100" height="60" fill="#69c"/></svg>` +
+        `<svg id="b" viewBox="0 0 100 20"><rect width="100" height="20" fill="#69c"/></svg>` +
+        `<svg id="c" viewBox="0 0 40 60"><rect width="40" height="60" fill="#69c"/></svg>` +
+        `<img id="t" src="${IMG}" style="width:200px"></div>`,
+    );
+    const w = (id: string) => boxes.find((b: any) => b.i === id).w;
+    // Chromium: 23.4 / 70.1 / 9.3 / 97.1 (uniform shrink; the img freezes at
+    // 109.3 * 80/90 = 97.2). Without the fix: 27.3 / 81.8 / 10.9 / 80.
+    expect(Math.abs(w("a") - 23.4)).toBeLessThan(1.5);
+    expect(Math.abs(w("b") - 70.1)).toBeLessThan(1.5);
+    expect(Math.abs(w("c") - 9.3)).toBeLessThan(1.5);
+    expect(Math.abs(w("t") - 97.2)).toBeLessThan(1.5);
+  });
+});
+
+describe("P0-89 a fit-content item in a wrapping column flex sizes its line by the resolved width", () => {
+  const page = async (body: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:content-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 800,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as any);
+    return layout;
+  };
+  const IMG = `data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22300%22%20height%3D%2230%22%20viewBox%3D%220%200%20300%2030%22%3E%3Crect%20width%3D%22300%22%20height%3D%2230%22%20fill%3D%22%2369c%22%2F%3E%3C%2Fsvg%3E`;
+  it("the following column starts after the resolved 379.4, not the 420 max-content", async () => {
+    const boxes = await page(
+      `<div style="display:flex;flex-direction:row;gap:4px;height:60px;padding:12px;margin:12px;width:473.7px">` +
+        `<div style="display:grid;grid-template-columns:60px auto;grid-auto-rows:minmax(30px,auto);align-items:stretch;margin:12px;overflow:hidden"><div style="height:36px"></div></div>` +
+        `<div style="display:flex;flex-direction:column;flex-wrap:wrap;padding:12px">` +
+        `<div style="width:20px;height:25px;flex:2 1 0"></div>` +
+        `<div id="ib" style="display:inline-block;width:fit-content"><div style="height:12px"></div><div style="height:36px"></div><svg viewBox="0 0 40 60" style="width:120px"><rect width="40" height="60" fill="#69c"/></svg><img src="${IMG}" style="width:fit-content"></div>` +
+        `<div id="third" style="margin:4px;flex:0 1 auto"><div style="width:90px;height:40px"></div><svg viewBox="0 0 100 20"><rect width="100" height="20" fill="#69c"/></svg></div>` +
+        `</div></div>`,
+    );
+    const ib = boxes.find((b: any) => b.i === "ib");
+    const third = boxes.find((b: any) => b.i === "third");
+    // Chromium: the fit-content wrapper resolves to 379.4 (its flexed container's
+    // content width) and the third column starts right after it: x = 509.7.
+    // Without the fix the line is sized by the 420 max-content: x = 550.3.
+    expect(Math.abs(ib.w - 379.4)).toBeLessThan(1.5);
+    expect(Math.abs(third.x - 509.7)).toBeLessThan(1.5);
+  });
+});
+
+describe("P0-90 a percentage height inside a stretched auto-height grid item resolves against the row height for the inline contribution", () => {
+  const page = async (body: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 800,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as any);
+    return layout;
+  };
+  const IMG = `data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2220%22%20height%3D%2210%22%20viewBox%3D%220%200%2020%2010%22%3E%3Crect%20width%3D%2220%22%20height%3D%2210%22%20fill%3D%22%2369c%22%2F%3E%3C%2Fsvg%3E`;
+  it("the height:100% flex inside a plain wrapper contributes the transferred image width", async () => {
+    const boxes = await page(
+      `<div style="display:grid;grid-template-columns:fit-content(80px) auto;grid-auto-rows:minmax(30px,auto);width:400px">` +
+        `<div><div id="t" style="display:flex;justify-content:flex-end;height:100%;padding:2px"><img id="im" src="${IMG}"></div></div>` +
+        `<div style="height:60px"></div></div>`,
+    );
+    const t = boxes.find((b: any) => b.i === "t");
+    const im = boxes.find((b: any) => b.i === "im");
+    // Chromium: the row is 60 tall (the mate), the flex fills the wrapper at
+    // 60, the image stretches to 56 high and transfers to 112 wide, so the
+    // fit-content column is 116. Without the fix the percentage stays cyclic
+    // and the column is 24 (image at its intrinsic 20 wide).
+    expect(Math.round(t.w)).toBe(116);
+    expect(Math.round(t.h)).toBe(60);
+    expect(Math.round(im.w)).toBe(112);
+    expect(Math.round(im.h)).toBe(56);
+  });
+});

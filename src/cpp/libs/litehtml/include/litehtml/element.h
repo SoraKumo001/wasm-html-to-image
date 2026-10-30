@@ -133,6 +133,7 @@ namespace litehtml
 		// A replaced element with an aspect ratio but no intrinsic width or height (an <svg> with only a
 		// viewBox): with `width: auto` it fills the available width instead of taking a natural size.
 		virtual bool				is_ratio_only_replaced() const { return false; }
+		virtual bool				is_no_ratio_replaced() const { return false; }
 		virtual void				compute_styles(bool recursive = true);
 		virtual void				apply_word_break();
 		virtual void				draw(uint_ptr hdc, pixel_t x, pixel_t y, const position *clip, const std::shared_ptr<render_item>& ri);

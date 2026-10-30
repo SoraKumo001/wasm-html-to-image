@@ -515,6 +515,41 @@ void litehtml::flex_line::init(pixel_t container_main_size, bool fit_container,
 
             item->el->measure(child_cb, fmt_ctx);
 
+            // A fit-content inline size resolves against the container's content width
+            // (fit-content = min(max-content, max(min-content, available))). The content
+            // measure above answers the raw max-content width, so a wrapper whose content
+            // resolves narrower (420 max-content in a 379.4 container) would size its
+            // line from a width the item never gets and push every following line
+            // sideways. Resolve it here and re-measure at the resolved width, which
+            // also gives the main size of the box the item actually ends up with.
+            const css_length& item_inline_prop = wm.get_inline_size(item->el->css());
+            if (item_inline_prop.is_predefined() && item_inline_prop.predef() == 1 &&
+                self_size.render_inline_size().type != containing_block_context::cbc_value_type_auto &&
+                self_size.render_inline_size().value > 0)
+            {
+                const pixel_t available = self_size.render_inline_size().value -
+                    item->el->content_offset_inline(wm) + item->el->box_sizing_inline(wm);
+                pixel_t resolved = item->get_el_cross_size() - item->el->content_offset_inline(wm) +
+                    item->el->box_sizing_inline(wm);
+                if (resolved > available)
+                {
+                    containing_block_context min_cb = child_cb;
+                    min_cb.size_mode |= containing_block_context::size_mode_min_content;
+                    item->el->measure(min_cb, fmt_ctx);
+                    const pixel_t min_size = item->get_el_cross_size() - item->el->content_offset_inline(wm) +
+                        item->el->box_sizing_inline(wm);
+                    resolved = std::max(min_size, available);
+                    containing_block_context fit_cb = child_cb;
+                    fit_cb.inline_size() = resolved - item->el->box_sizing_inline(wm);
+                    fit_cb.render_inline_size() = fit_cb.inline_size();
+                    fit_cb.size_mode |= wm.is_vertical() ? containing_block_context::size_mode_exact_height
+                                                         : containing_block_context::size_mode_exact_width;
+                    fit_cb.size_mode &= ~(containing_block_context::size_mode_content |
+                                          containing_block_context::size_mode_min_content);
+                    item->el->measure(fit_cb, fmt_ctx);
+                }
+            }
+
             if (item != items.front()) main_size += main_gap;
             main_size += item->get_el_main_size();
             cross_size = std::max(cross_size, item->get_el_cross_size());
