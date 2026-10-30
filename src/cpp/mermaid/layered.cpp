@@ -12,10 +12,14 @@ constexpr double kNodeSep = 28;    // between two nodes of a layer
 constexpr double kDummySep = 14;   // beside a bend point of a long edge
 constexpr double kLayerGap = 48;   // between two layers
 constexpr double kLabelGap = 12;   // extra room around an edge label
+constexpr double kFrameGap = 20;   // between a group's frame and what is outside it, per frame boundary
+constexpr double kFramePad = 18;   // breadth room kept around the members of a group
+constexpr double kFrameHeader = 26;  // the title bar of a frame
 
 // A node of the layered graph: a real node or a bend point ("dummy") of an edge that spans layers.
 struct LN {
     int node = -1;  // index into the input nodes, -1 for a dummy
+    int group = -1; // innermost group (a dummy takes the innermost group both ends of its edge share)
     double bw = 0;  // size along the layer (breadth)
     double dp = 0;  // size across the layers (depth)
     int layer = 0;
@@ -38,7 +42,8 @@ double sep(const LN& a, const LN& b) {
 
 }  // namespace
 
-LayoutResult layout_layered(const std::vector<LayoutNode>& nodes, const std::vector<LayoutEdge>& edges, Direction dir) {
+LayoutResult layout_layered(const std::vector<LayoutNode>& nodes, const std::vector<LayoutEdge>& edges, Direction dir,
+                            const std::vector<int>& group_parent) {
     const int n = (int)nodes.size();
     const bool horiz = dir == Direction::LR || dir == Direction::RL;
     LayoutResult res;
@@ -75,6 +80,20 @@ LayoutResult layout_layered(const std::vector<LayoutNode>& nodes, const std::vec
     int max_layer = 0;
     for (int v = 0; v < n; v++) max_layer = std::max(max_layer, layer[v]);
 
+    // groups: the chain of enclosing groups of a group (innermost first), and the deepest group two groups share
+    const int ngroups = (int)group_parent.size();
+    auto chain_of = [&](int g) {
+        std::vector<int> c;
+        for (; g >= 0 && g < ngroups; g = group_parent[g]) c.push_back(g);
+        return c;
+    };
+    auto common_group = [&](int a, int b) {
+        auto ca = chain_of(a), cb = chain_of(b);
+        for (int g : ca)
+            if (std::find(cb.begin(), cb.end(), g) != cb.end()) return g;
+        return -1;
+    };
+
     // ── 3. layered nodes and edge chains ──
     std::vector<LN> ln(n);
     for (int v = 0; v < n; v++) {
@@ -82,6 +101,7 @@ LayoutResult layout_layered(const std::vector<LayoutNode>& nodes, const std::vec
         ln[v].bw = horiz ? nodes[v].h : nodes[v].w;
         ln[v].dp = horiz ? nodes[v].w : nodes[v].h;
         ln[v].layer = layer[v];
+        ln[v].group = nodes[v].group;
     }
     std::vector<Chain> chains;
     std::vector<double> label_extra(max_layer + 1, 0);  // per layer: room the labels below it need
@@ -97,6 +117,7 @@ LayoutResult layout_layered(const std::vector<LayoutNode>& nodes, const std::vec
         for (int l = layer[a] + 1; l < layer[b]; l++) {
             LN d;
             d.layer = l;
+            d.group = common_group(nodes[edges[e].from].group, nodes[edges[e].to].group);
             ln.push_back(d);
             int id = (int)ln.size() - 1;
             ln[prev].down.push_back(id);
@@ -111,6 +132,17 @@ LayoutResult layout_layered(const std::vector<LayoutNode>& nodes, const std::vec
         if (lab > 0) label_extra[layer[a]] = std::max(label_extra[layer[a]], lab);
         chains.push_back(std::move(c));
     }
+
+    // room between two neighbours: the node gap, plus one frame gap for every frame that holds only one of them
+    auto sep = [&](const LN& a, const LN& b) {
+        double gap = ::mermaid::sep(a, b);
+        if (ngroups == 0 || a.group == b.group) return gap;
+        auto ca = chain_of(a.group), cb = chain_of(b.group);
+        int diff = 0;
+        for (int g : ca) diff += std::find(cb.begin(), cb.end(), g) == cb.end();
+        for (int g : cb) diff += std::find(ca.begin(), ca.end(), g) == ca.end();
+        return gap + diff * kFrameGap;
+    };
 
     // ── 4. order within the layers: barycentre sweeps, keeping the best ordering seen ──
     std::vector<std::vector<int>> L(max_layer + 1);
@@ -133,6 +165,28 @@ LayoutResult layout_layered(const std::vector<LayoutNode>& nodes, const std::vec
         return total;
     };
     refresh();
+    // members of a group stay together in every layer: rows are re-sorted by (group position, ..., own position)
+    auto cluster = [&](int l) {
+        if (ngroups == 0) return;
+        auto& row = L[l];
+        std::vector<double> sum(ngroups, 0);
+        std::vector<int> cnt(ngroups, 0);
+        for (size_t i = 0; i < row.size(); i++)
+            for (int g : chain_of(ln[row[i]].group)) sum[g] += (double)i, cnt[g]++;
+        std::vector<std::pair<std::vector<double>, int>> keyed;
+        for (size_t i = 0; i < row.size(); i++) {
+            auto ch = chain_of(ln[row[i]].group);
+            std::reverse(ch.begin(), ch.end());
+            std::vector<double> key;
+            for (int g : ch) key.push_back(sum[g] / cnt[g]), key.push_back((double)g);
+            key.push_back((double)i);
+            keyed.push_back({key, row[i]});
+        }
+        std::stable_sort(keyed.begin(), keyed.end(), [](const auto& x, const auto& y) { return x.first < y.first; });
+        for (size_t i = 0; i < keyed.size(); i++) row[i] = keyed[i].second;
+    };
+    for (int l = 0; l <= max_layer; l++) cluster(l);
+    refresh();
     long best = crossings();
     auto best_L = L;
     auto sweep = [&](int l, bool use_up) {
@@ -149,6 +203,7 @@ LayoutResult layout_layered(const std::vector<LayoutNode>& nodes, const std::vec
         }
         std::stable_sort(keyed.begin(), keyed.end(), [](auto& x, auto& y) { return x.first < y.first; });
         for (size_t i = 0; i < keyed.size(); i++) L[l][i] = keyed[i].second;
+        cluster(l);
         refresh();
     };
     for (int iter = 0; iter < 24 && best > 0; iter++) {
@@ -202,13 +257,72 @@ LayoutResult layout_layered(const std::vector<LayoutNode>& nodes, const std::vec
         else
             for (int l = 0; l <= max_layer; l++) pass(l);
     }
+    // groups: the layers each one spans, and a push that keeps every node that is not a member out of its frame
+    std::vector<int> gmin(ngroups, 1 << 30), gmax(ngroups, -1);
+    for (const LN& v : ln)
+        for (int g : chain_of(v.group)) gmin[g] = std::min(gmin[g], v.layer), gmax[g] = std::max(gmax[g], v.layer);
+    if (ngroups > 0) {
+        const double pad_lo = kFramePad + (horiz ? kFrameHeader : 0), pad_hi = kFramePad;
+        std::vector<int> order(ngroups);
+        for (int g = 0; g < ngroups; g++) order[g] = g;
+        std::stable_sort(order.begin(), order.end(), [&](int a, int b) { return chain_of(a).size() > chain_of(b).size(); });
+        auto member = [&](const LN& v, int g) {
+            auto c = chain_of(v.group);
+            return std::find(c.begin(), c.end(), g) != c.end();
+        };
+        for (int pass = 0; pass < 40; pass++) {
+            bool moved = false;
+            for (int g : order) {
+                if (gmax[g] < 0) continue;
+                double lo = 1e18, hi = -1e18;
+                for (const LN& v : ln)
+                    if (member(v, g)) lo = std::min(lo, v.b - v.bw / 2), hi = std::max(hi, v.b + v.bw / 2);
+                lo -= pad_lo;
+                hi += pad_hi;
+                for (int l = gmin[g]; l <= gmax[g]; l++) {
+                    auto& row = L[l];
+                    int first = -1;
+                    for (int i = 0; i < (int)row.size(); i++)
+                        if (member(ln[row[i]], g)) {
+                            first = i;
+                            break;
+                        }
+                    for (int i = 0; i < (int)row.size(); i++) {
+                        const LN& x = ln[row[i]];
+                        if (member(x, g)) continue;
+                        double xl = x.b - x.bw / 2, xh = x.b + x.bw / 2;
+                        if (xh <= lo || xl >= hi) continue;
+                        bool left = first >= 0 ? i < first : x.b < (lo + hi) / 2;
+                        if (left) {
+                            double d = xh - lo + kFrameGap / 2;
+                            for (int j = 0; j <= i; j++) ln[row[j]].b -= d;
+                        } else {
+                            double d = hi - xl + kFrameGap / 2;
+                            for (int j = i; j < (int)row.size(); j++) ln[row[j]].b += d;
+                        }
+                        moved = true;
+                        break;  // the row changed: look at it again on the next pass
+                    }
+                }
+            }
+            if (!moved) break;
+        }
+    }
     double min_b = 1e18;
     for (auto& v : ln) min_b = std::min(min_b, v.b - v.bw / 2);
     for (auto& v : ln) v.b -= min_b;
     double total_b = 0;
     for (auto& v : ln) total_b = std::max(total_b, v.b + v.bw / 2);
 
-    // ── 6. depth: the layers one after the other, with room for the labels between them ──
+    // ── 6. depth: the layers one after the other, with room for the labels and the frame edges between them ──
+    // a frame needs its title bar on the side that is the top of the picture, and a little room on the other
+    std::vector<double> group_gap(max_layer + 1, 0);
+    for (int g = 0; g < ngroups; g++) {
+        if (gmax[g] < 0 || horiz) continue;
+        double before = dir == Direction::BT ? 16 : kFrameHeader, after = dir == Direction::BT ? kFrameHeader : 16;
+        if (gmin[g] > 0) group_gap[gmin[g] - 1] += before;
+        if (gmax[g] < max_layer) group_gap[gmax[g]] += after;
+    }
     std::vector<double> layer_dp(max_layer + 1, 0), layer_d(max_layer + 1, 0);
     for (auto& v : ln)
         if (v.node >= 0) layer_dp[v.layer] = std::max(layer_dp[v.layer], v.dp);
@@ -216,7 +330,7 @@ LayoutResult layout_layered(const std::vector<LayoutNode>& nodes, const std::vec
     for (int l = 0; l <= max_layer; l++) {
         layer_d[l] = cur + layer_dp[l] / 2;
         cur += layer_dp[l];
-        if (l < max_layer) cur += kLayerGap + (label_extra[l] > 0 ? label_extra[l] + kLabelGap : 0);
+        if (l < max_layer) cur += kLayerGap + (label_extra[l] > 0 ? label_extra[l] + kLabelGap : 0) + group_gap[l];
     }
     const double total_d = cur;
 
@@ -348,6 +462,59 @@ LayoutResult layout_layered(const std::vector<LayoutNode>& nodes, const std::vec
         double r = c.x + nodes[v].w / 2;
         res.points[e] = {{r, c.y - 7}, {r + 24, c.y - 7}, {r + 24, c.y + 7}, {r, c.y + 7}};
         if (edges[e].label_w > 0) res.label_center[e] = {r + 24 + edges[e].label_w / 2 + 4, c.y};
+    }
+    // labels: try the middle (and the quarter points) of every segment of the label's own edge, and keep the spot
+    // that covers the least of the other edges, the nodes and the other labels
+    {
+        struct Box {
+            double x0, y0, x1, y1;
+        };
+        auto hits = [](Pt a, Pt b, const Box& r) {  // Liang-Barsky: does the segment cross the box?
+            double t0 = 0, t1 = 1, dx = b.x - a.x, dy = b.y - a.y;
+            auto clip = [&](double p, double q) {
+                if (std::fabs(p) < 1e-9) return q >= 0;
+                double t = q / p;
+                if (p < 0) {
+                    if (t > t1) return false;
+                    t0 = std::max(t0, t);
+                } else {
+                    if (t < t0) return false;
+                    t1 = std::min(t1, t);
+                }
+                return true;
+            };
+            return clip(-dx, a.x - r.x0) && clip(dx, r.x1 - a.x) && clip(-dy, a.y - r.y0) && clip(dy, r.y1 - a.y);
+        };
+        auto overlap = [](const Box& a, const Box& b) { return a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1; };
+        auto box_of = [&](size_t e, Pt c) { return Box{c.x - edges[e].label_w / 2, c.y - edges[e].label_h / 2, c.x + edges[e].label_w / 2, c.y + edges[e].label_h / 2}; };
+        auto cost = [&](size_t e, Pt c) {
+            Box r = box_of(e, c);
+            double total = 0;
+            for (size_t f = 0; f < edges.size(); f++) {
+                if (f != e)
+                    for (size_t i = 0; i + 1 < res.points[f].size(); i++) total += hits(res.points[f][i], res.points[f][i + 1], r) ? 1 : 0;
+                if (f != e && edges[f].label_w > 0 && overlap(r, box_of(f, res.label_center[f]))) total += 10;
+            }
+            for (int v = 0; v < n; v++)
+                if (overlap(r, Box{res.center[v].x - nodes[v].w / 2, res.center[v].y - nodes[v].h / 2, res.center[v].x + nodes[v].w / 2, res.center[v].y + nodes[v].h / 2})) total += 10;
+            return total;
+        };
+        for (size_t e = 0; e < edges.size(); e++) {
+            if (edges[e].label_w <= 0 || edges[e].from == edges[e].to || res.points[e].size() < 2) continue;
+            Pt best = res.label_center[e];
+            double best_cost = cost(e, best);
+            for (size_t i = 0; i + 1 < res.points[e].size() && best_cost > 0; i++) {
+                Pt a = res.points[e][i], b = res.points[e][i + 1];
+                double len = std::fabs(a.x - b.x) + std::fabs(a.y - b.y);
+                for (double t : {0.5, 0.25, 0.75}) {
+                    if (t != 0.5 && len < 70) continue;
+                    Pt c = {a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t};
+                    double k = cost(e, c) + 0.001 * (std::fabs(c.x - res.label_center[e].x) + std::fabs(c.y - res.label_center[e].y));
+                    if (k < best_cost) best_cost = k, best = c;
+                }
+            }
+            res.label_center[e] = best;
+        }
     }
     (void)total_b;
 

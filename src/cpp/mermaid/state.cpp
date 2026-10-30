@@ -271,6 +271,7 @@ bool render_state(const std::string& source, const Options& options, std::string
         }
         ln[k].w = n.w;
         ln[k].h = n.h;
+        ln[k].group = n.group;
         ln[k].outline = n.kind == Kind::Choice ? 1 : (n.kind == Kind::Start || n.kind == Kind::End) ? 2 : 0;
     }
     std::vector<LayoutEdge> le(d.edges.size());
@@ -284,7 +285,9 @@ bool render_state(const std::string& source, const Options& options, std::string
             le[k].label_h = label_lines[k].size() * kEdgeFont * kLineHeight + 16;
         }
     }
-    LayoutResult lay = layout_layered(ln, le, d.dir);
+    std::vector<int> group_parent;
+    for (const Group& gr : d.groups) group_parent.push_back(gr.parent);
+    LayoutResult lay = layout_layered(ln, le, d.dir, group_parent);
 
     // composite state frames, children first so a parent covers them
     struct Frame {

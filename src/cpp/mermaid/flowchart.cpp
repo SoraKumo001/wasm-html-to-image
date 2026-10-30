@@ -627,6 +627,7 @@ bool render_flowchart(const std::string& source, const Options& options, std::st
     for (size_t i = 0; i < g.nodes.size(); i++) {
         ln[i].w = g.nodes[i].w;
         ln[i].h = g.nodes[i].h;
+        ln[i].group = g.nodes[i].group;
         Shape s = g.nodes[i].shape;
         ln[i].outline = s == Shape::Diamond ? 1 : (s == Shape::Circle || s == Shape::DoubleCircle ? 2 : 0);
     }
@@ -641,7 +642,9 @@ bool render_flowchart(const std::string& source, const Options& options, std::st
             le[i].label_h = label_lines[i].size() * kEdgeFont * kLineHeight + 16;
         }
     }
-    LayoutResult lay = layout_layered(ln, le, g.dir);
+    std::vector<int> group_parent;
+    for (const Group& gr : g.groups) group_parent.push_back(gr.parent);
+    LayoutResult lay = layout_layered(ln, le, g.dir, group_parent);
 
     // subgraph frames around their members (children first so a parent covers them)
     struct Frame {

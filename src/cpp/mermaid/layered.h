@@ -17,6 +17,9 @@ struct LayoutNode {
     double w = 0, h = 0;
     /// Outline for edge anchors: 0 box, 1 diamond, 2 ellipse.
     int outline = 0;
+    /// The innermost group (frame) the node belongs to, -1 for none. Members of a group are kept together and
+    /// nodes outside it are kept out of its frame.
+    int group = -1;
 };
 
 struct LayoutEdge {
@@ -31,7 +34,9 @@ struct LayoutResult {
     double width = 0, height = 0;            // content box; the origin is its top left corner
 };
 
-LayoutResult layout_layered(const std::vector<LayoutNode>& nodes, const std::vector<LayoutEdge>& edges, Direction dir);
+/// `group_parent[g]` is the enclosing group of group `g` (-1 at the top level); empty when no node has a group.
+LayoutResult layout_layered(const std::vector<LayoutNode>& nodes, const std::vector<LayoutEdge>& edges, Direction dir,
+                            const std::vector<int>& group_parent = {});
 
 }  // namespace mermaid
 

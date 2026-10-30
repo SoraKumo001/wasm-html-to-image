@@ -152,6 +152,23 @@ int main() {
         check(lab.center[1].y - lab.center[0].y > plain.center[1].y - plain.center[0].y + 29, "layout/label_gets_room");
     }
     {
+        // a group keeps its members together, and nodes outside it stay out of its box
+        std::vector<LayoutNode> ns(6, box(60, 30));
+        ns[1].group = ns[2].group = ns[4].group = 0;
+        auto r = mermaid::layout_layered(ns, {edge(0, 1), edge(0, 2), edge(0, 3), edge(1, 4), edge(3, 5), edge(2, 4)}, Direction::TD, {-1});
+        double x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+        for (int v : {1, 2, 4}) {
+            x0 = std::min(x0, r.center[v].x - 30);
+            x1 = std::max(x1, r.center[v].x + 30);
+            y0 = std::min(y0, r.center[v].y - 15);
+            y1 = std::max(y1, r.center[v].y + 15);
+        }
+        for (int v : {0, 3, 5}) {
+            bool inside = r.center[v].x + 30 > x0 && r.center[v].x - 30 < x1 && r.center[v].y + 15 > y0 && r.center[v].y - 15 < y1;
+            check(!inside, "layout/group_excludes_outsiders_" + std::to_string(v));
+        }
+    }
+    {
         // labels in the same gap do not overlap
         LayoutEdge e1 = edge(0, 1), e2 = edge(0, 2);
         e1.label_w = e2.label_w = 80;
