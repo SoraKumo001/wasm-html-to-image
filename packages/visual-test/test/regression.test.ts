@@ -10376,3 +10376,26 @@ describe("P0-96 a stretched replaced item with a definite width keeps that width
     expect(Math.round((await img("")).w)).toBe(360);
   });
 });
+
+describe("P0-97 a percentage-width ratio-only svg in a shrink-to-fit column contributes its default width", () => {
+  // Blink: an `auto` viewBox-only svg contributes 0 to a shrink-to-fit column, a width:100% one the
+  // 300px default object width. The engine filled the whole 600px line instead.
+  const svg = async (style: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0}</style></head><body><div style="display:flex"><div id="c" style="display:flex;flex-direction:column"><svg id="s" viewBox="0 0 100 20" style="${style}"></svg></div></div></body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as any);
+    return layout.find((b: any) => b.i === "c");
+  };
+  it("width:100% makes the column 300 wide and 60 tall", async () => {
+    const c = await svg("width:100%");
+    expect(Math.round(c.w)).toBe(300);
+    expect(Math.round(c.h)).toBe(60);
+  });
+  it("an auto width contributes nothing", async () => {
+    expect(Math.round((await svg("")).w)).toBe(0);
+  });
+});
