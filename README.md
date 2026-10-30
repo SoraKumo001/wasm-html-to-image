@@ -251,10 +251,11 @@ lang: en               # <html lang>
 numbering: true        # number the headings 1, 1.1, 1.1.1
 orientation: landscape # turn the page sideways
 margin: 20mm 18mm      # page margin (a CSS margin value)
-footer: "{{title}} {{pageNumber}} / {{totalPages}}"   # replaces the template's footer (header: works the same)
+footer: "{{title}} {{pageNumber}} / {{totalPages}}"   # replaces the template's footer (header: works the same; {{chapter}} is the h1 the page is in)
 toc_depth: 2           # deepest heading in the contents
 toc_title: Contents    # heading of the contents page
 cover_style: center    # band | plain | center
+mermaid_theme: nord    # a named theme for the diagrams (also mermaid_mode, mermaid_directives)
 ---
 ```
 
@@ -368,6 +369,8 @@ const { data: png } = await renderMermaid("graph LR\n  A --> B", { format: "png"
 - **Themes**: `light`, `dark`, `neutral`, `forest`, `nord`, `dracula`, `solarized-light`, `solarized-dark`, `rose-pine`, `sepia`; or set `--mermaid-theme`, `--mermaid-fg`, `--mermaid-bg`, `--mermaid-accent`, ... in CSS.
 - **Formats**: SVG (a string), PNG, WebP, JPEG, AVIF, JXL and PDF; the image is sized to the diagram.
 - **Input repair** (`mode`): `strict` (default) reports every mistake, with a "did you mean" hint for a near-miss keyword; `compat` also accepts a keyword in the wrong case, CRLF and unfinished `end` / `}`; `recover` also fixes a misspelt keyword and skips lines it cannot read.
+- **Warnings**: `onWarning` receives `MERMAID_ERROR` (the diagram did not parse; the image then shows an error box) and one `MERMAID_RECOVERED` per change the repair made. The CLI prints them on stderr and exits with status 1 for an unreadable diagram.
+- **Limits**: a diagram over 2000 lines or 200000 bytes is refused (`maxLines`, `maxSourceBytes`; `0` lifts them), because the layout of a big graph grows faster than its size.
 - `classDef` / `class` / `style` (flowchart, state, class, ER, block), `accTitle` / `accDescr` (they become the SVG `<title>` / `<desc>`), and, with `directives: true`, `%%{init}%%` and frontmatter `config:`.
 
 From the command line: `npx wasm-html-to-image flow.mmd -o flow.png --mermaid-theme nord` (a `.mmd` / `.mermaid` file, or `--mermaid` for inline text and stdin).
