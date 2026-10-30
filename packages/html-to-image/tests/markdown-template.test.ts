@@ -37,7 +37,7 @@ describe("front matter", () => {
 describe("templates", () => {
   it("lists the bundled templates with a description each", () => {
     const names = listTemplates().map((t) => t.name);
-    expect(names).toEqual(["default", "report", "proposal", "book", "paper", "compact"]);
+    expect(names).toEqual(["default", "report", "proposal", "book", "paper", "compact", "manual", "minutes", "letter", "slides", "invoice"]);
     for (const t of listTemplates()) expect(t.description.length).toBeGreaterThan(10);
   });
 
@@ -372,5 +372,46 @@ describe("call-outs, figures, page breaks, heading numbers and footnotes", () =>
     expect(h).toContain("[^c]: not a note");
     expect(h).toContain('<p class="footnotes-title">Notes</p>');
     expect(html("a[^q]")).not.toContain('class="footnotes"');
+  });
+});
+
+describe("the manual, minutes, letter, slides and invoice templates", () => {
+  const names = ["manual", "minutes", "letter", "slides", "invoice"];
+
+  it("are listed with a description", () => {
+    const listed = listTemplates().map((t) => t.name);
+    for (const n of names) expect(listed).toContain(n);
+    for (const t of listTemplates()) expect(t.description, t.name).not.toBe("");
+  });
+
+  it("render a document in both themes without throwing", () => {
+    for (const n of names)
+      for (const theme of ["light", "dark"] as const)
+        expect(() => markdownToDocument("---\ntitle: T\n---\n# H\n\n## S\n\n> [!NOTE]\n> n\n\n| a | b |\n|---|---|\n| 1 | 2 |", { template: n, theme, paged: true }), `${n} ${theme}`).not.toThrow();
+  });
+
+  it("manual numbers headings, starts chapters on a new page and has a cover and contents", () => {
+    const d = markdownToDocument("---\ntitle: T\ntemplate: manual\n---\n# A\n\n## B", { paged: true });
+    expect(d.settings).toMatchObject({ cover: true, toc: true, numbering: true });
+    expect(style(d.html)).toMatch(/\.markdown-body h1 \{[^}]*break-before: page/);
+    expect(d.html).toContain('<span class="hnum">1.1</span>');
+  });
+
+  it("slides is A4 landscape with each h2 on its own page, and hides a --- rule", () => {
+    const s = style(markdownToDocument("---\ntitle: T\ntemplate: slides\n---\n## One\n\n---\n\n## Two", { paged: true }).html);
+    expect(s).toContain("size: A4 landscape;");
+    expect(s).toMatch(/\.markdown-body h2 \{[^}]*break-before: page/);
+    expect(s).toMatch(/\.markdown-body hr \{ display: none; \}/);
+  });
+
+  it("minutes and letter have no cover or contents; letter offers .right and .center", () => {
+    for (const n of ["minutes", "letter"]) expect(resolveTemplate(n).defaults).toMatchObject({ cover: false, toc: false });
+    expect(resolveTemplate("letter").css).toContain(".right { text-align: right; }");
+  });
+
+  it("invoice titles the page at the right and fills the table header with the accent colour", () => {
+    const css = resolveTemplate("invoice").css!;
+    expect(css).toContain("text-align: right");
+    expect(css).toMatch(/th \{ color: #ffffff; background: var\(--accent/);
   });
 });

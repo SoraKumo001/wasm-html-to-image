@@ -14,7 +14,7 @@ It is implemented in pure JavaScript with no Node.js platform dependencies, runn
 ## Key Capabilities
 
 - **`markdownToDocument()` & `markdownToHtml()`**: Produce HTML and complete PDF render options (headers, footers, metadata).
-- **Template System**: 6 built-in templates (`default`, `report`, `proposal`, `book`, `paper`, `compact`) for ready-to-use professional styling without writing CSS.
+- **Template System**: 11 built-in templates (`default`, `report`, `proposal`, `book`, `paper`, `compact`, `manual`, `minutes`, `letter`, `slides`, `invoice`) for ready-to-use professional styling without writing CSS.
 - **Automatic Table of Contents (TOC)**: Generates a table of contents with exact destination page numbers filled in during PDF pagination.
 - **Automatic PDF Bookmarks (Outline)**: Creates nested PDF document outlines from `h1`–`h6` headings.
 - **Smart Page Break Handling**: Avoids orphan headings (`break-after: avoid`) and prevents breaking code blocks and tables across page boundaries.
@@ -106,6 +106,11 @@ Templates configure the document's typography, page size, margins, running heade
 | `book` | Books, long-form reading | A5, serif, justified text, each chapter (`h1`) starts on a new page, cover, TOC, page numbers |
 | `paper` | Technical papers, essays | A4, serif, justified text, tight line-height, page number in footer |
 | `compact` | Notes, cheat sheets | 12px font, 12mm margins, no cover or TOC |
+| `manual` | Manuals, specifications | A4, cover, contents, numbered headings, each chapter (`h1`) on a new page, call-outs, title in the header and page number in the footer |
+| `minutes` | Meeting minutes | A4, no cover or contents, ruled title, tinted table headers, title and date in the header |
+| `letter` | Letters, notices | A4, serif, wide margins, generous leading, `.right` and `.center` classes for the address block and date |
+| `slides` | Presentations | A4 landscape, 28px text, each `h2` on its own page, `---` ignored, with a cover |
+| `invoice` | Invoices, quotations | A4, large right-aligned title, accent table header, emphasised last row, call-out box for notes |
 
 Inspect available templates with `listTemplates()`:
 

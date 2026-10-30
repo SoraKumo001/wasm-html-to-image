@@ -17,6 +17,11 @@ import diagramsSample from "./samples/diagrams.md?raw";
 import technicalSample from "./samples/technical.md?raw";
 import showcaseSample from "./samples/showcase.md?raw";
 import compactSample from "./samples/compact.md?raw";
+import manualSample from "./samples/manual.md?raw";
+import minutesSample from "./samples/minutes.md?raw";
+import letterSample from "./samples/letter.md?raw";
+import slidesSample from "./samples/slides.md?raw";
+import invoiceSample from "./samples/invoice.md?raw";
 
 const SAMPLES = [
   { id: "report", label: "Report with charts and a long table (Japanese)", text: reportSample },
@@ -26,6 +31,11 @@ const SAMPLES = [
   { id: "book", label: "Book: chapters and page numbers (Japanese)", text: bookSample },
   { id: "technical", label: "Paper: maths, code and a flowchart", text: technicalSample },
   { id: "compact", label: "Cheat sheet (compact)", text: compactSample },
+  { id: "manual", label: "Manual: numbered chapters and call-outs (Japanese)", text: manualSample },
+  { id: "minutes", label: "Meeting minutes (Japanese)", text: minutesSample },
+  { id: "letter", label: "Business letter (Japanese)", text: letterSample },
+  { id: "slides", label: "Slides: landscape pages (Japanese)", text: slidesSample },
+  { id: "invoice", label: "Invoice (Japanese)", text: invoiceSample },
 ] as const;
 
 const STORAGE_KEY = "markdown-playground-text";
