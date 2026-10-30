@@ -524,9 +524,14 @@ void litehtml::flex_item_row_direction::direction_specific_init(const litehtml::
 
 	// A replaced item with an intrinsic ratio that is stretched to a definite container height transfers
 	// that height to its main size (CSS Flexbox 9.2): the flex base size follows the stretched cross size.
+	// An item with a definite width keeps that width as its base, but its automatic minimum is
+	// still the transferred size: flex-shrink freezes it there instead of at its intrinsic width
+	// (a width:200px img, ratio 80/90, in a 109.3-tall row freezes at 97.2 in Chromium, not 80).
+	const bool main_size_auto = size_prop.is_predefined() && size_prop.predef() == 0;
+	const bool main_size_definite_px = !size_prop.is_predefined() && size_prop.units() == css_units_px;
 	if (!m_container_wm.is_vertical() && el->src_el()->is_replaced() && el->css().get_flex_basis().is_predefined() && el->css().get_flex_basis().predef() == flex_basis_auto &&
 		self_size.render_height.type != containing_block_context::cbc_value_type_auto &&
-		size_prop.is_predefined() && size_prop.predef() == 0 &&
+		(main_size_auto || main_size_definite_px) &&
 		el->css().get_height().is_predefined() && el->css().get_height().predef() == 0 &&
 		((align & 0xFF) == flex_align_items_stretch || (align & 0xFF) == flex_align_items_normal) &&
 		el->parent() && el->parent()->css().get_flex_wrap() == flex_wrap_nowrap)
@@ -536,7 +541,18 @@ void litehtml::flex_item_row_direction::direction_specific_init(const litehtml::
 		if (sz.width > 0 && sz.height > 0)
 		{
 			const pixel_t cross = std::max<pixel_t>(0, (pixel_t)self_size.render_height - el->content_offset_block(m_container_wm));
-			flex_base_size = cross * sz.width / sz.height + render_offset;
+			const pixel_t transferred = cross * sz.width / sz.height + render_offset;
+			if (!main_size_auto)
+			{
+				// Definite width: the base stays the width; only the automatic
+				// minimum follows the transfer (see the block comment above).
+				if (min_size_prop.is_predefined() && !el->src_el()->is_ratio_only_replaced())
+				{
+					min_main_size = transferred;
+				}
+			} else
+			{
+			flex_base_size = transferred;
 			// The transferred size is the item's min-content contribution in this container
 			// too: at the definite stretched cross size the ratio leaves it no narrower
 			// size, so an intrinsic query on the container (a min-content grid track) sees
@@ -560,6 +576,7 @@ void litehtml::flex_item_row_direction::direction_specific_init(const litehtml::
 				// afterwards, and a floor raised from THIS pass's height would clamp
 				// that second transfer up to a size the item never gets.
 				min_main_size = flex_base_size;
+			}
 			}
 		}
 	}
