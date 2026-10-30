@@ -545,10 +545,12 @@ void litehtml::flex_item_row_direction::direction_specific_init(const litehtml::
 			if (!main_size_auto)
 			{
 				// Definite width: the base stays the width; only the automatic
-				// minimum follows the transfer (see the block comment above).
+				// minimum follows the transfer (see the block comment above), but never
+				// above the specified size (CSS Flexbox 4.5: min(specified, content size
+				// suggestion)): a width:120px 300x50 image in a 60-tall row stays 120 wide.
 				if (min_size_prop.is_predefined() && !el->src_el()->is_ratio_only_replaced())
 				{
-					min_main_size = transferred;
+					min_main_size = std::min(transferred, flex_base_size);
 				}
 			} else
 			{

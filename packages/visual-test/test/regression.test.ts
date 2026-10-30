@@ -10352,3 +10352,27 @@ describe("P0-95 a block inside an inline keeps its margins collapsing through th
     expect(c.h).toBeGreaterThan(30);
   });
 });
+
+describe("P0-96 a stretched replaced item with a definite width keeps that width", () => {
+  // CSS Flexbox 4.5: the automatic minimum is min(specified size, content size suggestion). The
+  // transferred size (60 * 300/50 = 360) must not lift the minimum above the specified 120px.
+  const svg = "data:image/svg+xml," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="300" height="50" viewBox="0 0 300 50"><rect width="300" height="50" fill="#69c"/></svg>`);
+  const img = async (style: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0}</style></head><body><div style="display:flex;height:60px"><img id="i" src="${svg}" style="${style}"></div></body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as any);
+    return layout.find((b: any) => b.i === "i");
+  };
+  it("width:120px stays 120 wide and stretches to 60 tall", async () => {
+    const b = await img("width:120px");
+    expect(Math.round(b.w)).toBe(120);
+    expect(Math.round(b.h)).toBe(60);
+  });
+  it("an auto width still takes the transferred 360", async () => {
+    expect(Math.round((await img("")).w)).toBe(360);
+  });
+});
