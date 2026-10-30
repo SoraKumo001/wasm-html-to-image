@@ -148,6 +148,31 @@ Settings are resolved in the following order:
 
 ---
 
+### Page and cover settings
+
+These front matter keys also change the page:
+
+| Key | Value | Effect |
+| :--- | :--- | :--- |
+| `header` / `footer` | HTML | Running header and footer (replacing the template's). `{{title}}`, `{{author}}`, `{{date}}`, `{{stamp}}`, `{{pageNumber}}` and `{{totalPages}}` work |
+| `margin` | `20mm 18mm` | Page margin (a CSS `margin` value) |
+| `orientation` | `landscape` | Turn the paper sideways |
+| `toc_depth` | `1` to `6` | Deepest heading level in the contents |
+| `toc_title` | text | Heading of the contents page (`Contents`) |
+| `cover_style` | `band` / `plain` / `center` | Look of the cover |
+| `numbering` | `true` | Number the headings `1`, `1.1`, `1.1.1` |
+
+With a template that has a cover, the cover carries no header or footer (page numbers still count it as page 1).
+
+## Syntax extensions
+
+- **Call-outs**: a block quote that starts with `[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]` or `[!CAUTION]` becomes a coloured box (the title is Japanese with `lang: ja`).
+- **Numbered figures**: an image with a title, `![alt](src "Title")`, becomes a figure captioned `Figure 1　Title`.
+- **Page break**: `<!-- pagebreak -->` forces a new page.
+- **Footnotes**: `[^name]` in the text and `[^name]: the note` anywhere put a list of notes at the end, numbered by first use.
+- **Tables** span the text width in `report`, `proposal`, `book` and `paper`.
+- **Long code lines** wrap at the right edge instead of being cut.
+
 ## Table of Contents & PDF Bookmarks
 
 When `paged: true` (or CLI PDF output) is specified:

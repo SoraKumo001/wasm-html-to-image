@@ -1,5 +1,6 @@
 import { marked, Marked } from "marked";
 import { mathExtension, type MathRenderer } from "./markdown-math-syntax.js";
+import { calloutHtml, createFootnotes, figureLabel, pagebreakHtml } from "./markdown-blocks.js";
 import {
   DEFAULT_PAGE,
   DEFAULT_TYPE,
@@ -227,6 +228,26 @@ body { color: ${c.fg}; font-family: ${type.font}; font-size: ${type.size}px; lin
 .markdown-body .diagram { margin: 0 0 16px; text-align: center; }
 .markdown-body .mermaid { display: inline-block; margin: 0; color: ${c.fg}; --mermaid-fg: ${c.fg}; --mermaid-bg: ${c.bg}; --mermaid-border: ${c.border}; --mermaid-surface: ${c.codeBg}; }
 .markdown-body pre code { padding: 0; font-size: 100%; background: transparent; white-space: pre-wrap; word-break: break-all; }
+.markdown-body .hnum { margin-right: 0.4em; }
+.markdown-body .callout { margin: 0 0 16px; padding: 10px 16px; border-left: 4px solid ${c.link}; background: ${c.codeBg}; break-inside: avoid; }
+.markdown-body .callout > *:last-child { margin-bottom: 0; }
+.markdown-body .callout-title { margin: 0 0 4px; font-weight: 700; color: ${c.link}; }
+.markdown-body .callout-tip { border-left-color: #16a34a; }
+.markdown-body .callout-tip .callout-title { color: #16a34a; }
+.markdown-body .callout-important { border-left-color: #8b5cf6; }
+.markdown-body .callout-important .callout-title { color: #8b5cf6; }
+.markdown-body .callout-warning { border-left-color: #d97706; }
+.markdown-body .callout-warning .callout-title { color: #d97706; }
+.markdown-body .callout-caution { border-left-color: #dc2626; }
+.markdown-body .callout-caution .callout-title { color: #dc2626; }
+.markdown-body .figure { margin: 0 0 16px; text-align: center; break-inside: avoid; }
+.markdown-body .figure img { max-width: 100%; }
+.markdown-body figcaption { margin-top: 6px; font-size: 0.9em; color: ${c.muted}; }
+.markdown-body .pagebreak { height: 1px; margin: 0; break-after: page; }
+.markdown-body .fnref { font-size: 0.75em; line-height: 0; }
+.markdown-body .footnotes { margin-top: 32px; padding-top: 8px; border-top: 1px solid ${c.border}; font-size: 0.9em; color: ${c.muted}; }
+.markdown-body .footnotes-title { margin: 0 0 4px; font-weight: 600; }
+.markdown-body .footnotes ol { margin: 0; }
 .markdown-body hr { height: 0; margin: 24px 0; border: 0; border-top: 4px solid ${c.border}; }
 .markdown-body img { max-width: 100%; }
 .markdown-body table { border-collapse: collapse;${type.wideTables ? " width: 100%;" : ""} }
@@ -368,12 +389,18 @@ export function markdownToDocument(markdown: string, options: MarkdownOptions = 
   // Every heading gets an id (a link target, and what the table of contents points at).
   const entries: TocEntry[] = [];
   const usedIds = new Map<string, number>();
+  const counters = [0, 0, 0, 0, 0, 0];
   renderer.heading = function ({ tokens, depth, text }) {
     const base = slugify(text);
     const seen = usedIds.get(base) ?? 0;
     usedIds.set(base, seen + 1);
     const id = seen === 0 ? base : `${base}-${seen + 1}`;
-    const inner = this.parser.parseInline(tokens);
+    let inner = this.parser.parseInline(tokens);
+    if (settings.numbering) {
+      counters[depth - 1]++;
+      for (let k = depth; k < 6; k++) counters[k] = 0;
+      inner = `<span class="hnum">${counters.slice(0, depth).map((n) => n || 1).join(".")}</span> ${inner}`;
+    }
     entries.push({ level: depth, id, html: inner });
     return `<h${depth} id="${id}">${inner}</h${depth}>\n`;
   };
@@ -385,8 +412,31 @@ export function markdownToDocument(markdown: string, options: MarkdownOptions = 
       : escapeHtml(text);
     return `<pre><code${name ? ` class="language-${escapeHtml(name)}"` : ""}>${body}\n</code></pre>\n`;
   };
-  const parser = options.math ? new Marked(mathExtension(options.math)) : marked;
-  const text = parser.parse(source, { async: false, gfm: true, renderer }) as string;
+  // Call-out boxes (`> [!NOTE]`), numbered figures, page breaks and footnotes.
+  renderer.blockquote = function ({ tokens }) {
+    const body = this.parser.parse(tokens);
+    return calloutHtml(body, settings.lang) ?? `<blockquote>
+${body}</blockquote>
+`;
+  };
+  let figures = 0;
+  const defaultParagraph = renderer.paragraph.bind(renderer);
+  renderer.paragraph = function (token) {
+    const only = token.tokens.length === 1 ? token.tokens[0] : undefined;
+    if (only?.type === "image" && only.title) {
+      figures++;
+      return `<figure class="figure">${this.parser.parseInline(token.tokens).replace(/ title="[^"]*"/, "")}<figcaption>${figureLabel(figures, settings.lang)}　${escapeHtml(only.title)}</figcaption></figure>
+`;
+    }
+    return defaultParagraph(token);
+  };
+  renderer.html = ({ text: raw }) => pagebreakHtml(raw) ?? raw;
+  const footnotes = createFootnotes();
+  source = footnotes.extract(source);
+  const parser = new Marked(footnotes.extension, options.math ? mathExtension(options.math) : {});
+  const text =
+    (parser.parse(source, { async: false, gfm: true, renderer }) as string) +
+    footnotes.list((t) => parser.parseInline(t, { async: false, gfm: true }) as string, settings.lang?.toLowerCase().startsWith("ja") ? "脚注" : "Notes");
 
   const tocOption = options.toc ?? (front.toc !== undefined || template.defaults?.toc !== undefined ? settings.toc : !!options.paged);
   const tocExtras = { ...(settings.toc_depth ? { depth: settings.toc_depth } : {}), ...(settings.toc_title ? { title: settings.toc_title } : {}) };

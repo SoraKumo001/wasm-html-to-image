@@ -49,6 +49,8 @@ export interface DocumentSettings {
   toc_depth?: number;
   /** Heading of the contents page (`Contents`). */
   toc_title?: string;
+  /** Number the headings: `1`, `1.1`, `1.1.1`. */
+  numbering?: boolean;
   /** Look of the cover: `band` (a bar at the left), `plain`, or `center`. A template picks its own. */
   cover_style?: string;
 }
@@ -142,8 +144,9 @@ const KNOWN_KEYS = new Set<string>([
   "toc_depth",
   "toc_title",
   "cover_style",
+  "numbering",
 ]);
-const BOOLEAN_KEYS = new Set(["toc", "cover"]);
+const BOOLEAN_KEYS = new Set(["toc", "cover", "numbering"]);
 const NUMBER_KEYS = new Set(["toc_depth"]);
 
 /**

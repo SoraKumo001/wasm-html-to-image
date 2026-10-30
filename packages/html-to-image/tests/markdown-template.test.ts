@@ -328,3 +328,49 @@ describe("page settings in the front matter", () => {
     expect(doc("title: T\ntemplate: compact").renderOptions.pdfSkipRunning).toBeUndefined(); // no cover
   });
 });
+
+describe("call-outs, figures, page breaks, heading numbers and footnotes", () => {
+  const html = (md: string, options = {}) => markdownToDocument(md, options).html;
+
+  it("turns [!NOTE]-style block quotes into titled call-outs and leaves ordinary quotes alone", () => {
+    const h = html("> [!WARNING]\n> Mind the gap.\n\n> plain quote\n\n> [!TIP] inline start");
+    expect(h).toMatch(/<div class="callout callout-warning"><p class="callout-title">Warning<\/p><p>Mind the gap\.<\/p>\s*<\/div>/);
+    expect(h).toContain("<blockquote>");
+    expect(h).toContain('class="callout callout-tip"');
+    expect(h).toContain("<p>inline start</p>");
+    expect(html("---\nlang: ja\n---\n> [!NOTE]\n> x")).toContain(">補足</p>");
+  });
+
+  it("numbers a figure when the image has a title, and does not touch an image without one", () => {
+    const h = html('![a](a.png "First")\n\n![b](b.png "Second")\n\n![c](c.png)');
+    expect(h).toContain("<figcaption>Figure 1　First</figcaption>");
+    expect(h).toContain("<figcaption>Figure 2　Second</figcaption>");
+    expect(h.match(/<figure/g)).toHaveLength(2);
+    expect(h).toContain('<p><img src="c.png" alt="c"></p>');
+  });
+
+  it("makes <!-- pagebreak --> a forced page break", () => {
+    expect(html("a\n\n<!-- pagebreak -->\n\nb")).toContain('<div class="pagebreak"></div>');
+    expect(html("a\n\n<!-- a comment -->\n\nb")).not.toContain("pagebreak\"");
+  });
+
+  it("numbers the headings 1, 1.1, 1.2, 2 when numbering is on, and the contents show the numbers", () => {
+    const d = html("---\ntitle: T\nnumbering: true\ntoc: true\n---\n# A\n\n## B\n\n## C\n\n# D", { paged: true });
+    const nums = [...d.matchAll(/<h[12] id="[^"]*"><span class="hnum">([\d.]+)<\/span>/g)].map((m) => m[1]);
+    expect(nums).toEqual(["1", "1.1", "1.2", "2"]);
+    expect(d).toMatch(/class="toc-text"><span class="hnum">1\.2<\/span>/);
+    expect(html("# A\n\n## B")).not.toContain("hnum\"");
+  });
+
+  it("collects footnotes at the end, numbered by first use, and leaves unknown ids and code alone", () => {
+    const md = "Text[^a] and more[^b], again[^a], unknown[^zz].\n\n[^a]: first note\n[^b]: second **bold**\n  continued\n\n```\n[^c]: not a note\n```\n";
+    const h = html(md);
+    expect([...h.matchAll(/<sup class="fnref"><a id="fnref-(\d)-(\d)" href="#fn-\d">(\d)/g)].map((m) => `${m[3]}:${m[2]}`)).toEqual(["1:1", "2:1", "1:2"]);
+    expect(h).toContain('<li id="fn-1">first note</li>');
+    expect(h).toContain('<li id="fn-2">second <strong>bold</strong> continued</li>');
+    expect(h).toContain("unknown[^zz]");
+    expect(h).toContain("[^c]: not a note");
+    expect(h).toContain('<p class="footnotes-title">Notes</p>');
+    expect(html("a[^q]")).not.toContain('class="footnotes"');
+  });
+});
