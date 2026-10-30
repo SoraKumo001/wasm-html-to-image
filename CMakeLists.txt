@@ -121,6 +121,7 @@ target_sources(html_to_image_core PRIVATE
     src/cpp/mermaid/state.cpp
     src/cpp/mermaid/classdiagram.cpp
     src/cpp/mermaid/erdiagram.cpp
+    src/cpp/mermaid/xychart.cpp
     src/cpp/core/resource_manager.cpp
     src/cpp/core/font_manager.cpp
     src/cpp/renderers/svg_renderer.cpp

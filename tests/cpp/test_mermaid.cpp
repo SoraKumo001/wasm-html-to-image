@@ -241,6 +241,22 @@ int main() {
         check(!render("erDiagram", e1, e2), "er/error_empty");
     }
 
+    // --- xychart ---
+    {
+        std::string s = svg_of("xychart-beta\n  title \"Sales\"\n  x-axis [jan, feb, mar]\n  y-axis \"Revenue\" 0 --> 100\n  bar [10, 50, 90]\n  line [20, 40, 60]");
+        check(has(s, ">Sales<") && has(s, ">jan<") && has(s, ">mar<") && has(s, ">Revenue<"), "xychart/titles_and_categories");
+        check(count(s, "<rect x=") >= 3 && has(s, "fill-opacity"), "xychart/bars");
+        check(has(s, "class=\"series\"") && count(s, "<circle") == 3, "xychart/line_points");
+        check(has(s, ">100<") && has(s, ">0<"), "xychart/explicit_range_ticks");
+        check(has(svg_of("xychart-beta\nx-axis \"n\" 1 --> 3\nline [1, 2, 3]"), ">2<"), "xychart/numeric_x_axis");
+        check(has(svg_of("xychart-beta\nx-axis [\xe6\x97\xa5, \xe6\x9c\x88]\nbar [1, 2]"), ">\xe6\x97\xa5<"), "xychart/cjk");
+        check(has(svg_of("xychart-beta\nbar [3, -2]"), "<rect"), "xychart/negative_values");
+        std::string e1, e2;
+        check(!render("xychart-beta\nx-axis [a]", e1, e2), "xychart/error_no_series");
+        check(!render("xychart-beta\nbar [a, b]", e1, e2), "xychart/error_not_a_number");
+        check(!render("xychart-beta horizontal\nbar [1]", e1, e2), "xychart/error_horizontal");
+    }
+
     std::printf("----\n%d passed, %d failed\n", g_pass, g_fail);
     return g_fail == 0 ? 0 : 1;
 }
