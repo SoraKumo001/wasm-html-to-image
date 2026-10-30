@@ -250,6 +250,7 @@ const { data: png } = await renderMermaid("graph LR\n  A --> B", {
 | `width` | 図の幅 + 余白 | 画像の幅（px） |
 | `background` | SVG は透明、画像はテーマの背景色 | ページの背景（CSS の色） |
 | `accent` | テーマから算出 | 矢印やバーの色 |
+| `directives` | `false` | 本文の `%%{init: {...}}%%` と frontmatter の `config:`（`theme`、`themeVariables`）を反映します |
 | `mode` | `"strict"` | 誤りの許容度。`"compat"` は図種名の大文字小文字、BOM・CRLF、閉じ忘れた `end` / `}` を許し、`"recover"` はさらに図種名の綴り違いを直し、読めない行を飛ばします |
 
 `strict` でも、図種名が綴り違いのときは、エラー枠に「`flowchart` のことですか?」と候補が表示されます。ページの CSS からテーマを選ぶときは `--mermaid-theme: nord` を使い、`--mermaid-bg` などの個別の色はその上に重ねて指定できます。モードは `--mermaid-mode: compat`（または `recover`）を使います。

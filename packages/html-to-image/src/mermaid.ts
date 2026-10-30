@@ -32,6 +32,8 @@ export interface MermaidOptions {
    * lines the diagram cannot read. What was repaired is left in the SVG as a leading `<!-- recovered: ... -->` comment.
    */
   mode?: "strict" | "compat" | "recover";
+  /** Honour `%%{init: {...}}%%` and frontmatter `config:` (theme, themeVariables) written in the source. Off by default. */
+  directives?: boolean;
 }
 
 /** What a render function takes: `render` of `wasm-html-to-image`, or `htmlToImage` with its module applied. */
@@ -58,13 +60,13 @@ type ThemeColours = { fg: string; bg: string; border: string; surface: string; a
 const escapeHtml = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 /** The page that holds one diagram, for `render({ value, ... })`. */
-export function mermaidToHtml(source: string, options: Pick<MermaidOptions, "theme" | "padding" | "background" | "accent" | "mode"> & { raster?: boolean } = {}): string {
+export function mermaidToHtml(source: string, options: Pick<MermaidOptions, "theme" | "padding" | "background" | "accent" | "mode" | "directives"> & { raster?: boolean } = {}): string {
   const c: ThemeColours = MERMAID_THEMES[options.theme ?? "light"];
   if (!c) throw new Error(`unknown mermaid theme "${options.theme}". Choose from: ${Object.keys(MERMAID_THEMES).join(", ")}`);
   const padding = options.padding ?? 16;
   const background = options.background ?? (options.raster ? c.bg : "transparent");
   const accentColour = options.accent ?? c.accent;
-  const accent = (accentColour ? ` --mermaid-accent: ${accentColour};` : "") + (c.line ? ` --mermaid-line: ${c.line};` : "") + (options.mode && options.mode !== "strict" ? ` --mermaid-mode: ${options.mode};` : "");
+  const accent = (accentColour ? ` --mermaid-accent: ${accentColour};` : "") + (c.line ? ` --mermaid-line: ${c.line};` : "") + (options.mode && options.mode !== "strict" ? ` --mermaid-mode: ${options.mode};` : "") + (options.directives ? " --mermaid-directives: on;" : "");
   return (
     `<!doctype html><html><head><meta charset="utf-8"><style>` +
     `html, body { margin: 0; padding: 0; background: ${background}; }` +
