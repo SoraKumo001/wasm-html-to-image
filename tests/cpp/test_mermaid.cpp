@@ -84,8 +84,7 @@ int main() {
     check(has(svg_of("graph TD\nA([pill])"), "rx="), "shape/stadium");
     check(has(svg_of("graph TD\nA[\"quoted [text]\"]"), ">quoted [text]<"), "node/quoted_label");
     check(has(svg_of("graph TD\nA[line one<br/>line two]"), ">line two<"), "node/br_break");
-    // every non-ASCII character is its own <tspan> (SkSVGText cannot cross font slices inside one run)
-    check(has(svg_of("graph TD\nA[a\xe6\x97\xa5\xe6\x9c\xac]-->B"), ">a<tspan>\xe6\x97\xa5</tspan><tspan>\xe6\x9c\xac</tspan><"), "node/cjk_label");
+    check(has(svg_of("graph TD\nA[a\xe6\x97\xa5\xe6\x9c\xac]-->B"), ">a\xe6\x97\xa5\xe6\x9c\xac<"), "node/cjk_label");
     check(count(svg_of("graph TD\nA[x] --> A"), "<g class=\"node\">") == 1, "node/redeclared_is_one_node");
     check(has(svg_of("graph TD\nA-->B\nstyle A fill:#ff0000"), "#ff0000"), "style/node_fill");
     check(has(svg_of("graph TD\nclassDef hot fill:#00ff00\nA:::hot-->B"), "#00ff00"), "style/class_def");

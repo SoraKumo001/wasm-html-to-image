@@ -136,24 +136,8 @@ struct Text {
     }
 };
 
-/// Escaped text for a `<text>`; every non-ASCII character is its own `<tspan>`. The default CJK fonts come in
-/// slices and SkSVGText keeps the first slice it falls back to for the rest of a run, so two kanji that live in
-/// different slices only draw correctly as separate spans.
-inline std::string text_content(const std::string& s) {
-    std::string out;
-    for (size_t i = 0; i < s.size();) {
-        unsigned char c = (unsigned char)s[i];
-        if (c < 0x80) {
-            out += esc(std::string(1, (char)c));
-            i++;
-        } else {
-            size_t len = c >= 0xF0 ? 4 : c >= 0xE0 ? 3 : 2;
-            out += "<tspan>" + s.substr(i, len) + "</tspan>";
-            i += len;
-        }
-    }
-    return out;
-}
+/// Escaped text for a `<text>`.
+inline std::string text_content(const std::string& s) { return esc(s); }
 
 /// A `<text>` that is centred on (cx, cy); one `<text>` per line so no tspan support is needed.
 inline void centered_text(std::string& out, const Theme& th, const std::vector<std::string>& lines, double cx, double cy,
@@ -164,6 +148,18 @@ inline void centered_text(std::string& out, const Theme& th, const std::vector<s
         out += "<text x=\"" + num(cx) + "\" y=\"" + num(y0 + lh * i + size * 0.35) + "\" text-anchor=\"middle\" font-size=\"" +
                num(size) + "\" font-weight=\"" + std::to_string(weight) + "\" font-family=\"" + esc(mono ? th.mono : th.font) +
                "\" fill=\"" + fill + "\">" + text_content(lines[i]) + "</text>\n";
+    }
+}
+
+/// Like centered_text, anchored at x: "start" (left aligned), "middle" or "end".
+inline void aligned_text(std::string& out, const Theme& th, const std::vector<std::string>& lines, double x, double cy, double size,
+                         int weight, const std::string& fill, const char* anchor, bool mono = false) {
+    double lh = size * metrics::kLineHeight;
+    double y0 = cy - lh * (lines.size() - 1) / 2.0;
+    for (size_t i = 0; i < lines.size(); i++) {
+        out += "<text x=\"" + num(x) + "\" y=\"" + num(y0 + lh * i + size * 0.35) + "\" text-anchor=\"" + anchor + "\" font-size=\"" + num(size) +
+               "\" font-weight=\"" + std::to_string(weight) + "\" font-family=\"" + esc(mono ? th.mono : th.font) + "\" fill=\"" + fill + "\">" +
+               text_content(lines[i]) + "</text>\n";
     }
 }
 

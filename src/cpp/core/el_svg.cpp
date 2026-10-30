@@ -18,6 +18,9 @@
 #include "libs/litehtml/include/litehtml/render_image.h"
 #include "libs/litehtml/include/litehtml/render_item.h"
 #include "modules/skresources/include/SkResources.h"
+#include "modules/skshaper/include/SkShaper_factory.h"
+#include "modules/skshaper/include/SkShaper_harfbuzz.h"
+#include "modules/skunicode/include/SkUnicode.h"
 #include "modules/svg/include/SkSVGDOM.h"
 #include "svg_paint_utils.h"
 #include "text_utils.h"
@@ -137,6 +140,31 @@ class SatoruSvgFontMgr final : public SkFontMgr {
 
     SatoruContext& m_ctx;
     sk_sp<SkFontMgr> m_base;
+};
+
+// SkSVGDOM shapes text with Skia's primitive shaper unless it is given another one, and that shaper takes
+// the font of the FIRST font run for the whole string: a character that font lacks (the second kanji of a
+// word, when the default CJK font comes in unicode-range slices) is drawn as a box. HarfBuzz walks every
+// run, so the fallback manager above is consulted for each character.
+class SatoruSvgShaperFactory final : public SkShapers::Factory {
+   public:
+    explicit SatoruSvgShaperFactory(sk_sp<SkUnicode> unicode) : m_unicode(std::move(unicode)) {}
+
+    std::unique_ptr<SkShaper> makeShaper(sk_sp<SkFontMgr> fallback) override {
+        return SkShapers::HB::ShapeDontWrapOrReorder(m_unicode, std::move(fallback));
+    }
+    // One direction and one script per string: HarfBuzz guesses the segment properties itself.
+    // The run ends at the end of the text: HarfBuzz walks the runs, and an end of 0 never advances.
+    std::unique_ptr<SkShaper::BiDiRunIterator> makeBidiRunIterator(const char*, size_t utf8Bytes, uint8_t level) override {
+        return std::make_unique<SkShaper::TrivialBiDiRunIterator>(level, utf8Bytes);
+    }
+    std::unique_ptr<SkShaper::ScriptRunIterator> makeScriptRunIterator(const char*, size_t utf8Bytes, SkFourByteTag script) override {
+        return std::make_unique<SkShaper::TrivialScriptRunIterator>(script, utf8Bytes);
+    }
+    SkUnicode* getUnicode() override { return m_unicode.get(); }
+
+   private:
+    sk_sp<SkUnicode> m_unicode;
 };
 
 class SatoruResourceProvider : public skresources::ResourceProvider {
@@ -654,6 +682,8 @@ void draw_svg_xml(container_skia* container, const std::string& xml, const posit
 
         SkSVGDOM::Builder builder;
         builder.setResourceProvider(proxy_rp);
+        builder.setTextShapingFactory(
+            sk_make_sp<SatoruSvgShaperFactory>(container->get_context().getUnicodeService().getSkUnicodeSp()));
         // Without a font manager SkSVGText draws nothing at all.
         builder.setFontManager(sk_make_sp<SatoruSvgFontMgr>(
             container->get_context(), container->get_context().fontManager.getFontMgr()));

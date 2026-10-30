@@ -1597,7 +1597,7 @@ describe("regression: layout and paint probes", () => {
     const plain = await renderPng(page(`<pre>graph TD</pre>`), 300, 60);
     expect(countPixels(plain.img, (r, g, b) => b > 200 && r < 60 && g < 60)).toBe(0);
   });
-  it("inline SVG text takes the font weight and draws CJK runs in one <text>", async () => {
+  it("inline SVG text takes the font weight and falls back per character inside one <text>", async () => {
     const ink = async (attrs: string, text: string) => {
       const { img } = await renderPng(`<svg width="260" height="40"><text x="4" y="28" font-size="22" ${attrs}>${text}</text></svg>`, 260, 40);
       let dark = 0;
@@ -1605,9 +1605,13 @@ describe("regression: layout and paint probes", () => {
       return dark;
     };
     expect(await ink('font-weight="800"', "Weight")).toBeGreaterThan(1.2 * (await ink('font-weight="300"', "Weight")));
-    // a boxed (.notdef) glyph has a frame of ink; real kanji of the same count have clearly less
-    const kanji = await ink('font-family="sans-serif"', "<tspan>開</tspan><tspan>始</tspan><tspan>判</tspan><tspan>定</tspan>");
-    expect(kanji).toBeGreaterThan(200);
+    // Kanji that live in different slices of the default CJK font, in ONE <text>: the first one used to be the only
+    // glyph drawn (Skia's primitive shaper takes the first font run for the whole string), the rest were boxes.
+    // A box is a thin frame; real glyphs have clearly more ink than boxes.
+    const word = await ink('font-family="sans-serif"', "開始判定");
+    const boxes = await ink('font-family="sans-serif"', "開始判定".replace(/./g, "͸"));
+    expect(word).toBeGreaterThan(400);
+    expect(word).toBeGreaterThan(boxes * 1.5);
   });
   it("inline SVG <text> is drawn (needs a font manager that knows Satoru's fonts)", async () => {
     const { img } = await renderPng(
