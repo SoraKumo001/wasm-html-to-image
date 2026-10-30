@@ -2,6 +2,7 @@
 
 #include "mermaid/flowchart.h"
 #include "mermaid/mermaid_internal.h"
+#include "mermaid/sequence.h"
 
 namespace mermaid {
 
@@ -50,6 +51,7 @@ bool render(const std::string& source, const Options& options, std::string& svg,
         i = e + 1;
     }
     if (keyword == "graph" || keyword == "flowchart" || keyword == "flowchart-elk") return render_flowchart(source, options, svg, error);
+    if (keyword == "sequenceDiagram") return render_sequence(source, options, svg, error);
     error = keyword.empty() ? "empty diagram" : "unsupported diagram type: " + keyword;
     return false;
 }

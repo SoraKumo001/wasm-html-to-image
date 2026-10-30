@@ -117,6 +117,7 @@ target_sources(html_to_image_core PRIVATE
     src/cpp/mermaid/mermaid.cpp
     src/cpp/mermaid/flowchart.cpp
     src/cpp/mermaid/layered.cpp
+    src/cpp/mermaid/sequence.cpp
     src/cpp/core/resource_manager.cpp
     src/cpp/core/font_manager.cpp
     src/cpp/renderers/svg_renderer.cpp

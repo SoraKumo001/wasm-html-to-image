@@ -157,6 +157,29 @@ int main() {
         check(!has(svg, "var(") && !has(svg, "color-mix"), "svg/plain_colours_only");
     }
 
+    // --- sequence diagrams ---
+    {
+        const std::string seq = "sequenceDiagram\nparticipant A as Alice\nA->>B: hello\nB-->>A: back\n";
+        std::string svg = svg_of(seq);
+        check(has(svg, ">Alice<") && has(svg, ">B<"), "sequence/participants");
+        check(count(svg, "<polygon") == 2, "sequence/arrow_heads");
+        check(has(svg, ">hello<") && has(svg, "stroke-dasharray=\"6 4\""), "sequence/labels_and_dashed_reply");
+        check(count(svg, ">Alice<") == 2, "sequence/boxes_top_and_bottom");
+        check(count(svg_of("sequenceDiagram\nA->B: x"), "<polygon") == 0, "sequence/open_arrow_has_no_head");
+        check(count(svg_of("sequenceDiagram\nA-xB: x"), "<line") >= 4, "sequence/cross");
+        check(has(svg_of("sequenceDiagram\nA->>A: self"), "<polyline"), "sequence/self_message");
+        check(has(svg_of("sequenceDiagram\nautonumber\nA->>B: x\nB->>A: y"), ">2. y<"), "sequence/autonumber");
+        check(has(svg_of("sequenceDiagram\nA->>+B: x\nB-->>-A: y"), "width=\"8\""), "sequence/activation_bar");
+        check(has(svg_of("sequenceDiagram\nNote over A,B: careful\nA->>B: x"), ">careful<"), "sequence/note");
+        std::string blk = svg_of("sequenceDiagram\nloop every day\nA->>B: x\nalt ok\nB->>A: y\nelse bad\nB->>A: z\nend\nend");
+        check(has(blk, ">loop<") && has(blk, ">[every day]<") && has(blk, ">alt<") && has(blk, ">[bad]<"), "sequence/blocks");
+        check(has(svg_of("sequenceDiagram\nA->>B: \xe6\x97\xa5\xe6\x9c\xac"), ">\xe6\x97\xa5\xe6\x9c\xac<"), "sequence/cjk");
+        check(!has(blk, "var(") && !has(blk, "color-mix"), "sequence/plain_colours_only");
+        std::string e1, e2;
+        check(!render("sequenceDiagram\nend", e1, e2) && has(e2, "without a block"), "sequence/error_stray_end");
+        check(!render("sequenceDiagram", e1, e2), "sequence/error_empty");
+    }
+
     std::printf("----\n%d passed, %d failed\n", g_pass, g_fail);
     return g_fail == 0 ? 0 : 1;
 }

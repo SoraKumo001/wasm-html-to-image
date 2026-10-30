@@ -48,7 +48,8 @@ add_test(NAME svg_paint_utils COMMAND test_svg_paint_utils)
 add_library(mermaid_core STATIC
     "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/mermaid/mermaid.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/mermaid/flowchart.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/mermaid/layered.cpp")
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/mermaid/layered.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/mermaid/sequence.cpp")
 target_include_directories(mermaid_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp")
 target_compile_features(mermaid_core PUBLIC cxx_std_20)
 if(MSVC)
