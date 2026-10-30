@@ -208,6 +208,33 @@ graph LR
 - `mermaid: false` を渡すと、通常のコードブロックとして表示します。
 - 未対応の図種（`gantt`、`mindmap` など）や構文エラーは、図の位置にエラー枠が表示されます。
 
+### JavaScript から SVG・画像として取得する
+
+`renderMermaid()` は、図のソースから SVG 文字列または画像を返します（図の大きさに合わせて自動でサイズが決まります）。
+
+```typescript
+import { renderMermaid } from "wasm-html-to-image";
+
+const { data: svg } = await renderMermaid("graph LR
+  A --> B"); // SVG 文字列
+const { data: png } = await renderMermaid("graph LR
+  A --> B", {
+  format: "png", // "svg"（既定）, "png", "webp", "pdf" など
+  theme: "dark", // "light"（既定）| "dark"
+});
+```
+
+| オプション | 既定値 | 説明 |
+| :--- | :--- | :--- |
+| `format` | `"svg"` | 出力形式。`"svg"` は文字列、それ以外は `Uint8Array` |
+| `theme` | `"light"` | 配色 |
+| `padding` | `16` | 図の周りの余白（px） |
+| `width` | 図の幅 + 余白 | 画像の幅（px） |
+| `background` | SVG は透明、画像はテーマの背景色 | ページの背景（CSS の色） |
+| `accent` | テーマから算出 | 矢印やバーの色 |
+
+Workers 向けのエントリ（`/workerd`、`/edge-light`）では、`renderMermaidWith((options) => render(options, wasm), source, options)` を使います。HTML ページとして使いたい場合は `mermaidToHtml(source, options)` が、図を 1 つ含む HTML を返します。
+
 ## KaTeX 数式組版 (`/markdown-math`)
 
 `wasm-html-to-image/markdown-math` サブパスの `katexMath()` を渡すことで、インライン `$…$` およびディスプレイ `$$…$$` の TeX 数式を描画できます。

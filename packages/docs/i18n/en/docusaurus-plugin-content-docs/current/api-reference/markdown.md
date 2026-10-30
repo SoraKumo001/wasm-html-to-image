@@ -208,6 +208,33 @@ graph LR
 - Pass `mermaid: false` to show them as plain code blocks.
 - An unsupported type (`gantt`, `mindmap`, ...) or a syntax error shows an error box where the diagram would be.
 
+### Getting SVG or an image from JavaScript
+
+`renderMermaid()` returns an SVG string or an image for a diagram source, sized to the diagram.
+
+```typescript
+import { renderMermaid } from "wasm-html-to-image";
+
+const { data: svg } = await renderMermaid("graph LR
+  A --> B"); // an SVG string
+const { data: png } = await renderMermaid("graph LR
+  A --> B", {
+  format: "png", // "svg" (default), "png", "webp", "pdf", ...
+  theme: "dark", // "light" (default) | "dark"
+});
+```
+
+| Option | Default | Description |
+| :--- | :--- | :--- |
+| `format` | `"svg"` | Output format: a string for `"svg"`, a `Uint8Array` otherwise |
+| `theme` | `"light"` | Colour scheme |
+| `padding` | `16` | Space around the diagram (px) |
+| `width` | diagram width + padding | Image width (px) |
+| `background` | transparent for SVG, the theme background for images | Page background (a CSS colour) |
+| `accent` | derived from the theme | Colour of arrows and bars |
+
+On the Workers entries (`/workerd`, `/edge-light`) use `renderMermaidWith((options) => render(options, wasm), source, options)`. `mermaidToHtml(source, options)` returns the HTML page that holds one diagram.
+
 ## KaTeX Math Typesetting (`/markdown-math`)
 
 Pass `katexMath()` from `wasm-html-to-image/markdown-math` to render inline `$…$` and display `$$…$$` TeX equations:
