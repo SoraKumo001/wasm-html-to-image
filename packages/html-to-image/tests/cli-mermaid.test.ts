@@ -66,11 +66,13 @@ describe.skipIf(!built)("wasm-html-to-image CLI with Mermaid", () => {
     const input = path.join(dir, "typo.mmd");
     fs.writeFileSync(input, "flowchrt LR\n  A --> B\n");
     const strict = path.join(dir, "strict.svg");
-    await run(process.execPath, [CLI, input, "-o", strict]);
+    // the error box is still written, and the exit status says the diagram did not parse
+    await expect(run(process.execPath, [CLI, input, "-o", strict])).rejects.toMatchObject({ stderr: expect.stringContaining("MERMAID_ERROR") });
     expect(fs.readFileSync(strict, "utf-8")).not.toContain("<polygon");
     const recovered = path.join(dir, "recovered.svg");
-    await run(process.execPath, [CLI, input, "-o", recovered, "--mermaid-mode", "recover"]);
+    const ran = await run(process.execPath, [CLI, input, "-o", recovered, "--mermaid-mode", "recover"]);
     expect(fs.readFileSync(recovered, "utf-8")).toContain("<polygon");
+    expect(ran.stderr).toContain("MERMAID_RECOVERED"); // what was repaired is said on stderr
   });
 
   it("reports an unknown theme and exits with an error", async () => {

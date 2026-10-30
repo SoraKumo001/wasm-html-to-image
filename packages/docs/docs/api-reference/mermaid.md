@@ -92,6 +92,7 @@ HTML ページとして使いたいときは、`mermaidToHtml(source, options)` 
 | `background` | SVG は透明、画像はテーマの背景色 | ページの背景（CSS の色、または `"transparent"`） |
 | `mode` | `"strict"` | 誤りの許容度（[入力の補正](#5-入力の補正)） |
 | `directives` | `false` | 本文の `%%{init: {...}}%%` と frontmatter の `config:` を反映する |
+| `onWarning` | なし | `(warning) => void`。図が読めなかったとき（`MERMAID_ERROR`）と、入力の補正で直した内容（`MERMAID_RECOVERED`、1 件ずつ）を受け取る |
 
 ---
 
@@ -149,7 +150,16 @@ HTML ページとして使いたいときは、`mermaidToHtml(source, options)` 
 | `compat` | 図種名の大文字小文字、先頭の BOM、CRLF、閉じ忘れた `end` / `}`（最大 3 つ） |
 | `recover` | `compat` に加えて、図種名の綴り違い（編集距離 1〜2 で候補が 1 つに決まるとき）と、読めない行の読み飛ばし |
 
-直した内容は、図の SVG の先頭に `<!-- recovered: ... -->` というコメントで残ります。C++ の API では、警告の一覧も受け取れます。
+直した内容は、`onWarning` で 1 件ずつ受け取れます（`MERMAID_RECOVERED`）。読めなかった図は `MERMAID_ERROR` で届きます。
+
+```typescript
+await renderMermaid("flowchrt LR\n  A --> B", {
+  mode: "recover",
+  onWarning: (w) => console.warn(w.code, w.message), // MERMAID_RECOVERED: `flowchrt` read as `flowchart`
+});
+```
+
+CLI では、同じ内容が標準エラー出力に出ます。図が読めなかったときは、エラー枠の入った画像を書き出したうえで、終了コード 1 で終わります（スクリプトや CI で失敗に気づけます）。
 
 ---
 

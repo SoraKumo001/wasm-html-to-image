@@ -12,7 +12,7 @@ export { render } from "./workerd.js";
 import { render as workerdRender } from "./workerd.js";
 import { bindRenderMermaid, type RenderMermaid } from "./mermaid.js";
 export { MERMAID_THEMES, mermaidToHtml, renderMermaidWith } from "./mermaid.js";
-export type { MermaidOptions, MermaidTheme } from "./mermaid.js";
+export type { MermaidOptions, MermaidTheme, MermaidWarning } from "./mermaid.js";
 export const renderMermaid: RenderMermaid = bindRenderMermaid((options) => workerdRender(options));
 
 export const setLimit = (_limit: number): void => {};

@@ -51,6 +51,12 @@ export interface DocumentSettings {
   toc_title?: string;
   /** Number the headings: `1`, `1.1`, `1.1.1`. */
   numbering?: boolean;
+  /** Colour theme of the Mermaid diagrams (`nord`, `dracula`, ...) instead of the document's light / dark colours. */
+  mermaid_theme?: string;
+  /** How much a broken diagram is forgiven: `strict`, `compat` or `recover`. */
+  mermaid_mode?: string;
+  /** Honour `%%{init}%%` and frontmatter `config:` inside the diagrams. */
+  mermaid_directives?: boolean;
   /** Look of the cover: `band` (a bar at the left), `plain`, or `center`. A template picks its own. */
   cover_style?: string;
 }
@@ -147,8 +153,11 @@ const KNOWN_KEYS = new Set<string>([
   "toc_title",
   "cover_style",
   "numbering",
+  "mermaid_theme",
+  "mermaid_mode",
+  "mermaid_directives",
 ]);
-const BOOLEAN_KEYS = new Set(["toc", "cover", "numbering"]);
+const BOOLEAN_KEYS = new Set(["toc", "cover", "numbering", "mermaid_directives"]);
 const NUMBER_KEYS = new Set(["toc_depth"]);
 
 /**

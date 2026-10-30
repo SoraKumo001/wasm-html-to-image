@@ -193,8 +193,12 @@ export function markdownStylesheet(
   type: TemplateType = DEFAULT_TYPE,
   accent?: string,
   page?: { size?: string; margin: string },
+  mermaid: { theme?: string; mode?: string; directives?: boolean } = {},
 ): string {
   const c = { ...PALETTES[theme], ...(accent ? { link: accent } : {}) };
+  // a named Mermaid theme brings its own colours, so the document's are left out of the diagram's variables
+  const mermaidTheme = mermaid.theme && /^[a-z][a-z-]*$/.test(mermaid.theme) ? mermaid.theme : undefined;
+  const mermaidMode = mermaid.mode === "compat" || mermaid.mode === "recover" ? mermaid.mode : undefined;
   const head = type.headingFont ?? type.font;
   const headColor = type.accentHeadings && accent ? accent : c.fg;
   const pageRule = page
@@ -226,7 +230,7 @@ body { color: ${c.fg}; font-family: ${type.font}; font-size: ${type.size}px; lin
 .markdown-body code { padding: 0.2em 0.4em; font-family: ${type.mono}; font-size: 85%; background: ${c.codeBg}; border-radius: ${type.radius}px; }
 .markdown-body pre { padding: 16px; overflow: hidden; white-space: pre-wrap; word-break: break-all; font-size: 85%; line-height: 1.45; background: ${c.codeBg}; border-radius: ${type.radius}px; text-align: left; }
 .markdown-body .diagram { margin: 0 0 16px; text-align: center; }
-.markdown-body .mermaid { display: inline-block; margin: 0; color: ${c.fg}; --mermaid-fg: ${c.fg}; --mermaid-bg: ${c.bg}; --mermaid-border: ${c.border}; --mermaid-surface: ${c.codeBg}; }
+.markdown-body .mermaid { display: inline-block; margin: 0; color: ${c.fg};${mermaidTheme ? ` --mermaid-theme: ${mermaidTheme};` : ` --mermaid-fg: ${c.fg}; --mermaid-bg: ${c.bg}; --mermaid-border: ${c.border}; --mermaid-surface: ${c.codeBg};`}${mermaidMode ? ` --mermaid-mode: ${mermaidMode};` : ""}${mermaid.directives ? " --mermaid-directives: on;" : ""} }
 .markdown-body pre code { padding: 0; font-size: 100%; background: transparent; white-space: pre-wrap; word-break: break-all; }
 .markdown-body .hnum { margin-right: 0.4em; }
 .markdown-body .callout { margin: 0 0 16px; padding: 10px 16px; border-left: 4px solid ${c.link}; background: ${c.codeBg}; break-inside: avoid; }
@@ -467,7 +471,11 @@ ${body}</blockquote>
       : undefined;
   const sheet =
     options.stylesheet ??
-    markdownStylesheet(options.theme, options.padding, options.maxWidth, options.paged, type, settings.accent, pageSetting);
+    markdownStylesheet(options.theme, options.padding, options.maxWidth, options.paged, type, settings.accent, pageSetting, {
+      theme: settings.mermaid_theme,
+      mode: settings.mermaid_mode,
+      directives: settings.mermaid_directives,
+    });
 
   const titleText = settings.title;
   const title = titleText ? `<title>${escapeHtml(titleText)}</title>` : "";

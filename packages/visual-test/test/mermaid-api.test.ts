@@ -25,6 +25,21 @@ describe("renderMermaid", () => {
     expect(svg).not.toContain("accTitle");
   });
 
+  it("reports what the repair changed and what did not parse, through onWarning", async () => {
+    const seen: { code: string; message: string }[] = [];
+    await renderMermaid("flowchrt LR\n  A --> B\n  not a line", { mode: "recover", onWarning: (w) => seen.push(w) });
+    expect(seen.filter((w) => w.code === "MERMAID_RECOVERED").map((w) => w.message)).toEqual(expect.arrayContaining([expect.stringContaining("flowchrt")]));
+    expect(seen.every((w) => w.code === "MERMAID_RECOVERED")).toBe(true);
+
+    const errors: { code: string; message: string }[] = [];
+    await renderMermaid("flowchrt LR\n  A --> B", { onWarning: (w) => errors.push(w) });
+    expect(errors).toEqual([expect.objectContaining({ code: "MERMAID_ERROR", message: expect.stringContaining("did you mean") })]);
+
+    const none: unknown[] = [];
+    await renderMermaid(GRAPH, { onWarning: (w) => none.push(w) });
+    expect(none).toEqual([]);
+  });
+
   it("encodes AVIF and JXL (the playground offers both)", async () => {
     const avif = (await renderMermaid(GRAPH, { format: "avif" })).data as Uint8Array;
     expect(Buffer.from(avif.subarray(4, 12)).toString("latin1")).toBe("ftypavif");

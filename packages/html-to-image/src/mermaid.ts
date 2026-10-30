@@ -12,6 +12,7 @@
  */
 
 import type { HtmlToImageOptions, OutputFormat, RenderResult } from "./core.js";
+import { LogLevel } from "./diagnostics.js";
 
 export interface MermaidOptions {
   /** Colour scheme: a key of {@link MERMAID_THEMES}. Defaults to `"light"`. */
@@ -34,6 +35,17 @@ export interface MermaidOptions {
   mode?: "strict" | "compat" | "recover";
   /** Honour `%%{init: {...}}%%` and frontmatter `config:` (theme, themeVariables) written in the source. Off by default. */
   directives?: boolean;
+  /**
+   * Called with what went wrong or was repaired: `MERMAID_ERROR` when the source did not parse (the image then
+   * shows an error box), and one `MERMAID_RECOVERED` per change the `compat` / `recover` mode made.
+   */
+  onWarning?: (warning: MermaidWarning) => void;
+}
+
+/** One thing the engine reported about a diagram: `code` is `MERMAID_ERROR` or `MERMAID_RECOVERED`. */
+export interface MermaidWarning {
+  code: "MERMAID_ERROR" | "MERMAID_RECOVERED";
+  message: string;
 }
 
 /** What a render function takes: `render` of `wasm-html-to-image`, or `htmlToImage` with its module applied. */
@@ -102,7 +114,26 @@ export async function renderMermaidWith(
     const size = typeof probe.data === "string" ? diagramSize(probe.data) : undefined;
     width = size ? Math.ceil(size.width + 2 * padding) : 800;
   }
-  return render({ value, width, format });
+  // the engine reports repairs and errors through its log; the probe above is a throw-away render, so only this one is listened to
+  const onWarning = options.onWarning;
+  const told = new Set<string>(); // the page is laid out more than once, and each pass draws the diagram again
+  return render({
+    value,
+    width,
+    format,
+    ...(onWarning
+      ? {
+          logLevel: LogLevel.Warning,
+          onLog: (_level: LogLevel, text: string) => {
+            const m = /^\[(MERMAID_ERROR|MERMAID_RECOVERED)\]\s*(.*)$/.exec(text);
+            if (m && !told.has(text)) {
+              told.add(text);
+              onWarning({ code: m[1] as MermaidWarning["code"], message: m[2] });
+            }
+          },
+        }
+      : {}),
+  });
 }
 
 /** The shape of `renderMermaid` in each entry point: SVG text by default, bytes for the other formats. */

@@ -166,6 +166,9 @@ lang: ja
 | `toc_title` | 文字列 | 目次ページの見出し（既定は `Contents`） |
 | `cover_style` | `band` / `plain` / `center` | 表紙の体裁 |
 | `numbering` | `true` | 見出しに `1`、`1.1`、`1.1.1` の番号を付ける |
+| `mermaid_theme` | 名前（`nord` など） | 図の配色を名前付きテーマにする（文書のライト・ダークの色ではなく、テーマの色になる。ダークな文書には `dracula`、`nord`、`dark` などが合う） |
+| `mermaid_mode` | `compat` / `recover` | 壊れた図の許容度 |
+| `mermaid_directives` | `true` | 図の中の `%%{init}%%` と frontmatter を反映する |
 
 表紙のあるテンプレートでは、表紙にヘッダーとフッターを出しません（ページ番号の数え方は変わらず、表紙が 1 ページ目です）。
 

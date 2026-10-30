@@ -217,9 +217,18 @@ program
         // one diagram: the image is sized to it unless -w is given
         const source = await loadMermaidSource(input, options);
         const widthGiven = program.getOptionValueSource("width") === "cli";
-        const drawn = await renderMermaidWith((o) => render(o), source, mermaidOptionsFromFlags(flags, widthGiven));
+        let broken = false;
+        const drawn = await renderMermaidWith((o) => render(o), source, {
+          ...mermaidOptionsFromFlags(flags, widthGiven),
+          onWarning: (w) => {
+            if (w.code === "MERMAID_ERROR") broken = true;
+            console.warn(`wasm-html-to-image: ${w.code}: ${w.message}`);
+          },
+        });
         await fs.writeFile(outputPath, typeof drawn.data === "string" ? drawn.data : Buffer.from(drawn.data));
         console.log(`Successfully rendered to ${outputPath}`);
+        // the file holds the error box; a script still needs to know the diagram did not parse
+        if (broken) process.exit(1);
         return;
       }
       const result = await render(await buildRenderOptions(input, flags));

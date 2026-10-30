@@ -20,6 +20,7 @@ import {
 import {
   DIAGNOSTIC_CODES,
   LogLevel,
+  parseCppLogToDiagnostic,
   type RenderDiagnostics,
   type RenderLimits,
   type ResolveResourceHook,
@@ -313,6 +314,19 @@ export function createOrchestration(
       // Non-fatal; JS-side logging still works.
     }
   }
+  // What the engine logs (`[CODE] detail`, see src/cpp/utils/logging.h) reaches the `onLog` hook, and, when a
+  // report is asked for, becomes a warning or an error in it. The engine calls `Module.onLog`.
+  (module as unknown as { onLog?: (level: number, message: string) => void }).onLog =
+    logLevel !== LogLevel.None
+      ? (level, message) => {
+          emitLog(level as LogLevel, message);
+          if (diag && level <= LogLevel.Warning) {
+            (level === LogLevel.Error ? diag.errors : diag.warnings).push(
+              parseCppLogToDiagnostic(message, "ENGINE_LOG"),
+            );
+          }
+        }
+      : undefined;
 
   return {
     format: format as OutputFormat,

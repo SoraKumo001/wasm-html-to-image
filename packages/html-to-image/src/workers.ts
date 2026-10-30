@@ -260,7 +260,7 @@ export function render(
 
 import { bindRenderMermaid, type RenderMermaid } from "./mermaid.js";
 export { MERMAID_THEMES, mermaidToHtml, renderMermaidWith } from "./mermaid.js";
-export type { MermaidOptions, MermaidTheme } from "./mermaid.js";
+export type { MermaidOptions, MermaidTheme, MermaidWarning } from "./mermaid.js";
 /** Render a Mermaid diagram on the worker pool; see {@link RenderMermaid}. */
 export const renderMermaid: RenderMermaid = bindRenderMermaid((options) => render(options));
 

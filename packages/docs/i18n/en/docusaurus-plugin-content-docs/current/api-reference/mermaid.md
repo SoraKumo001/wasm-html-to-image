@@ -92,6 +92,7 @@ The output is sized to the diagram (plus the padding). `data` is a string for `f
 | `background` | transparent for SVG, the theme's background for images | Page background (a CSS colour or `"transparent"`) |
 | `mode` | `"strict"` | How much a broken source is forgiven (see [Input repair](#5-input-repair)) |
 | `directives` | `false` | Honour `%%{init: {...}}%%` and frontmatter `config:` written in the source |
+| `onWarning` | none | `(warning) => void`: gets `MERMAID_ERROR` when the diagram did not parse, and one `MERMAID_RECOVERED` for each change the input repair made |
 
 ---
 
@@ -149,7 +150,16 @@ The same names work in `%%{init: {"theme": "dark"}}%%` (`default` and `base` mea
 | `compat` | A keyword in the wrong case, a leading BOM, CRLF, and unfinished `end` / `}` blocks (up to 3) |
 | `recover` | Everything in `compat`, plus a misspelt keyword (1 to 2 edits, when one keyword fits) and lines the diagram cannot read (skipped) |
 
-What was repaired is left in the diagram's SVG as a leading `<!-- recovered: ... -->` comment. The C++ API also returns the list of warnings.
+What was repaired comes to `onWarning`, one `MERMAID_RECOVERED` at a time; a diagram that could not be read arrives as `MERMAID_ERROR`.
+
+```typescript
+await renderMermaid("flowchrt LR\n  A --> B", {
+  mode: "recover",
+  onWarning: (w) => console.warn(w.code, w.message), // MERMAID_RECOVERED: `flowchrt` read as `flowchart`
+});
+```
+
+The CLI prints the same on stderr. When a diagram cannot be read it still writes the image with the error box, and then exits with status 1, so a script or CI notices.
 
 ---
 

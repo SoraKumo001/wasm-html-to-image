@@ -11,6 +11,7 @@
 #include "include/core/SkFont.h"
 #include "include/core/SkFontStyle.h"
 #include "include/core/SkTypeface.h"
+#include "utils/logging.h"
 #include "libs/litehtml/include/litehtml/render_image.h"
 #include "libs/litehtml/include/litehtml/render_item.h"
 #include "mermaid/mermaid.h"
@@ -106,8 +107,13 @@ void el_mermaid::ensure_svg() {
     }
 
     std::string svg, err;
-    if (!mermaid::render(source, opt, svg, err)) {
+    std::vector<std::string> repaired;
+    if (mermaid::render(source, opt, svg, err, &repaired)) {
+        // what the input repair changed (Compat / Recover), for the page's diagnostics
+        for (const std::string& note : repaired) SATORU_LOG_WARN("[MERMAID_RECOVERED] %s", note.c_str());
+    } else {
         // a diagram that does not parse is shown as a one-line error instead of vanishing
+        SATORU_LOG_WARN("[MERMAID_ERROR] %s", err.c_str());
         std::string msg = "Mermaid: " + err;
         double w = mermaid::estimate_text_width(msg, 12, 400, false) + 24, h = 36;
         svg = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 " + mermaid::num(w) + " " + mermaid::num(h) + "\" width=\"" +

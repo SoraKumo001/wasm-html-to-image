@@ -443,3 +443,32 @@ describe("templates that extend a bundled one", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 });
+
+describe("Mermaid settings in the front matter", () => {
+  const sheet = (front: string) => style(markdownToDocument(`---\n${front}\n---\n# H`, { paged: true }).html);
+
+  it("reads mermaid_theme, mermaid_mode and mermaid_directives", () => {
+    expect(parseFrontMatter("mermaid_theme: nord\nmermaid_mode: recover\nmermaid_directives: true")).toEqual({ mermaid_theme: "nord", mermaid_mode: "recover", mermaid_directives: true });
+  });
+
+  it("names the theme in the diagram's CSS and leaves the document's colours out of it", () => {
+    const s = sheet("mermaid_theme: nord");
+    const rule = /\.markdown-body \.mermaid \{[^}]*\}/.exec(s)![0];
+    expect(rule).toContain("--mermaid-theme: nord;");
+    expect(rule).not.toContain("--mermaid-bg"); // those would override the theme
+  });
+
+  it("keeps the document's colours without a theme, and adds the mode and directives when asked", () => {
+    const plain = /\.markdown-body \.mermaid \{[^}]*\}/.exec(sheet("title: T"))![0];
+    expect(plain).toContain("--mermaid-bg");
+    expect(plain).not.toContain("--mermaid-theme");
+    const rule = /\.markdown-body \.mermaid \{[^}]*\}/.exec(sheet("mermaid_mode: recover\nmermaid_directives: true"))![0];
+    expect(rule).toContain("--mermaid-mode: recover;");
+    expect(rule).toContain("--mermaid-directives: on;");
+    expect(/\.markdown-body \.mermaid \{[^}]*\}/.exec(sheet("mermaid_mode: strict"))![0]).not.toContain("--mermaid-mode");
+  });
+
+  it("ignores a theme name that is not a plain word", () => {
+    expect(/\.markdown-body \.mermaid \{[^}]*\}/.exec(sheet("mermaid_theme: a; b {"))![0]).not.toContain("--mermaid-theme");
+  });
+});
