@@ -180,6 +180,23 @@ int main() {
         check(!render("sequenceDiagram", e1, e2), "sequence/error_empty");
     }
 
+    // --- state diagrams ---
+    {
+        std::string s = svg_of("stateDiagram-v2\n[*] --> Idle\nIdle --> Busy : start\nBusy --> [*]");
+        check(count(s, "class=\"node\"") == 4, "state/nodes");
+        check(count(s, "class=\"edge\"") == 3 && has(s, ">start<"), "state/edges_and_label");
+        check(has(s, ">Idle<") && has(s, ">Busy<"), "state/names");
+        check(has(svg_of("stateDiagram\nstate \"Long name\" as L\n[*] --> L"), ">Long name<"), "state/alias");
+        check(has(svg_of("stateDiagram-v2\nA : first\nA : second"), ">second<"), "state/description");
+        check(has(svg_of("stateDiagram-v2\nstate X {\n[*] --> In\n}\n[*] --> X"), "class=\"composite\""), "state/composite");
+        check(has(svg_of("stateDiagram-v2\nstate c <<choice>>\nA --> c\nc --> B"), "<polygon points"), "state/choice");
+        check(has(svg_of("stateDiagram-v2\ndirection LR\nA --> B"), "<svg"), "state/direction");
+        check(has(svg_of("stateDiagram-v2\nA --> B : \xe6\x97\xa5\xe6\x9c\xac"), ">\xe6\x97\xa5\xe6\x9c\xac<"), "state/cjk");
+        std::string e1, e2;
+        check(!render("stateDiagram-v2\nstate X {\nA --> B", e1, e2), "state/error_unclosed");
+        check(!render("stateDiagram-v2", e1, e2), "state/error_empty");
+    }
+
     std::printf("----\n%d passed, %d failed\n", g_pass, g_fail);
     return g_fail == 0 ? 0 : 1;
 }
