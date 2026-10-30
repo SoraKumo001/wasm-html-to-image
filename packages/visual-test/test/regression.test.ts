@@ -1607,6 +1607,7 @@ describe("regression: layout and paint probes", () => {
       xychart: "xychart-beta\n  x-axis [a, b]\n  bar [1, 2]",
       gantt: "gantt\n  A :a, 2024-01-01, 5d\n  B :after a, 3d",
       mindmap: "mindmap\n  r\n    a\n    b",
+      timeline: "timeline\n  2020 : a : b\n  2021 : c",
       pie: 'pie title T\n  "a" : 1\n  "b" : 2',
     };
     for (const [name, src] of Object.entries(sources)) {

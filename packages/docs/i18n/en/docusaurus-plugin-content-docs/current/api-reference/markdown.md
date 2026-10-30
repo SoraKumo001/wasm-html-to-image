@@ -204,11 +204,12 @@ graph LR
 | Pie chart | `pie` |
 | Gantt chart | `gantt` |
 | Mind map | `mindmap` |
+| Timeline | `timeline` |
 
 - Colours follow the theme (`light` / `dark`).
 - A diagram is never split across pages.
 - Pass `mermaid: false` to show them as plain code blocks.
-- An unsupported type (`timeline`, `gitGraph`, ...) or a syntax error shows an error box where the diagram would be.
+- An unsupported type (`journey`, `gitGraph`, ...) or a syntax error shows an error box where the diagram would be.
 
 ### Getting SVG or an image from JavaScript
 

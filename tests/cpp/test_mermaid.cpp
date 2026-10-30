@@ -324,6 +324,21 @@ int main() {
         check(!render("mindmap", e1, e2), "mindmap/error_empty");
     }
 
+    // --- timeline ---
+    {
+        std::string s = svg_of("timeline\n  title History\n  section Early\n  2002 : LinkedIn\n  2004 : Facebook : Google\n  : Twitter\n  section Late\n  2010 : Instagram");
+        check(has(s, ">History<") && has(s, ">Early<") && has(s, ">Late<"), "timeline/title_and_sections");
+        check(count(s, "class=\"period\"") == 3, "timeline/periods");
+        check(count(s, "class=\"event\"") == 5, "timeline/events_including_continuation");
+        check(has(s, ">Twitter<") && has(s, ">Instagram<"), "timeline/event_text");
+        check(count(svg_of("timeline\n  2000 : a\n  2001"), "class=\"period\"") == 2, "timeline/period_without_event");
+        check(has(svg_of("timeline\n  \xe6\x97\xa5\xe6\x9c\xac : \xe6\x9d\xb1\xe4\xba\xac"), ">\xe6\x9d\xb1\xe4\xba\xac<"), "timeline/cjk");
+        check(!has(s, "var(") && !has(s, "color-mix"), "timeline/plain_colours_only");
+        std::string e1, e2;
+        check(!render("timeline\n  : orphan", e1, e2), "timeline/error_event_without_period");
+        check(!render("timeline", e1, e2), "timeline/error_empty");
+    }
+
     std::printf("----\n%d passed, %d failed\n", g_pass, g_fail);
     return g_fail == 0 ? 0 : 1;
 }
