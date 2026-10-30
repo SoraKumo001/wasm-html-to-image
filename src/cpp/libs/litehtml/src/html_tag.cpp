@@ -904,6 +904,74 @@ int litehtml::html_tag::select(const string& selector)
 
 int litehtml::html_tag::select(const css_selector& selector, bool apply_pseudo)
 {
+        // ::part(name): the compound's type selector and the selectors written
+        // before ::part describe the shadow HOST; the part name (and any
+        // selectors after it) describe this element. Flattening keeps the part
+        // element under its host (data-satoru-scope / data-satoru-slotted name
+        // the scope whose host carries data-satoru-host), so rebuild the
+        // selector without ::part and match it against the host -- the
+        // combinators to the left then resolve in the host's own context.
+        int part_idx = -1;
+        for (int i = 0; i < (int)selector.m_right.m_attrs.size(); i++)
+        {
+                if (selector.m_right.m_attrs[i].type == select_pseudo_element &&
+                    selector.m_right.m_attrs[i].name == _id("part"))
+                {
+                        part_idx = i;
+                        break;
+                }
+        }
+        if (part_idx >= 0)
+        {
+                const string& part_name = selector.m_right.m_attrs[part_idx].value;
+                const char* part_attr = get_attr("part");
+                if (!part_attr || part_name.empty() ||
+                    !contains(split_string(string(part_attr)), part_name))
+                {
+                        return select_no_match;
+                }
+                int self_flags = 0;
+                if (part_idx + 1 < (int)selector.m_right.m_attrs.size())
+                {
+                        css_element_selector self_sel;
+                        self_sel.m_tag = star_id;
+                        self_sel.m_attrs.assign(selector.m_right.m_attrs.begin() + part_idx + 1,
+                                                selector.m_right.m_attrs.end());
+                        int self_res = select(self_sel, apply_pseudo);
+                        if (self_res == select_no_match)
+                        {
+                                return select_no_match;
+                        }
+                        self_flags = self_res & ~select_match;
+                }
+                css_selector host_selector;
+                host_selector.m_right.m_prefix = selector.m_right.m_prefix;
+                host_selector.m_right.m_tag = selector.m_right.m_tag;
+                host_selector.m_right.m_attrs.assign(selector.m_right.m_attrs.begin(),
+                                                     selector.m_right.m_attrs.begin() + part_idx);
+                host_selector.m_left = selector.m_left;
+                host_selector.m_combinator = selector.m_combinator;
+                for (const char* scope_name : {"data-satoru-scope", "data-satoru-slotted"})
+                {
+                        const char* scope = get_attr(scope_name);
+                        if (!scope) continue;
+                        for (element::ptr anc = parent(); anc; anc = anc->parent())
+                        {
+                                const char* host_id = anc->get_attr("data-satoru-host");
+                                if (host_id && string(host_id) == scope)
+                                {
+                                        int host_res = anc->select(host_selector, apply_pseudo);
+                                        if (host_res != select_no_match)
+                                        {
+                                                return select_match |
+                                                       (host_res & select_match_pseudo_class) | self_flags;
+                                        }
+                                }
+                        }
+                }
+                return select_no_match;
+        }
+
         int right_res = select(selector.m_right, apply_pseudo);
         if(right_res == select_no_match)
         {

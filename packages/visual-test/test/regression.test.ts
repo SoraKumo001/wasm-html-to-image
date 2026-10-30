@@ -10184,3 +10184,145 @@ describe("P0-90 a percentage height inside a stretched auto-height grid item res
     expect(Math.round(im.h)).toBe(56);
   });
 });
+
+describe("P0-91 a column-flex item's keyword inline size resolves in line sizing and final layout", () => {
+  const page = async (kw: string) => {
+    let layout: any[] = [];
+    const SVG = `data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22120%22%20height%3D%2290%22%3E%3Crect%20width%3D%22120%22%20height%3D%2290%22%20fill%3D%22%23666%22%2F%3E%3C%2Fsvg%3E`;
+    const IMG = `data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22300%22%20height%3D%22246%22%3E%3Crect%20width%3D%22300%22%20height%3D%22246%22%20fill%3D%22%23999%22%2F%3E%3C%2Fsvg%3E`;
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>` +
+        `<div style="display:flex;flex-direction:column;flex-wrap:wrap;width:403.4px;height:84px;padding:12px">` +
+        `<div style="width:20px;height:36px"></div>` +
+        `<div id="ib" style="display:inline-block;width:${kw}"><img src="${SVG}"><img src="${IMG}"></div>` +
+        `<div style="width:90px;height:58px"></div></div></body></html>`,
+      width: 800,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as any);
+    return layout.find((b: any) => b.i === "ib");
+  };
+  it("width:auto is the fit-content size (max-content clamped to the column)", async () => {
+    const ib = await page("auto");
+    // Chromium: 379.4 wide (the column's content width), the images wrap and
+    // the item is 336 high. The engine used the raw max-content 420 x 246.
+    expect(Math.round(ib.w)).toBe(379);
+    expect(Math.round(ib.h)).toBe(336);
+  });
+  it("width:min-content is the widest unbreakable piece", async () => {
+    const ib = await page("min-content");
+    // Chromium: 300 wide (the img), 336 high. The engine used max-content 420.
+    expect(Math.round(ib.w)).toBe(300);
+    expect(Math.round(ib.h)).toBe(336);
+  });
+  it("width:fit-content and max-content are unchanged", async () => {
+    const fit = await page("fit-content");
+    expect(Math.round(fit.w)).toBe(379);
+    const max = await page("max-content");
+    expect(Math.round(max.w)).toBe(420);
+  });
+});
+
+describe("P0-92 a keyword-width item contributes its resolved size to its flex container's base and minimum", () => {
+  const BODY = `<div style="background:#ddf;display:flex;flex-direction:row;justify-content:flex-start;gap:4px;height:60px;min-width:100px;padding:12px;margin:12px;width:473.7px"><div style="background:#fdf;display:grid;grid-template-columns:60px auto;grid-auto-rows:minmax(30px,auto);align-items:stretch;margin:12px;overflow:hidden"><div style="background:#dff;height:36px;"></div></div><div style="background:#fdf;display:flex;flex-direction:column;flex-wrap:wrap;padding:12px"><div style="background:#fed;width:20px;height:25px;flex:2 1 0;"></div><div style="background:#ddf;display:inline-block;width:max-content"><div style="background:#ffd;height:12px;"></div><div style="background:#fdd;height:36px;"></div><svg viewBox="0 0 40 60" style="width:120px;"><rect width="40" height="60" fill="#69c"/></svg><img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22300%22%20height%3D%2230%22%20viewBox%3D%220%200%20300%2030%22%3E%3Crect%20width%3D%22300%22%20height%3D%2230%22%20fill%3D%22%2369c%22%2F%3E%3C%2Fsvg%3E" style="width:fit-content"></div><div style="background:#eee;margin:4px;flex:0 1 auto"><div style="background:#fdd;width:90px;height:40px;"></div><svg viewBox="0 0 100 20" style=""><rect width="100" height="20" fill="#69c"/></svg></div></div></div>`;
+  const page = async (kw: string, rootW: number) => {
+    let layout: any[] = [];
+    const body = BODY.replace("width:max-content", `width:${kw}`).replace("width:473.7px", `width:${rootW}px`);
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:content-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body>${body}</body></html>`,
+      width: 2400,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as any);
+    return {
+      a: layout.find((b: any) => b.p === "0.1.0.0"),
+      b: layout.find((b: any) => b.p === "0.1.0.1"),
+    };
+  };
+  it("the container's flex base uses a min-content item at its min-content size", async () => {
+    const { b } = await page("min-content", 2000);
+    // Chromium: B's base is 442 (the item at 300), not 562 (item at max-content).
+    expect(Math.round(b.w)).toBe(442);
+  });
+  it("the container's automatic minimum uses a max-content item at its max-content size", async () => {
+    const { b } = await page("max-content", 100);
+    // Chromium: B's minimum is 444 (the item at 420), not 324 (item at min-content).
+    expect(Math.round(b.w)).toBe(444);
+  });
+  it("the final distribution freezes the container at that minimum", async () => {
+    const { a, b } = await page("max-content", 473.7);
+    // Chromium: B stays 444 and the grid sibling is crushed to ~2 wide.
+    expect(Math.round(b.w)).toBe(444);
+    expect(a.w).toBeLessThan(10);
+  });
+});
+
+describe("P0-93 a grid item's percentage height resolves against the area (margin-box) height", () => {
+  const page = async (h: string) => {
+    let layout: any[] = [];
+    const a = `<div style="display:flex;flex-direction:column;flex-wrap:wrap;justify-content:space-around;align-items:stretch;height:${h};padding:8px;margin:12px"><div style="height:36px;margin:2px"></div><div style="height:36px;width:10px"></div><div style="width:90px;height:10px;flex:1"></div></div>`;
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body><div id="w" style="width:fit-content"><div style="display:grid;grid-template-columns:1fr auto auto;gap:4px;width:25%">${a}<div style="width:90px;height:10px"></div></div></div></body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as any);
+    return layout.find((b: any) => b.i === "w");
+  };
+  it("height:80% resolves against 116 (margin box), so the flex stays in one column", async () => {
+    // Chromium: the wrapper is 228 wide. Resolving against the border-box
+    // height (92) wraps the flex into two columns and widens it to 232.
+    expect(Math.round((await page("80%")).w)).toBe(228);
+  });
+  it("height:60% still wraps under either basis", async () => {
+    expect(Math.round((await page("60%")).w)).toBe(232);
+  });
+});
+
+describe("P0-93b the percentage re-measure is not served from the cyclic measure's memo", () => {
+  it("a height:30% item inside a grid > column-flex > grid chain contributes its wrapped width", async () => {
+    let layout: any[] = [];
+    const a = `<div style="display:flex;flex-direction:column;flex-wrap:wrap;justify-content:space-around;align-items:stretch;height:30%;padding:8px;margin:12px"><div style="height:36px;margin:2px"></div><div style="height:36px"></div><div style="width:90px;height:10px;flex:1"></div></div>`;
+    const inner = `<div style="display:grid;grid-template-columns:1fr auto auto;gap:4px;width:25%">${a}<div style="width:90px;height:10px"></div></div>`;
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:content-box}html,body{margin:0;font-size:0;line-height:0}</style></head><body><div style="display:grid;grid-template-columns:auto auto 2fr;align-items:end;padding:4px"><div id="cf" style="display:flex;flex-direction:column">${inner}</div></div></body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as any);
+    const cf = layout.find((b: any) => b.i === "cf");
+    // Chromium: the column flex is 232 wide (the item wraps at 30% of the
+    // 116px area). Serving the re-measure from the cyclic pass's memo
+    // returns the unwrapped contribution and the flex comes out 228.
+    expect(Math.round(cf.w)).toBe(232);
+  });
+});
+
+describe("P0-94 ::part() rules from the document apply to shadow-tree part elements", () => {
+  const page = async (withPartRule: boolean) => {
+    let layout: any[] = [];
+    const rules = withPartRule
+      ? `.bar x-host, .bar x-host::part(button) { height: 100% } .bar x-host::part(other) { height: 7px }`
+      : `.bar x-host { height: 100% }`;
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0;font-size:0;line-height:0}${rules}</style></head><body><div class="bar" style="height:30px;display:flex"><x-host style="display:flex"><template shadowrootmode="open"><div style="position:relative"><button id="b" part="button" style="display:flex;align-items:center;margin:0;padding:0 8px;border:none;background:none"><span style="font-size:16px;line-height:24px">Theme</span></button><span id="o" part="other" style="display:block">x</span></div></template></x-host></div></body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as any);
+    return layout;
+  };
+  it("the part element takes the ::part height (100% of the stretched shadow div)", async () => {
+    // Chromium: button 30 (its content alone is 24), span#o 7 (its content
+    // alone is 0 at font-size 0). Without ::part support both rules are
+    // inert: button 24, span 0.
+    const layout = await page(true);
+    expect(Math.round(layout.find((b: any) => b.i === "b").h)).toBe(30);
+    expect(Math.round(layout.find((b: any) => b.i === "o").h)).toBe(7);
+  });
+  it("without the ::part rules the elements keep their content heights", async () => {
+    const layout = await page(false);
+    expect(Math.round(layout.find((b: any) => b.i === "b").h)).toBe(24);
+    expect(Math.round(layout.find((b: any) => b.i === "o").h)).toBe(0);
+  });
+});
