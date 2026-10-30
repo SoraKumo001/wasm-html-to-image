@@ -214,6 +214,24 @@ int main() {
         check(!render("classDiagram\nnonsense here", e1, e2), "class/error_unrecognised");
     }
 
+    // --- ER diagrams ---
+    {
+        std::string s = svg_of("erDiagram\nCUSTOMER ||--o{ ORDER : places\nCUSTOMER {\n  string name PK\n  string email UK \"login\"\n}");
+        check(count(s, "class=\"node\"") == 2, "er/entities");
+        check(count(s, "class=\"edge\"") == 1 && has(s, ">places<"), "er/relation_and_label");
+        check(has(s, ">name<") && has(s, ">email<") && has(s, ">string<") && has(s, ">PK<") && has(s, ">UK<"), "er/attributes");
+        check(has(s, "<circle") && count(s, "<line") >= 5, "er/crows_foot");
+        check(has(svg_of("erDiagram\nA ||..|{ B : x"), "stroke-dasharray=\"5 4\""), "er/non_identifying_dashed");
+        check(has(svg_of("erDiagram\nA }|--|| B"), "<line"), "er/many_to_one");
+        check(has(svg_of("erDiagram\nA |o--o| B"), "<circle"), "er/zero_or_one");
+        check(has(svg_of("erDiagram\nA[\"Alias\"] ||--|| B"), ">Alias<"), "er/alias");
+        check(has(svg_of("erDiagram\nA ||--|| B : \"\xe6\x97\xa5\xe6\x9c\xac\""), ">\xe6\x97\xa5\xe6\x9c\xac<"), "er/cjk_label");
+        std::string e1, e2;
+        check(!render("erDiagram\nA {\nstring", e1, e2), "er/error_unclosed");
+        check(!render("erDiagram\nA xx--|| B", e1, e2), "er/error_unknown_cardinality");
+        check(!render("erDiagram", e1, e2), "er/error_empty");
+    }
+
     std::printf("----\n%d passed, %d failed\n", g_pass, g_fail);
     return g_fail == 0 ? 0 : 1;
 }
