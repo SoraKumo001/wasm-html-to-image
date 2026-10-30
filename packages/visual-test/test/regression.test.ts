@@ -10326,3 +10326,29 @@ describe("P0-94 ::part() rules from the document apply to shadow-tree part eleme
     expect(Math.round(layout.find((b: any) => b.i === "o").h)).toBe(0);
   });
 });
+
+describe("P0-95 a block inside an inline keeps its margins collapsing through the parent", () => {
+  // Hacker News's vote arrow: <center><a><div style="margin:3px 2px 6px"></div></a></center>. The empty
+  // halves of the split <a> make no line box, so the margins leave the <center> (Chromium: y 6, h 10).
+  const page = async (inner: string) => {
+    let layout: any[] = [];
+    await render({
+      value: `<!doctype html><html><head><style>html,body{margin:0}</style></head><body><div style="padding-top:1px"><center id="c">${inner}</center></div></body></html>`,
+      width: 300,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as any);
+    return layout.find((b: any) => b.i === "c");
+  };
+  const arrow = `<div style="width:10px;height:10px;margin:3px 2px 6px"></div>`;
+  it("with an <a> around the block, the <center> is as tall as the block alone", async () => {
+    const plain = await page(arrow);
+    const wrapped = await page(`<a href="x">${arrow}</a>`);
+    expect(Math.round(wrapped.h)).toBe(Math.round(plain.h));
+    expect(Math.round(wrapped.y)).toBe(Math.round(plain.y));
+  });
+  it("an inline with real content on both sides still makes its own lines", async () => {
+    const c = await page(`<a href="x">before${arrow}after</a>`);
+    expect(c.h).toBeGreaterThan(30);
+  });
+});
