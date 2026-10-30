@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { MERMAID_THEMES, mermaidToHtml, renderMermaid, type MermaidOptions } from "wasm-html-to-image/workers";
 import { MERMAID_SAMPLES, type MermaidSample } from "./mermaidSamples";
 import useJxlSupport from "./useJxlSupport";
+import { decodeText, encodeText, MAX_SHARED_LENGTH } from "./shareText";
 
 const STORAGE_KEY = "mermaid-playground-text";
 const FORMATS = ["svg", "png", "webp", "jpeg", "avif", "jxl", "pdf"] as const;
@@ -98,6 +99,8 @@ export const MermaidPlayground: React.FC = () => {
   const [panel, setPanel] = useState<Panel>(() => panelFromParams(new URLSearchParams(window.location.search)));
   const [view, setView] = useState<"editor" | "gallery">(() => (new URLSearchParams(window.location.search).get("view") === "gallery" ? "gallery" : "editor"));
   const jxlSupport = useJxlSupport();
+  // The diagram itself rides in the URL (compressed) so a link shares it, not only the settings.
+  const [shared, setShared] = useState(() => new URLSearchParams(window.location.search).get("src") ?? "");
   const [out, setOut] = useState<Output | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -113,8 +116,25 @@ export const MermaidPlayground: React.FC = () => {
     for (const k of [...params.keys()]) if (k !== "mode") params.delete(k);
     for (const [k, v] of panelToParams(panel)) params.set(k, v);
     if (view === "gallery") params.set("view", "gallery");
+    if (shared) params.set("src", shared);
     window.history.replaceState({}, "", `${window.location.pathname}?${params.toString()}`);
-  }, [panel, view]);
+  }, [panel, view, shared]);
+  // a link with a diagram in it opens that diagram
+  useEffect(() => {
+    const src = new URLSearchParams(window.location.search).get("src");
+    if (src) void decodeText(src).then((t) => t !== undefined && setText(t));
+  }, []);
+  useEffect(() => {
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      const encoded = await encodeText(text);
+      if (!cancelled) setShared(encoded && encoded.length <= MAX_SHARED_LENGTH ? encoded : "");
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [text]);
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, text);

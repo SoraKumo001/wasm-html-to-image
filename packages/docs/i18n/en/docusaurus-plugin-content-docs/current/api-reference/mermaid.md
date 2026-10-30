@@ -92,6 +92,8 @@ The output is sized to the diagram (plus the padding). `data` is a string for `f
 | `background` | transparent for SVG, the theme's background for images | Page background (a CSS colour or `"transparent"`) |
 | `mode` | `"strict"` | How much a broken source is forgiven (see [Input repair](#5-input-repair)) |
 | `directives` | `false` | Honour `%%{init: {...}}%%` and frontmatter `config:` written in the source |
+| `maxLines` | `2000` | Most lines of text a diagram may have (comments and blank lines are free). `0` lifts the limit |
+| `maxSourceBytes` | `200000` | Largest diagram source in bytes. `0` lifts the limit |
 | `onWarning` | none | `(warning) => void`: gets `MERMAID_ERROR` when the diagram did not parse, and one `MERMAID_RECOVERED` for each change the input repair made |
 
 ---
@@ -209,10 +211,14 @@ The syntax of the `-beta` diagrams changes often in Mermaid itself. `venn-beta`,
 
 ---
 
-## 7. Errors
+## 7. Size limits
+
+The layout of a big graph grows faster than its size (measured: a flowchart takes seconds at 600 nodes and minutes at 1500). So that a server that draws whatever a user sends cannot be stalled by one huge diagram, there are limits on lines (default 2000) and on source size (default 200000 bytes). A diagram over either becomes an error box (`MERMAID_ERROR`). Change them with `maxLines` / `maxSourceBytes` (in CSS: `--mermaid-max-lines` / `--mermaid-max-bytes`).
+
+## 8. Errors
 
 A syntax error or an unsupported diagram shows as a one-line error box (`Mermaid: ...`) where the diagram would be; the rest of the document still converts. `renderMermaid()` returns an SVG of the same box.
 
-## 8. Try it in the playground
+## 9. Try it in the playground
 
-The playground's "Mermaid" tab switches the sample (one per diagram type, 26 in all), theme, input repair, output format (SVG / PNG / WebP / JPEG / AVIF / JXL / PDF), accent colour and directives on the spot. "Gallery" draws every sample with the current settings. The settings live in the URL, so a link shares them (for example `?mode=mermaid&theme=nord&format=png&view=gallery`).
+The playground's "Mermaid" tab switches the sample (one per diagram type, 26 in all), theme, input repair, output format (SVG / PNG / WebP / JPEG / AVIF / JXL / PDF), accent colour and directives on the spot. "Gallery" draws every sample with the current settings. The settings live in the URL, and so does the diagram itself (compressed, up to about 6000 characters, as `src=`), so one link shares the diagram and how it is drawn (for example `?mode=mermaid&theme=nord&format=png&view=gallery`).

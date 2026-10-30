@@ -230,6 +230,28 @@ int main() {
         check(count(svg_of("flowchart LR\nA o--o B\nC x--x D"), "class=\"edge\"") == 2, "flowchart/start_markers");
     }
 
+    // --- size limits ---
+    {
+        std::string svg, err, big = "flowchart TD\n";
+        for (int k = 0; k < 120; k++) big += "n" + std::to_string(k) + " --> n" + std::to_string(k + 1) + "\n";
+        mermaid::Options small;
+        small.max_lines = 100;
+        check(!mermaid::render(big, small, svg, err) && has(err, "too many lines") && has(err, "121"), "limits/lines");
+        small.max_lines = 0;
+        check(mermaid::render(big, small, svg, err), "limits/zero_lifts_the_limit");
+        mermaid::Options bytes;
+        bytes.max_source_bytes = 50;
+        check(!mermaid::render(big, bytes, svg, err) && has(err, "too large"), "limits/bytes");
+        // comments and blank lines are free
+        std::string chatty = "flowchart TD\n";
+        for (int k = 0; k < 300; k++) chatty += "%% note\n\n";
+        chatty += "A-->B\n";
+        mermaid::Options few;
+        few.max_lines = 5;
+        check(mermaid::render(chatty, few, svg, err), "limits/comments_and_blank_lines_are_free");
+        check(!render("pie\n" + std::string(250000, ' ') + "\"a\": 1", svg, err) && has(err, "too large"), "limits/default_bytes");
+    }
+
     // --- errors ---
     {
         std::string svg, err;

@@ -2,6 +2,7 @@
 // itself (src/cpp/mermaid), as a replaced element in the same way an inline <svg> is.
 
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <list>
 #include <set>
@@ -97,6 +98,13 @@ void el_mermaid::ensure_svg() {
     over("--mermaid-surface", opt.surface);
     over("--mermaid-border", opt.border);
     opt.allow_directives = prop("--mermaid-directives") == "on";
+    // a limit given as 0 lifts it; anything that is not a number keeps the default
+    auto limit = [&](const char* name, size_t& dst) {
+        std::string v = prop(name);
+        if (!v.empty() && v.find_first_not_of("0123456789") == std::string::npos) dst = (size_t)std::strtoull(v.c_str(), nullptr, 10);
+    };
+    limit("--mermaid-max-bytes", opt.max_source_bytes);
+    limit("--mermaid-max-lines", opt.max_lines);
     if (auto m = prop("--mermaid-mode"); m == "compat") opt.mode = mermaid::Options::Mode::Compat;
     else if (m == "recover") opt.mode = mermaid::Options::Mode::Recover;
     if (skia) {

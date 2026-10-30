@@ -41,6 +41,10 @@ struct Options {
     ///  Recover: also a misspelt keyword and lines the diagram cannot read (skipped, and reported).
     enum class Mode { Strict, Compat, Recover };
     Mode mode = Mode::Strict;
+    /// A diagram over either limit is refused (0: no limit). The layout of a big graph grows faster than its size
+    /// (600 nodes take seconds, 1500 minutes), so an input one does not trust needs a ceiling.
+    size_t max_source_bytes = 200000;
+    size_t max_lines = 2000;  // lines with text, comments and blank lines not counted
 };
 
 /// Sets the colours of a named theme (light, dark, neutral, forest, nord, dracula, solarized-light, solarized-dark,

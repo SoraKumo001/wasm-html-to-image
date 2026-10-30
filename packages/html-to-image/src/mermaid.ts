@@ -40,6 +40,10 @@ export interface MermaidOptions {
    * shows an error box), and one `MERMAID_RECOVERED` per change the `compat` / `recover` mode made.
    */
   onWarning?: (warning: MermaidWarning) => void;
+  /** The most lines of text a diagram may have (comments and blank lines are free). Default 2000; 0 lifts the limit. */
+  maxLines?: number;
+  /** The largest diagram source in bytes. Default 200000; 0 lifts the limit. */
+  maxSourceBytes?: number;
 }
 
 /** One thing the engine reported about a diagram: `code` is `MERMAID_ERROR` or `MERMAID_RECOVERED`. */
@@ -72,13 +76,13 @@ type ThemeColours = { fg: string; bg: string; border: string; surface: string; a
 const escapeHtml = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 /** The page that holds one diagram, for `render({ value, ... })`. */
-export function mermaidToHtml(source: string, options: Pick<MermaidOptions, "theme" | "padding" | "background" | "accent" | "mode" | "directives"> & { raster?: boolean } = {}): string {
+export function mermaidToHtml(source: string, options: Pick<MermaidOptions, "theme" | "padding" | "background" | "accent" | "mode" | "directives" | "maxLines" | "maxSourceBytes"> & { raster?: boolean } = {}): string {
   const c: ThemeColours = MERMAID_THEMES[options.theme ?? "light"];
   if (!c) throw new Error(`unknown mermaid theme "${options.theme}". Choose from: ${Object.keys(MERMAID_THEMES).join(", ")}`);
   const padding = options.padding ?? 16;
   const background = options.background ?? (options.raster ? c.bg : "transparent");
   const accentColour = options.accent ?? c.accent;
-  const accent = (accentColour ? ` --mermaid-accent: ${accentColour};` : "") + (c.line ? ` --mermaid-line: ${c.line};` : "") + (options.mode && options.mode !== "strict" ? ` --mermaid-mode: ${options.mode};` : "") + (options.directives ? " --mermaid-directives: on;" : "");
+  const accent = (accentColour ? ` --mermaid-accent: ${accentColour};` : "") + (c.line ? ` --mermaid-line: ${c.line};` : "") + (options.mode && options.mode !== "strict" ? ` --mermaid-mode: ${options.mode};` : "") + (options.directives ? " --mermaid-directives: on;" : "") + (options.maxLines !== undefined ? ` --mermaid-max-lines: ${Math.max(0, Math.floor(options.maxLines))};` : "") + (options.maxSourceBytes !== undefined ? ` --mermaid-max-bytes: ${Math.max(0, Math.floor(options.maxSourceBytes))};` : "");
   return (
     `<!doctype html><html><head><meta charset="utf-8"><style>` +
     `html, body { margin: 0; padding: 0; background: ${background}; }` +

@@ -92,6 +92,8 @@ HTML ページとして使いたいときは、`mermaidToHtml(source, options)` 
 | `background` | SVG は透明、画像はテーマの背景色 | ページの背景（CSS の色、または `"transparent"`） |
 | `mode` | `"strict"` | 誤りの許容度（[入力の補正](#5-入力の補正)） |
 | `directives` | `false` | 本文の `%%{init: {...}}%%` と frontmatter の `config:` を反映する |
+| `maxLines` | `2000` | 図のテキストの行数の上限（コメントと空行は数えない）。`0` で無制限 |
+| `maxSourceBytes` | `200000` | 図のソースの大きさの上限（バイト）。`0` で無制限 |
 | `onWarning` | なし | `(warning) => void`。図が読めなかったとき（`MERMAID_ERROR`）と、入力の補正で直した内容（`MERMAID_RECOVERED`、1 件ずつ）を受け取る |
 
 ---
@@ -209,10 +211,14 @@ CLI では、同じ内容が標準エラー出力に出ます。図が読めな�
 
 ---
 
-## 7. エラーの扱い
+## 7. 大きさの上限
+
+大きなグラフの配置は、大きさよりも速く重くなります（実測で、フローチャートは 600 ノードで数秒、1500 ノードで数分かかります）。利用者の入力をそのまま描くサーバーが、巨大な図で止まらないように、行数（既定 2000）とソースの大きさ（既定 200000 バイト）に上限があります。超えた図は、エラー枠（`MERMAID_ERROR`）になります。必要なら `maxLines` / `maxSourceBytes`（CSS では `--mermaid-max-lines` / `--mermaid-max-bytes`）で変えられます。
+
+## 8. エラーの扱い
 
 構文エラーや未対応の図は、図の位置に 1 行のエラー枠（`Mermaid: ...`）を表示します。文書全体の変換は止まりません。`renderMermaid()` でも同じ枠の SVG が返ります。
 
-## 8. プレイグラウンドで試す
+## 9. プレイグラウンドで試す
 
-プレイグラウンドの「Mermaid」タブで、図種ごとのサンプル（全 26 種）、テーマ、入力の補正、出力形式（SVG / PNG / WebP / JPEG / AVIF / JXL / PDF）、アクセント色、ディレクティブを、その場で切り替えられます。「Gallery」では、全サンプルを今の設定で一覧できます。設定は URL に残るので、そのまま共有できます（例: `?mode=mermaid&theme=nord&format=png&view=gallery`）。
+プレイグラウンドの「Mermaid」タブで、図種ごとのサンプル（全 26 種）、テーマ、入力の補正、出力形式（SVG / PNG / WebP / JPEG / AVIF / JXL / PDF）、アクセント色、ディレクティブを、その場で切り替えられます。「Gallery」では、全サンプルを今の設定で一覧できます。設定は URL に残ります。図のソースも（圧縮して、約 6000 文字まで）`src=` として URL に入るので、リンク 1 本で図ごと共有できます（例: `?mode=mermaid&theme=nord&format=png&view=gallery`）。

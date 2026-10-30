@@ -40,6 +40,17 @@ describe("renderMermaid", () => {
     expect(none).toEqual([]);
   });
 
+  it("refuses a diagram over the size limits, and maxLines / maxSourceBytes move them", async () => {
+    const many = "graph TD\n" + Array.from({ length: 30 }, (_, k) => `  n${k} --> n${k + 1}`).join("\n");
+    const seen: string[] = [];
+    const refused = (await renderMermaid(many, { maxLines: 10, onWarning: (w) => seen.push(w.message) })).data;
+    expect(refused).toContain("#cf222e"); // the error box
+    expect(seen[0]).toContain("too many lines");
+    expect((await renderMermaid(many, { maxLines: 0 })).data).not.toContain("#cf222e");
+    expect((await renderMermaid(many, { maxSourceBytes: 40 })).data).toContain("#cf222e");
+    expect((await renderMermaid(many)).data).not.toContain("#cf222e"); // the defaults are generous
+  });
+
   it("encodes AVIF and JXL (the playground offers both)", async () => {
     const avif = (await renderMermaid(GRAPH, { format: "avif" })).data as Uint8Array;
     expect(Buffer.from(avif.subarray(4, 12)).toString("latin1")).toBe("ftypavif");

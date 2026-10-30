@@ -322,6 +322,24 @@ static void take_accessibility(std::string& source, std::string& title, std::str
 }
 
 bool render(const std::string& input, const Options& options, std::string& svg, std::string& error, std::vector<std::string>* warnings) {
+    if (options.max_source_bytes && input.size() > options.max_source_bytes) {
+        error = "the diagram source is too large (" + std::to_string(input.size()) + " bytes; the limit is " + std::to_string(options.max_source_bytes) + ")";
+        return false;
+    }
+    if (options.max_lines) {
+        size_t lines = 0;
+        for (size_t i = 0; i < input.size();) {
+            size_t e = input.find('\n', i);
+            std::string line = litehtml::svgutil::trim(input.substr(i, e == std::string::npos ? std::string::npos : e - i));
+            if (!line.empty() && line.compare(0, 2, "%%") != 0) lines++;
+            if (e == std::string::npos) break;
+            i = e + 1;
+        }
+        if (lines > options.max_lines) {
+            error = "the diagram has too many lines (" + std::to_string(lines) + "; the limit is " + std::to_string(options.max_lines) + ")";
+            return false;
+        }
+    }
     std::string source = input;
     std::string acc_title, acc_descr;
     take_accessibility(source, acc_title, acc_descr);
