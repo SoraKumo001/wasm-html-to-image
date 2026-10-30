@@ -10219,3 +10219,32 @@ describe("P0-93b the percentage re-measure is not served from the cyclic measure
     expect(Math.round(cf.w)).toBe(232);
   });
 });
+
+describe("P0-94 ::part() rules from the document apply to shadow-tree part elements", () => {
+  const page = async (withPartRule: boolean) => {
+    let layout: any[] = [];
+    const rules = withPartRule
+      ? `.bar x-host, .bar x-host::part(button) { height: 100% } .bar x-host::part(other) { height: 7px }`
+      : `.bar x-host { height: 100% }`;
+    await render({
+      value: `<!doctype html><html><head><style>*{box-sizing:border-box}html,body{margin:0;font-size:0;line-height:0}${rules}</style></head><body><div class="bar" style="height:30px;display:flex"><x-host style="display:flex"><template shadowrootmode="open"><div style="position:relative"><button id="b" part="button" style="display:flex;align-items:center;margin:0;padding:0 8px;border:none;background:none"><span style="font-size:16px;line-height:24px">Theme</span></button><span id="o" part="other" style="display:block">x</span></div></template></x-host></div></body></html>`,
+      width: 600,
+      format: "png",
+      onLayout: (l: any) => (layout = l),
+    } as any);
+    return layout;
+  };
+  it("the part element takes the ::part height (100% of the stretched shadow div)", async () => {
+    // Chromium: button 30 (its content alone is 24), span#o 7 (its content
+    // alone is 0 at font-size 0). Without ::part support both rules are
+    // inert: button 24, span 0.
+    const layout = await page(true);
+    expect(Math.round(layout.find((b: any) => b.i === "b").h)).toBe(30);
+    expect(Math.round(layout.find((b: any) => b.i === "o").h)).toBe(7);
+  });
+  it("without the ::part rules the elements keep their content heights", async () => {
+    const layout = await page(false);
+    expect(Math.round(layout.find((b: any) => b.i === "b").h)).toBe(24);
+    expect(Math.round(layout.find((b: any) => b.i === "o").h)).toBe(0);
+  });
+});
