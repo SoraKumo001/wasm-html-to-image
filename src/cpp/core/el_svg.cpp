@@ -429,7 +429,13 @@ void el_svg::write_element(std::ostream& os, const element::ptr& el) const {
     if (el->is_text()) {
         string text;
         el->get_text(text);
-        os << text;
+        // the parser has decoded entities; XML needs them back, or "<<x>>" ends the whole document
+        for (char c : text) {
+            if (c == '&') os << "&amp;";
+            else if (c == '<') os << "&lt;";
+            else if (c == '>') os << "&gt;";
+            else os << c;
+        }
         return;
     }
     if (el->is_comment()) return;

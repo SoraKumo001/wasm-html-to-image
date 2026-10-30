@@ -1613,6 +1613,17 @@ describe("regression: layout and paint probes", () => {
     expect(word).toBeGreaterThan(400);
     expect(word).toBeGreaterThan(boxes * 1.5);
   });
+  it("inline SVG text with &lt; and &amp; does not break the drawing", async () => {
+    // The parser decodes entities; writing the text back unescaped made "<<x>>" end the XML and dropped the whole SVG.
+    const { img } = await renderPng(
+      `<svg width="200" height="40"><rect x="0" y="0" width="200" height="40" fill="#000"/><text x="5" y="25" font-size="16" fill="#fff">&lt;&lt;a&gt;&gt; &amp; b</text></svg>`,
+      200,
+      40,
+    );
+    let dark = 0;
+    for (let i = 0; i < img.data.length; i += 4) if (img.data[i] < 128) dark++;
+    expect(dark).toBeGreaterThan(5000);
+  });
   it("inline SVG <text> is drawn (needs a font manager that knows Satoru's fonts)", async () => {
     const { img } = await renderPng(
       `<svg width="200" height="40"><text x="5" y="25" font-size="16" fill="#000">Hello 世田谷区</text></svg>`,

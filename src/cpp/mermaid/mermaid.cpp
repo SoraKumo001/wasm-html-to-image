@@ -1,5 +1,6 @@
 #include "mermaid/mermaid.h"
 
+#include "mermaid/classdiagram.h"
 #include "mermaid/flowchart.h"
 #include "mermaid/mermaid_internal.h"
 #include "mermaid/sequence.h"
@@ -53,6 +54,7 @@ bool render(const std::string& source, const Options& options, std::string& svg,
     }
     if (keyword == "graph" || keyword == "flowchart" || keyword == "flowchart-elk") return render_flowchart(source, options, svg, error);
     if (keyword == "stateDiagram" || keyword == "stateDiagram-v2") return render_state(source, options, svg, error);
+    if (keyword == "classDiagram" || keyword == "classDiagram-v2") return render_class(source, options, svg, error);
     if (keyword == "sequenceDiagram") return render_sequence(source, options, svg, error);
     error = keyword.empty() ? "empty diagram" : "unsupported diagram type: " + keyword;
     return false;

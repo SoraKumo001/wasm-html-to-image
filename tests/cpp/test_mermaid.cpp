@@ -197,6 +197,23 @@ int main() {
         check(!render("stateDiagram-v2", e1, e2), "state/error_empty");
     }
 
+    // --- class diagrams ---
+    {
+        std::string s = svg_of("classDiagram\nclass Animal {\n  +String name\n  +eat() void\n}\nAnimal <|-- Dog\nDog : +bark()");
+        check(count(s, "class=\"node\"") == 2, "class/nodes");
+        check(has(s, ">+String name<") && has(s, ">+eat() void<") && has(s, ">+bark()<"), "class/members");
+        check(count(s, "class=\"edge\"") == 1 && has(s, "<polygon"), "class/inheritance_triangle");
+        check(has(svg_of("classDiagram\nA *-- B"), "<polygon") && has(svg_of("classDiagram\nA o-- B"), "<polygon"), "class/diamonds");
+        check(has(svg_of("classDiagram\nA ..> B"), "stroke-dasharray=\"5 4\""), "class/dashed");
+        check(has(svg_of("classDiagram\nA \"1\" --> \"*\" B : owns"), ">owns<") && has(svg_of("classDiagram\nA \"1\" --> \"*\" B"), ">*<"), "class/label_and_cardinality");
+        check(has(svg_of("classDiagram\nclass I\n<<interface>> I"), ">&lt;&lt;interface&gt;&gt;<"), "class/annotation");
+        check(has(svg_of("classDiagram\nA --|> B"), "<polygon"), "class/marker_at_end");
+        check(has(svg_of("classDiagram\nclass \xe6\x97\xa5\xe6\x9c\xac"), ">\xe6\x97\xa5\xe6\x9c\xac<"), "class/cjk");
+        std::string e1, e2;
+        check(!render("classDiagram\nclass A {\n+x", e1, e2), "class/error_unclosed");
+        check(!render("classDiagram\nnonsense here", e1, e2), "class/error_unrecognised");
+    }
+
     std::printf("----\n%d passed, %d failed\n", g_pass, g_fail);
     return g_fail == 0 ? 0 : 1;
 }
