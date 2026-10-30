@@ -103,3 +103,18 @@ radar-beta
   curve y["Bob"]{3, 3, 5, 4, 2}
   max 5
 ```
+
+## アーキテクチャ図
+
+```mermaid
+architecture-beta
+  group api(cloud)[API]
+  service db(database)[Database] in api
+  service disk(disk)[Storage] in api
+  service server(server)[Server] in api
+  service gw(internet)[Gateway]
+
+  gw:R --> L:server
+  server:R -- L:db
+  server:B -- T:disk
+```

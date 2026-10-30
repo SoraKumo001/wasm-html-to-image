@@ -213,6 +213,7 @@ graph LR
 | Sankey | `sankey-beta` |
 | Requirement | `requirementDiagram` |
 | Block | `block-beta` (nested blocks are not supported) |
+| Architecture | `architecture-beta` |
 | Treemap | `treemap-beta` |
 | Radar | `radar-beta` |
 | Version banner | `info` |

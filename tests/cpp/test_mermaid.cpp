@@ -127,6 +127,19 @@ int main() {
         check(has(svg_of("info\nshowInfo"), ">v11<"), "info/banner");
     }
 
+    // --- architecture ---
+    {
+        std::string ar = svg_of("architecture-beta\ngroup api(cloud)[API]\nservice db(database)[Database] in api\nservice server(server)[Server] in api\nservice gw(internet)[Gateway]\njunction j\ndb:L -- R:server\nserver:T -- B:j\ngw:R --> L:server");
+        check(count(ar, "class=\"node\"") == 4 && count(ar, "class=\"group\"") == 1 && count(ar, "class=\"edge\"") == 3, "architecture/items");
+        check(has(ar, ">Database<") && has(ar, ">API<"), "architecture/labels");
+        check(count(ar, "<polygon") == 1, "architecture/one_arrow");
+        check(!has(svg_of("architecture-beta\nservice a[A]\nservice b[B]\nservice c[C]\na:R -- L:b\nb:B -- T:c\nc{group}:R -- L:a"), "ERROR"), "architecture/group_flag_parses");
+        check(has(svg_of("architecture-beta\nservice a[A]\na:R -- L:b"), "ERROR"), "architecture/unknown_service");
+        check(has(svg_of("architecture-beta\nservice a[A] in nope"), "ERROR"), "architecture/unknown_group");
+        check(has(svg_of("architecture-beta\nservice a[A]\nservice b[B]\na:X -- L:b"), "ERROR"), "architecture/bad_side");
+        check(has(svg_of("architecture-beta\nservice a[A]\nservice b[B]"), "class=\"node\""), "architecture/no_edges");
+    }
+
     // --- errors ---
     {
         std::string svg, err;

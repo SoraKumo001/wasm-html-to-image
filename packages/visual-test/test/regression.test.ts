@@ -1620,6 +1620,7 @@ describe("regression: layout and paint probes", () => {
       treemap: 'treemap-beta\n"A"\n  "a1": 10\n  "a2": 30\n"B": 20',
       radar: 'radar-beta\n  axis a, b, c\n  curve x{1, 2, 3}',
       info: "info\nshowInfo",
+      architecture: "architecture-beta\n  service a(server)[A]\n  service b(database)[B]\n  a:R -- L:b",
     };
     for (const [name, src] of Object.entries(sources)) {
       const { img } = await renderPng(`<div style="color:#000"><div class="mermaid">${src}</div></div>`, 400, 360);

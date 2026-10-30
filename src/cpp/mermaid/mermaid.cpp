@@ -22,6 +22,7 @@
 #include "mermaid/treemap.h"
 #include "mermaid/radar.h"
 #include "mermaid/info.h"
+#include "mermaid/architecture.h"
 #include "mermaid/timeline.h"
 #include "mermaid/xychart.h"
 
@@ -176,6 +177,7 @@ bool render(const std::string& input, const Options& base, std::string& svg, std
     if (keyword == "treemap-beta" || keyword == "treemap") return render_treemap(source, options, svg, error);
     if (keyword == "radar-beta" || keyword == "radar") return render_radar(source, options, svg, error);
     if (keyword == "info") return render_info(source, options, svg, error);
+    if (keyword == "architecture-beta" || keyword == "architecture") return render_architecture(source, options, svg, error);
     if (keyword == "timeline") return render_timeline(source, options, svg, error);
     if (keyword == "mindmap")return render_mindmap(source, options, svg, error);
     if (keyword == "gantt")return render_gantt(source, options, svg, error);
