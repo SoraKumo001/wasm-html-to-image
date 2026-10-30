@@ -55,11 +55,10 @@ set(COMMON_LINK_OPTIONS
     "-sALLOW_MEMORY_GROWTH=1"
 )
 
-# Development build (`pnpm wasm:build --dev`): no ThinLTO and a light link, so a one-line change relinks in
+# Development build (`pnpm wasm:build --dev`): no ThinLTO, so a one-line change relinks in
 # seconds instead of minutes. The binary is larger and slower; release builds never set this.
 option(WASM_DEV_BUILD "Skip link-time optimisation for fast development builds" OFF)
 if(WASM_DEV_BUILD)
     list(REMOVE_ITEM COMMON_COMPILE_OPTIONS "-flto=thin")
-    list(REMOVE_ITEM COMMON_LINK_OPTIONS "-flto=thin" "-O3")
-    list(APPEND COMMON_LINK_OPTIONS "-O1")
+    list(REMOVE_ITEM COMMON_LINK_OPTIONS "-flto=thin")
 endif()

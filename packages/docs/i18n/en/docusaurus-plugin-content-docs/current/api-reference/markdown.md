@@ -14,7 +14,7 @@ It is implemented in pure JavaScript with no Node.js platform dependencies, runn
 ## Key Capabilities
 
 - **`markdownToDocument()` & `markdownToHtml()`**: Produce HTML and complete PDF render options (headers, footers, metadata).
-- **Template System**: 5 built-in templates (`default`, `report`, `book`, `paper`, `compact`) for ready-to-use professional styling without writing CSS.
+- **Template System**: 6 built-in templates (`default`, `report`, `proposal`, `book`, `paper`, `compact`) for ready-to-use professional styling without writing CSS.
 - **Automatic Table of Contents (TOC)**: Generates a table of contents with exact destination page numbers filled in during PDF pagination.
 - **Automatic PDF Bookmarks (Outline)**: Creates nested PDF document outlines from `h1`–`h6` headings.
 - **Smart Page Break Handling**: Avoids orphan headings (`break-after: avoid`) and prevents breaking code blocks and tables across page boundaries.
@@ -101,6 +101,7 @@ Templates configure the document's typography, page size, margins, running heade
 | :--- | :--- | :--- |
 | `default` | Web images, quick PDFs | Clean GitHub-like style |
 | `report` | Business reports, specs | A4, cover page, table of contents, accent colour, title in header, author and `n / N` in footer |
+| `proposal` | Proposals, quotations | A4, cover, accent bars on sections, tinted table headers, call-out quotes, title and `n / N` in the footer |
 | `book` | Books, long-form reading | A5, serif, justified text, each chapter (`h1`) starts on a new page, cover, TOC, page numbers |
 | `paper` | Technical papers, essays | A4, serif, justified text, tight line-height, page number in footer |
 | `compact` | Notes, cheat sheets | 12px font, 12mm margins, no cover or TOC |
