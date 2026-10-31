@@ -8,6 +8,7 @@
 
 #include "mermaid/frame_clear.h"
 #include "mermaid/layered.h"
+#include "mermaid/swimlane.h"
 
 namespace mermaid {
 
@@ -56,6 +57,7 @@ struct Graph {
     std::vector<std::pair<int, std::string>> class_use;  // node, class name
     std::map<int, Style> link_styles;                    // edge index, -1 = default
     std::map<int, std::string> link_stroke;
+    bool swimlane = false;  // `swimlane-beta`: the top-level subgraphs are lanes
 };
 
 bool is_id_char(unsigned char c) { return std::isalnum(c) || c == '_' || c >= 0x80; }
@@ -423,8 +425,65 @@ struct Parser {
     }
 };
 
+/// An `agentflow-beta` statement as flowchart syntax: `flow` is a subgraph, `global` a block that draws nothing, `connector` a node,
+/// `@{ shape: ... }` picks the node's shape, and a metadata line alone (`id@{ ... }`) says nothing the picture needs.
+/// An empty result means there is nothing to parse.
+std::string agentflow_statement(const std::string& line, std::vector<char>& blocks) {
+    std::string s = trim(line);
+    auto starts_with = [&](const char* kw) {
+        size_t l = std::strlen(kw);
+        return s.compare(0, l, kw) == 0 && s.size() > l && s[l] == ' ';
+    };
+    if (starts_with("flow")) {
+        blocks.push_back('f');
+        return "subgraph " + trim(s.substr(5));
+    }
+    if (s == "global") {
+        blocks.push_back('g');
+        return "";
+    }
+    if (s == "end") {
+        char top = blocks.empty() ? 'f' : blocks.back();
+        if (!blocks.empty()) blocks.pop_back();
+        return top == 'g' ? "" : "end";
+    }
+    if (starts_with("connector")) s = trim(s.substr(10));
+    size_t meta = s.find("@{");
+    if (meta == std::string::npos) return s;
+    std::string head = trim(s.substr(0, meta)), body = s.substr(meta + 2);
+    size_t close = body.rfind('}');
+    body = close == std::string::npos ? body : body.substr(0, close);
+    if (head.find_first_of("[({") == std::string::npos) return "";  // `id@{ ... }` on its own line
+    // the shape key, then the node written in the flowchart shape that matches it
+    std::string shape;
+    size_t at = body.find("shape:");
+    if (at != std::string::npos) {
+        size_t end = body.find(',', at);
+        shape = trim(body.substr(at + 6, end == std::string::npos ? std::string::npos : end - at - 6));
+        if (shape.size() >= 2 && shape.front() == '"' && shape.back() == '"') shape = shape.substr(1, shape.size() - 2);
+    }
+    size_t open = head.find('[');
+    if (open == std::string::npos || head.back() != ']') return head;
+    std::string id = head.substr(0, open), label = head.substr(open + 1, head.size() - open - 2);
+    if (shape == "task" || shape == "roundedRect" || shape == "rounded") return id + "(" + label + ")";
+    if (shape == "tool" || shape == "subroutine" || shape == "fr-rect") return id + "[[" + label + "]]";
+    if (shape == "input" || shape == "lean-right") {  // the parallelogram form takes the text bare
+        std::string bare = trim(label);
+        if (bare.size() >= 2 && bare.front() == '"' && bare.back() == '"') bare = bare.substr(1, bare.size() - 2);
+        return id + "[/" + bare + "/]";
+    }
+    if (shape == "decision" || shape == "diamond") return id + "{" + label + "}";
+    if (shape == "action" || shape == "hexagon") return id + "{{" + label + "}}";
+    if (shape == "stadium" || shape == "terminal") return id + "([" + label + "])";
+    if (shape == "circle") return id + "((" + label + "))";
+    if (shape == "cylinder" || shape == "database") return id + "[(" + label + ")]";
+    return head;
+}
+
 bool parse(const std::string& source, Graph& g, std::string& error) {
     Parser p;
+    bool agentflow = false;
+    std::vector<char> blocks;
     std::vector<std::string> lines;
     std::string cur;
     bool in_quote = false;
@@ -448,10 +507,12 @@ bool parse(const std::string& source, Graph& g, std::string& error) {
         if (!header) {
             size_t sp = line.find(' ');
             std::string kw = line.substr(0, sp);
-            if (kw != "graph" && kw != "flowchart" && kw != "flowchart-elk") {
+            if (kw != "graph" && kw != "flowchart" && kw != "flowchart-elk" && kw != "swimlane-beta" && kw != "agentflow-beta") {
                 error = "not a flowchart: " + kw;
                 return false;
             }
+            p.g.swimlane = kw == "swimlane-beta";
+            agentflow = kw == "agentflow-beta";
             std::string d = sp == std::string::npos ? "TD" : trim(line.substr(sp + 1));
             if (d == "LR") p.g.dir = Direction::LR;
             else if (d == "RL") p.g.dir = Direction::RL;
@@ -459,6 +520,10 @@ bool parse(const std::string& source, Graph& g, std::string& error) {
             else p.g.dir = Direction::TD;
             header = true;
             continue;
+        }
+        if (agentflow) {
+            line = agentflow_statement(line, blocks);
+            if (line.empty()) continue;
         }
         if (!p.parse_statement(line)) {
             error = "cannot parse: " + line;
@@ -479,6 +544,51 @@ bool parse(const std::string& source, Graph& g, std::string& error) {
         if (dst.color.empty()) dst.color = st.color;
         if (dst.stroke_width.empty()) dst.stroke_width = st.stroke_width;
         if (dst.dash.empty()) dst.dash = st.dash;
+    }
+    if (agentflow) {
+        // An edge to a container (`researcher --> designer`) made a node of that name: send it to the container's first member
+        // (as a target) or last member (as a source) instead, and drop the placeholder.
+        Graph& gr = p.g;
+        const int n = (int)gr.nodes.size();
+        std::vector<int> first(n, -1), last(n, -1);
+        std::vector<char> phantom(n, 0);
+        for (size_t gi = 0; gi < gr.groups.size(); gi++) {
+            auto it = gr.index.find(gr.groups[gi].id);
+            if (it == gr.index.end()) continue;
+            int ph = it->second;
+            for (int v = 0; v < n; v++) {
+                if (v == ph) continue;
+                for (int a = gr.nodes[v].group; a >= 0; a = gr.groups[a].parent)
+                    if (a == (int)gi) {
+                        if (first[ph] < 0) first[ph] = v;
+                        last[ph] = v;
+                        break;
+                    }
+            }
+            if (first[ph] >= 0) phantom[ph] = 1;
+        }
+        std::vector<int> remap(n, -1);
+        int kept = 0;
+        for (int v = 0; v < n; v++)
+            if (!phantom[v]) remap[v] = kept++;
+        for (Edge& e : gr.edges) {
+            if (phantom[e.from]) e.from = last[e.from];
+            if (phantom[e.to]) e.to = first[e.to];
+            e.from = remap[e.from];
+            e.to = remap[e.to];
+        }
+        std::vector<Node> nodes;
+        for (int v = 0; v < n; v++)
+            if (!phantom[v]) nodes.push_back(gr.nodes[v]);
+        gr.nodes = std::move(nodes);
+        gr.index.clear();
+        for (size_t v = 0; v < gr.nodes.size(); v++) gr.index[gr.nodes[v].id] = (int)v;
+        for (Group& grp : gr.groups) {
+            std::vector<int> members;
+            for (int v : grp.nodes)
+                if (v >= 0 && v < n && remap[v] >= 0) members.push_back(remap[v]);
+            grp.nodes = std::move(members);
+        }
     }
     g = std::move(p.g);
     return true;
@@ -650,7 +760,39 @@ bool render_flowchart(const std::string& source, const Options& options, std::st
     }
     std::vector<int> group_parent;
     for (const Group& gr : g.groups) group_parent.push_back(gr.parent);
-    LayoutResult lay = layout_layered(ln, le, g.dir, group_parent);
+    LayoutResult lay;
+    SwimResult swim;
+    std::vector<std::string> lane_titles;
+    if (g.swimlane) {
+        // a node's lane is the top-level subgraph it sits in; nodes outside any subgraph share a lane of their own at the end
+        std::vector<int> lane_of_group(g.groups.size(), -1);
+        for (size_t gi = 0; gi < g.groups.size(); gi++)
+            if (g.groups[gi].parent < 0) {
+                lane_of_group[gi] = (int)lane_titles.size();
+                lane_titles.push_back(g.groups[gi].title);
+            }
+        std::vector<SwimNode> sn(g.nodes.size());
+        int loose = -1;
+        for (size_t i = 0; i < g.nodes.size(); i++) {
+            sn[i].w = g.nodes[i].w;
+            sn[i].h = g.nodes[i].h;
+            int gi = g.nodes[i].group;
+            while (gi >= 0 && g.groups[gi].parent >= 0) gi = g.groups[gi].parent;
+            if (gi >= 0) {
+                sn[i].lane = lane_of_group[gi];
+            } else {
+                if (loose < 0) {
+                    loose = (int)lane_titles.size();
+                    lane_titles.push_back("");
+                }
+                sn[i].lane = loose;
+            }
+        }
+        swim = layout_swimlane(sn, le, (int)lane_titles.size(), g.dir, 30, 120);
+        lay = swim.lay;
+    } else {
+        lay = layout_layered(ln, le, g.dir, group_parent);
+    }
 
     // subgraph frames around their members (children first so a parent covers them)
     struct Frame {
@@ -674,6 +816,8 @@ bool render_flowchart(const std::string& source, const Options& options, std::st
         int p = g.groups[gi].parent;
         if (p >= 0) grow(frames[p], f.x0, f.y0, f.x1, f.y1);
     }
+    if (g.swimlane)
+        for (Frame& f : frames) f.used = false;  // the lanes are drawn instead of the subgraph frames
     // the drawing's box: the layout plus the frames, with a margin
     double x0 = 0, y0 = 0, x1 = lay.width, y1 = lay.height;
     for (const Frame& f : frames)
@@ -697,7 +841,16 @@ bool render_flowchart(const std::string& source, const Options& options, std::st
         body += "<text x=\"" + num(f.x0 + ox + 12) + "\" y=\"" + num(f.y0 + oy + kHeader / 2 + kGroupFont * 0.35) + "\" font-size=\"" + num(kGroupFont) +
                 "\" font-weight=\"" + std::to_string(kGroupWeight) + "\" font-family=\"" + esc(th.font) + "\" fill=\"" + th.text + "\">" + esc(g.groups[gi].title) + "</text>\n</g>\n";
     }
-    clear_frame_borders(lay.points, lay.label_center, le, frames);
+    for (size_t li = 0; li < swim.lanes.size(); li++) {
+        const SwimLane& lane = swim.lanes[li];
+        double lx = lane.x0 + ox, ly = lane.y0 + oy, lw = lane.x1 - lane.x0, lh = lane.y1 - lane.y0;
+        body += "<g class=\"lane\">\n<rect x=\"" + num(lx) + "\" y=\"" + num(ly) + "\" width=\"" + num(lw) + "\" height=\"" + num(lh) + "\" fill=\"" + th.group_fill + "\" stroke=\"" + th.border + "\" stroke-width=\"1\"/>\n";
+        double hw = swim.lanes_are_columns ? lw : lane.header, hh = swim.lanes_are_columns ? lane.header : lh;
+        body += "<rect x=\"" + num(lx) + "\" y=\"" + num(ly) + "\" width=\"" + num(hw) + "\" height=\"" + num(hh) + "\" fill=\"" + th.cluster_hdr + "\" stroke=\"" + th.border + "\" stroke-width=\"1\"/>\n";
+        centered_text(body, th, split_lines(lane_titles[li]), lx + hw / 2, ly + hh / 2, kGroupFont, kGroupWeight, th.text);
+        body += "</g>\n";
+    }
+    if (!g.swimlane) clear_frame_borders(lay.points, lay.label_center, le, frames);
     // edges
     for (size_t i = 0; i < g.edges.size(); i++) {
         const Edge& e = g.edges[i];

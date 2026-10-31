@@ -127,6 +127,8 @@ target_sources(html_to_image_core PRIVATE
     src/cpp/mermaid/mindmap.cpp
     src/cpp/mermaid/timeline.cpp
     src/cpp/mermaid/treeview.cpp
+    src/cpp/mermaid/swimlane.cpp
+    src/cpp/mermaid/usecase.cpp
     src/cpp/mermaid/eventmodeling.cpp
     src/cpp/mermaid/railroad.cpp
     src/cpp/mermaid/cynefin.cpp

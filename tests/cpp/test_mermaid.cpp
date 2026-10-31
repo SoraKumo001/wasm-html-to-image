@@ -236,6 +236,54 @@ int main() {
         check(has(svg_of("eventmodeling"), "ERROR"), "eventmodeling/empty");
     }
 
+    // --- usecase ---
+    {
+        std::string ex1 = svg_of("usecase-beta\nCustomer --> Login\nactor Customer\nactor Admin(\"Main administrator\")\nLogin(\"Sign in\")\nReport[Generate report]\n\"Reset password\"\nAdmin --> Report");
+        check(!has(ex1, "ERROR") && count(ex1, "class=\"actor\"") == 2 && count(ex1, "<ellipse") == 2 && has(ex1, ">Main administrator<") && has(ex1, ">Sign in<") && has(ex1, ">Generate report<") && has(ex1, ">Reset password<"), "usecase/actors_and_use_cases");
+        check(count(ex1, "class=\"usecase\"") == 3 && count(ex1, "class=\"edge\"") == 2, "usecase/shapes_and_edges");
+        std::string ex2 = svg_of("usecase-beta\nactor Admin\nactor Person\nCheckout\nPayment\nApplyCoupon\nAdmin --|> Person\nCheckout ..> : include Payment\nApplyCoupon ..> : extend Checkout\nApplyCoupon --|> Checkout");
+        const std::string lq = "\xC2\xAB", rq = "\xC2\xBB";  // the guillemets of a stereotype
+        check(!has(ex2, "ERROR") && has(ex2, ">" + lq + "include" + rq + "<") && has(ex2, ">" + lq + "extend" + rq + "<") && count(ex2, "class=\"edge\"") == 4, "usecase/include_extend_generalization");
+        check(count(ex2, "stroke-dasharray=\"5 4\"") == 2, "usecase/dashed_relations");
+        std::string ex3 = svg_of("usecase-beta\ndirection LR\naccTitle: Online ordering use cases\naccDescr {\n  A customer places an order through the storefront.\n  Staff review the order and inspect its data.\n}\nactor Customer(\"Customer\")\nactor Staff(\"Order staff\")@{ type: hollow, business: true } <<Employee>>\nsystemBoundary ordering[\"Ordering System\"]@{ type: package }:::system\n  Browse(\"Browse products\")\n  Checkout(\"Checkout\") <<Core>>:::critical\n  Payment(\"Process payment\")\n  Review[Review order]\nend\njson OrderData@{\n  \"status\": \"pending\",\n  \"items\": [{ \"name\": \"Book\", \"quantity\": 1 }],\n  \"total\": 29.95\n}:::data\nnote for Checkout \"`Validates the **cart** before payment`\"\nCustomer starts@-- \"places order\" ---> Checkout\nCustomer --> Browse\nCheckout pays@..> : include Payment\nStaff --> Review\nReview --> OrderData\nclassDef system stroke:#c8a02a,stroke-width:2px\nclassDef critical stroke:#c33,stroke-width:3px\nclassDef data stroke:#3572a5\nstarts@{ animation: fast }\nstyle pays stroke:#6b46c1,stroke-width:2px");
+        check(!has(ex3, "ERROR") && has(ex3, ">Ordering System<") && has(ex3, ">" + lq + "Core" + rq + "<") && has(ex3, ">" + lq + "Employee" + rq + "<") && has(ex3, ">places order<"), "usecase/complete_example");
+        check(has(ex3, ">items[0].name<") && has(ex3, ">Book<") && has(ex3, ">29.95<") && count(ex3, "class=\"json\"") == 1, "usecase/json_table");
+        check(has(ex3, "stroke=\"#c33\"") && has(ex3, "stroke=\"#6b46c1\"") && has(ex3, "stroke=\"#c8a02a\""), "usecase/styles");
+        check(count(ex3, "class=\"note\"") == 1 && has(ex3, "Validates the **cart** before payment") && count(ex3, "class=\"note-link\"") == 1, "usecase/note");
+        check(count(svg_of("usecase-beta\nA --o B\nB x-- C\nC <-- D\nD -- E"), "<circle") >= 1, "usecase/end_marks");
+        check(has(svg_of("usecase-beta\nactor A\nsystemBoundary b\n  actor B\n  systemBoundary c\n  end\nend"), "ERROR"), "usecase/nested_boundary");
+        check(has(svg_of("usecase-beta\nsystemBoundary b\n  A"), "ERROR"), "usecase/unclosed_boundary");
+        check(has(svg_of("usecase-beta\nactor A@{ fillColor: red }"), "ERROR"), "usecase/unknown_actor_key");
+        check(has(svg_of("usecase-beta\nA --> B -> C"), "ERROR"), "usecase/not_a_relationship");
+        check(has(svg_of("usecase-beta"), "ERROR"), "usecase/empty");
+    }
+
+    // --- swimlanes, agentflow ---
+    {
+        std::string sw = svg_of("swimlane-beta LR\n  subgraph Customer\n    request[Request service]\n    receive[Receive update]\n  end\n\n  subgraph Support\n    triage[Triage request]\n    answer[Send answer]\n  end\n\n  subgraph Engineering\n    investigate[Investigate issue]\n    fix[Prepare fix]\n  end\n\n  request --> triage\n  triage -->|Known issue| answer\n  triage -->|Needs code change| investigate\n  investigate --> fix --> answer\n  answer --> receive");
+        check(!has(sw, "ERROR") && count(sw, "class=\"lane\"") == 3 && count(sw, "class=\"edge\"") == 6, "swimlane/lanes_and_edges");
+        check(has(sw, ">Customer<") && has(sw, ">Support<") && has(sw, ">Engineering<") && has(sw, ">Known issue<") && has(sw, ">Prepare fix<"), "swimlane/labels");
+        check(!has(sw, "class=\"subgraph\""), "swimlane/lanes_replace_frames");
+        std::string tb = svg_of("swimlane-beta\n  subgraph ops [Operations]\n    intake[Receive request]\n    plan[Plan work]\n  end\n  subgraph legal [Legal]\n    review[Review contract]\n  end\n  intake --> plan --> review\n  classDef attention fill:#fff2cc,stroke:#d6a500,color:#111;\n  class review attention;");
+        check(!has(tb, "ERROR") && count(tb, "class=\"lane\"") == 2 && has(tb, ">Operations<") && has(tb, "fill=\"#fff2cc\""), "swimlane/top_down_and_styles");
+        std::string shapes = svg_of("swimlane-beta LR\n  subgraph Intake\n    start([Start])\n    task[Do work]\n    fix[Fix issues]\n  end\n  subgraph Review\n    decision{Ready?}\n  end\n  subgraph Complete\n    done((Done))\n  end\n  start --> task --> decision\n  decision -->|Yes| done\n  decision -->|No| fix\n  fix --> task");
+        check(!has(shapes, "ERROR") && count(shapes, "class=\"lane\"") == 3 && count(shapes, "<polygon") >= 1, "swimlane/shapes_and_cycle");
+        check(has(svg_of("swimlane-beta LR"), "ERROR"), "swimlane/empty");
+        std::string loose = svg_of("swimlane-beta\n  subgraph A\n    a1\n  end\n  a1 --> outside");
+        check(count(loose, "class=\"lane\"") == 2, "swimlane/nodes_outside_a_lane");
+
+        std::string ag = svg_of("agentflow-beta TB\n  flow reviewer[\"Review Agent\"]\n    changes[\"Gather changes\"]@{ shape: input }\n    analyse[\"Analyse diff\"]@{ shape: task }\n    lint[\"run_linter\"]@{ shape: tool }\n    ok[\"Clean?\"]@{ shape: decision }\n\n    changes --> analyse --> lint --> ok\n  end");
+        check(!has(ag, "ERROR") && has(ag, ">Review Agent<") && has(ag, ">Gather changes<") && has(ag, ">run_linter<") && has(ag, ">Clean?<") && count(ag, "class=\"edge\"") == 3, "agentflow/flow_and_shapes");
+        check(count(ag, "class=\"subgraph\"") == 1 && count(ag, "<polygon") >= 2, "agentflow/container_and_shape_kinds");
+        std::string ed = svg_of("agentflow-beta TB\n  check[\"Tests pass?\"]@{ shape: decision }\n  ship[\"Ship it\"]@{ shape: action }\n  fix[\"Fix the build\"]@{ shape: task }\n  logs[\"Build logs\"]@{ shape: refdoc }\n\n  check -- yes --> ship\n  check -- no --> fix\n  fix --x check\n  fix -.- logs");
+        check(!has(ed, "ERROR") && has(ed, ">yes<") && has(ed, ">no<") && count(ed, "class=\"edge\"") == 4, "agentflow/edges");
+        std::string big = svg_of("agentflow-beta TB\n  connector llm[\"LLM API\"]\n  llm@{ protocol: \"http\", endpoint: \"https://api.example.com/chat\" }\n\n  flow coffee_team[\"Coffee Team\"]\n    city[\"city\"]@{ shape: input, value: \"Stockholm\" }\n\n    flow researcher[\"Researcher\"]\n      research[\"research_location\"]@{ shape: tool, params: \"city :: String\", returns: \"Report\" }\n      write[\"write_copy\"]@{ shape: tool, connectorRef: \"llm.chat\", returns: \"CoffeeCopy\" }\n      city --> research --> write\n    end\n    researcher@{ instruction: \"Research the city and draft English coffee copy citing sources.\" }\n\n    flow designer[\"Designer\"]\n      render[\"generate_html\"]@{ shape: tool, connectorRef: \"llm.chat\", returns: \"String\" }\n      brand[\"Nordic Brand Guide\"]@{ shape: refdoc }\n      render -.- brand\n    end\n\n    researcher --> designer\n  end");
+        check(!has(big, "ERROR") && has(big, ">LLM API<") && has(big, ">Coffee Team<") && has(big, ">Researcher<") && has(big, ">Designer<") && has(big, ">generate_html<"), "agentflow/nested_flows_and_connector");
+        std::string global = svg_of("agentflow-beta LR\n  global\n    a[\"A\"]\n    b[\"B\"]\n  end\n  a --> b");
+        check(!has(global, "ERROR") && count(global, "class=\"subgraph\"") == 0 && has(global, ">A<"), "agentflow/global_draws_no_frame");
+        check(has(svg_of("agentflow-beta\n  a --> "), "ERROR") || count(svg_of("agentflow-beta\n  a --> "), "class=\"node\"") >= 1, "agentflow/incomplete_edge_is_handled");
+    }
+
     // --- treeView, ishikawa, venn ---
     {
         std::string tv = svg_of("treeView-beta\n  \"packages\"\n    \"core\"\n      \"src\"\n    \"cli\"\n  \"README.md\"");

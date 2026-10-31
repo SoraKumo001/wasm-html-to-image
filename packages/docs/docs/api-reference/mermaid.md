@@ -203,6 +203,9 @@ CLI では、同じ内容が標準エラー出力に出ます。図が読めな�
 | クネヴィンフレームワーク | `cynefin-beta` |
 | 構文図（鉄道図） | `railroad-ebnf-beta` `railroad-abnf-beta` `railroad-peg-beta` `railroad-beta` |
 | イベントモデリング | `eventmodeling` |
+| ユースケース図 | `usecase-beta` |
+| スイムレーン図 | `swimlane-beta` |
+| エージェントフロー図 | `agentflow-beta` |
 | バージョン表示 | `info` |
 
 未対応の図種（`zenuml` など）は、図の位置にエラー枠が表示されます。

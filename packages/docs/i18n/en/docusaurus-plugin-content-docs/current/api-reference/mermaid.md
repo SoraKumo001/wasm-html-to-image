@@ -203,6 +203,9 @@ The CLI prints the same on stderr. When a diagram cannot be read it still writes
 | Cynefin framework | `cynefin-beta` |
 | Railroad diagram | `railroad-ebnf-beta` `railroad-abnf-beta` `railroad-peg-beta` `railroad-beta` |
 | Event modeling | `eventmodeling` |
+| Use case diagram | `usecase-beta` |
+| Swimlane diagram | `swimlane-beta` |
+| Agent flow diagram | `agentflow-beta` |
 | Version banner | `info` |
 
 An unsupported type (`zenuml`, ...) shows as an error box where the diagram would be.

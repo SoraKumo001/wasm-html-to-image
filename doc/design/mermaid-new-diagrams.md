@@ -1,6 +1,6 @@
 # Mermaid: 未実装の図の実装計画
 
-状態: wardley、cynefin、railroad、eventmodeling は実装済み。swimlanes、usecase、agentflow は未完
+状態: 7種すべて実装済み(未対応は zenuml のみ)
 
 ## 対象
 
@@ -41,3 +41,6 @@
 
 - 実装済み: wardley、cynefin、railroad(4方言)、eventmodeling。公式ページの例はすべてコーパスに入れ、WASM 経由でも描ける(コーパスと playground サンプルのテスト 159 件が通る)。
 - 見つけた不具合: Skia の SVG は、`stroke-dasharray` 付きの `<line>` を「実線 + 黒い破線」で描く。`<path>` なら正しく描く。`dashed_line()`(`mermaid_internal.h`)を作り、gitgraph と journey の破線もこれに直した。
+- 実装済み(続き): usecase(アクター、ユースケース、システム境界、関連・include・extend・汎化、注、JSON 表、`classDef` / `style`)、swimlanes(flowchart の構文。トップレベルの `subgraph` を帯にして、順位ごとに置く `swimlane.cpp`)、agentflow(flowchart の構文に翻訳: `flow` は subgraph、`global` は枠なし、`@{ shape: ... }` は形、コンテナへの辺は最初・最後のメンバーへ)。
+- 検証: ホストテスト 448 件、visual-test 975 件(コーパス、playground サンプルを含む)が通る。
+- まだ公式と合わせていないこと: 色の ΔE(既存の図と同じ方法で、後から測る)、公式が書いていない細部(コメント、エスケープ、未宣言の端点)。agentflow の辺のメタデータ(`curve`、`animate`)と、usecase の `icon`、`colorScheme: rotate` は読み飛ばす。
