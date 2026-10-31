@@ -115,6 +115,12 @@ int main() {
         check(w > 100 && w < 1500, "layout/groups_ordered_alike_in_every_row");
     }
     {
+        std::string worded = svg_of("erDiagram\n  A one to many B : has\n  A zero or more optionally to only one C");
+        check(count(worded, "class=\"node\"") == 3 && count(worded, "class=\"edge\"") == 2, "er/worded_relationships");
+        std::string seq = svg_of("sequenceDiagram\n  A->>B: hi\n  A->>A: self\n  Note over A: n");
+        check(count(seq, "class=\"lifeline\"") == 2 && count(seq, "class=\"message\"") == 2, "sequence/countable_marks");
+    }
+    {
         std::string lab = svg_of("flowchart TD\n  A --\"Yes\"--> B\n  A --Maybe--> C\n  A -.near.-> D\n  A -- \"spaced\" --> E");
         check(!has(lab, "ERROR") && has(lab, ">Yes<") && has(lab, ">Maybe<") && has(lab, ">near<") && has(lab, ">spaced<") && !has(lab, "&quot;"), "edge/compact_and_quoted_labels");
     }
@@ -505,12 +511,12 @@ int main() {
         };
         struct Frozen { const char* theme; unsigned long long hash[6]; };
         const Frozen frozen[] = {
-            {"nord", {11243782259192426327ull, 3651886260605628939ull, 7440896151333172490ull, 3905288298567241074ull, 175437596168651868ull, 9751055940604640942ull}},
-            {"dracula", {9173676882967520079ull, 6562885363073828054ull, 7115237374810826030ull, 1716523713338679796ull, 15250715627772429097ull, 15813959643653013916ull}},
-            {"solarized-light", {17722543342328864403ull, 13630062689254594252ull, 10925943474433918076ull, 14190747636729263506ull, 1066096645479023495ull, 10785765333670782637ull}},
-            {"solarized-dark", {12961002802899193158ull, 4947546758206853888ull, 13152149386711216853ull, 16079790508120439295ull, 16433683437209907014ull, 2925557938494227877ull}},
-            {"rose-pine", {44304171628481796ull, 10217296344170784352ull, 10277657207745800466ull, 1101500477800157097ull, 5157649815519468525ull, 14185117963999280394ull}},
-            {"sepia", {9767951103982456000ull, 6016422664941835242ull, 17433353230813544808ull, 8050788171094520827ull, 14193181199171495114ull, 13175144670565691982ull}},
+            {"nord", {11243782259192426327ull, 2354812876712625435ull, 7440896151333172490ull, 3905288298567241074ull, 175437596168651868ull, 9751055940604640942ull}},
+            {"dracula", {9173676882967520079ull, 2790671306747882490ull, 7115237374810826030ull, 1716523713338679796ull, 15250715627772429097ull, 15813959643653013916ull}},
+            {"solarized-light", {17722543342328864403ull, 258502525475343896ull, 10925943474433918076ull, 14190747636729263506ull, 1066096645479023495ull, 10785765333670782637ull}},
+            {"solarized-dark", {12961002802899193158ull, 8039991062857688804ull, 13152149386711216853ull, 16079790508120439295ull, 16433683437209907014ull, 2925557938494227877ull}},
+            {"rose-pine", {44304171628481796ull, 5401919379311402362ull, 10277657207745800466ull, 1101500477800157097ull, 5157649815519468525ull, 14185117963999280394ull}},
+            {"sepia", {9767951103982456000ull, 17699003364794791736ull, 17433353230813544808ull, 8050788171094520827ull, 14193181199171495114ull, 13175144670565691982ull}},
         };
         for (const Frozen& f : frozen) {
             for (int d = 0; d < 6; d++) {

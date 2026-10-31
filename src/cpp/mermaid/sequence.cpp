@@ -393,7 +393,7 @@ bool render_sequence(const std::string& source, const Options& options, std::str
                 if (e.a == e.b) {
                     double x = cx[e.a], top = y + 8, bottom = top + 22, lw = tx.block_width(lines, kMsgFont, 400);
                     touch(x, x + 40 + lw);
-                    msgs += "<polyline points=\"" + num(x) + "," + num(top) + " " + num(x + 30) + "," + num(top) + " " + num(x + 30) + "," +
+                    msgs += "<polyline class=\"message\" points=\"" + num(x) + "," + num(top) + " " + num(x + 30) + "," + num(top) + " " + num(x + 30) + "," +
                             num(bottom) + " " + num(x + 7) + "," + num(bottom) + "\" fill=\"none\" stroke=\"" + th.line + "\" stroke-width=\"1.5\"" +
                             dash + "/>\n";
                     msgs += "<polygon points=\"" + num(x) + "," + num(bottom) + " " + num(x + 8) + "," + num(bottom - 4) + " " + num(x + 8) +
@@ -406,7 +406,7 @@ bool render_sequence(const std::string& source, const Options& options, std::str
                     yline = y + labelh + 8;
                     touch(std::min(x1, x2), std::max(x1, x2));
                     double stop = e.head == kArrow ? x2 - dir * metrics::kArrowW : x2;
-                    msgs += line_el(x1, yline, stop, yline, th.line, 1.5, dash.c_str());
+                    msgs += line_el(x1, yline, stop, yline, th.line, 1.5, (" class=\"message\"" + dash).c_str());
                     if (e.head == kArrow) {
                         msgs += "<polygon points=\"" + num(x2) + "," + num(yline) + " " + num(x2 - dir * metrics::kArrowW) + "," +
                                 num(yline - metrics::kArrowH) + " " + num(x2 - dir * metrics::kArrowW) + "," + num(yline + metrics::kArrowH) +
@@ -491,7 +491,7 @@ bool render_sequence(const std::string& source, const Options& options, std::str
 
     std::string lifelines, bars_svg, boxes;
     for (size_t k = 0; k < n; k++) {
-        lifelines += line_el(cx[k], hh, cx[k], bottom, th.border, 1, " stroke-dasharray=\"4 4\"");
+        lifelines += line_el(cx[k], hh, cx[k], bottom, th.border, 1, " class=\"lifeline\" stroke-dasharray=\"4 4\"");
         for (double top : {0.0, bottom}) {
             boxes += rect(cx[k] - w[k] / 2, top, w[k], hh, th.surface, th.actor_border, 4);
             centered_text(boxes, th, names[k], cx[k], top + hh / 2, metrics::kNodeFont, metrics::kNodeWeight, th.text);

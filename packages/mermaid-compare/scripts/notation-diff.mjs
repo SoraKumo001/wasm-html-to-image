@@ -192,14 +192,19 @@ const size = (v) => v?.size ?? v?.length ?? 0;
 async function officialShape(text) {
   const db = (await mermaid.mermaidAPI.getDiagramFromText(text)).db;
   if (db.getVertices) return { nodes: db.getVertices().size, edges: db.getEdges().length, subgraphs: db.getSubGraphs().length };
-  if (db.getStates) return { nodes: size(db.getStates()), edges: size((db.getRelations ?? db.getEdges)?.call(db)), subgraphs: 0 };
-  if (db.getClasses) return { nodes: size(db.getClasses()), edges: size(db.getRelations()), subgraphs: 0 };
   if (db.getEntities) return { nodes: size(db.getEntities()), edges: size(db.getRelationships()), subgraphs: 0 };
+  if (db.getStates) return { nodes: size(db.getStates()), edges: size((db.getRelations ?? db.getEdges)?.call(db)), subgraphs: 0 };
+  if (db.getClasses) return { nodes: size(db.getClasses()), edges: size(db.getRelations?.()), subgraphs: 0 };
+  if (db.getActors) {
+    // sequence: the actors, and the messages that draw an arrow (not notes, loops or activations)
+    const arrow = new Set([0, 1, 3, 4, 5, 6, 24, 25, 33, 34]);
+    return { nodes: db.getActors().size, edges: db.getMessages().filter((m) => arrow.has(m.type)).length, subgraphs: 0 };
+  }
   return null;
 }
 function ownShape(svg) {
   const n = (re) => (svg.match(re) ?? []).length;
-  return { nodes: n(/class="node"/g), edges: n(/class="edge"/g), subgraphs: n(/class="subgraph"/g) };
+  return { nodes: n(/class="node"/g) + n(/class="lifeline"/g), edges: n(/class="edge"/g) + n(/class="message"/g), subgraphs: n(/class="subgraph"/g) };
 }
 
 const rows = [];
@@ -208,7 +213,7 @@ for (const c of cases) {
   const e = own(c.text);
   const row = { ...c, official: o, own: e };
   const body = c.text.replace(/^---[\s\S]*?---\s*/, "").replace(/^%%.*\s*/gm, "");
-  if (o.ok && e.ok && /^\s*(graph|flowchart|stateDiagram|classDiagram|erDiagram)\b/.test(body)) {
+  if (o.ok && e.ok && /^\s*(graph|flowchart|stateDiagram|classDiagram|erDiagram|sequenceDiagram)\b/.test(body)) {
     try {
       row.shape = { official: await officialShape(c.text), own: ownShape(e.svg) };
     } catch (err) { if (!globalThis.__w) { globalThis.__w = 1; console.error("shape error:", err?.message); } }

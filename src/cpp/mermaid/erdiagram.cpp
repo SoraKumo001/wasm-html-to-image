@@ -1,6 +1,7 @@
 #include "mermaid/erdiagram.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <map>
 
@@ -110,6 +111,48 @@ bool right_card(const std::string& t, Card& c) {
     return true;
 }
 
+// The relationship written in words: `A one to many B : label`, `A zero or more optionally to one or more B`.
+bool word_card(std::string t, Card& c) {
+    for (char& ch : t) ch = (char)std::tolower((unsigned char)ch);
+    if (t == "one or zero" || t == "zero or one") c = kZeroOne;
+    else if (t == "one or more" || t == "one or many" || t == "1+" || t == "many(1)") c = kOneMany;
+    else if (t == "zero or more" || t == "zero or many" || t == "0+" || t == "many(0)" || t == "many") c = kZeroMany;
+    else if (t == "one" || t == "only one" || t == "1") c = kOne;
+    else return false;
+    return true;
+}
+
+bool parse_worded_relation(const std::string& line, Relation& r, std::string& left, std::string& right, std::string& label) {
+    std::string head = line;
+    size_t colon = line.find(':');
+    if (colon != std::string::npos) {
+        head = trim(line.substr(0, colon));
+        label = unquote(line.substr(colon + 1));
+    }
+    std::vector<std::string> tok;
+    for (size_t i = 0; i < head.size();) {
+        while (i < head.size() && (head[i] == ' ' || head[i] == '	')) i++;
+        size_t j = i;
+        while (j < head.size() && head[j] != ' ' && head[j] != '	') j++;
+        if (j > i) tok.push_back(head.substr(i, j - i));
+        i = j;
+    }
+    for (size_t k = 2; k + 2 < tok.size(); k++) {
+        bool optional = tok[k] == "to" && tok[k - 1] == "optionally";
+        if (tok[k] != "to") continue;
+        size_t from = optional ? k - 1 : k;
+        std::string a, b;
+        for (size_t m = 1; m < from; m++) a += (a.empty() ? "" : " ") + tok[m];
+        for (size_t m = k + 1; m + 1 < tok.size(); m++) b += (b.empty() ? "" : " ") + tok[m];
+        if (!word_card(a, r.ca) || !word_card(b, r.cb)) continue;
+        r.dashed = optional;
+        left = tok[0];
+        right = tok.back();
+        return true;
+    }
+    return false;
+}
+
 bool parse(const std::string& source, Doc& d, std::string& error) {
     bool first = true;
     int open = -1;
@@ -142,6 +185,17 @@ bool parse(const std::string& source, Doc& d, std::string& error) {
         if (line.back() == '{') {
             open = entity_for(d, line.substr(0, line.size() - 1));
             continue;
+        }
+        {
+            Relation r;
+            std::string left, right, label;
+            if (parse_worded_relation(line, r, left, right, label)) {
+                r.a = entity_for(d, left);
+                r.b = entity_for(d, right);
+                r.label = label;
+                d.rels.push_back(r);
+                continue;
+            }
         }
         size_t p = line.find("--");
         bool dashed = false;
