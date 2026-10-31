@@ -70,6 +70,8 @@ process.exitCode = await runCfSmoke({
       console.log(`markdown-math: typeset ${typeset}px, plain ${plain}px`);
       assert(typeset > plain + 20, `typeset maths (${typeset}px) is not taller than its source (${plain}px)`);
     },
+    // 4b. Mermaid through the workerd entry
+    (base) => expectPng(base, "/mermaid"),
     // 5. Invalid input rejected with 400
     (base) => expectStatus(base, "/invalid", 400),
   ],

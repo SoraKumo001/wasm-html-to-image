@@ -1,4 +1,4 @@
-import { render } from "wasm-html-to-image/workerd";
+import { render, renderMermaid } from "wasm-html-to-image/workerd";
 import { markdownToDocument, markdownToHtml } from "wasm-html-to-image/markdown";
 import { katexMath } from "wasm-html-to-image/markdown-math";
 
@@ -70,6 +70,15 @@ export default {
       const typeset = await heightOf(markdownToHtml(md, { math: katexMath() }));
       const plain = await heightOf(markdownToHtml(md));
       return Response.json({ typeset, plain });
+    }
+
+    // Mermaid: drawn by the engine itself, so no DOM and no extra bundle in the worker.
+    if (url.pathname === "/mermaid") {
+      const out = await renderMermaid("flowchart LR\n  A[Start] --> B{Ok?}\n  B --> C[Done]", {
+        format: "png",
+        theme: "dark",
+      });
+      return new Response(out.data as BodyInit, { headers: { "Content-Type": "image/png" } });
     }
 
     if (url.pathname === "/invalid") {
