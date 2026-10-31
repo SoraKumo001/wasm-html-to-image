@@ -74,7 +74,8 @@ The output is sized to the diagram (plus the padding). `data` is a string for `f
 | :--- | :--- |
 | `wasm-html-to-image/single` (and `wasm-html-to-image` on Node.js and similar) | Yes |
 | `wasm-html-to-image/workers` | Yes (drawn on the worker pool) |
-| `/workerd`, `/edge-light` (on Cloudflare Workers `wasm-html-to-image` resolves here too) | No `renderMermaid`; use `renderMermaidWith((options) => render(options, wasm), source, options)` |
+| `/workerd` (on Cloudflare Workers `wasm-html-to-image` resolves here too) | Yes, bound to the bundled WASM |
+| `/edge-light` | Build it with `bindRenderMermaid((options) => render(options, wasm))`; `renderMermaidWith((options) => render(options, wasm), source, options)` works too |
 
 `mermaidToHtml(source, options)` returns an HTML string with one diagram, for when you want a page.
 
@@ -221,6 +222,96 @@ The syntax of the `-beta` diagrams changes often in Mermaid itself. `venn-beta`,
 - **Frontmatter**: a leading `---` block is skipped. With `directives` on, its `config:` (`theme`, `themeVariables`) is applied.
 - **Comments**: lines starting with `%%` are ignored.
 
+### Writing the newer diagrams (examples)
+
+The seven diagrams below follow the syntax in the official Mermaid 12.2 documentation; getting every example there through was the first goal. They are all `-beta` or new, and their syntax tends to change.
+
+| Diagram | What is drawn | Notes |
+| :--- | :--- | :--- |
+| `wardley-beta` | Components on an evolution (x) and visibility (y) grid, anchors, links, evolution arrows, pipelines, annotations | The trend indicator `-.- (x,y)` is not drawn |
+| `cynefin-beta` | Five domains (complex, complicated, clear, chaotic, confusion), wavy boundaries, the cliff, item badges, transition arrows | Domain colours are the official theme values |
+| `railroad-*` | The four dialects (EBNF, ABNF, PEG and the official intermediate form) drawn as one kind of syntax diagram | The layout is approximate |
+| `eventmodeling` | Time frames, the three lanes (UI, commands, events, ...), data blocks, explicit and inferred relations | The official 12.2.0 npm package has no renderer for it |
+| `usecase-beta` | Actors, use cases, system boundaries, associations, include / extend / generalisation, notes, JSON tables, styles | `icon` and `colorScheme: rotate` are skipped |
+| `swimlane-beta` | Flowchart syntax; each top-level `subgraph` becomes a lane | Edge settings such as `curve` are skipped |
+| `agentflow-beta` | `flow` is read as a `subgraph` and `global` as a group without a frame, then drawn as a flowchart | `@{ shape: ... }` picks the shape. The official 12.2.0 package has no renderer for it |
+
+```
+wardley-beta
+title Tea Shop
+anchor Business [0.95, 0.63]
+component Cup of Tea [0.79, 0.61]
+component Kettle [0.43, 0.35]
+Business -> Cup of Tea
+Cup of Tea -> Kettle
+```
+
+```
+cynefin-beta
+title Incident triage
+complex
+  "Experiment"
+complicated
+  "Analyse"
+clear
+  "Follow the runbook"
+chaotic
+  "Stabilise"
+```
+
+```
+railroad-ebnf-beta
+expr = term , { ( "+" | "-" ) , term } ;
+term = factor , { ( "*" | "/" ) , factor } ;
+factor = number | "(" , expr , ")" ;
+```
+
+```
+eventmodeling
+tf 01 ui CartUI
+tf 02 cmd AddItem [[AddItem01]]
+tf 03 evt ItemAdded [[ItemAdded]]
+data AddItem01 {
+  price: 20.4
+}
+```
+
+```
+usecase-beta
+  actor Admin
+  actor Person
+  Checkout
+  Payment
+  ApplyCoupon
+  Admin --|> Person
+  Person --> Checkout
+  Checkout ..> : include Payment
+  ApplyCoupon ..> : extend Checkout
+```
+
+```
+swimlane-beta LR
+  subgraph Customer
+    request[Request service]
+  end
+  subgraph Support
+    triage[Triage request]
+    answer[Send answer]
+  end
+  request --> triage
+  triage -->|Known issue| answer
+```
+
+```
+agentflow-beta TB
+  flow reviewer["Review Agent"]
+    changes["Gather changes"]@{ shape: input }
+    lint["run_linter"]@{ shape: tool }
+    ok["Clean?"]@{ shape: decision }
+    changes --> lint --> ok
+  end
+```
+
 ---
 
 ## 7. Size limits
@@ -233,4 +324,27 @@ A syntax error or an unsupported diagram shows as a one-line error box (`Mermaid
 
 ## 9. Try it in the playground
 
-The playground's "Mermaid" tab switches the sample (one per diagram type, 26 in all), theme, input repair, output format (SVG / PNG / WebP / JPEG / AVIF / JXL / PDF), accent colour and directives on the spot. "Gallery" draws every sample with the current settings. The settings live in the URL, and so does the diagram itself (compressed, up to about 6000 characters, as `src=`), so one link shares the diagram and how it is drawn (for example `?mode=mermaid&theme=nord&format=png&view=gallery`).
+The playground's "Mermaid" tab switches the sample (one per diagram type, 33 in all), theme, input repair, output format (SVG / PNG / WebP / JPEG / AVIF / JXL / PDF), accent colour and directives on the spot. "Gallery" draws every sample with the current settings. The settings live in the URL, and so does the diagram itself (compressed, up to about 6000 characters, as `src=`), so one link shares the diagram and how it is drawn (for example `?mode=mermaid&theme=nord&format=png&view=gallery`).
+
+---
+
+## 10. Runtimes
+
+| Runtime | Getting `renderMermaid` |
+| :--- | :--- |
+| Node.js, Bun, Deno | `wasm-html-to-image` or `/single`. On Deno and Bun, the Markdown import and the `javascript` option are limited (see [Compatibility](../compatibility.md)) |
+| Cloudflare Workers (workerd) | `wasm-html-to-image/workerd` exports a `renderMermaid` bound to the bundled WASM; `wasm-html-to-image` resolves there too |
+| Vercel Edge and the like (edge-light) | Build it with `bindRenderMermaid((options) => render(options, wasm))`. `renderMermaidWith` and `mermaidToHtml` are on the same entry |
+
+A diagram is drawn straight through Skia's SVG, so no DOM is needed. On workerd the smoke test in `packages/e2e-cloudflare` (`/mermaid`) checks that a PNG comes out. edge-light is covered by type and output tests only; it has not been run on the real runtime.
+
+---
+
+## 11. Compared with the official Mermaid
+
+- **Colours**: `light`, `dark`, `neutral` and `forest` match the colours (computed values) that official 12.2 draws. `parity.html` in `packages/mermaid-compare` draws the same diagram with both and lists the difference (CIE76 ΔE) of node fills, borders, lines and text. For the newer diagrams, the fills and lines of wardley, cynefin and railroad are within ΔE 0 to 1.4 of the official ones, text is 0 to 9.7, and the borders of usecase are 3.6 to 11.9. The method and results are in `doc/design/mermaid-theme-parity.md` and `doc/design/mermaid-new-diagrams.md` in the repository.
+- **Shapes**: the layout is this engine's own, so coordinates differ from the official ones. Node positions and edge bends are close, diagram by diagram, not identical.
+- **Unsupported**: only `zenuml`. The official `elk` layout is not used; `flowchart-elk` is drawn with the same layout.
+- **Browser features**: click events and `click` links mean nothing in an image or a PDF, so they are ignored.
+
+The comparison app runs with `pnpm --filter mermaid-compare dev` (`http://localhost:3001`). Side by side, a slider, and SVG / PNG / WebP export let you check against the official drawing.

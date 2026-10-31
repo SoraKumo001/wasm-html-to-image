@@ -74,7 +74,8 @@ const { data: png } = await renderMermaid("graph LR\n  A --> B", {
 | :--- | :--- |
 | `wasm-html-to-image/single`（Node.js などでは `wasm-html-to-image` も） | あり |
 | `wasm-html-to-image/workers` | あり（ワーカープールで描画） |
-| `/workerd`、`/edge-light`（Cloudflare Workers では `wasm-html-to-image` もこちらに解決される） | `renderMermaid` は無い。`renderMermaidWith((options) => render(options, wasm), source, options)` を使う |
+| `/workerd`（Cloudflare Workers では `wasm-html-to-image` もこちらに解決される） | あり（同梱の WASM に結びついている） |
+| `/edge-light` | `bindRenderMermaid((options) => render(options, wasm))` で作る。`renderMermaidWith((options) => render(options, wasm), source, options)` も使える |
 
 HTML ページとして使いたいときは、`mermaidToHtml(source, options)` が、図を 1 つ含む HTML 文字列を返します。
 
@@ -221,6 +222,96 @@ CLI では、同じ内容が標準エラー出力に出ます。図が読めな�
 - **frontmatter**: 先頭の `---` で囲んだ部分は読み飛ばします。`directives` を有効にすると、`config:` の `theme` と `themeVariables` を反映します。
 - **コメント**: `%%` で始まる行は無視します。
 
+### 新しい図の書き方（例）
+
+次の 7 種は、公式 Mermaid 12.2 の公式ドキュメントにある記法を通すことを優先して実装しています。どれも `-beta` か新しい図で、記法は変わりやすい部分です。
+
+| 図 | 描かれるもの | 補足 |
+| :--- | :--- | :--- |
+| `wardley-beta` | 進化（横）と可視性（縦）の座標に置いた部品、アンカー、リンク、進化の矢印、パイプライン、注釈 | 追跡の矢印 `-.- (x,y)` は描きません |
+| `cynefin-beta` | 5 つの領域（複雑・煩雑・明確・混乱・混沌）、波打つ境界、崖、項目のバッジ、領域間の遷移の矢印 | 領域の色は公式のテーマの値です |
+| `railroad-*` | EBNF / ABNF / PEG / 公式の中間表現の 4 つの方言を、同じ構文図にして描きます | 配置は近似です |
+| `eventmodeling` | 時間枠、UI・コマンド・イベントなどの 3 つのレーン、データブロック、明示と推論の関連 | 公式 12.2.0 の npm パッケージには描画器がありません |
+| `usecase-beta` | アクター、ユースケース、システム境界、関連、include・extend・汎化、注、JSON の表、スタイル | `icon` と `colorScheme: rotate` は読み飛ばします |
+| `swimlane-beta` | フローチャートの記法のまま、最上位の `subgraph` を帯（レーン）にして配置します | 辺の `curve` などは読み飛ばします |
+| `agentflow-beta` | `flow` を `subgraph` に、`global` を枠なしのグループに読み替えて、フローチャートとして描きます | `@{ shape: ... }` で形を選びます。公式 12.2.0 のパッケージには描画器がありません |
+
+```
+wardley-beta
+title Tea Shop
+anchor Business [0.95, 0.63]
+component Cup of Tea [0.79, 0.61]
+component Kettle [0.43, 0.35]
+Business -> Cup of Tea
+Cup of Tea -> Kettle
+```
+
+```
+cynefin-beta
+title Incident triage
+complex
+  "Experiment"
+complicated
+  "Analyse"
+clear
+  "Follow the runbook"
+chaotic
+  "Stabilise"
+```
+
+```
+railroad-ebnf-beta
+expr = term , { ( "+" | "-" ) , term } ;
+term = factor , { ( "*" | "/" ) , factor } ;
+factor = number | "(" , expr , ")" ;
+```
+
+```
+eventmodeling
+tf 01 ui CartUI
+tf 02 cmd AddItem [[AddItem01]]
+tf 03 evt ItemAdded [[ItemAdded]]
+data AddItem01 {
+  price: 20.4
+}
+```
+
+```
+usecase-beta
+  actor Admin
+  actor Person
+  Checkout
+  Payment
+  ApplyCoupon
+  Admin --|> Person
+  Person --> Checkout
+  Checkout ..> : include Payment
+  ApplyCoupon ..> : extend Checkout
+```
+
+```
+swimlane-beta LR
+  subgraph Customer
+    request[Request service]
+  end
+  subgraph Support
+    triage[Triage request]
+    answer[Send answer]
+  end
+  request --> triage
+  triage -->|Known issue| answer
+```
+
+```
+agentflow-beta TB
+  flow reviewer["Review Agent"]
+    changes["Gather changes"]@{ shape: input }
+    lint["run_linter"]@{ shape: tool }
+    ok["Clean?"]@{ shape: decision }
+    changes --> lint --> ok
+  end
+```
+
 ---
 
 ## 7. 大きさの上限
@@ -233,4 +324,27 @@ CLI では、同じ内容が標準エラー出力に出ます。図が読めな�
 
 ## 9. プレイグラウンドで試す
 
-プレイグラウンドの「Mermaid」タブで、図種ごとのサンプル（全 26 種）、テーマ、入力の補正、出力形式（SVG / PNG / WebP / JPEG / AVIF / JXL / PDF）、アクセント色、ディレクティブを、その場で切り替えられます。「Gallery」では、全サンプルを今の設定で一覧できます。設定は URL に残ります。図のソースも（圧縮して、約 6000 文字まで）`src=` として URL に入るので、リンク 1 本で図ごと共有できます（例: `?mode=mermaid&theme=nord&format=png&view=gallery`）。
+プレイグラウンドの「Mermaid」タブで、図種ごとのサンプル（全 33 種）、テーマ、入力の補正、出力形式（SVG / PNG / WebP / JPEG / AVIF / JXL / PDF）、アクセント色、ディレクティブを、その場で切り替えられます。「Gallery」では、全サンプルを今の設定で一覧できます。設定は URL に残ります。図のソースも（圧縮して、約 6000 文字まで）`src=` として URL に入るので、リンク 1 本で図ごと共有できます（例: `?mode=mermaid&theme=nord&format=png&view=gallery`）。
+
+---
+
+## 10. 実行環境
+
+| 環境 | `renderMermaid` の入手 |
+| :--- | :--- |
+| Node.js、Bun、Deno | `wasm-html-to-image` または `/single`。Deno と Bun では、Markdown の取り込みと `javascript` オプションに制限があります（[互換性](../compatibility.md)） |
+| Cloudflare Workers（workerd） | `wasm-html-to-image/workerd` が、同梱の WASM に結びついた `renderMermaid` を直接出します。`wasm-html-to-image` もここに解決されます |
+| Vercel Edge など（edge-light） | `bindRenderMermaid((options) => render(options, wasm))` で作ります。`renderMermaidWith` と `mermaidToHtml` も同じ入口にあります |
+
+図は Skia の SVG でそのまま描くので、DOM は要りません。workerd では、`packages/e2e-cloudflare` の煙テスト（`/mermaid`）で、PNG になるところまで確かめています。edge-light は型と出力のテストまでで、実際のランタイムでは動かしていません。
+
+---
+
+## 11. 公式 Mermaid との比較
+
+- **色**: `light`、`dark`、`neutral`、`forest` は、公式 12.2 の描く色（計算値）に合わせています。`packages/mermaid-compare` の `parity.html` は、同じ図を両方で描いて、ノードの塗り、枠、線、文字の色の差（CIE76 の ΔE）を一覧にします。新しい図は、wardley、cynefin、railroad の塗りと線が ΔE 0〜1.4 で、公式とほぼ同じです。文字は 0〜9.7、usecase の枠は 3.6〜11.9 です。測定の方法と結果は、リポジトリの `doc/design/mermaid-theme-parity.md` と `doc/design/mermaid-new-diagrams.md` にあります。
+- **形**: 配置の計算はエンジン独自です。公式と同じ座標にはなりません。ノードの位置や線の曲がり方は、図ごとに近いだけです。
+- **未対応**: `zenuml` だけです。公式の `elk` レイアウトは使わず、`flowchart-elk` も同じ配置で描きます。
+- **ブラウザ向けの機能**: クリックのイベントとリンクの `click` は、画像や PDF では意味がないので、無視します。
+
+比較アプリは `pnpm --filter mermaid-compare dev` で動きます（`http://localhost:3001`）。左右並べ、スライダー、SVG・PNG・WebP の書き出しで、公式の描画と見比べられます。

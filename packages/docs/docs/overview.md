@@ -162,7 +162,7 @@ const result = await htmlToImage(mod, {
 | `wasm-html-to-image/preact`     | Preact 連携                | Preact JSX ノードを直接描画するラッパー                                                   |
 | `wasm-html-to-image/tailwind`   | スタイリング               | UnoCSS / Tailwind v4 のユーティリティ CSS を生成（`tw` prop、`@theme`、`@apply`）                                             |
 | `wasm-html-to-image/markdown`   | Markdown 入力              | GitHub 形式 Markdown を装飾済み HTML / PDF 用ドキュメントに変換（`markdownToHtml`, `markdownToDocument`, テンプレート対応） |
-| `wasm-html-to-image/single`、`/workers` | Mermaid の図 | `renderMermaid(source, options)` で、図だけを SVG や画像として取得（26 種類の図、テーマ、入力の補正） |
+| `wasm-html-to-image/single`、`/workers` | Mermaid の図 | `renderMermaid(source, options)` で、図だけを SVG や画像として取得（33 種類の図、テーマ、入力の補正） |
 | `wasm-html-to-image/markdown-math` | 数式描画                | Markdown 内の数式（`$…$`, `$$…$$`）を KaTeX でレンダリング（`katexMath`） |
 
 ---

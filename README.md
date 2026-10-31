@@ -26,7 +26,7 @@ Runs seamlessly across **Node.js**, **Cloudflare Workers**, **Edge runtimes**, *
 | 📑 **Multi-Page Vector PDF** | Generate crisp, selectable vector PDFs from HTML or images | PDF |
 | 🖼️ **Image Resizing & Optimization** | Fast format conversion, crop, and resize (Sharp alternative) | WebP, AVIF, JXL, PNG, JPEG |
 | 📝 **Markdown to PDF** | GitHub-flavoured Markdown to a styled, paged PDF: 11 templates, cover, contents, bookmarks, maths, syntax highlighting, call-outs, footnotes | PDF, PNG, WebP |
-| 🧜 **Mermaid Diagrams** | 26 diagram types drawn by the engine itself as vectors (no browser, no Mermaid JS): in Markdown, in HTML, or alone with `renderMermaid()` | SVG, PNG, WebP, JPEG, AVIF, JXL, PDF |
+| 🧜 **Mermaid Diagrams** | 33 diagram types drawn by the engine itself as vectors (no browser, no Mermaid JS): in Markdown, in HTML, or alone with `renderMermaid()` | SVG, PNG, WebP, JPEG, AVIF, JXL, PDF |
 | 🪶 **ThumbHash Blur Placeholder** | Generate compact blur placeholders for instant progressive loading | ThumbHash |
 
 
@@ -366,17 +366,24 @@ const { data: svg } = await renderMermaid("graph LR\n  A --> B"); // an SVG stri
 const { data: png } = await renderMermaid("graph LR\n  A --> B", { format: "png", theme: "nord" }); // bytes
 ```
 
-- **26 diagram types**: flowchart, sequence, state, class, ER, requirement, block, C4 (five kinds), architecture, Gantt, pie, XY chart, quadrant, radar, Sankey, treemap, Venn, mind map, timeline, user journey, git graph, kanban, packet, Ishikawa, tree view and `info`. An unsupported one (`zenuml`, ...) shows an error box where the diagram would be.
+- **33 diagram types**, all the diagrams in the Mermaid 12.2 documentation except `zenuml`:
+  - *Structure and flow*: flowchart (`graph`, `flowchart`), swimlanes (`swimlane-beta`), agent flow (`agentflow-beta`), state, class, ER, requirement, block, architecture, C4 (five kinds), use case (`usecase-beta`), event modeling (`eventmodeling`).
+  - *Time and sequence*: sequence, Gantt, timeline, user journey, git graph, kanban.
+  - *Data*: pie, XY chart, quadrant, radar, Sankey, treemap, Venn, packet.
+  - *Thinking tools*: mind map, Ishikawa, tree view, Wardley map (`wardley-beta`), Cynefin (`cynefin-beta`), railroad / syntax diagram (`railroad-ebnf-beta`, `-abnf-`, `-peg-`, `railroad-beta`) and `info`.
+  - An unsupported one (`zenuml`) shows an error box where the diagram would be.
+- **Official colours**: `light`, `dark`, `neutral` and `forest` follow the colours official Mermaid 12.2 draws (nodes, borders, lines, text, and the colours of the newer diagrams). The `mermaid-compare` package draws a diagram with both renderers side by side and reports the colour difference (CIE76 ΔE) per role.
 - **Themes**: `light`, `dark`, `neutral`, `forest`, `nord`, `dracula`, `solarized-light`, `solarized-dark`, `rose-pine`, `sepia`; or set `--mermaid-theme`, `--mermaid-fg`, `--mermaid-bg`, `--mermaid-accent`, ... in CSS.
 - **Formats**: SVG (a string), PNG, WebP, JPEG, AVIF, JXL and PDF; the image is sized to the diagram.
 - **Input repair** (`mode`): `strict` (default) reports every mistake, with a "did you mean" hint for a near-miss keyword; `compat` also accepts a keyword in the wrong case, CRLF and unfinished `end` / `}`; `recover` also fixes a misspelt keyword and skips lines it cannot read.
 - **Warnings**: `onWarning` receives `MERMAID_ERROR` (the diagram did not parse; the image then shows an error box) and one `MERMAID_RECOVERED` per change the repair made. The CLI prints them on stderr and exits with status 1 for an unreadable diagram.
+- **Runtimes**: Node.js, Bun and Deno use `wasm-html-to-image` or `/single`; Cloudflare Workers get a bound `renderMermaid` from `/workerd`; on edge-light, `bindRenderMermaid((options) => render(options, wasm))` builds it. No DOM is needed.
 - **Limits**: a diagram over 2000 lines or 200000 bytes is refused (`maxLines`, `maxSourceBytes`; `0` lifts them), because the layout of a big graph grows faster than its size.
 - `classDef` / `class` / `style` (flowchart, state, class, ER, block), `accTitle` / `accDescr` (they become the SVG `<title>` / `<desc>`), and, with `directives: true`, `%%{init}%%` and frontmatter `config:`.
 
 From the command line: `npx wasm-html-to-image flow.mmd -o flow.png --mermaid-theme nord` (a `.mmd` / `.mermaid` file, or `--mermaid` for inline text and stdin).
 
-Try every diagram, theme and format in the [playground](https://sorakumo001.github.io/wasm-html-to-image/master/?mode=mermaid); its *Gallery* draws all the samples at once. Details: the *Mermaid Conversion* page of the documentation.
+Try every diagram (33 samples), theme and format in the [playground](https://sorakumo001.github.io/wasm-html-to-image/master/?mode=mermaid); its *Gallery* draws all the samples at once. Details: the *Mermaid Conversion* page of the documentation.
 
 </details>
 
