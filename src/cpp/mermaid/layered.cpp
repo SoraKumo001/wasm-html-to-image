@@ -202,11 +202,11 @@ LayoutResult layout_layered(const std::vector<LayoutNode>& nodes, const std::vec
             pos[v] = (int)i;
         }
     };
-    auto cluster = [&](int l) {
+    auto cluster = [&](int l, const std::vector<double>* frozen = nullptr) {
         if (ngroups == 0) return;
         auto& row = L[l];
         retally(l);
-        const std::vector<double>& sum = gsum;
+        const std::vector<double>& sum = frozen ? *frozen : gsum;
         const std::vector<int>& cnt = gcnt;
         const double rs = row.size() > 1 ? 1.0 / (double)(row.size() - 1) : 0;
         std::vector<std::pair<std::vector<double>, int>> keyed;
@@ -262,6 +262,19 @@ LayoutResult layout_layered(const std::vector<LayoutNode>& nodes, const std::vec
     }
     L = best_L;
     refresh();
+    if (ngroups > 0) {
+        // The rows were clustered at different moments, by group places that kept changing, so two groups can stand in
+        // opposite order in two rows. One last clustering with the places fixed puts them in the same order everywhere.
+        std::fill(gsum.begin(), gsum.end(), 0.0);
+        for (size_t r = 0; r < L.size(); r++) {
+            const double scale = L[r].size() > 1 ? 1.0 / (double)(L[r].size() - 1) : 0;
+            for (size_t i = 0; i < L[r].size(); i++)
+                for (int g : chain_of(ln[L[r][i]].group)) gsum[g] += (double)pos[L[r][i]] * scale;
+        }
+        const std::vector<double> fixed = gsum;
+        for (int l = 0; l <= max_layer; l++) cluster(l, &fixed);
+        refresh();
+    }
 
     // ── 5. breadth: pack each layer, then pull nodes toward their neighbours ──
     for (auto& row : L) {
@@ -430,6 +443,27 @@ LayoutResult layout_layered(const std::vector<LayoutNode>& nodes, const std::vec
                 break;
             }
             if (!moved) break;
+        }
+    }
+    // A node with no edge has nothing to line up with, but every push of a group in its row moved it along; draw it back
+    // up to its left neighbour, as long as that does not put it inside the frame of a group that spans its layer.
+    if (ngroups > 0) {
+        std::vector<double> glo(ngroups, 1e18), ghi(ngroups, -1e18);
+        for (const LN& v : ln)
+            for (int g : chain_of(v.group)) glo[g] = std::min(glo[g], v.b - v.bw / 2 - kFramePad), ghi[g] = std::max(ghi[g], v.b + v.bw / 2 + kFramePad);
+        for (size_t l = 0; l < L.size(); l++) {
+            auto& rw = L[l];
+            for (size_t j = 1; j < rw.size(); j++) {
+                LN& v = ln[rw[j]];
+                if (!v.up.empty() || !v.down.empty() || v.group >= 0) continue;
+                double want = std::min(v.b, ln[rw[j - 1]].b + sep(ln[rw[j - 1]], v));
+                bool clear = true;
+                for (int g = 0; g < ngroups && clear; g++) {
+                    if (gmax[g] < 0 || (int)l < gmin[g] || (int)l > gmax[g] || std::find(chain_of(v.group).begin(), chain_of(v.group).end(), g) != chain_of(v.group).end()) continue;
+                    if (want + v.bw / 2 > glo[g] && want - v.bw / 2 < ghi[g]) clear = false;
+                }
+                if (clear) v.b = want;
+            }
         }
     }
     double min_b = 1e18;
