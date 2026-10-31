@@ -10,7 +10,7 @@ import {
   type ScaleMode,
   type CanvasBgSettings,
 } from "./components/CanvasToolbar.tsx";
-import { PRESETS, type PresetItem } from "./presets/index.ts";
+import type { PresetItem } from "./presets/index.ts";
 import {
   renderWasm,
   type WasmRenderOptions,
@@ -18,25 +18,18 @@ import {
   type MermaidTheme,
 } from "./utils/renderWasm.ts";
 import { renderOfficial, type OfficialRenderResult } from "./utils/renderOfficial.ts";
+import { settingsFromParams, settingsToParams } from "./utils/urlState.ts";
 
 export const App: React.FC = () => {
-  const [selectedPreset, setSelectedPreset] = useState<PresetItem>(PRESETS[0]);
-  const [code, setCode] = useState<string>(PRESETS[0].code);
-  const [selectedTheme, setSelectedTheme] = useState<MermaidTheme>("light");
-  const [viewMode, setViewMode] = useState<ViewMode>("side-by-side");
-  const [scaleMode, setScaleMode] = useState<ScaleMode>("fit");
-  const [bgSettings, setBgSettings] = useState<CanvasBgSettings>({
-    type: "light",
-    customColor: "#334155",
-  });
-
-  const [wasmOptions, setWasmOptions] = useState<WasmRenderOptions>({
-    theme: "light",
-    mode: "strict",
-    directives: true,
-    padding: 16,
-    format: "svg",
-  });
+  // the settings live in the query string, so a link reproduces the screen
+  const [initial] = useState(() => settingsFromParams(new URLSearchParams(window.location.search)));
+  const [selectedPreset, setSelectedPreset] = useState<PresetItem>(initial.preset);
+  const [code, setCode] = useState<string>(initial.code);
+  const [selectedTheme, setSelectedTheme] = useState<MermaidTheme>(initial.theme);
+  const [viewMode, setViewMode] = useState<ViewMode>(initial.view);
+  const [scaleMode, setScaleMode] = useState<ScaleMode>(initial.scale);
+  const [bgSettings, setBgSettings] = useState<CanvasBgSettings>(initial.bg);
+  const [wasmOptions, setWasmOptions] = useState<WasmRenderOptions>(initial.options);
 
   const [wasmResult, setWasmResult] = useState<WasmRenderResult | null>(null);
   const [officialResult, setOfficialResult] = useState<OfficialRenderResult | null>(null);
@@ -73,6 +66,20 @@ export const App: React.FC = () => {
   useEffect(() => {
     executeRender(code, selectedTheme, wasmOptions);
   }, []);
+
+  // Keep the address bar in step with the settings (no new history entry per change)
+  useEffect(() => {
+    const query = settingsToParams({
+      preset: selectedPreset,
+      code,
+      theme: selectedTheme,
+      view: viewMode,
+      scale: scaleMode,
+      bg: bgSettings,
+      options: wasmOptions,
+    }).toString();
+    window.history.replaceState(null, "", query ? `?${query}` : window.location.pathname);
+  }, [selectedPreset, code, selectedTheme, viewMode, scaleMode, bgSettings, wasmOptions]);
 
   const handleSelectPreset = (preset: PresetItem) => {
     setSelectedPreset(preset);
