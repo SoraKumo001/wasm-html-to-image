@@ -632,7 +632,7 @@ void draw_actor(std::string& out, const Theme& th, const Node& n, Pt c, const St
     if (n.actor_type == "awesome") out += "<circle cx=\"" + num(cx) + "\" cy=\"" + num(top + 7) + "\" r=\"3\" fill=\"" + stroke + "\"/>\n";
     if (n.business) out += "<path d=\"M" + num(cx - 4) + " " + num(top + 5) + " L" + num(cx + 4) + " " + num(top + 9) + "\" fill=\"none\"" + stroke_attrs(stroke, "1") + "/>\n";
     std::vector<std::string> lines = n.lines;
-    centered_text(out, th, lines, c.x, c.y + n.h / 2 - 10 - (lines.size() - 1) * kNodeFont * kLineHeight / 2, kNodeFont, 500, st.color.empty() ? th.text : st.color);
+    centered_text(out, th, lines, c.x, c.y + n.h / 2 - 10 - (lines.size() - 1) * kNodeFont * kLineHeight / 2, kNodeFont, 500, st.color.empty() ? th.label : st.color);
     out += "</g>\n";
 }
 
@@ -778,9 +778,9 @@ bool render_usecase(const std::string& source, const Options& options, std::stri
         double tw = text.width(m.boundaries[b].title, kGroupFont, kGroupWeight) + 24;
         if (m.boundaries[b].type == "package") {
             body += "<rect x=\"" + num(f.x0 + ox) + "\" y=\"" + num(f.y0 + oy) + "\" width=\"" + num(tw) + "\" height=\"" + num(kHeader) + "\" fill=\"" + (st.fill.empty() ? th.cluster_hdr : st.fill) + "\"" + stroke_attrs(stroke, sw) + "/>\n";
-            aligned_text(body, th, {m.boundaries[b].title}, f.x0 + ox + 12, f.y0 + oy + kHeader / 2, kGroupFont, kGroupWeight, st.color.empty() ? th.text : st.color, "start");
+            aligned_text(body, th, {m.boundaries[b].title}, f.x0 + ox + 12, f.y0 + oy + kHeader / 2, kGroupFont, kGroupWeight, st.color.empty() ? th.label : st.color, "start");
         } else {
-            centered_text(body, th, {m.boundaries[b].title}, (f.x0 + f.x1) / 2 + ox, f.y0 + oy + kHeader / 2, kGroupFont, kGroupWeight, st.color.empty() ? th.text : st.color);
+            centered_text(body, th, {m.boundaries[b].title}, (f.x0 + f.x1) / 2 + ox, f.y0 + oy + kHeader / 2, kGroupFont, kGroupWeight, st.color.empty() ? th.label : st.color);
         }
         body += "</g>\n";
     }
@@ -866,7 +866,7 @@ bool render_usecase(const std::string& source, const Options& options, std::stri
         Pt c = at(lay.center[i]);
         const Style& st = n.style;
         std::string fill = st.fill.empty() ? th.surface : st.fill, stroke = st.stroke.empty() ? th.border : st.stroke, sw = st.stroke_width.empty() ? num(kInnerStroke) : px(st.stroke_width);
-        std::string color = st.color.empty() ? th.text : st.color;
+        std::string color = st.color.empty() ? th.label : st.color;
         switch (n.kind) {
             case Kind::Actor: draw_actor(body, th, n, c, st); break;
             case Kind::Ellipse:

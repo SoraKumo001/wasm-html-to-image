@@ -62,3 +62,5 @@
 | usecase | 1.9/3.1/7.7/1.3 | 8.8/6.2/3.6/11.9 | 18/2.5/0/5.1 |
 
 残り: light の wardley と usecase の文字(公式は `#131300`、こちらは `#333333`)、forest の railroad の文字(公式は `#321b67`)、usecase の枠。
+
+文字色(`label_color`、公式の `#131300` / `#e0dfdf` / `#321b67` / `#111111`)を wardley・railroad・usecase に適用した後の文字の ΔE: wardley 9.7/3.7/0/0、railroad 0/0/0/0、usecase 5.1/0.7/0/1.4。usecase の枠(3.6〜11.9)は公式がノードの枠にテーマの枠色を使う箇所との差が残る。

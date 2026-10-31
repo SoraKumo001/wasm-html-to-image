@@ -563,7 +563,7 @@ struct Painter {
                 bool term = n.kind == Node::Terminal, spec = n.kind == Node::Special;
                 out += "<rect x=\"" + num(x) + "\" y=\"" + num(y - kBoxH / 2) + "\" width=\"" + num(n.w) + "\" height=\"" + num(kBoxH) + "\" rx=\"" + (term ? num(kBoxH / 2) : spec ? "6" : "3") + "\" fill=\"" +
                        (term ? th.surface : th.group_fill) + "\" stroke=\"" + th.line + "\" stroke-width=\"" + (term ? "1.2" : "1.5") + "\"" + (spec ? " stroke-dasharray=\"4 3\"" : "") + "/>\n";
-                centered_text(out, th, {n.text}, x + n.w / 2, y, kFont, n.kind == Node::NonTerminal ? 600 : 500, th.text, term);
+                centered_text(out, th, {n.text}, x + n.w / 2, y, kFont, n.kind == Node::NonTerminal ? 600 : 500, th.label, term);
                 break;
             }
             case Node::Seq: {
@@ -684,7 +684,7 @@ bool render_railroad(const std::string& source, const Options& options, std::str
     for (auto& r : rules) {
         double w = kEnd * 2 + r.body.w + 2 * 8;
         maxw = std::max(maxw, w);
-        aligned_text(p.out, th, {r.name}, kMargin, y + 8, 14, 700, th.text, "start");
+        aligned_text(p.out, th, {r.name}, kMargin, y + 8, 14, 700, th.label, "start");
         double base = y + 24 + r.body.up;
         // start marker, the diagram, end marker
         p.out += "<circle cx=\"" + num(kMargin + 4) + "\" cy=\"" + num(base) + "\" r=\"4\" fill=\"" + th.line + "\"/>\n";
@@ -697,7 +697,7 @@ bool render_railroad(const std::string& source, const Options& options, std::str
     }
     double W = maxw + 2 * kMargin, H = y - 36 + kMargin;
     std::string body;
-    if (!title.empty()) centered_text(body, th, {title}, W / 2, kMargin, 18, 600, th.text);
+    if (!title.empty()) centered_text(body, th, {title}, W / 2, kMargin, 18, 600, th.label);
     body += p.out;
     svg = svg_document(th, W, H, body);
     return true;

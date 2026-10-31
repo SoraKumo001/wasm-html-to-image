@@ -362,7 +362,7 @@ bool render_wardley(const std::string& source, const Options& options, std::stri
     auto X = [&](double evo) { return left + evo * pw; };
     auto Y = [&](double vis) { return top + (1 - vis) * ph; };
     std::string body;
-    if (!title.empty()) centered_text(body, th, {title}, W / 2, 26, 18, 600, th.text);
+    if (!title.empty()) centered_text(body, th, {title}, W / 2, 26, 18, 600, th.label);
 
     // axes and stage dividers
     const std::string axis = th.line;
@@ -384,7 +384,7 @@ bool render_wardley(const std::string& source, const Options& options, std::stri
         centered_text(body, th, parts, X((from + to) / 2), top + ph + 18 + (parts.size() > 1 ? 7 : 0), 12, 500, th.text_sec);
         from = to;
     }
-    centered_text(body, th, {"Evolution"}, left + pw / 2, top + ph + 56, 12, 600, th.text);
+    centered_text(body, th, {"Evolution"}, left + pw / 2, top + ph + 56, 12, 600, th.label);
     {
         double cx = 22, cy = top + ph / 2;
         body += "<text transform=\"rotate(-90 " + num(cx) + " " + num(cy) + ")\" x=\"" + num(cx) + "\" y=\"" + num(cy + 4) + "\" text-anchor=\"middle\" font-size=\"12\" font-weight=\"600\" font-family=\"" + esc(th.font) + "\" fill=\"" + th.text +
@@ -418,7 +418,7 @@ bool render_wardley(const std::string& source, const Options& options, std::stri
         body += "<rect x=\"" + num(X(lo) - 14) + "\" y=\"" + num(y - 14) + "\" width=\"" + num(X(hi) - X(lo) + 28) + "\" height=\"28\" fill=\"none\" stroke=\"" + th.line + "\" stroke-width=\"1.5\"/>\n";
         for (auto& c : p.children) {
             body += "<rect x=\"" + num(X(c.second) - 4) + "\" y=\"" + num(y - 4) + "\" width=\"8\" height=\"8\" fill=\"" + th.component_fill + "\" stroke=\"" + th.line + "\" stroke-width=\"1.5\"/>\n";
-            aligned_text(body, th, {c.first}, X(c.second), y + 25, 11, 400, th.text, "middle");
+            aligned_text(body, th, {c.first}, X(c.second), y + 25, 11, 400, th.label, "middle");
         }
     }
 
@@ -475,7 +475,7 @@ bool render_wardley(const std::string& source, const Options& options, std::stri
         double lx = c.x + (n.has_offset ? n.dx : 10 + pad);
         double ly = c.y + (n.has_offset ? n.dy : -12);
         bool flip = !n.has_offset && lx + text.width(n.name, 12, n.anchor ? 700 : 400) > W - 10;
-        aligned_text(body, th, {n.name}, flip ? c.x - 10 - pad : lx, ly, 12, n.anchor ? 700 : 400, th.text, flip ? "end" : "start");
+        aligned_text(body, th, {n.name}, flip ? c.x - 10 - pad : lx, ly, 12, n.anchor ? 700 : 400, th.label, flip ? "end" : "start");
     }
 
     // notes and forces
@@ -488,7 +488,7 @@ bool render_wardley(const std::string& source, const Options& options, std::stri
             double w = 26, h = 10, dir = m.kind == 1 ? 1 : -1;
             body += "<polygon points=\"" + num(x) + "," + num(y - h) + " " + num(x + dir * w) + "," + num(y - h) + " " + num(x + dir * w) + "," + num(y - h - 6) + " " + num(x + dir * (w + 14)) + "," + num(y) + " " + num(x + dir * w) + "," +
                     num(y + h + 6) + " " + num(x + dir * w) + "," + num(y + h) + " " + num(x) + "," + num(y + h) + "\" fill=\"" + color + "\" fill-opacity=\"0.35\" stroke=\"" + color + "\" stroke-width=\"1.2\"/>\n";
-            aligned_text(body, th, {m.text}, x + dir * (w + 20), y, 11, 500, th.text, dir > 0 ? "start" : "end");
+            aligned_text(body, th, {m.text}, x + dir * (w + 20), y, 11, 500, th.label, dir > 0 ? "start" : "end");
         }
     }
 
@@ -496,7 +496,7 @@ bool render_wardley(const std::string& source, const Options& options, std::stri
     for (auto& a : annotations) {
         double x = X(a.evo), y = Y(a.vis);
         body += "<circle cx=\"" + num(x) + "\" cy=\"" + num(y) + "\" r=\"9\" fill=\"" + th.component_fill + "\" stroke=\"" + th.line + "\" stroke-width=\"1.2\"/>\n";
-        centered_text(body, th, {std::to_string(a.number)}, x, y, 10, 600, th.text);
+        centered_text(body, th, {std::to_string(a.number)}, x, y, 10, 600, th.label);
     }
     if (!annotations.empty()) {
         double bx = has_annotation_box ? X(box_evo) : left + 12, by = has_annotation_box ? Y(box_vis) : top + 12;
@@ -505,7 +505,7 @@ bool render_wardley(const std::string& source, const Options& options, std::stri
         double bh = (double)annotations.size() * 16 + 12;
         body += "<rect x=\"" + num(bx) + "\" y=\"" + num(by) + "\" width=\"" + num(bw + 20) + "\" height=\"" + num(bh) + "\" fill=\"" + th.surface + "\" stroke=\"" + th.border + "\" stroke-width=\"1\"/>\n";
         for (size_t k = 0; k < annotations.size(); k++)
-            aligned_text(body, th, {std::to_string(annotations[k].number) + ". " + annotations[k].text}, bx + 10, by + 14 + 16 * k, 11, 400, th.text, "start");
+            aligned_text(body, th, {std::to_string(annotations[k].number) + ". " + annotations[k].text}, bx + 10, by + 14 + 16 * k, 11, 400, th.label, "start");
     }
 
     svg = svg_document(th, W, H, body);

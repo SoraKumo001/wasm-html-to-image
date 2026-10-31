@@ -40,7 +40,7 @@ struct Theme {
     std::string bg, fg, accent, line, muted, surface, border;
     std::string text, text_sec, text_faint, arrow, group_fill, group_hdr, cluster_hdr, composite_fill, composite_header, actor_border, label_bg, label_stroke, note_fill, note_border, note_text, scale_stroke, inner_stroke, key_badge;
     std::vector<std::string> scale, plot, domains;  // empty: the diagram derives its own colours
-    std::string evolution, component_fill, cliff;
+    std::string evolution, component_fill, cliff, label;
     bool paint_background = false;
     std::string font, mono;
 };
@@ -88,6 +88,7 @@ inline Theme make_theme(const Options& o) {
     t.scale = split_colors(o.scale);
     t.plot = split_colors(o.plot);
     t.domains = split_colors(o.domains);
+    t.label = o.label_color.empty() ? t.text : o.label_color;
     t.cliff = o.cliff.empty() ? t.line : o.cliff;
     t.evolution = o.evolution.empty() ? "#d9534f" : o.evolution;
     t.component_fill = o.component_fill.empty() ? t.bg : o.component_fill;

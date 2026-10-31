@@ -46,6 +46,7 @@ struct Options {
     std::string plot;
     /// The fills of the five Cynefin domains (complex, complicated, chaotic, clear, confusion), comma separated; empty: tints of the accent.
     std::string domains;
+    std::string label_color;     // text of the Wardley, Railroad and use case diagrams; default: fg
     std::string cliff;           // the cliff of a Cynefin diagram; default: the line colour
     std::string evolution;       // evolution arrows of a Wardley map; default: a red
     std::string component_fill;  // components of a Wardley map; default: bg
