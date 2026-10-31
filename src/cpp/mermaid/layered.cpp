@@ -223,6 +223,9 @@ LayoutResult layout_layered(const std::vector<LayoutNode>& nodes, const std::vec
         cluster(l);
         for (size_t i = 0; i < L[l].size(); i++) pos[L[l][i]] = (int)i;  // only this row moved
     };
+    // a big graph (long edges become many dummy nodes) gives up sooner when the sweeps stop paying off
+    const bool big = ln.size() > 3000;
+    int stale = 0;
     for (int iter = 0; iter < 24 && best > 0; iter++) {
         if (iter % 2 == 0)
             for (int l = 1; l <= max_layer; l++) sweep(l, true);
@@ -232,6 +235,9 @@ LayoutResult layout_layered(const std::vector<LayoutNode>& nodes, const std::vec
         if (c < best) {
             best = c;
             best_L = L;
+            stale = 0;
+        } else if (big && ++stale >= 4) {
+            break;
         }
     }
     L = best_L;
