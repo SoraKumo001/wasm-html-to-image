@@ -866,7 +866,21 @@ bool render_flowchart(const std::string& source, const Options& options, std::st
         for (const Pt& p : lay.points[i]) pts.push_back(at(p));
         std::string list;
         for (const Pt& p : pts) list += (list.empty() ? "" : " ") + num(p.x) + "," + num(p.y);
-        body += "<polyline class=\"edge\" points=\"" + list + "\" fill=\"none\"" + stroke_attrs(color, width, dash) + " stroke-linejoin=\"round\"/>\n";
+        if (g.swimlane && pts.size() > 2) {
+            // the official swimlane edges bend with rounded corners
+            std::string d = "M" + num(pts[0].x) + " " + num(pts[0].y);
+            for (size_t k = 1; k + 1 < pts.size(); k++) {
+                double ax = pts[k].x - pts[k - 1].x, ay = pts[k].y - pts[k - 1].y, bx = pts[k + 1].x - pts[k].x, by = pts[k + 1].y - pts[k].y;
+                double la = std::sqrt(ax * ax + ay * ay), lb = std::sqrt(bx * bx + by * by);
+                if (la < 1e-6 || lb < 1e-6) continue;
+                double rr = std::min(8.0, std::min(la, lb) / 2);
+                d += " L" + num(pts[k].x - ax / la * rr) + " " + num(pts[k].y - ay / la * rr) + " Q" + num(pts[k].x) + " " + num(pts[k].y) + " " + num(pts[k].x + bx / lb * rr) + " " + num(pts[k].y + by / lb * rr);
+            }
+            d += " L" + num(pts.back().x) + " " + num(pts.back().y);
+            body += "<path class=\"edge\" d=\"" + d + "\" fill=\"none\"" + stroke_attrs(color, width, dash) + " stroke-linejoin=\"round\"/>\n";
+        } else {
+            body += "<polyline class=\"edge\" points=\"" + list + "\" fill=\"none\"" + stroke_attrs(color, width, dash) + " stroke-linejoin=\"round\"/>\n";
+        }
         if (e.arrow_end) draw_arrow(body, pts.back(), pts[pts.size() - 2], color == th.line ? th.arrow : color);
         if (e.arrow_start) draw_arrow(body, pts.front(), pts[1], color == th.line ? th.arrow : color);
     }

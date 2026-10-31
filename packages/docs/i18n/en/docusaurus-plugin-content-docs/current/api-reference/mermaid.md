@@ -230,12 +230,12 @@ The seven diagrams below follow the syntax in the official Mermaid 12.2 document
 
 | Diagram | What is drawn | Notes |
 | :--- | :--- | :--- |
-| `wardley-beta` | Components on an evolution (x) and visibility (y) grid, anchors, links, evolution arrows, pipelines, annotations | The trend indicator `-.- (x,y)` is not drawn |
+| `wardley-beta` | Components on an evolution (x) and visibility (y) grid, anchors, links, evolution arrows, pipelines, annotations | Evolution arrows are drawn from `evolve`. The `-.- (x,y)` form is not in the official 12.2 grammar either |
 | `cynefin-beta` | Five domains (complex, complicated, clear, chaotic, confusion), wavy boundaries, the cliff, item badges, transition arrows | Domain colours are the official theme values |
 | `railroad-*` | The four dialects (EBNF, ABNF, PEG and the official intermediate form) drawn as one kind of syntax diagram | The layout is approximate |
 | `eventmodeling` | Time frames, the three lanes (UI, commands, events, ...), data blocks, explicit and inferred relations | The official 12.2.0 npm package has no renderer for it |
-| `usecase-beta` | Actors, use cases, system boundaries, associations, include / extend / generalisation, notes, JSON tables, styles | `icon` and `colorScheme: rotate` are skipped |
-| `swimlane-beta` | Flowchart syntax; each top-level `subgraph` becomes a lane | Edge settings such as `curve` are skipped |
+| `usecase-beta` | Actors, use cases, system boundaries, associations, include / extend / generalisation, notes, JSON tables, styles | `icon` (needs an icon pack) is skipped. `colorScheme: rotate` only takes effect in the official `redux-color` themes, which this engine does not have, so it has no effect |
+| `swimlane-beta` | Flowchart syntax; each top-level `subgraph` becomes a lane | Edges bend with rounded corners. Edge `curve` and `animate` (which only moves on screen) are skipped |
 | `agentflow-beta` | `flow` is read as a `subgraph` and `global` as a group without a frame, then drawn as a flowchart | `@{ shape: ... }` picks the shape. The official 12.2.0 package has no renderer for it |
 
 ```

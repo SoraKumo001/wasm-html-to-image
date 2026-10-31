@@ -1225,7 +1225,7 @@
     ]
   },
   "usecase@light": {
-    "width": 824,
+    "width": 800,
     "height": 684.9,
     "tags": {
       "svg": 2,
@@ -1258,7 +1258,7 @@
     ]
   },
   "usecase@dark": {
-    "width": 824,
+    "width": 800,
     "height": 684.9,
     "tags": {
       "svg": 2,
@@ -1298,7 +1298,7 @@
       "g": 11,
       "rect": 14,
       "text": 11,
-      "polyline": 6,
+      "path": 6,
       "polygon": 6
     },
     "colors": [
@@ -1318,7 +1318,7 @@
       "g": 11,
       "rect": 14,
       "text": 11,
-      "polyline": 6,
+      "path": 6,
       "polygon": 6
     },
     "colors": [
