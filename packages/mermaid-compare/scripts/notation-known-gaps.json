@@ -1,0 +1,6 @@
+{
+  "official accepts, engine rejects (reason)": {
+    "class note": "a class diagram of nothing but a `note for` has no class to draw",
+    "c4 args": "Rel to an element that is never declared; official fails when it draws it"
+  }
+}

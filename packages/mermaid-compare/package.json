@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "notation-diff": "node scripts/notation-diff.mjs --check"
   },
   "dependencies": {
     "mermaid": "^12.2.0",

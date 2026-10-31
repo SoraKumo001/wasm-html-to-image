@@ -225,3 +225,13 @@ console.log(`
 for (const r of shapeDiff) console.log(`  [${r.kind}] ${r.name}  official ${JSON.stringify(r.shape.official)}  engine ${JSON.stringify(r.shape.own)}
       ${JSON.stringify(r.text)}`);
 if (jsonOut) fs.writeFileSync(jsonOut, JSON.stringify(rows, null, 2));
+
+// --check: exit 1 for a divergence that is not a known, deliberate one (see notation-known-gaps.json).
+if (args.includes("--check")) {
+  const known = Object.keys(JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "notation-known-gaps.json"), "utf8"))["official accepts, engine rejects (reason)"]);
+  const newGaps = gap.filter((r) => !known.includes(r.name));
+  // `~~~` is an invisible link: official counts it as an edge, the engine draws none on purpose
+  const newShapes = shapeDiff.filter((r) => !r.text.includes("~~~"));
+  console.log(`\ncheck: ${newGaps.length} new gaps, ${newShapes.length} new structure differences`);
+  process.exit(newGaps.length || newShapes.length ? 1 : 0);
+}

@@ -56,3 +56,7 @@ The settings are kept in the address bar, so a link reproduces the screen. Value
 Open `http://localhost:3001/parity.html` for the theme colour report: it renders every preset in `light`, `dark`,
 `forest` and `neutral` with both renderers and lists the colour difference (CIE76 ΔE) of node, edge and text
 colours, plus the official theme variables (`window.__parity`). See `doc/design/mermaid-theme-parity.md`.
+
+## Notation differential test
+
+`pnpm --filter mermaid-compare notation-diff` feeds about 1600 notation variants (link tokens with and without spaces, labels holding delimiters, quotes, line breaks, per-diagram syntax) to the official Mermaid parser and to the host `build-host-tests/Release/mermaid_cli.exe`, and fails on an input the official parser takes and the engine rejects, or on a flowchart whose node / edge / subgraph counts differ. Deliberate differences are listed in `scripts/notation-known-gaps.json`. Rebuild `mermaid_cli` first (`cmake --build build-host-tests --config Release --target mermaid_cli`).
