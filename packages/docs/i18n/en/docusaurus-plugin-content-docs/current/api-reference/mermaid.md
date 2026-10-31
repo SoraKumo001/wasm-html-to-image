@@ -223,6 +223,9 @@ The syntax of the `-beta` diagrams changes often in Mermaid itself. `venn-beta`,
 - **Comments**: lines starting with `%%` are ignored.
 - **Markdown strings**: a label such as `"`**bold** and *italic*`"` is drawn plain: the markers are removed and a line break in the label stays a line break (there is no bold or italic styling).
 - **Math** (`$$...$$`), node `click` and links are not handled: math is shown as typed, and `click` is skipped.
+- **Flowchart notation**: links are read as `A --- B`, `A---B`, `A ---- B`, `A === B`, `A--xB`, `A -- text --> B`, `A --"text"--> B`, `A -.text.-> B` and `A e1@--> B` (an edge id). A node can also be written as `A@{ shape: diamond, label: "text" }`. Inside quotes, `%%`, `|`, `;` and line breaks are label text; so is a `;` inside `[]` or `()`.
+- **Empty `subgraph`**: an empty one still draws its frame and title, also when an edge points to it (the edge stops at the frame's border). An empty frame at the top level is set beside the drawing; one inside another `subgraph` is set beside the members in its parent's frame.
+- **Relationships in words (ER)**: besides symbols such as `||--o{`, a relationship can be written as `A one to many B : text` or `A zero or more optionally to only one B`.
 
 ### Writing the newer diagrams (examples)
 
@@ -348,5 +351,7 @@ A diagram is drawn straight through Skia's SVG, so no DOM is needed. On workerd 
 - **Shapes**: the layout is this engine's own, so coordinates differ from the official ones. Node positions and edge bends are close, diagram by diagram, not identical.
 - **Unsupported**: only `zenuml`. The official `elk` layout is not used; `flowchart-elk` is drawn with the same layout.
 - **Browser features**: click events and `click` links mean nothing in an image or a PDF, so they are ignored.
+- **Frames**: `subgraph` frames are placed so that they do not overlap (checked on 932 diagrams from real documents: no overlapping frames).
+- **Notation variants**: `pnpm --filter mermaid-compare notation-diff` builds about 1600 variants (spaces or none, link length, quotes, delimiters inside labels, ...) and compares them with the official parser. It fails on an input the official parser takes and this engine rejects, or on a differing count of elements in flowcharts, state, class, ER and sequence diagrams. Deliberate differences are listed with a reason in `packages/mermaid-compare/scripts/notation-known-gaps.json`.
 
 The comparison app runs with `pnpm --filter mermaid-compare dev` (`http://localhost:3001`). Side by side, a slider, and SVG / PNG / WebP export let you check against the official drawing.
