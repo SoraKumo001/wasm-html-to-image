@@ -89,6 +89,10 @@ int main() {
     check(!has(svg_of("packet-beta\n  +16: \"a\"\n  +16: \"b\""), "ERROR"), "packet/plus_width");
     check(!has(svg_of("sequenceDiagram; A->>B: hi"), "ERROR"), "sequence/statement_on_header");
     check(!has(svg_of("block-beta\n  A[\"a --> b\"] B"), "ERROR"), "block/arrow_in_label");
+    // an empty subgraph keeps its frame and title (issue 23)
+    check(count(svg_of("flowchart TB\n  A --> B\n  subgraph S[\"EmptyBox\"]\n  end"), "class=\"subgraph\"") == 1 && has(svg_of("flowchart TB\n  A --> B\n  subgraph S[\"EmptyBox\"]\n  end"), ">EmptyBox<"), "subgraph/empty_keeps_title");
+    check(count(svg_of("flowchart TB\n  A --> B\n  subgraph S[\"EmptyBox\"]\n  end\n  B -.-> S"), "class=\"node\"") == 2 && has(svg_of("flowchart TB\n  A --> B\n  subgraph S[\"EmptyBox\"]\n  end\n  B -.-> S"), ">EmptyBox<") && !has(svg_of("flowchart TB\n  A --> B\n  subgraph S[\"EmptyBox\"]\n  end\n  B -.-> S"), ">S<"), "subgraph/empty_referenced");
+    check(count(svg_of("flowchart TB\n  subgraph P[\"Parent\"]\n    subgraph C[\"Child\"]\n    end\n  end"), "class=\"subgraph\"") == 2, "subgraph/only_empty_child");
     {
         std::string lab = svg_of("flowchart TD\n  A --\"Yes\"--> B\n  A --Maybe--> C\n  A -.near.-> D\n  A -- \"spaced\" --> E");
         check(!has(lab, "ERROR") && has(lab, ">Yes<") && has(lab, ">Maybe<") && has(lab, ">near<") && has(lab, ">spaced<") && !has(lab, "&quot;"), "edge/compact_and_quoted_labels");

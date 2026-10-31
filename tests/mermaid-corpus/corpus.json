@@ -138,5 +138,6 @@
   "packet/plus": "packet-beta\n  +16: \"Source\"\n  +16: \"Destination\"",
   "sequence/header_statement": "sequenceDiagram; A->>B: hi",
   "usecase/compact": "usecase-beta\n  actor A\n  U\n  A-->U\n  A --- V",
-  "block/arrow_in_label": "block-beta\n  A[\"a --> b\"] B"
+  "block/arrow_in_label": "block-beta\n  A[\"a --> b\"] B",
+  "flowchart/empty_subgraph": "flowchart TB\n  A --> B\n  subgraph S[\"EmptyBox\"]\n  end\n  B -.-> S\n  subgraph P[\"Parent\"]\n    subgraph C[\"Child\"]\n    end\n  end"
 }

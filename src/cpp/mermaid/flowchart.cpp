@@ -27,6 +27,7 @@ struct Node {
     Shape shape = Shape::Rect;
     Style style;
     int group = -1;
+    bool phantom = false;  // stands in for an empty subgraph: sized to its frame, drawn as nothing
     double w = 0, h = 0;
     std::vector<std::string> lines;
 };
@@ -653,6 +654,30 @@ bool parse(const std::string& source, Graph& g, std::string& error) {
         if (dst.stroke_width.empty()) dst.stroke_width = st.stroke_width;
         if (dst.dash.empty()) dst.dash = st.dash;
     }
+    if (!agentflow) {
+        // An empty subgraph still draws its frame and title: a hidden node (the one an edge to it made, if any) holds the place.
+        Graph& gr = p.g;
+        std::vector<char> has_child(gr.groups.size(), 0);
+        for (const Group& grp : gr.groups)
+            if (grp.parent >= 0) has_child[grp.parent] = 1;
+        for (size_t gi = 0; gi < gr.groups.size(); gi++) {
+            if (!gr.groups[gi].nodes.empty() || has_child[gi]) continue;
+            auto it = gr.index.find(gr.groups[gi].id);
+            int v;
+            if (it != gr.index.end()) {
+                v = it->second;
+            } else {
+                Node n;
+                n.id = gr.groups[gi].id;
+                gr.nodes.push_back(n);
+                v = (int)gr.nodes.size() - 1;
+            }
+            gr.nodes[v].phantom = true;
+            gr.nodes[v].label = gr.groups[gi].title;
+            gr.nodes[v].group = (int)gi;
+            gr.groups[gi].nodes.push_back(v);
+        }
+    }
     if (agentflow) {
         // An edge to a container (`researcher --> designer`) made a node of that name: send it to the container's first member
         // (as a target) or last member (as a source) instead, and drop the placeholder.
@@ -708,6 +733,11 @@ void size_nodes(Graph& g, const Text& text) {
     using namespace metrics;
     for (Node& n : g.nodes) {
         n.lines = split_lines(n.label);
+        if (n.phantom) {  // wide enough that its frame holds the subgraph's title
+            n.w = std::max(60.0, std::ceil(text.block_width({n.label}, kGroupFont, kGroupWeight)) - 8);
+            n.h = 24;
+            continue;
+        }
         double tw = text.block_width(n.lines, kNodeFont, kNodeWeight);
         double th = n.lines.size() * kNodeFont * kLineHeight;
         double w = tw + 2 * kPadX, h = th + 2 * kPadY;
@@ -1000,7 +1030,8 @@ bool render_flowchart(const std::string& source, const Options& options, std::st
         centered_text(body, th, label_lines[i], c.x, c.y, kEdgeFont, kEdgeWeight, th.text_sec);
         body += "</g>\n";
     }
-    for (size_t i = 0; i < g.nodes.size(); i++) draw_node(body, th, g.nodes[i], at(lay.center[i]));
+    for (size_t i = 0; i < g.nodes.size(); i++)
+        if (!g.nodes[i].phantom) draw_node(body, th, g.nodes[i], at(lay.center[i]));
 
     svg = svg_document(th, (x1 - x0) + 2 * kMargin, (y1 - y0) + 2 * kMargin, body);
     return true;
