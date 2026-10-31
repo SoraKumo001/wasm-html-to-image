@@ -38,7 +38,8 @@ constexpr double kMargin = 40;
 /// Colours with every derived value computed (no var() / color-mix() left in the output).
 struct Theme {
     std::string bg, fg, accent, line, muted, surface, border;
-    std::string text, text_sec, text_faint, arrow, group_fill, group_hdr, label_bg, inner_stroke, key_badge;
+    std::string text, text_sec, text_faint, arrow, group_fill, group_hdr, cluster_hdr, label_bg, note_fill, note_border, note_text, scale_stroke, inner_stroke, key_badge;
+    std::vector<std::string> scale, plot;  // empty: the diagram derives its own colours
     bool paint_background = false;
     std::string font, mono;
 };
@@ -46,6 +47,21 @@ struct Theme {
 inline std::string mix(const std::string& fg, const std::string& bg, int pct) {
     std::string expr = "color-mix(in srgb, " + fg + " " + std::to_string(pct) + "%, " + bg + ")", out;
     return litehtml::svgutil::eval_color_functions(expr, out) ? out : fg;
+}
+
+inline std::vector<std::string> split_colors(const std::string& list) {
+    std::vector<std::string> out;
+    size_t at = 0;
+    while (at <= list.size()) {
+        size_t end = list.find(',', at);
+        if (end == std::string::npos) end = list.size();
+        std::string c = list.substr(at, end - at);
+        while (!c.empty() && c.front() == ' ') c.erase(c.begin());
+        while (!c.empty() && c.back() == ' ') c.pop_back();
+        if (!c.empty()) out.push_back(c);
+        at = end + 1;
+    }
+    return out;
 }
 
 inline Theme make_theme(const Options& o) {
@@ -62,7 +78,14 @@ inline Theme make_theme(const Options& o) {
     t.text_faint = mix(o.fg, o.bg, 25);
     t.arrow = o.arrow.empty() ? t.accent : o.arrow;
     t.group_fill = o.group_fill.empty() ? o.bg : o.group_fill;
-    t.group_hdr = o.group_header.empty() ? mix(o.fg, o.bg, 5) : o.group_header;
+    t.group_hdr = mix(o.fg, o.bg, 5);
+    t.cluster_hdr = o.group_header.empty() ? t.group_hdr : o.group_header;
+    t.note_fill = o.note_fill.empty() ? t.group_hdr : o.note_fill;
+    t.note_border = o.note_border.empty() ? t.border : o.note_border;
+    t.note_text = o.note_text.empty() ? t.text : o.note_text;
+    t.scale_stroke = o.scale_stroke.empty() ? o.bg : o.scale_stroke;
+    t.scale = split_colors(o.scale);
+    t.plot = split_colors(o.plot);
     t.label_bg = o.label_fill.empty() ? o.bg : o.label_fill;
     t.inner_stroke = mix(o.fg, o.bg, 12);
     t.key_badge = mix(o.fg, o.bg, 10);

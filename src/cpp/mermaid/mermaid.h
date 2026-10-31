@@ -32,6 +32,15 @@ struct Options {
     std::string group_fill;    // body of a subgraph / cluster; default: bg
     std::string group_header;  // header band of a subgraph; default: a faint tint of fg over bg
     std::string label_fill;    // behind edge labels; default: bg
+    std::string note_fill;     // notes (sequence diagram); default: a faint tint of fg over bg
+    std::string note_border;   // default: border
+    std::string note_text;     // default: fg
+    /// Series colours, comma separated (`#aaa,#bbb,...`), taken in turn by the slices of a pie chart; empty: shades of fg.
+    /// With a scale the pie is drawn as the official Mermaid one is (translucent slices, an outline in scale_stroke).
+    std::string scale;
+    std::string scale_stroke;  // outline of the pie slices; default: bg
+    /// Colours of the series of an xychart, comma separated; empty: one colour (the accent or the line colour).
+    std::string plot;
     /// Paint the background rectangle. Off by default so a diagram sits on the page it is placed on.
     bool paint_background = false;
     std::string font_family = "sans-serif";

@@ -420,8 +420,8 @@ bool render_sequence(const std::string& source, const Options& options, std::str
                 else if (lo == hi) x0 = cx[lo] - nw / 2, x1 = x0 + nw;
                 else x0 = std::min(cx[lo] - 10, (cx[lo] + cx[hi]) / 2 - nw / 2), x1 = std::max(cx[hi] + 10, (cx[lo] + cx[hi]) / 2 + nw / 2);
                 touch(x0, x1);
-                msgs += rect(x0, y, x1 - x0, nh, th.group_hdr, th.border, 2);
-                centered_text(msgs, th, lines, (x0 + x1) / 2, y + nh / 2, kMsgFont, 400, th.text);
+                msgs += rect(x0, y, x1 - x0, nh, th.note_fill, th.note_border, 2);
+                centered_text(msgs, th, lines, (x0 + x1) / 2, y + nh / 2, kMsgFont, 400, th.note_text);
                 y += nh + 10;
                 break;
             }

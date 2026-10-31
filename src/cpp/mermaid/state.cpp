@@ -4,6 +4,7 @@
 #include <cmath>
 #include <map>
 
+#include "mermaid/frame_clear.h"
 #include "mermaid/layered.h"
 #include "mermaid/nodestyle.h"
 
@@ -332,6 +333,7 @@ bool render_state(const std::string& source, const Options& options, std::string
         body += "<line x1=\"" + num(f.x0 + ox) + "\" y1=\"" + num(f.y0 + oy + kHeader) + "\" x2=\"" + num(f.x1 + ox) + "\" y2=\"" + num(f.y0 + oy + kHeader) + "\" stroke=\"" + th.border +
                 "\" stroke-width=\"1\"/>\n</g>\n";
     }
+    clear_frame_borders(lay.points, lay.label_center, le, frames);
     for (size_t k = 0; k < d.edges.size(); k++) {
         if (lay.points[k].size() < 2) continue;
         std::vector<Pt> pts;

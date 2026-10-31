@@ -147,6 +147,8 @@ bool render_xychart(const std::string& source, const Options& options, std::stri
     Chart c;
     if (!parse(source, c, error)) return false;
     Theme th = make_theme(options);
+    const bool plotted = !th.plot.empty();  // the official look: one colour per series, taken in turn
+    auto plot_color = [&](size_t si) { return th.plot[si % th.plot.size()]; };
     Text text{options};
 
     size_t n = 0;
@@ -227,23 +229,25 @@ bool render_xychart(const std::string& source, const Options& options, std::stri
         const std::string hcolor = options.accent.empty() ? th.line : th.accent;
         static const double kOp[] = {1.0, 0.6, 0.35, 0.8};
         size_t hi_bar = 0, hi_line = 0;
-        for (auto& s : c.series) {
+        for (size_t si = 0; si < c.series.size(); si++) {
+            const Series& s = c.series[si];
             if (!s.bar) continue;
             for (size_t k = 0; k < s.values.size(); k++) {
                 double x = VX(s.values[k]), y = CY(k) - hgroup / 2 + hbw * hi_bar;
-                hb += "<rect x=\"" + num(std::min(x, hbase)) + "\" y=\"" + num(y + 1) + "\" width=\"" + num(std::fabs(x - hbase)) + "\" height=\"" + num(std::max(1.0, hbw - 2)) + "\" rx=\"2\" fill=\"" + hcolor +
-                      "\" fill-opacity=\"" + num(kOp[hi_bar % 4]) + "\"/>\n";
+                hb += "<rect x=\"" + num(std::min(x, hbase)) + "\" y=\"" + num(y + 1) + "\" width=\"" + num(std::fabs(x - hbase)) + "\" height=\"" + num(std::max(1.0, hbw - 2)) + "\" rx=\"2\" fill=\"" + (plotted ? plot_color(si) : hcolor) +
+                      "\" fill-opacity=\"" + num(plotted ? 1.0 : kOp[hi_bar % 4]) + "\"/>\n";
             }
             hi_bar++;
         }
         static const char* kHDash[] = {"", " stroke-dasharray=\"6 4\"", " stroke-dasharray=\"2 3\""};
         bool hbar_any = hbars > 0;
-        for (auto& s : c.series) {
+        for (size_t si = 0; si < c.series.size(); si++) {
+            const Series& s = c.series[si];
             if (s.bar) continue;
-            std::string color = hbar_any ? th.text : (options.accent.empty() ? th.text : th.accent), pts;
+            std::string color = plotted ? plot_color(si) : hbar_any ? th.text : (options.accent.empty() ? th.text : th.accent), pts;
             for (size_t k = 0; k < s.values.size(); k++) pts += (pts.empty() ? "" : " ") + num(VX(s.values[k])) + "," + num(CY(k));
             hb += "<polyline class=\"series\" points=\"" + pts + "\" fill=\"none\" stroke=\"" + color + "\" stroke-width=\"2\" stroke-linejoin=\"round\"" + kHDash[hi_line % 3] + "/>\n";
-            for (size_t k = 0; k < s.values.size(); k++)
+            for (size_t k = 0; !plotted && k < s.values.size(); k++)
                 hb += "<circle cx=\"" + num(VX(s.values[k])) + "\" cy=\"" + num(CY(k)) + "\" r=\"3.5\" fill=\"" + th.bg + "\" stroke=\"" + color + "\" stroke-width=\"2\"/>\n";
             hi_line++;
         }
@@ -295,23 +299,25 @@ bool render_xychart(const std::string& source, const Options& options, std::stri
     const std::string bar_color = options.accent.empty() ? th.line : th.accent;
     static const double kBarOpacity[] = {1.0, 0.6, 0.35, 0.8};
     size_t bi = 0, li = 0;
-    for (auto& s : c.series) {
+    for (size_t si = 0; si < c.series.size(); si++) {
+        const Series& s = c.series[si];
         if (!s.bar) continue;
-        double op = kBarOpacity[bi % 4];
+        double op = plotted ? 1.0 : kBarOpacity[bi % 4];
         for (size_t k = 0; k < s.values.size(); k++) {
             double x = X(k) - group / 2 + bw * bi, y = Y(s.values[k]), h = std::fabs(base - y);
-            body += "<rect x=\"" + num(x + 1) + "\" y=\"" + num(std::min(y, base)) + "\" width=\"" + num(std::max(1.0, bw - 2)) + "\" height=\"" + num(h) + "\" rx=\"2\" fill=\"" + bar_color +
+            body += "<rect x=\"" + num(x + 1) + "\" y=\"" + num(std::min(y, base)) + "\" width=\"" + num(std::max(1.0, bw - 2)) + "\" height=\"" + num(h) + "\" rx=\"2\" fill=\"" + (plotted ? plot_color(si) : bar_color) +
                     "\" fill-opacity=\"" + num(op) + "\"/>\n";
         }
         bi++;
     }
     static const char* kDash[] = {"", " stroke-dasharray=\"6 4\"", " stroke-dasharray=\"2 3\""};
-    for (auto& s : c.series) {
+    for (size_t si = 0; si < c.series.size(); si++) {
+        const Series& s = c.series[si];
         if (s.bar) continue;
-        std::string color = has_bar ? th.text : (options.accent.empty() ? th.text : th.accent), pts;
+        std::string color = plotted ? plot_color(si) : has_bar ? th.text : (options.accent.empty() ? th.text : th.accent), pts;
         for (size_t k = 0; k < s.values.size(); k++) pts += (pts.empty() ? "" : " ") + num(X(k)) + "," + num(Y(s.values[k]));
         body += "<polyline class=\"series\" points=\"" + pts + "\" fill=\"none\" stroke=\"" + color + "\" stroke-width=\"2\" stroke-linejoin=\"round\"" + kDash[li % 3] + "/>\n";
-        for (size_t k = 0; k < s.values.size(); k++)
+        for (size_t k = 0; !plotted && k < s.values.size(); k++)
             body += "<circle cx=\"" + num(X(k)) + "\" cy=\"" + num(Y(s.values[k])) + "\" r=\"3.5\" fill=\"" + th.bg + "\" stroke=\"" + color + "\" stroke-width=\"2\"/>\n";
         li++;
     }

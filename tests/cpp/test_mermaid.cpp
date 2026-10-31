@@ -198,6 +198,60 @@ int main() {
         check(mermaid::render("%%{init: {\"theme\":\"dracula\",\"themeVariables\":{\"primaryColor\":\"#abcdef\"}}}%%\ngraph TD\nA-->B", on, svg, err) && has(svg, "#abcdef") && !has(svg, "#343746"), "theme/variables_override_preset");
     }
 
+    // --- an edge does not run along the border of a subgraph frame ---
+    {
+        std::string svg = svg_of("flowchart TD\n subgraph Client\n  Browser([Web Browser])\n  Mobile[/Mobile App/]\n end\n subgraph Backend\n  Gateway{API Gateway}\n  Auth[[Auth Service]]\n end\n Browser --> Gateway\n Mobile --> Gateway\n Gateway --> Auth");
+        std::vector<double> borders;  // top and bottom of each frame
+        for (size_t at = svg.find("class=\"subgraph\""); at != std::string::npos; at = svg.find("class=\"subgraph\"", at + 1)) {
+            size_t r = svg.find("<rect", at);
+            double y = 0, h = 0;
+            size_t py = svg.find(" y=\"", r), ph = svg.find(" height=\"", r);
+            if (py != std::string::npos && ph != std::string::npos) {
+                y = std::atof(svg.c_str() + py + 4);
+                h = std::atof(svg.c_str() + ph + 9);
+                borders.push_back(y);
+                borders.push_back(y + h);
+            }
+        }
+        check(borders.size() == 4, "frame/two_frames");
+        bool clear = true;
+        int bends = 0;
+        for (size_t at = svg.find("<polyline class=\"edge\" points=\""); at != std::string::npos; at = svg.find("<polyline class=\"edge\" points=\"", at + 1)) {
+            const char* s = svg.c_str() + at + 31;
+            std::vector<std::pair<double, double>> pts;
+            while (*s && *s != '"') {
+                char* end;
+                double x = std::strtod(s, &end);
+                double y = std::strtod(end + 1, &end);
+                pts.push_back({x, y});
+                s = *end == ' ' ? end + 1 : end;
+            }
+            for (size_t k = 1; k + 2 < pts.size(); k++) {
+                if (std::fabs(pts[k].second - pts[k + 1].second) > 1e-6) continue;
+                bends++;
+                for (double b : borders)
+                    if (std::fabs(pts[k].second - b) < 3) clear = false;
+            }
+        }
+        check(bends >= 2, "frame/edges_have_bends");
+        check(clear, "frame/edge_bend_clear_of_frame_border");
+    }
+
+    // --- an edge label does not sit on the border of a composite state ---
+    {
+        std::string svg = svg_of("stateDiagram-v2\n [*] --> Pending\n Pending --> Paid: Payment Received\n Paid --> Processing: Prepare Items\n state Processing {\n  [*] --> Packing\n  Packing --> Shipping: Courier Picked Up\n }\n Processing --> Done\n Done --> [*]");
+        size_t comp = svg.find("class=\"composite\"");
+        size_t text = svg.find(">Prepare Items<");
+        size_t grp = text == std::string::npos ? std::string::npos : svg.rfind("<g class=\"edge-label\">", text);
+        check(comp != std::string::npos && grp != std::string::npos, "composite/label_found");
+        if (comp != std::string::npos && grp != std::string::npos) {
+            double top = std::atof(svg.c_str() + svg.find(" y=\"", svg.find("<rect", comp)) + 4);
+            size_t r = svg.find("<rect", grp);
+            double ly = std::atof(svg.c_str() + svg.find(" y=\"", r) + 4), lh = std::atof(svg.c_str() + svg.find(" height=\"", r) + 9);
+            check(top - (ly + lh) >= 6 || ly - top >= 6, "composite/label_clear_of_border");
+        }
+    }
+
     // --- the official-colour themes: node, group, edge and arrow colours ---
     {
         std::string svg, err;
@@ -218,6 +272,20 @@ int main() {
             check(ok && has(svg, std::string("class=\"edge\"") ) && has(svg, std::string("stroke=\"") + t.line + "\""), name + "/edge");
             check(ok && has(svg, std::string("class=\"subgraph\">\n<rect x=\"") ) && has(svg, std::string("fill=\"") + t.group + "\" stroke=\"" + t.border + "\""), name + "/group");
             check(ok && has(svg, std::string("fill=\"") + t.line + "\" stroke=\"" + t.line + "\" stroke-width=\"0.75\""), name + "/arrow_follows_line");
+        }
+        // pie, xychart and sequence notes take their colours from the theme
+        {
+            mermaid::Options light, dark;
+            mermaid::apply_theme("light", light);
+            mermaid::apply_theme("dark", dark);
+            std::string pie = "pie\n \"a\": 3\n \"b\": 5\n \"c\": 2";
+            check(mermaid::render(pie, light, svg, err) && has(svg, "fill=\"#ececff\" fill-opacity=\"0.7\" stroke=\"#000000\"") && has(svg, "fill=\"#ffffde\" fill-opacity=\"0.7\"") && has(svg, "fill=\"#b5ff20\" fill-opacity=\"0.7\""), "theme/official/pie_scale");
+            check(mermaid::render(pie, dark, svg, err) && has(svg, "fill=\"#0b0000\" fill-opacity=\"0.7\"") && has(svg, "fill=\"#4d1037\" fill-opacity=\"0.7\""), "theme/official/pie_scale_dark");
+            std::string xy = "xychart-beta\n x-axis [a, b, c]\n bar [1, 2, 3]\n line [3, 2, 1]";
+            check(mermaid::render(xy, light, svg, err) && has(svg, "fill=\"#ececff\" fill-opacity=\"1\"") && has(svg, "class=\"series\"") && has(svg, "stroke=\"#8493a6\"") && !has(svg, "<circle"), "theme/official/xychart_plot");
+            std::string seq = "sequenceDiagram\n A->>B: hi\n Note over A,B: hello";
+            check(mermaid::render(seq, light, svg, err) && has(svg, "fill=\"#fff5ad\" stroke=\"#aaaa33\""), "theme/official/note");
+            check(mermaid::render(seq, dark, svg, err) && has(svg, "fill=\"#474949\" stroke=\"#2f2f2f\""), "theme/official/note_dark");
         }
         mermaid::Options custom;
         custom.arrow = "#ff0000";

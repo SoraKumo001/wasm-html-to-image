@@ -6,6 +6,7 @@
 #include <cstring>
 #include <map>
 
+#include "mermaid/frame_clear.h"
 #include "mermaid/layered.h"
 
 namespace mermaid {
@@ -692,10 +693,11 @@ bool render_flowchart(const std::string& source, const Options& options, std::st
         body += "<g class=\"subgraph\">\n<rect x=\"" + num(f.x0 + ox) + "\" y=\"" + num(f.y0 + oy) + "\" width=\"" + num(f.x1 - f.x0) + "\" height=\"" + num(f.y1 - f.y0) +
                 "\" rx=\"2\" ry=\"2\" fill=\"" + th.group_fill + "\" stroke=\"" + th.border + "\" stroke-width=\"1\"/>\n";
         body += "<rect x=\"" + num(f.x0 + ox) + "\" y=\"" + num(f.y0 + oy) + "\" width=\"" + num(f.x1 - f.x0) + "\" height=\"" + num(kHeader) +
-                "\" rx=\"2\" ry=\"2\" fill=\"" + th.group_hdr + "\" stroke=\"" + th.border + "\" stroke-width=\"1\"/>\n";
+                "\" rx=\"2\" ry=\"2\" fill=\"" + th.cluster_hdr + "\" stroke=\"" + th.border + "\" stroke-width=\"1\"/>\n";
         body += "<text x=\"" + num(f.x0 + ox + 12) + "\" y=\"" + num(f.y0 + oy + kHeader / 2 + kGroupFont * 0.35) + "\" font-size=\"" + num(kGroupFont) +
                 "\" font-weight=\"" + std::to_string(kGroupWeight) + "\" font-family=\"" + esc(th.font) + "\" fill=\"" + th.text + "\">" + esc(g.groups[gi].title) + "</text>\n</g>\n";
     }
+    clear_frame_borders(lay.points, lay.label_center, le, frames);
     // edges
     for (size_t i = 0; i < g.edges.size(); i++) {
         const Edge& e = g.edges[i];

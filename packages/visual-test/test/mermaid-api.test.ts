@@ -85,9 +85,9 @@ describe("renderMermaid", () => {
     const b = PNG.sync.read(Buffer.from(dark.data));
     expect(a.width).toBeLessThan(700);
     expect(a.width).toBe(b.width);
-    // the page takes the theme's background: white vs near black in the corner
+    // the page takes the theme's background: white vs the official dark grey (#333333) in the corner
     expect(a.data[0]).toBeGreaterThan(240);
-    expect(b.data[0]).toBeLessThan(40);
+    expect(b.data[0]).toBeLessThan(60);
   });
 
   it("honours width, padding and an explicit background", async () => {
