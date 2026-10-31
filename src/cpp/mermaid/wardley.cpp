@@ -365,7 +365,7 @@ bool render_wardley(const std::string& source, const Options& options, std::stri
     if (!title.empty()) centered_text(body, th, {title}, W / 2, 26, 18, 600, th.text);
 
     // axes and stage dividers
-    const std::string axis = th.border;
+    const std::string axis = th.line;
     body += "<rect x=\"" + num(left) + "\" y=\"" + num(top) + "\" width=\"" + num(pw) + "\" height=\"" + num(ph) + "\" fill=\"none\" stroke=\"" + axis + "\" stroke-width=\"1\"/>\n";
     double from = 0;
     for (size_t k = 0; k < stages.size(); k++) {
@@ -415,9 +415,9 @@ bool render_wardley(const std::string& source, const Options& options, std::stri
             hi = std::max(hi, c.second);
         }
         double y = Y(parent.vis) + 30;
-        body += "<rect x=\"" + num(X(lo) - 14) + "\" y=\"" + num(y - 14) + "\" width=\"" + num(X(hi) - X(lo) + 28) + "\" height=\"28\" fill=\"none\" stroke=\"" + th.fg + "\" stroke-width=\"1.5\"/>\n";
+        body += "<rect x=\"" + num(X(lo) - 14) + "\" y=\"" + num(y - 14) + "\" width=\"" + num(X(hi) - X(lo) + 28) + "\" height=\"28\" fill=\"none\" stroke=\"" + th.line + "\" stroke-width=\"1.5\"/>\n";
         for (auto& c : p.children) {
-            body += "<rect x=\"" + num(X(c.second) - 4) + "\" y=\"" + num(y - 4) + "\" width=\"8\" height=\"8\" fill=\"" + th.bg + "\" stroke=\"" + th.fg + "\" stroke-width=\"1.5\"/>\n";
+            body += "<rect x=\"" + num(X(c.second) - 4) + "\" y=\"" + num(y - 4) + "\" width=\"8\" height=\"8\" fill=\"" + th.component_fill + "\" stroke=\"" + th.line + "\" stroke-width=\"1.5\"/>\n";
             aligned_text(body, th, {c.first}, X(c.second), y + 25, 11, 400, th.text, "middle");
         }
     }
@@ -449,16 +449,16 @@ bool render_wardley(const std::string& source, const Options& options, std::stri
         double tx = X(ev.target);
         if (std::abs(tx - p.x) < kR) continue;
         double dir = tx > p.x ? 1 : -1;
-        body += dashed_line(p.x + dir * kR, p.y, tx - dir * kR, p.y, "#d9534f", 1.5, "5 4");
-        arrow_head(body, {tx - dir * kR, p.y}, {p.x, p.y}, "#d9534f");
+        body += dashed_line(p.x + dir * kR, p.y, tx - dir * kR, p.y, th.evolution, 1.5, "5 4");
+        arrow_head(body, {tx - dir * kR, p.y}, {p.x, p.y}, th.evolution);
         body += "<circle cx=\"" + num(tx) + "\" cy=\"" + num(p.y) + "\" r=\"" + num(kR) + "\" fill=\"none\" stroke=\"#d9534f\" stroke-width=\"1.5\"/>\n";
     }
 
     // components
     for (auto& n : nodes) {
         Pt c = center(n);
-        body += "<circle cx=\"" + num(c.x) + "\" cy=\"" + num(c.y) + "\" r=\"" + num(kR) + "\" fill=\"" + (n.anchor ? th.fg : th.bg) + "\" stroke=\"" + th.fg + "\" stroke-width=\"1.5\"/>\n";
-        const std::string ring = "fill=\"none\" stroke=\"" + th.fg + "\" stroke-width=\"1.2\"";
+        body += "<circle cx=\"" + num(c.x) + "\" cy=\"" + num(c.y) + "\" r=\"" + num(kR) + "\" fill=\"" + th.component_fill + "\" stroke=\"" + th.line + "\" stroke-width=\"1.5\"/>\n";
+        const std::string ring = "fill=\"none\" stroke=\"" + th.line + "\" stroke-width=\"1.2\"";
         if (n.sourcing == "build") {
             double r = 12;
             body += "<polygon points=\"" + num(c.x) + "," + num(c.y - r) + " " + num(c.x + r) + "," + num(c.y + r * 0.8) + " " + num(c.x - r) + "," + num(c.y + r * 0.8) + "\" " + ring + "/>\n";
@@ -470,7 +470,7 @@ bool render_wardley(const std::string& source, const Options& options, std::stri
         } else if (n.sourcing == "market") {
             body += "<circle cx=\"" + num(c.x) + "\" cy=\"" + num(c.y) + "\" r=\"12\" " + ring + "/>\n";
         }
-        if (n.inertia) body += "<line x1=\"" + num(c.x + 18) + "\" y1=\"" + num(c.y - 9) + "\" x2=\"" + num(c.x + 18) + "\" y2=\"" + num(c.y + 9) + "\" stroke=\"" + th.fg + "\" stroke-width=\"3\"/>\n";
+        if (n.inertia) body += "<line x1=\"" + num(c.x + 18) + "\" y1=\"" + num(c.y - 9) + "\" x2=\"" + num(c.x + 18) + "\" y2=\"" + num(c.y + 9) + "\" stroke=\"" + th.line + "\" stroke-width=\"3\"/>\n";
         double pad = n.sourcing.empty() && !n.inertia ? 0 : 8;
         double lx = c.x + (n.has_offset ? n.dx : 10 + pad);
         double ly = c.y + (n.has_offset ? n.dy : -12);
@@ -484,7 +484,7 @@ bool render_wardley(const std::string& source, const Options& options, std::stri
         if (m.kind == 0) {
             aligned_text(body, th, {m.text}, x, y, 11, 400, th.text_sec, "start");
         } else {
-            std::string color = m.kind == 1 ? "#2f9e5f" : "#d9534f";
+            std::string color = m.kind == 1 ? "#2f9e5f" : th.evolution;
             double w = 26, h = 10, dir = m.kind == 1 ? 1 : -1;
             body += "<polygon points=\"" + num(x) + "," + num(y - h) + " " + num(x + dir * w) + "," + num(y - h) + " " + num(x + dir * w) + "," + num(y - h - 6) + " " + num(x + dir * (w + 14)) + "," + num(y) + " " + num(x + dir * w) + "," +
                     num(y + h + 6) + " " + num(x + dir * w) + "," + num(y + h) + " " + num(x) + "," + num(y + h) + "\" fill=\"" + color + "\" fill-opacity=\"0.35\" stroke=\"" + color + "\" stroke-width=\"1.2\"/>\n";
@@ -495,7 +495,7 @@ bool render_wardley(const std::string& source, const Options& options, std::stri
     // numbered annotations and their key
     for (auto& a : annotations) {
         double x = X(a.evo), y = Y(a.vis);
-        body += "<circle cx=\"" + num(x) + "\" cy=\"" + num(y) + "\" r=\"9\" fill=\"" + th.bg + "\" stroke=\"" + th.fg + "\" stroke-width=\"1.2\"/>\n";
+        body += "<circle cx=\"" + num(x) + "\" cy=\"" + num(y) + "\" r=\"9\" fill=\"" + th.component_fill + "\" stroke=\"" + th.line + "\" stroke-width=\"1.2\"/>\n";
         centered_text(body, th, {std::to_string(a.number)}, x, y, 10, 600, th.text);
     }
     if (!annotations.empty()) {

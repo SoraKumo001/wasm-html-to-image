@@ -31,6 +31,14 @@ const DomainInfo kInfo[kDomains] = {
     {"confusion", "Confusion", "", "", 12},
 };
 
+/// The official themes give each domain a colour of its own, drawn at 40% over the background.
+std::string domain_fill(const Theme& th, int d) {
+    if (d < (int)th.domains.size()) return th.domains[d];
+    return mix(d == Confusion ? th.fg : th.accent, th.bg, kInfo[d].tint);
+}
+
+std::string domain_opacity(const Theme& th) { return th.domains.size() == kDomains ? " fill-opacity=\"0.4\"" : ""; }
+
 struct Transition {
     int from, to;
     std::string label;
@@ -136,10 +144,10 @@ bool render_cynefin(const std::string& source, const Options& options, std::stri
     } box[4] = {{left, top, mx, my}, {mx, top, right, my}, {left, my, mx, bottom}, {mx, my, right, bottom}};
     for (int d = 0; d < 4; d++) {
         const Box& b = box[d];
-        body += "<rect x=\"" + num(b.x0) + "\" y=\"" + num(b.y0) + "\" width=\"" + num(b.x1 - b.x0) + "\" height=\"" + num(b.y1 - b.y0) + "\" fill=\"" + mix(th.accent, th.bg, kInfo[d].tint) + "\"/>\n";
+        body += "<rect x=\"" + num(b.x0) + "\" y=\"" + num(b.y0) + "\" width=\"" + num(b.x1 - b.x0) + "\" height=\"" + num(b.y1 - b.y0) + "\" fill=\"" + domain_fill(th, d) + "\"" + domain_opacity(th) + "/>\n";
     }
     // the boundaries between them wave; the one between clear and chaotic is the cliff
-    const std::string boundary = th.border;
+    const std::string boundary = th.line;
     auto joined = [](std::string d) {
         d[0] = 'L';  // continue the previous piece instead of starting a new one
         return d;
@@ -147,13 +155,13 @@ bool render_cynefin(const std::string& source, const Options& options, std::stri
     body += "<path d=\"" + wavy({mx, top}, {mx, my}, amp, 3, 0.6) + joined(wavy({mx, my}, {mx, bottom}, amp, 3, 2.1)) + "\" fill=\"none\" stroke=\"" + boundary + "\" stroke-width=\"2\"/>\n";
     body += "<path d=\"" + wavy({left, my}, {mx, my}, amp, 3, 1.3) + joined(wavy({mx, my}, {right, my}, amp, 3, 3.4)) + "\" fill=\"none\" stroke=\"" + boundary + "\" stroke-width=\"2\"/>\n";
     // the cliff: the lower half of the vertical boundary, where clear falls into chaotic
-    body += "<path d=\"" + wavy({mx, my}, {mx, bottom}, amp, 3, 2.1) + "\" fill=\"none\" stroke=\"" + th.fg + "\" stroke-width=\"3\" stroke-dasharray=\"2 5\" stroke-linecap=\"round\" opacity=\"0.5\"/>\n";
+    body += "<path d=\"" + wavy({mx, my}, {mx, bottom}, amp, 3, 2.1) + "\" fill=\"none\" stroke=\"" + th.cliff + "\" stroke-width=\"4\"/>\n";
     body += "<rect x=\"" + num(left) + "\" y=\"" + num(top) + "\" width=\"" + num(right - left) + "\" height=\"" + num(bottom - top) + "\" fill=\"none\" stroke=\"" + boundary + "\" stroke-width=\"1\"/>\n";
 
     // domain titles, how to act there, and the items as badges
     auto badge = [&](double cx, double y, const std::string& label, double max_w) {
         double w = std::min(max_w, text.width(label, 12, 500) + 20);
-        body += "<rect x=\"" + num(cx - w / 2) + "\" y=\"" + num(y) + "\" width=\"" + num(w) + "\" height=\"24\" rx=\"12\" fill=\"" + th.bg + "\" stroke=\"" + th.border + "\" stroke-width=\"1\"/>\n";
+        body += "<rect x=\"" + num(cx - w / 2) + "\" y=\"" + num(y) + "\" width=\"" + num(w) + "\" height=\"24\" rx=\"12\" fill=\"" + th.bg + "\" stroke=\"" + th.line + "\" stroke-width=\"1\"/>\n";
         centered_text(body, th, {label}, cx, y + 12, 12, 500, th.text);
     };
     for (int d = 0; d < 4; d++) {
@@ -178,7 +186,7 @@ bool render_cynefin(const std::string& source, const Options& options, std::stri
     // confusion: an ellipse over the junction
     {
         double rx = 92, ry = 56;
-        body += "<ellipse cx=\"" + num(mx) + "\" cy=\"" + num(my) + "\" rx=\"" + num(rx) + "\" ry=\"" + num(ry) + "\" fill=\"" + mix(th.fg, th.bg, kInfo[Confusion].tint) + "\" stroke=\"" + boundary + "\" stroke-width=\"2\"/>\n";
+        body += "<ellipse cx=\"" + num(mx) + "\" cy=\"" + num(my) + "\" rx=\"" + num(rx) + "\" ry=\"" + num(ry) + "\" fill=\"" + domain_fill(th, Confusion) + "\"" + domain_opacity(th) + " stroke=\"" + boundary + "\" stroke-width=\"2\"/>\n";
         double y = items[Confusion].empty() ? my : my - 22;
         centered_text(body, th, {kInfo[Confusion].title}, mx, y, 14, 700, th.text);
         double iy = y + 12;

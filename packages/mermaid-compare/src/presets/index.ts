@@ -1,7 +1,7 @@
 export interface PresetItem {
   id: string;
   name: string;
-  category: "Flowchart" | "Sequence" | "Class" | "State" | "ER" | "Chart" | "Recovery";
+  category: "Flowchart" | "Sequence" | "Class" | "State" | "ER" | "Chart" | "New" | "Recovery";
   code: string;
   description: string;
   recommendedMode?: "strict" | "compat" | "recover";
@@ -194,5 +194,83 @@ export const PRESETS: PresetItem[] = [
     B -- Fail --> D[Rejected]
     C --> E[End]
     D --> E`,
+  },
+  {
+    id: "new-wardley",
+    name: "Wardley map",
+    category: "New",
+    description: "Diagram added in Mermaid 12.2",
+    code: `wardley-beta
+title Tea Shop
+anchor Business [0.95, 0.63]
+component Cup of Tea [0.79, 0.61]
+component Tea [0.63, 0.81]
+component Kettle [0.43, 0.35]
+Business -> Cup of Tea
+Cup of Tea -> Tea
+Cup of Tea -> Kettle`,
+  },
+  {
+    id: "new-cynefin",
+    name: "Cynefin",
+    category: "New",
+    description: "Diagram added in Mermaid 12.2",
+    code: `cynefin-beta
+title Incident triage
+complex
+  "Experiment"
+  "Probe"
+complicated
+  "Analyse"
+clear
+  "Follow the runbook"
+chaotic
+  "Stabilise"
+confusion
+  "Unknown"`,
+  },
+  {
+    id: "new-railroad",
+    name: "Railroad (EBNF)",
+    category: "New",
+    description: "Diagram added in Mermaid 12.2",
+    code: `railroad-ebnf-beta
+expr = term , { ( "+" | "-" ) , term } ;
+term = factor , { ( "*" | "/" ) , factor } ;
+factor = number | "(" , expr , ")" ;`,
+  },
+  {
+    id: "new-swimlane",
+    name: "Swimlanes",
+    category: "New",
+    description: "Diagram added in Mermaid 12.2",
+    code: `swimlane-beta LR
+  subgraph Customer
+    request[Request service]
+    receive[Receive update]
+  end
+  subgraph Support
+    triage[Triage request]
+    answer[Send answer]
+  end
+  request --> triage
+  triage -->|Known issue| answer
+  answer --> receive`,
+  },
+  {
+    id: "new-usecase",
+    name: "Use case",
+    category: "New",
+    description: "Diagram added in Mermaid 12.2",
+    code: `usecase-beta
+  actor Admin
+  actor Person
+  Checkout
+  Payment
+  ApplyCoupon
+  Admin --|> Person
+  Person --> Checkout
+  Checkout ..> : include Payment
+  ApplyCoupon ..> : extend Checkout`,
   },
 ];

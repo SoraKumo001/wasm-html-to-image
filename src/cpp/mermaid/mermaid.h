@@ -44,6 +44,11 @@ struct Options {
     std::string scale_stroke;  // outline of the pie slices; default: bg
     /// Colours of the series of an xychart, comma separated; empty: one colour (the accent or the line colour).
     std::string plot;
+    /// The fills of the five Cynefin domains (complex, complicated, chaotic, clear, confusion), comma separated; empty: tints of the accent.
+    std::string domains;
+    std::string cliff;           // the cliff of a Cynefin diagram; default: the line colour
+    std::string evolution;       // evolution arrows of a Wardley map; default: a red
+    std::string component_fill;  // components of a Wardley map; default: bg
     /// Paint the background rectangle. Off by default so a diagram sits on the page it is placed on.
     bool paint_background = false;
     std::string font_family = "sans-serif";

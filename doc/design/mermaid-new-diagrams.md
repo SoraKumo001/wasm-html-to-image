@@ -44,3 +44,21 @@
 - 実装済み(続き): usecase(アクター、ユースケース、システム境界、関連・include・extend・汎化、注、JSON 表、`classDef` / `style`)、swimlanes(flowchart の構文。トップレベルの `subgraph` を帯にして、順位ごとに置く `swimlane.cpp`)、agentflow(flowchart の構文に翻訳: `flow` は subgraph、`global` は枠なし、`@{ shape: ... }` は形、コンテナへの辺は最初・最後のメンバーへ)。
 - 検証: ホストテスト 448 件、visual-test 975 件(コーパス、playground サンプルを含む)が通る。
 - まだ公式と合わせていないこと: 色の ΔE(既存の図と同じ方法で、後から測る)、公式が書いていない細部(コメント、エスケープ、未宣言の端点)。agentflow の辺のメタデータ(`curve`、`animate`)と、usecase の `icon`、`colorScheme: rotate` は読み飛ばす。
+
+## 公式の色との近さ(ΔE)
+
+測定は `packages/mermaid-compare` の `parity.html`(mermaid 12.2.0、CIE76)。比較アプリに「New」のプリセットを足した(wardley、cynefin、railroad(EBNF)、swimlane、usecase)。公式 12.2.0 には eventmodeling と agentflow の描画器が無く、この二つは測れない。
+
+公式の `themeVariables`(`cynefin` と `wardley` の色を含む)を読んで、`light` `dark` `forest` `neutral` のプリセットに次を足した: `domains`(Cynefin の5領域、不透明度0.4)、`cliff`、`evolution`(Wardley の進化の矢印)、`component_fill`。ほかのテーマは空のままで、従来の導出を使う。
+
+パレットの平均 ΔE(light / dark / forest / neutral の順):
+
+| 図 | 塗り | 枠・線 | 文字 |
+|---|---|---|---|
+| wardley | 20/15/25/25 → 0/0/0/0 | 35/3/37/43 → 0/0/0/0 | 18/7/0/0 |
+| cynefin | 7/46/10/8 → 0.3/1.4/0.5/0.3 | 64/3/51/42 → 0/0/0/0 | 0/0/0/0 |
+| railroad | 8/6/28/1 → 0.1/0.1/0.4/0 | 0/0/0/39 → 0/0/0/0 | 0/7/21/1 |
+| swimlane | 0 | 4.4/3.5/2/1 | 0 |
+| usecase | 1.9/3.1/7.7/1.3 | 8.8/6.2/3.6/11.9 | 18/2.5/0/5.1 |
+
+残り: light の wardley と usecase の文字(公式は `#131300`、こちらは `#333333`)、forest の railroad の文字(公式は `#321b67`)、usecase の枠。

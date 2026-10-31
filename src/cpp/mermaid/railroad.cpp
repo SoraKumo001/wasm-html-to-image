@@ -562,7 +562,7 @@ struct Painter {
                 hline(x, x + n.w, y);
                 bool term = n.kind == Node::Terminal, spec = n.kind == Node::Special;
                 out += "<rect x=\"" + num(x) + "\" y=\"" + num(y - kBoxH / 2) + "\" width=\"" + num(n.w) + "\" height=\"" + num(kBoxH) + "\" rx=\"" + (term ? num(kBoxH / 2) : spec ? "6" : "3") + "\" fill=\"" +
-                       (term ? th.surface : th.bg) + "\" stroke=\"" + (term ? th.line : th.fg) + "\" stroke-width=\"" + (term ? "1.2" : "1.5") + "\"" + (spec ? " stroke-dasharray=\"4 3\"" : "") + "/>\n";
+                       (term ? th.surface : th.group_fill) + "\" stroke=\"" + th.line + "\" stroke-width=\"" + (term ? "1.2" : "1.5") + "\"" + (spec ? " stroke-dasharray=\"4 3\"" : "") + "/>\n";
                 centered_text(out, th, {n.text}, x + n.w / 2, y, kFont, n.kind == Node::NonTerminal ? 600 : 500, th.text, term);
                 break;
             }
@@ -677,7 +677,7 @@ bool render_railroad(const std::string& source, const Options& options, std::str
     Measurer measure{text};
     for (auto& r : rules) measure.run(r.body);
 
-    Painter p{th, text, "", "stroke=\"" + th.fg + "\" stroke-width=\"1.5\""};
+    Painter p{th, text, "", "stroke=\"" + th.line + "\" stroke-width=\"1.5\""};
     const double kEnd = 16;  // the start and end markers and the lines to them
     double top = kMargin + (title.empty() ? 0 : 30), y = top, maxw = 0;
     std::string rule_art;
@@ -687,12 +687,12 @@ bool render_railroad(const std::string& source, const Options& options, std::str
         aligned_text(p.out, th, {r.name}, kMargin, y + 8, 14, 700, th.text, "start");
         double base = y + 24 + r.body.up;
         // start marker, the diagram, end marker
-        p.out += "<circle cx=\"" + num(kMargin + 4) + "\" cy=\"" + num(base) + "\" r=\"4\" fill=\"" + th.fg + "\"/>\n";
+        p.out += "<circle cx=\"" + num(kMargin + 4) + "\" cy=\"" + num(base) + "\" r=\"4\" fill=\"" + th.line + "\"/>\n";
         p.hline(kMargin + 8, kMargin + 8 + kEnd, base);
         p.draw(r.body, kMargin + 8 + kEnd, base);
         double ex = kMargin + 8 + kEnd + r.body.w;
         p.hline(ex, ex + kEnd, base);
-        p.out += "<circle cx=\"" + num(ex + kEnd + 4) + "\" cy=\"" + num(base) + "\" r=\"4\" fill=\"" + th.bg + "\" stroke=\"" + th.fg + "\" stroke-width=\"1.5\"/>\n";
+        p.out += "<circle cx=\"" + num(ex + kEnd + 4) + "\" cy=\"" + num(base) + "\" r=\"4\" fill=\"" + th.bg + "\" stroke=\"" + th.line + "\" stroke-width=\"1.5\"/>\n";
         y = base + r.body.down + 36;
     }
     double W = maxw + 2 * kMargin, H = y - 36 + kMargin;
