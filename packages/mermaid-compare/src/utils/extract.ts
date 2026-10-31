@@ -54,6 +54,12 @@ function mostCommon(values: (string | null)[]): string | null {
 function paint(el: Element, prop: "fill" | "stroke" | "color"): string | null {
   const cs = getComputedStyle(el);
   const raw = prop === "color" ? (el.tagName.toLowerCase() === "text" ? cs.fill : cs.color) : cs[prop];
+  // mermaid 12 strokes some themes with a gradient: stand in the first stop
+  const ref = raw.match(/^url\(["']?#([^"')]+)["']?\)/);
+  if (ref) {
+    const stop = el.closest("svg")?.querySelector(`[id="${ref[1]}"] stop`);
+    return stop ? toHex(getComputedStyle(stop).stopColor) : null;
+  }
   return toHex(raw);
 }
 

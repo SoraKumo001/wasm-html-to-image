@@ -85,6 +85,10 @@ async function main() {
   html += `</table>`;
   if (failures.length) html += `<h2>Failures</h2><pre>${failures.join("\n")}</pre>`;
   out.innerHTML = html;
+  const save = (name: string, data: unknown) =>
+    fetch(`/__parity-save?name=${name}`, { method: "POST", body: JSON.stringify(data) }).catch(() => undefined);
+  await save("official-theme-vars", { vars });
+  await save("report", { roleRows, paletteRows, failures });
   status.textContent = `done: ${roleRows.length} role rows, ${paletteRows.length} palette rows, ${failures.length} failures`;
 }
 
