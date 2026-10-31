@@ -234,10 +234,12 @@ struct Parser {
         } else if (c == '-' && j + 1 < s.size() && s[j + 1] == '.') {
             // dotted: -.-  -.->  -. text .->
             size_t k = j + 2;
-            if (k < s.size() && s[k] == ' ') {
+            if (k < s.size() && s[k] != '.' && s[k] != '-') {  // `-. text .->`, `-.text.->`
                 size_t e = s.find(".-", k);
                 if (e == std::string::npos) return false;
-                link.label = trim(s.substr(k, e - k));
+                std::string text = trim(s.substr(k, e - k));
+                if (text.size() >= 2 && text.front() == '"' && text.back() == '"') text = text.substr(1, text.size() - 2);
+                link.label = text;
                 k = e;
             }
             while (k < s.size() && s[k] == '.') k++;
@@ -250,19 +252,30 @@ struct Parser {
             size_t k = j;
             while (k < s.size() && s[k] == c) k++;
             size_t run = k - j;
-            if (run >= 2 && k < s.size() && s[k] == ' ') {
-                // `-- text -->`: text up to the closing run of the same character
+            size_t after_run = k;
+            arrow(k);
+            if (run >= 3 || (run == 2 && link.arrow_end)) {
+                // `---`, `----`, `===`, `-->`, `--->`, `==>`: an open link or an arrow; a label comes as `|text|`
+            } else if (run == 2 && after_run < s.size()) {
+                // `-- text -->`, `--text-->`, `--"text"-->`: text up to the closing run of the same character
+                k = after_run;
                 size_t e = k;
-                std::string closer(2, c);
-                size_t f = s.find(closer, e);
+                while (e < s.size() && s[e] == ' ') e++;
+                size_t search = e;
+                if (e < s.size() && s[e] == '"') {  // a quoted label may hold the closing characters
+                    size_t q = s.find('"', e + 1);
+                    if (q != std::string::npos) search = q + 1;
+                }
+                size_t f = s.find(std::string(2, c), search);
                 if (f == std::string::npos) return false;
-                link.label = trim(s.substr(k, f - k));
+                std::string text = trim(s.substr(k, f - k));
+                if (text.size() >= 2 && text.front() == '"' && text.back() == '"') text = text.substr(1, text.size() - 2);
+                link.label = text;
                 k = f;
                 while (k < s.size() && s[k] == c) k++;
                 arrow(k);
             } else {
-                arrow(k);
-                if (run < 2 || (run == 2 && !link.arrow_end)) return false;
+                return false;
             }
             link.kind = c == '=' ? Kind::Thick : Kind::Solid;
             i = k;
@@ -487,8 +500,18 @@ bool parse(const std::string& source, Graph& g, std::string& error) {
     std::vector<std::string> lines;
     std::string cur;
     bool in_quote = false;
-    for (char c : source) {
+    for (size_t at = 0; at < source.size(); at++) {
+        char c = source[at];
         if (c == '"') in_quote = !in_quote;
+        if (c == '\n' && in_quote) {
+            // a line break inside a quoted label is a line break of the label, unless the quote is never closed
+            size_t close = source.find('"', at);
+            if (close != std::string::npos && source.find("\n\n", at) > close) {
+                cur += "<br/>";
+                continue;
+            }
+            in_quote = false;
+        }
         if (c == '\n' || (c == ';' && !in_quote)) {
             lines.push_back(cur);
             cur.clear();

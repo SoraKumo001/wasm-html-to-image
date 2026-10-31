@@ -70,6 +70,20 @@ int main() {
     check(count(svg_of("graph TD\nA---B"), "<polygon") == 0, "edge/open_has_no_arrow");
     check(count(svg_of("graph TD\nA-->B"), "<polygon") == 1, "edge/arrow_head");
     check(count(svg_of("graph TD\nA<-->B"), "<polygon") == 2, "edge/both_arrows");
+    // spaced open links and compact labels (issue 22)
+    check(!has(svg_of("flowchart TD\n  A[あ] --- B[い]"), "ERROR") && count(svg_of("flowchart TD\n  A --- B"), "class=\"edge\"") == 1 && count(svg_of("flowchart TD\n  A --- B"), "<polygon") == 0, "edge/open_spaced");
+    check(count(svg_of("flowchart TD\n  A ---- B"), "class=\"edge\"") == 1 && count(svg_of("flowchart TD\n  A === B"), "class=\"edge\"") == 1, "edge/long_and_thick_open");
+    check(count(svg_of("flowchart TD\n  A --- B --- C --- D"), "class=\"node\"") == 4 && count(svg_of("flowchart TD\n  A --- B --- C --- D"), "class=\"edge\"") == 3, "edge/open_chain");
+    check(count(svg_of("flowchart TD\n  A --- B --> C"), "class=\"node\"") == 3 && count(svg_of("flowchart TD\n  A --- B --> C"), "class=\"edge\"") == 2, "edge/open_then_arrow");
+    check(count(svg_of("flowchart TD\n  A --- B & C"), "class=\"edge\"") == 2, "edge/open_group");
+    {
+        std::string lab = svg_of("flowchart TD\n  A --\"Yes\"--> B\n  A --Maybe--> C\n  A -.near.-> D\n  A -- \"spaced\" --> E");
+        check(!has(lab, "ERROR") && has(lab, ">Yes<") && has(lab, ">Maybe<") && has(lab, ">near<") && has(lab, ">spaced<") && !has(lab, "&quot;"), "edge/compact_and_quoted_labels");
+    }
+    {
+        std::string nlq = svg_of("flowchart TD\n  A[\"a\nb\"] --> B");
+        check(!has(nlq, "ERROR") && has(nlq, ">a<") && has(nlq, ">b<"), "node/newline_in_quotes");
+    }
     check(has(svg_of("graph TD\nA-.->B"), "stroke-dasharray=\"4 4\""), "edge/dotted");
     check(has(svg_of("graph TD\nA==>B"), "stroke-width=\"2.5\""), "edge/thick");
     check(has(svg_of("graph TD\nA-->|yes|B"), ">yes<"), "edge/pipe_label");
