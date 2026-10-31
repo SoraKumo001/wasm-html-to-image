@@ -208,13 +208,14 @@ LayoutResult layout_layered(const std::vector<LayoutNode>& nodes, const std::vec
         retally(l);
         const std::vector<double>& sum = gsum;
         const std::vector<int>& cnt = gcnt;
+        const double rs = row.size() > 1 ? 1.0 / (double)(row.size() - 1) : 0;
         std::vector<std::pair<std::vector<double>, int>> keyed;
         for (size_t i = 0; i < row.size(); i++) {
             auto ch = chain_of(ln[row[i]].group);
             std::reverse(ch.begin(), ch.end());
             std::vector<double> key;
             for (int g : ch) key.push_back(sum[g] / cnt[g]), key.push_back((double)g);
-            key.push_back((double)i);
+            key.push_back((double)i * rs);  // the same unit as a group's mean place
             keyed.push_back({key, row[i]});
         }
         std::stable_sort(keyed.begin(), keyed.end(), [](const auto& x, const auto& y) { return x.first < y.first; });
@@ -340,17 +341,85 @@ LayoutResult layout_layered(const std::vector<LayoutNode>& nodes, const std::vec
                         const LN& x = ln[row[i]];
                         if (member(x, g)) continue;
                         double xl = x.b - x.bw / 2, xh = x.b + x.bw / 2;
+                        // a node in another group (not one that encloses g) brings that group's frame padding along
+                        if (x.group >= 0) {
+                            auto enclosing = chain_of(g);
+                            if (std::find(enclosing.begin(), enclosing.end(), x.group) == enclosing.end()) xl -= kFramePad, xh += kFramePad;
+                        }
                         if (xh <= lo || xl >= hi) continue;
                         bool left = first >= 0 ? i < first : x.b < (lo + hi) / 2;
+                        // the group x belongs to (outermost one that does not enclose g) moves as a whole: its members in the other
+                        // rows go the same way, or its frame would stretch from the old place to the new one and still meet g's
+                        int other = -1;
+                        if (x.group >= 0) {
+                            auto enclosing = chain_of(g), cx = chain_of(x.group);
+                            for (auto it = cx.rbegin(); it != cx.rend(); ++it)
+                                if (std::find(enclosing.begin(), enclosing.end(), *it) == enclosing.end()) {
+                                    other = *it;
+                                    break;
+                                }
+                        }
+                        std::vector<char> shifted(ln.size(), 0);
+                        double d;
                         if (left) {
-                            double d = xh - lo + kFrameGap / 2;
-                            for (int j = 0; j <= i; j++) ln[row[j]].b -= d;
+                            d = xh - lo + kFrameGap / 2;
+                            for (int j = 0; j <= i; j++) ln[row[j]].b -= d, shifted[row[j]] = 1;
                         } else {
-                            double d = hi - xl + kFrameGap / 2;
-                            for (int j = i; j < (int)row.size(); j++) ln[row[j]].b += d;
+                            d = hi - xl + kFrameGap / 2;
+                            for (int j = i; j < (int)row.size(); j++) ln[row[j]].b += d, shifted[row[j]] = 1;
+                        }
+                        if (other >= 0) {
+                            for (size_t v = 0; v < ln.size(); v++)
+                                if (!shifted[v] && member(ln[v], other)) ln[v].b += left ? -d : d;
+                            for (size_t r = 0; r < L.size(); r++) {  // a member that moved into a neighbour pushes it on
+                                auto& rw = L[r];
+                                if (left)
+                                    for (size_t j = rw.size(); j-- > 1;) ln[rw[j - 1]].b = std::min(ln[rw[j - 1]].b, ln[rw[j]].b - sep(ln[rw[j - 1]], ln[rw[j]]));
+                                else
+                                    for (size_t j = 1; j < rw.size(); j++) ln[rw[j]].b = std::max(ln[rw[j]].b, ln[rw[j - 1]].b + sep(ln[rw[j - 1]], ln[rw[j]]));
+                            }
                         }
                         moved = true;
                         break;  // the row changed: look at it again on the next pass
+                    }
+                }
+            }
+            // two groups that do not enclose one another and share a layer have frames that may not overlap, whatever the
+            // nodes in the rows say: a frame is the box of all its members, and one can pass over a place the other only
+            // reaches in a different row. The one on the right moves, with all its members.
+            {
+                std::vector<double> glo(ngroups, 1e18), ghi(ngroups, -1e18);
+                for (const LN& v : ln)
+                    for (int g : chain_of(v.group)) glo[g] = std::min(glo[g], v.b - v.bw / 2 - pad_lo), ghi[g] = std::max(ghi[g], v.b + v.bw / 2 + pad_hi);
+                for (int g = 0; g < ngroups; g++) {
+                    if (gmax[g] < 0) continue;
+                    for (int h = g + 1; h < ngroups; h++) {
+                        if (gmax[h] < 0 || gmax[g] < gmin[h] || gmax[h] < gmin[g]) continue;
+                        auto cg = chain_of(g), ch = chain_of(h);
+                        if (std::find(cg.begin(), cg.end(), h) != cg.end() || std::find(ch.begin(), ch.end(), g) != ch.end()) continue;
+                        if (ghi[g] <= glo[h] || ghi[h] <= glo[g]) continue;
+                        int right = (glo[g] + ghi[g]) / 2 > (glo[h] + ghi[h]) / 2 ? g : h, leftg = right == g ? h : g;
+                        double d = ghi[leftg] - glo[right] + kFrameGap / 2;
+                        std::vector<double> keep(ln.size());
+                        for (size_t k = 0; k < ln.size(); k++) keep[k] = ln[k].b;
+                        const double was_hi = ghi[leftg], was_lo = glo[leftg];
+                        for (LN& v : ln)
+                            if (member(v, right)) v.b += d;
+                        for (auto& rw : L)
+                            for (size_t j = 1; j < rw.size(); j++) ln[rw[j]].b = std::max(ln[rw[j]].b, ln[rw[j - 1]].b + sep(ln[rw[j - 1]], ln[rw[j]]));
+                        for (const LN& v : ln)
+                            for (int k : chain_of(v.group)) glo[k] = 1e18, ghi[k] = -1e18;
+                        for (const LN& v : ln)
+                            for (int k : chain_of(v.group)) glo[k] = std::min(glo[k], v.b - v.bw / 2 - pad_lo), ghi[k] = std::max(ghi[k], v.b + v.bw / 2 + pad_hi);
+                        if (ghi[leftg] > was_hi + 1e-6 || glo[leftg] < was_lo - 1e-6) {  // the push dragged the other group along: undo it
+                            for (size_t k = 0; k < ln.size(); k++) ln[k].b = keep[k];
+                            for (const LN& v : ln)
+                                for (int k : chain_of(v.group)) glo[k] = 1e18, ghi[k] = -1e18;
+                            for (const LN& v : ln)
+                                for (int k : chain_of(v.group)) glo[k] = std::min(glo[k], v.b - v.bw / 2 - pad_lo), ghi[k] = std::max(ghi[k], v.b + v.bw / 2 + pad_hi);
+                            continue;
+                        }
+                        moved = true;
                     }
                 }
             }

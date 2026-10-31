@@ -2,6 +2,8 @@
 // Standard library only; a minimal runner like the other tests here.
 
 #include <algorithm>
+#include <array>
+#include <cstring>
 #include <cmath>
 #include <cstdio>
 #include <string>
@@ -119,6 +121,25 @@ int main() {
         check(count(worded, "class=\"node\"") == 3 && count(worded, "class=\"edge\"") == 2, "er/worded_relationships");
         std::string seq = svg_of("sequenceDiagram\n  A->>B: hi\n  A->>A: self\n  Note over A: n");
         check(count(seq, "class=\"lifeline\"") == 2 && count(seq, "class=\"message\"") == 2, "sequence/countable_marks");
+    }
+    {
+        // frames of groups that do not enclose one another stay apart, also where they only meet in rows holding none of the other's nodes
+        auto frames_apart = [](const std::string& svg) {
+            std::vector<std::array<double, 4>> fr;
+            for (size_t at = svg.find("class=\"subgraph\""); at != std::string::npos; at = svg.find("class=\"subgraph\"", at + 1)) {
+                auto num = [&](const char* key, size_t from) { return std::atof(svg.c_str() + svg.find(key, from) + std::strlen(key)); };
+                size_t r = svg.find("<rect", at);
+                double x = num("x=\"", r), y = num("y=\"", r), w = num("width=\"", r), h = num("height=\"", r);
+                fr.push_back({x, y, x + w, y + h});
+            }
+            for (size_t i = 0; i < fr.size(); i++)
+                for (size_t j = i + 1; j < fr.size(); j++)
+                    if (std::min(fr[i][2], fr[j][2]) - std::max(fr[i][0], fr[j][0]) > 0.5 && std::min(fr[i][3], fr[j][3]) - std::max(fr[i][1], fr[j][1]) > 0.5) return false;
+            return true;
+        };
+        check(frames_apart(svg_of("flowchart TB\nsubgraph G0[\"G0\"]\n  n2\nend\nsubgraph G1[\"G1\"]\n  n1\n  n3\nend\nn1 --> n3\nn2 --> n3\nn0 --> n2")), "layout/frames_apart_padding");
+        check(frames_apart(svg_of("flowchart TB\nsubgraph G0[\"G0\"]\n  n2\n  n3\nend\nsubgraph G1[\"G1\"]\n  n0\n  n4\nend\nn3 --> n2\nn3 --> n1\nn3 --> n4\nn0 --> n2")), "layout/frames_apart_unit_mismatch");
+        check(frames_apart(svg_of("flowchart TB\nsubgraph G0[\"G0\"]\n  n1\n  n2\nend\nsubgraph G1[\"G1\"]\n  n0\n  n3\n  n4\nend\nn1 --> n0\nn3 --> n4\nn2 --> n3\nn2 --> n1")), "layout/frames_apart_different_rows");
     }
     {
         std::string lab = svg_of("flowchart TD\n  A --\"Yes\"--> B\n  A --Maybe--> C\n  A -.near.-> D\n  A -- \"spaced\" --> E");
