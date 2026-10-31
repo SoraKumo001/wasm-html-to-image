@@ -622,7 +622,7 @@ std::string stroke_attrs(const std::string& color, const std::string& width) { r
 
 void draw_actor(std::string& out, const Theme& th, const Node& n, Pt c, const Style& st) {
     using namespace metrics;
-    std::string stroke = st.stroke.empty() ? th.fg : st.stroke, sw = st.stroke_width.empty() ? "1.5" : px(st.stroke_width);
+    std::string stroke = st.stroke.empty() ? th.border : st.stroke, sw = st.stroke_width.empty() ? "1.5" : px(st.stroke_width);
     double top = c.y - n.h / 2 + 4, cx = c.x;
     std::string fill = n.actor_type == "hollow" ? "none" : (st.fill.empty() ? th.bg : st.fill);
     out += "<g class=\"actor\">\n";

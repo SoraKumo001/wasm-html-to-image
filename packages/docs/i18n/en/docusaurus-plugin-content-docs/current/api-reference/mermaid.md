@@ -144,7 +144,7 @@ A `<div class="mermaid">` or a Markdown diagram takes its colours and behaviour 
 
 `light`, `dark`, `neutral` and `forest` follow what official Mermaid 12 draws for `default`, `dark`, `neutral` and `forest` (node fill and outline, lines, arrow heads, subgraphs). `nord` and the ones after it are this engine's own palettes.
 
-The same names work in `%%{init: {"theme": "dark"}}%%` (`default` and `base` mean `light`). `themeVariables` keys `primaryColor`, `primaryBorderColor`, `lineColor`, `arrowheadColor`, `clusterBkg`, `textColor`, `background` and `secondaryTextColor` are applied on top of the theme. Directives only take effect with `directives: true` (or `--mermaid-directives: on`): the page that places a diagram decides its colours, not the author of the diagram.
+The same names work in `%%{init: {"theme": "dark"}}%%` (`default` and `base` mean `light`). These `themeVariables` keys are applied on top of the theme: `primaryColor`, `primaryBorderColor`, `lineColor`, `arrowheadColor`, `clusterBkg`, `textColor`, `background` and `secondaryTextColor`, plus the aliases `mainBkg` (same as `primaryColor`), `nodeBorder` and `nodeTextColor`, the note colours `noteBkgColor`, `noteBorderColor` and `noteTextColor`, `edgeLabelBackground`, `actorBkg` and `actorBorder`, and the series colours `pie1` to `pie12` (or `cScale0` to `cScale11`). Directives only take effect with `directives: true` (or `--mermaid-directives: on`): the page that places a diagram decides its colours, not the author of the diagram.
 
 ---
 
@@ -221,6 +221,8 @@ The syntax of the `-beta` diagrams changes often in Mermaid itself. `venn-beta`,
 - **Accessibility**: `accTitle: Title` and `accDescr: Description` (`accDescr { ... }` for several lines) are not drawn; they become the SVG `<title>` and `<desc>`.
 - **Frontmatter**: a leading `---` block is skipped. With `directives` on, its `config:` (`theme`, `themeVariables`) is applied.
 - **Comments**: lines starting with `%%` are ignored.
+- **Markdown strings**: a label such as `"`**bold** and *italic*`"` is drawn plain: the markers are removed and a line break in the label stays a line break (there is no bold or italic styling).
+- **Math** (`$$...$$`), node `click` and links are not handled: math is shown as typed, and `click` is skipped.
 
 ### Writing the newer diagrams (examples)
 

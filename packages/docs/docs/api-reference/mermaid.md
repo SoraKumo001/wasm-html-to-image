@@ -144,7 +144,7 @@ HTML ページとして使いたいときは、`mermaidToHtml(source, options)` 
 
 `light`、`dark`、`neutral`、`forest` は、公式 Mermaid 12 の `default`、`dark`、`neutral`、`forest` が描く色に合わせています（ノードの塗りと枠、線、矢じり、サブグラフ）。`nord` 以降はこのエンジン独自の配色です。
 
-`%%{init: {"theme": "dark"}}%%` の `theme` にも同じ名前が使えます（`default` と `base` は `light`）。`themeVariables` の `primaryColor`、`primaryBorderColor`、`lineColor`、`arrowheadColor`、`clusterBkg`、`textColor`、`background`、`secondaryTextColor` は、テーマの上に重なります。ただし、ディレクティブは `directives: true`（または `--mermaid-directives: on`）のときだけ反映されます。ページの配色は、書き手ではなく、図を置く側が決めるためです。
+`%%{init: {"theme": "dark"}}%%` の `theme` にも同じ名前が使えます（`default` と `base` は `light`）。`themeVariables` の `primaryColor`、`primaryBorderColor`、`lineColor`、`arrowheadColor`、`clusterBkg`、`textColor`、`background`、`secondaryTextColor`、別名の `mainBkg`（`primaryColor` と同じ）、`nodeBorder`、`nodeTextColor`、ノートの `noteBkgColor` / `noteBorderColor` / `noteTextColor`、`edgeLabelBackground`、`actorBkg` / `actorBorder`、系列色の `pie1`〜`pie12`（または `cScale0`〜`cScale11`）は、テーマの上に重なります。ただし、ディレクティブは `directives: true`（または `--mermaid-directives: on`）のときだけ反映されます。ページの配色は、書き手ではなく、図を置く側が決めるためです。
 
 ---
 
@@ -221,6 +221,8 @@ CLI では、同じ内容が標準エラー出力に出ます。図が読めな�
 - **アクセシビリティ**: `accTitle: 題名` と `accDescr: 説明`（複数行は `accDescr { ... }`）は、図には描かず、SVG の `<title>` と `<desc>` として出力します。
 - **frontmatter**: 先頭の `---` で囲んだ部分は読み飛ばします。`directives` を有効にすると、`config:` の `theme` と `themeVariables` を反映します。
 - **コメント**: `%%` で始まる行は無視します。
+- **Markdown 文字列**: ラベルの `"`**太字** と *斜体*`"` は、記号を取り除いて、1 つの書式で描きます。ラベル内の改行は、表示でも改行になります（太字や斜体の見た目は付きません）。
+- **数式**（`$$...$$`）、ノードの `click` とリンクは扱いません。数式は文字のまま表示し、`click` は読み飛ばします。
 
 ### 新しい図の書き方（例）
 
