@@ -10399,3 +10399,60 @@ describe("P0-97 a percentage-width ratio-only svg in a shrink-to-fit column cont
     expect(Math.round((await svg("")).w)).toBe(0);
   });
 });
+
+// An SVG loaded as an image (<img>, or the input itself) used to come out without its text: SkSVGDOM bakes the
+// text in when the image is decoded, and it had neither the page's fonts nor, for an input, any font at all.
+describe("SVG as an image keeps its text and its external images", () => {
+  const SVG_TEXT =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="60"><rect width="300" height="60" fill="#fff"/>' +
+    '<text x="10" y="40" font-size="28" font-family="sans-serif" fill="#000">Hello 日本語</text></svg>';
+  const dark = (img: PNG) => {
+    let n = 0;
+    for (let i = 0; i < img.data.length; i += 4) if (img.data[i] < 128) n++;
+    return n;
+  };
+  const b64 = (s: string) => Buffer.from(s).toString("base64");
+
+  it("<img src=svg> draws the same text as the inline <svg>", async () => {
+    const asImg = await renderPng(`<img src="data:image/svg+xml;base64,${b64(SVG_TEXT)}" style="display:block">`, 300, 60);
+    const inline = await renderPng(SVG_TEXT, 300, 60);
+    expect(dark(asImg.img)).toBeGreaterThan(200);
+    expect(dark(asImg.img)).toBe(dark(inline.img));
+  });
+
+  it("an SVG given as the input draws its text, whatever the output format", async () => {
+    const png = await render({ value: SVG_TEXT, format: "png" });
+    expect(png.originalFormat).toBe("svg");
+    expect(png.width).toBe(300);
+    expect(dark(PNG.sync.read(Buffer.from(png.data)))).toBeGreaterThan(200);
+    const resized = await render({ value: new TextEncoder().encode(SVG_TEXT), format: "webp", width: 150 });
+    expect(resized.width).toBe(150);
+    expect(resized.height).toBe(30);
+  });
+
+  it("an SVG without text still goes straight through the converter", async () => {
+    const out = await render({ value: '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><rect width="40" height="20" fill="#f00"/></svg>', format: "png" });
+    expect(out.width).toBe(40);
+    expect(out.originalFormat).toBe("svg");
+  });
+
+  it("an <image> that points at another URL is fetched and drawn", async () => {
+    const red = new PNG({ width: 20, height: 20 });
+    for (let i = 0; i < red.data.length; i += 4) red.data.set([255, 0, 0, 255], i);
+    const png = PNG.sync.write(red);
+    const server = http.createServer((_req, res) => {
+      res.setHeader("content-type", "image/png");
+      res.end(png);
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const { port } = server.address() as { port: number };
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="60" height="60"><rect width="60" height="60" fill="#fff"/><image href="http://127.0.0.1:${port}/r.png" x="10" y="10" width="40" height="40"/></svg>`;
+      const { at } = await renderPng(`<img src="data:image/svg+xml;base64,${b64(svg)}" style="display:block">`, 60, 60);
+      expect(near(at(30, 30), RED)).toBe(true);
+      expect(isWhite(at(3, 3))).toBe(true);
+    } finally {
+      server.close();
+    }
+  });
+});

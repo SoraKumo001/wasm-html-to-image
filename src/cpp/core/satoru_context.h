@@ -101,6 +101,7 @@ class SatoruContext {
     uint64_t m_fontAliasCssVersion = 0;
     uint64_t m_generatedFontFaceCssVersion = 0;
     uint64_t m_fontVersion = 0;
+    bool m_svgDirty = false;  // fonts or images arrived since the SVG images were last drawn
     uint64_t m_imageVersion = 0;
     uint64_t m_fontResourceNamedLoadCount = 0;
     uint64_t m_fontResourceFallbackLoadCount = 0;
@@ -189,6 +190,14 @@ class SatoruContext {
 
     SatoruFontManager fontManager;
     std::map<std::string, image_info> imageCache;
+    // Characters of the <text> inside SVG images (<img>, CSS background): SkSVGDOM draws them, layout never
+    // sees them, so the font slices covering them are requested from here.
+    std::set<char32_t> svgImageCodepoints;
+    // Font families the <text> of SVG images names (requested like the families of HTML text), and the
+    // external images they reference, which the resource manager takes over to fetch.
+    std::set<std::string> svgImageFamilies;
+    bool svgImageBold = false;
+    std::vector<std::string> svgImageUrls;
     satoru::SatoruCacheManager cacheManager;
     LayoutProfile layoutProfile;
     bool needsRelayout = false;
@@ -288,14 +297,23 @@ class SatoruContext {
 
     bool load_font(const char *name, const uint8_t *data, int size, const char *url = nullptr) {
         bool changed = fontManager.loadFont(name, data, size, url);
-        if (changed) m_fontVersion++;
+        if (changed) {
+            m_fontVersion++;
+            m_svgDirty = true;
+        }
         return changed;
     }
     bool loadFont(const char *name, const uint8_t *data, int size, const char *url = nullptr) {
         bool changed = fontManager.loadFont(name, data, size, url);
-        if (changed) m_fontVersion++;
+        if (changed) {
+            m_fontVersion++;
+            m_svgDirty = true;
+        }
         return changed;
     }
+
+    /// Draw the SVG images again if fonts were loaded since they were last drawn.
+    void refreshSvgImages();
 
     void load_image(const char *name, const char *data_url, int width, int height) {
         loadImage(name, data_url, width, height);

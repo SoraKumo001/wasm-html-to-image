@@ -122,14 +122,15 @@ DecodeResult ImageDecoder::decode(const uint8_t* data, size_t size, sk_sp<SkFont
 
 sk_sp<SkImage> ImageDecoder::decode_first(const uint8_t* data, size_t size, int& out_width,
                                           int& out_height, sk_sp<SkFontMgr> font_mgr,
-                                          bool* out_ratio_only, bool* out_no_ratio) {
+                                          bool* out_ratio_only, bool* out_no_ratio,
+                                          const SvgBuilderConfig& configure_svg) {
     DecodeResult result;
     if (is_likely_svg(data, size)) {
         // The layout path rasterizes a ratio-only SVG at its default object
         // size (see decode_svg); decode() keeps the shared 512 fallback that
         // the standalone converter's output size relies on.
         auto sk_data = SkData::MakeWithCopy(data, size);
-        result = decode_svg(patch_svg_data(sk_data), std::move(font_mgr), true);
+        result = decode_svg(patch_svg_data(sk_data), std::move(font_mgr), true, configure_svg);
     } else {
         result = decode(data, size, std::move(font_mgr));
     }
@@ -231,16 +232,18 @@ bool ImageDecoder::decode_jxl(const uint8_t* data, size_t size, DecodeResult& re
 }
 
 DecodeResult ImageDecoder::decode_svg(const sk_sp<SkData>& data, sk_sp<SkFontMgr> font_mgr,
-                                      bool default_object_raster) {
+                                      bool default_object_raster,
+                                      const SvgBuilderConfig& configure_svg) {
     DecodeResult result;
     SkMemoryStream stream(data);
     auto resource_provider = skresources::DataURIResourceProviderProxy::Make(
         nullptr, skresources::ImageDecodeStrategy::kLazyDecode);
 
-    auto svg_dom = SkSVGDOM::Builder()
-                       .setResourceProvider(std::move(resource_provider))
-                       .setFontManager(font_mgr ? font_mgr : SkFontMgr::RefEmpty())
-                       .make(stream);
+    SkSVGDOM::Builder builder;
+    builder.setResourceProvider(std::move(resource_provider))
+        .setFontManager(font_mgr ? font_mgr : SkFontMgr::RefEmpty());
+    if (configure_svg) configure_svg(builder);
+    auto svg_dom = builder.make(stream);
     if (!svg_dom) return result;
 
     // A viewBox but no absolute width/height on the root: the SVG has an

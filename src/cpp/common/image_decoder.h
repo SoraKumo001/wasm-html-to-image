@@ -6,11 +6,18 @@
 #include <vector>
 
 #include "include/core/SkBitmap.h"
+#include <functional>
+
 #include "include/core/SkFontMgr.h"
+#include "modules/svg/include/SkSVGDOM.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkRefCnt.h"
 
 namespace html_to_image {
+
+// Lets the caller set the font manager, text shaper and resource provider of the SVG a decode builds
+// (the context that owns the fonts lives outside this shared code).
+using SvgBuilderConfig = std::function<void(SkSVGDOM::Builder&)>;
 
 struct DecodedFrame {
     SkBitmap bitmap;
@@ -49,13 +56,15 @@ class ImageDecoder {
     static sk_sp<SkImage> decode_first(const uint8_t* data, size_t size, int& out_width,
                                        int& out_height, sk_sp<SkFontMgr> font_mgr = nullptr,
                                        bool* out_ratio_only = nullptr,
-                                       bool* out_no_ratio = nullptr);
+                                       bool* out_no_ratio = nullptr,
+                                       const SvgBuilderConfig& configure_svg = nullptr);
 
    private:
     static bool decode_jxl(const uint8_t* data, size_t size, DecodeResult& result);
     static bool is_likely_svg(const uint8_t* data, size_t size);
     static DecodeResult decode_svg(const sk_sp<SkData>& data, sk_sp<SkFontMgr> font_mgr,
-                                   bool default_object_raster = false);
+                                   bool default_object_raster = false,
+                                   const SvgBuilderConfig& configure_svg = nullptr);
 };
 
 }  // namespace html_to_image

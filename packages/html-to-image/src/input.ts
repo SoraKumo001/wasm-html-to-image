@@ -49,7 +49,7 @@ function isSvgString(s: string): boolean {
 }
 
 /** Detect a known image container by magic bytes; `null` when unknown. */
-function sniffImageFormat(bytes: Uint8Array): string | null {
+export function sniffImageFormat(bytes: Uint8Array): string | null {
   if (
     bytes.length >= 4 &&
     bytes[0] === 0x89 &&

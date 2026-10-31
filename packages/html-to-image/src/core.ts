@@ -1,6 +1,7 @@
 import type { HtmlToImageModule } from "./loader.js";
 import { buildFullSatoruOptions } from "./encode-args.js";
-import { isImageInput } from "./input.js";
+import { imageBytesFromUnknown, isImageInput, sniffImageFormat } from "./input.js";
+import { svgHasText, svgIntrinsicSize, svgPage } from "./svg-input.js";
 import {
   DIAGNOSTIC_CODES,
   LogLevel,
@@ -323,6 +324,26 @@ export async function htmlToImage(
 
   // ---- Image input: skip rendering, straight to converter_* ----
   if (isImageInput(options.value)) {
+    // An SVG with text goes through the page pipeline first: the converter has no fonts to draw it with.
+    if (format !== "none") {
+      const bytes = imageBytesFromUnknown(options.value);
+      const text = sniffImageFormat(bytes) === "svg" ? new TextDecoder().decode(bytes) : "";
+      if (text && svgHasText(text)) {
+        const size = svgIntrinsicSize(text);
+        const drawn = await htmlToImage(module, {
+          ...options,
+          value: svgPage(bytes, size),
+          width: Math.ceil(size.width),
+          height: Math.ceil(size.height),
+          format: "png",
+          crop: undefined,
+          fit: undefined,
+          scale: undefined,
+        });
+        const out = await htmlToImage(module, { ...options, value: drawn.data as Uint8Array });
+        return { ...out, originalFormat: "svg" };
+      }
+    }
     return runImageInput(module, options.value, orch);
   }
 

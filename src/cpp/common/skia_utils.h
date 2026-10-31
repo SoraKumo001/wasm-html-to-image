@@ -30,6 +30,9 @@ struct image_info {
     // has no intrinsic ratio either; width/height are the CSS default
     // object size (300x150) and each auto axis takes its own default.
     bool no_ratio = false;
+    // The SVG source, kept so the image can be drawn again once the fonts its <text> needs have arrived
+    // (SkSVGDOM bakes the text into the bitmap when the image is decoded).
+    sk_sp<SkData> svg_source;
 };
 
 std::string clean_font_name(const char* name);
