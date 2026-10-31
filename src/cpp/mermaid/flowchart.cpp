@@ -214,15 +214,19 @@ struct Parser {
             link.arrow_start = true;
             j++;
         }
+        if (!link.arrow_start && j > before) {
+            // an edge id: `A e1@--> B`
+            size_t p = j;
+            while (p < s.size() && is_id_char((unsigned char)s[p])) p++;
+            if (p > j && p + 1 < s.size() && s[p] == '@' && (s[p + 1] == '-' || s[p + 1] == '=' || s[p + 1] == '~')) j = p + 1;
+        }
         char c = j < s.size() ? s[j] : 0;
         if (c != '-' && c != '=' && c != '~') return false;
         auto arrow = [&](size_t& k) {
             if (k < s.size() && (s[k] == '>' || s[k] == 'x' || s[k] == 'o')) {
-                bool real = s[k] == '>' || k + 1 >= s.size() || !is_id_char((unsigned char)s[k + 1]);
-                if (real) {
-                    link.arrow_end = true;
-                    k++;
-                }
+                // as in Mermaid, `--xB` and `--oB` are a cross / circle end followed by the node B
+                link.arrow_end = true;
+                k++;
             }
         };
         if (c == '~') {
@@ -284,7 +288,13 @@ struct Parser {
             size_t p = i;
             while (p < s.size() && s[p] == ' ') p++;
             if (p < s.size() && s[p] == '|') {
-                size_t q = s.find('|', p + 1);
+                size_t from = p + 1;
+                while (from < s.size() && s[from] == ' ') from++;
+                if (from < s.size() && s[from] == '"') {  // a quoted label may hold `|`
+                    size_t cq = s.find('"', from + 1);
+                    if (cq != std::string::npos) from = cq + 1;
+                }
+                size_t q = s.find('|', from);
                 if (q != std::string::npos) {
                     std::string text = trim(s.substr(p + 1, q - p - 1));
                     if (text.size() >= 2 && text.front() == '"' && text.back() == '"') text = text.substr(1, text.size() - 2);
@@ -438,6 +448,65 @@ struct Parser {
     }
 };
 
+/// `A@{ shape: diamond, label: "x" }` (Mermaid's node-metadata form) as the node written in bracket syntax. Metadata that names no
+/// shape or label (`e1@{ animate: true }`, an edge's) is dropped.
+std::string expand_node_meta(const std::string& line) {
+    std::string out = line;
+    for (size_t at = out.find("@{"); at != std::string::npos; at = out.find("@{")) {
+        size_t id_begin = at;
+        while (id_begin > 0 && is_id_char((unsigned char)out[id_begin - 1])) id_begin--;
+        size_t close = out.size();
+        bool quote = false;
+        for (size_t k = at + 2; k < out.size(); k++) {
+            if (out[k] == '"') quote = !quote;
+            else if (out[k] == '}' && !quote) {
+                close = k;
+                break;
+            }
+        }
+        std::string id = out.substr(id_begin, at - id_begin), body = out.substr(at + 2, close - at - 2);
+        auto value = [&](const char* key) {
+            size_t p = body.find(std::string(key) + ":");
+            if (p == std::string::npos) return std::string();
+            p += std::strlen(key) + 1;
+            while (p < body.size() && body[p] == ' ') p++;
+            size_t e = p;
+            if (p < body.size() && body[p] == '"') {
+                e = body.find('"', p + 1);
+                return e == std::string::npos ? body.substr(p + 1) : body.substr(p + 1, e - p - 1);
+            }
+            e = body.find(',', p);
+            return trim(body.substr(p, e == std::string::npos ? std::string::npos : e - p));
+        };
+        std::string shape = value("shape"), label = value("label");
+        std::string node;
+        if (!id.empty() && (!shape.empty() || !label.empty())) {
+            if (label.empty()) label = id;
+            label = "\"" + label + "\"";
+            if (shape == "rounded" || shape == "event" || shape == "round") node = id + "(" + label + ")";
+            else if (shape == "stadium" || shape == "terminal" || shape == "pill") node = id + "([" + label + "])";
+            else if (shape == "fr-rect" || shape == "subroutine" || shape == "subproc" || shape == "framed-rectangle") node = id + "[[" + label + "]]";
+            else if (shape == "cyl" || shape == "cylinder" || shape == "database" || shape == "db") node = id + "[(" + label + ")]";
+            else if (shape == "circle" || shape == "circ") node = id + "((" + label + "))";
+            else if (shape == "diam" || shape == "diamond" || shape == "decision" || shape == "question") node = id + "{" + label + "}";
+            else if (shape == "hex" || shape == "hexagon" || shape == "prepare") node = id + "{{" + label + "}}";
+            else if (shape == "lean-r" || shape == "lean-right" || shape == "in-out") node = id + "[/" + label + "/]";
+            else if (shape == "lean-l" || shape == "lean-left" || shape == "out-in") node = id + "[\\" + label + "\\]";
+            else if (shape == "trap-b" || shape == "trapezoid-bottom" || shape == "priority") node = id + "[/" + label + "\\]";
+            else if (shape == "trap-t" || shape == "trapezoid-top" || shape == "manual") node = id + "[\\" + label + "/]";
+            else node = id + "[" + label + "]";  // rect and every shape without a counterpart here
+        } else {
+            // a statement of nothing but `e1@{ animate: true }` is an edge's metadata, not a node
+            bool alone = trim(out.substr(0, id_begin)).empty() && trim(out.substr(close < out.size() ? close + 1 : out.size())).empty();
+            node = alone ? "" : id;
+        }
+        size_t end = close < out.size() ? close + 1 : out.size();
+        out = out.substr(0, id_begin) + node + out.substr(end);
+        if (node.empty()) break;
+    }
+    return out;
+}
+
 /// An `agentflow-beta` statement as flowchart syntax: `flow` is a subgraph, `global` a block that draws nothing, `connector` a node,
 /// `@{ shape: ... }` picks the node's shape, and a metadata line alone (`id@{ ... }`) says nothing the picture needs.
 /// An empty result means there is nothing to parse.
@@ -500,9 +569,15 @@ bool parse(const std::string& source, Graph& g, std::string& error) {
     std::vector<std::string> lines;
     std::string cur;
     bool in_quote = false;
+    int depth = 0;  // inside a node's brackets a `;` is text
     for (size_t at = 0; at < source.size(); at++) {
         char c = source[at];
         if (c == '"') in_quote = !in_quote;
+        if (!in_quote) {
+            if (c == '[' || c == '(' || c == '{') depth++;
+            else if ((c == ']' || c == ')' || c == '}') && depth > 0) depth--;
+        }
+        if (c == '\n') depth = 0;
         if (c == '\n' && in_quote) {
             // a line break inside a quoted label is a line break of the label, unless the quote is never closed
             size_t close = source.find('"', at);
@@ -512,7 +587,7 @@ bool parse(const std::string& source, Graph& g, std::string& error) {
             }
             in_quote = false;
         }
-        if (c == '\n' || (c == ';' && !in_quote)) {
+        if (c == '\n' || (c == ';' && !in_quote && depth == 0)) {
             lines.push_back(cur);
             cur.clear();
         } else if (c != '\r') {
@@ -523,7 +598,14 @@ bool parse(const std::string& source, Graph& g, std::string& error) {
 
     bool header = false;
     for (std::string line : lines) {
-        size_t cm = line.find("%%");
+        size_t cm = std::string::npos;
+        for (size_t k = 0, quotes = 0; k + 1 < line.size(); k++) {  // a `%%` inside a quoted label is text
+            if (line[k] == '"') quotes++;
+            else if (line[k] == '%' && line[k + 1] == '%' && quotes % 2 == 0) {
+                cm = k;
+                break;
+            }
+        }
         if (cm != std::string::npos) line = line.substr(0, cm);
         line = trim(line);
         if (line.empty()) continue;
@@ -546,6 +628,9 @@ bool parse(const std::string& source, Graph& g, std::string& error) {
         }
         if (agentflow) {
             line = agentflow_statement(line, blocks);
+            if (line.empty()) continue;
+        } else if (line.find("@{") != std::string::npos) {
+            line = trim(expand_node_meta(line));
             if (line.empty()) continue;
         }
         if (!p.parse_statement(line)) {

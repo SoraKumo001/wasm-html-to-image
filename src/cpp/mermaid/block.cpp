@@ -170,7 +170,12 @@ bool render_block(const std::string& source, const Options& options, std::string
             continue;
         }
         if (sheet.take(line)) continue;
-        size_t arrow = line.find("-->");
+        // the first `-->` outside quotes: a block's label may hold one
+        size_t arrow = std::string::npos;
+        for (size_t k = 0, quotes = 0; k + 2 < line.size() + 0 && arrow == std::string::npos; k++) {
+            if (line[k] == '"') quotes++;
+            else if (quotes % 2 == 0 && line.compare(k, 3, "-->") == 0) arrow = k;
+        }
         if (arrow != std::string::npos) {
             // `a --> b` or `a -- "text" --> b`
             std::string left = trim(line.substr(0, arrow)), right = trim(line.substr(arrow + 3)), label;

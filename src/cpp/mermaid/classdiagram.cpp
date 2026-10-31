@@ -78,22 +78,29 @@ const Op kOps[] = {{"<|--", kTriangle, kNoMark, false}, {"--|>", kNoMark, kTrian
                    {"..|>", kNoMark, kTriangle, true},  {"*--", kDiamondFilled, kNoMark, false}, {"--*", kNoMark, kDiamondFilled, false},
                    {"o--", kDiamondHollow, kNoMark, false}, {"--o", kNoMark, kDiamondHollow, false}, {"<--", kArrow, kNoMark, false},
                    {"-->", kNoMark, kArrow, false},     {"<..", kArrow, kNoMark, true},         {"..>", kNoMark, kArrow, true},
-                   {"--", kNoMark, kNoMark, false},     {"..", kNoMark, kNoMark, true}};
+                   {"--", kNoMark, kNoMark, false},     {"..", kNoMark, kNoMark, true},
+                   // a lollipop (interface) end is drawn as a plain end
+                   {"()--", kNoMark, kNoMark, false},   {"--()", kNoMark, kNoMark, false}, {"()..", kNoMark, kNoMark, true},
+                   {"..()", kNoMark, kNoMark, true}};
 
 bool parse_relation(Doc& d, const std::string& line, bool& matched, std::string& error) {
     size_t best = std::string::npos;
     const Op* op = nullptr;
-    for (auto& o : kOps) {
-        size_t n = std::char_traits<char>::length(o.tok);
-        for (size_t p = line.find(o.tok); p != std::string::npos; p = line.find(o.tok, p + 1)) {
-            bool before = p > 0 && (line[p - 1] == ' ' || line[p - 1] == '"');
-            bool after = p + n < line.size() && (line[p + n] == ' ' || line[p + n] == '"');
-            if (!before || !after) continue;
-            if (best == std::string::npos || p < best || (p == best && n > std::char_traits<char>::length(op->tok))) {
-                best = p;
-                op = &o;
+    // `A <|-- B` first; when no operator stands between spaces, `A<|--B` (not for `o--` and `--o`, which a name could run into)
+    for (int pass = 0; pass < 2 && !op; pass++) {
+        for (auto& o : kOps) {
+            size_t n = std::char_traits<char>::length(o.tok);
+            if (pass == 1 && (o.tok[0] == 'o' || o.tok[n - 1] == 'o')) continue;
+            for (size_t p = line.find(o.tok); p != std::string::npos; p = line.find(o.tok, p + 1)) {
+                bool before = pass == 1 ? p > 0 && line.find(':') >= p : p > 0 && (line[p - 1] == ' ' || line[p - 1] == '"');
+                bool after = pass == 1 ? p + n < line.size() : p + n < line.size() && (line[p + n] == ' ' || line[p + n] == '"');
+                if (!before || !after) continue;
+                if (best == std::string::npos || p < best || (p == best && n > std::char_traits<char>::length(op->tok))) {
+                    best = p;
+                    op = &o;
+                }
+                break;
             }
-            break;
         }
     }
     matched = op != nullptr;

@@ -316,11 +316,40 @@ bool take_head(const std::string& head, std::string& id, std::string& label, Kin
     return true;
 }
 
-bool parse_relationship(Model& m, const std::string& line) {
+// `A-->B` is `A --> B`: put spaces around a run of dashes (`--`, `-->`, `--|>`) or `..>` that touches a name
+std::string space_operators(const std::string& line) {
+    bool quote = false;
+    std::string spaced;
+    for (size_t k = 0; k < line.size(); k++) {
+        char c = line[k];
+        if (c == '"') quote = !quote;
+        bool run = !quote && ((c == '-' && k + 1 < line.size() && line[k + 1] == '-' && (k == 0 || line[k - 1] != '-')) ||
+                              (c == '.' && line.compare(k, 3, "..>") == 0));
+        if (run && (k == 0 || line[k - 1] != '@')) {
+            size_t e = k;
+            if (c == '.') e += 3;
+            else {
+                while (e < line.size() && line[e] == '-') e++;
+                if (line.compare(e, 2, "|>") == 0) e += 2;
+                else if (e < line.size() && line[e] == '>') e++;
+            }
+            if (!spaced.empty() && spaced.back() != ' ') spaced += ' ';
+            spaced += line.substr(k, e - k);
+            if (e < line.size() && line[e] != ' ') spaced += ' ';
+            k = e - 1;
+            continue;
+        }
+        spaced += c;
+    }
+    return spaced;
+}
+
+bool parse_relationship_words(Model& m, const std::string& line) {
     // split into words, keeping quoted text whole
     std::vector<std::string> w;
     std::string cur;
     bool quote = false;
+    quote = false;
     for (char c : line) {
         if (c == '"') quote = !quote;
         if (std::isspace((unsigned char)c) && !quote) {
@@ -352,7 +381,7 @@ bool parse_relationship(Model& m, const std::string& line) {
         if (n >= 3 && t.front() == 'o' && dashes(t, 1, n)) return op = Op::RevCircle, true;
         if (n >= 3 && t.back() == 'x' && dashes(t, 0, n - 1)) return op = Op::Cross, true;
         if (n >= 3 && t.front() == 'x' && dashes(t, 1, n)) return op = Op::RevCross, true;
-        if (n == 2 && t == "--") return op = Op::Line, true;
+        if (dashes(t, 0, n) && n >= 2) return op = Op::Line, true;  // `--`, `---`
         return false;
     };
     Edge e;
@@ -394,6 +423,12 @@ bool parse_relationship(Model& m, const std::string& line) {
     e.label = label;
     m.edges.push_back(e);
     return true;
+}
+
+bool parse_relationship(Model& m, const std::string& line) {
+    if (parse_relationship_words(m, line)) return true;
+    std::string spaced = space_operators(line);
+    return spaced != line && parse_relationship_words(m, spaced);
 }
 
 bool parse(const std::string& source, Model& m, std::string& error) {

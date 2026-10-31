@@ -132,5 +132,11 @@
   "agentflow/edges": "agentflow-beta TB\n  check[\"Tests pass?\"]@{ shape: decision }\n  ship[\"Ship it\"]@{ shape: action }\n  fix[\"Fix the build\"]@{ shape: task }\n  logs[\"Build logs\"]@{ shape: refdoc }\n\n  check -- yes --> ship\n  check -- no --> fix\n  fix --x check\n  fix -.- logs",
   "agentflow/nested": "agentflow-beta TB\n  connector llm[\"LLM API\"]\n  llm@{ protocol: \"http\", endpoint: \"https://api.example.com/chat\" }\n\n  flow coffee_team[\"Coffee Team\"]\n    city[\"city\"]@{ shape: input, value: \"Stockholm\" }\n\n    flow researcher[\"Researcher\"]\n      research[\"research_location\"]@{ shape: tool, params: \"city :: String\", returns: \"Report\" }\n      write[\"write_copy\"]@{ shape: tool, connectorRef: \"llm.chat\", returns: \"CoffeeCopy\" }\n      city --> research --> write\n    end\n    researcher@{ instruction: \"Research the city and draft English coffee copy citing sources.\" }\n\n    flow designer[\"Designer\"]\n      render[\"generate_html\"]@{ shape: tool, connectorRef: \"llm.chat\", returns: \"String\" }\n      brand[\"Nordic Brand Guide\"]@{ shape: refdoc }\n      render -.- brand\n    end\n\n    researcher --> designer\n  end",
   "flowchart/edges_spaced": "flowchart TD\n  A --- B\n  A ---- C\n  A === D\n  A --- E & F\n  A --- G --- H --- I\n  A --- J --> K\n  A --\"lbl\"--> L\n  A --lbl--> M\n  A -.lbl.-> N\n  A -- \"quoted\" --> O",
-  "flowchart/newline_in_label": "flowchart TD\n  A[\"first line\nsecond line\"] --> B"
+  "flowchart/newline_in_label": "flowchart TD\n  A[\"first line\nsecond line\"] --> B",
+  "flowchart/compact_and_meta": "flowchart TD\n  A--xB\n  C--oD\n  E[\"a %% b\"] --> F\n  E -->|\"a | b\"| G\n  H[a;b] --> I; I --> J\n  K@{ shape: diamond, label: \"x\" } --> L\n  K e1@--> M\n  e1@{ animate: true }",
+  "class/compact": "classDiagram\n  A<|--B\n  C()--D\n  E-->F",
+  "packet/plus": "packet-beta\n  +16: \"Source\"\n  +16: \"Destination\"",
+  "sequence/header_statement": "sequenceDiagram; A->>B: hi",
+  "usecase/compact": "usecase-beta\n  actor A\n  U\n  A-->U\n  A --- V",
+  "block/arrow_in_label": "block-beta\n  A[\"a --> b\"] B"
 }

@@ -45,6 +45,17 @@ bool render_packet(const std::string& source, const Options& options, std::strin
         }
         std::string range = trim(line.substr(0, colon)), label = trim(line.substr(colon + 1));
         if (label.size() >= 2 && label.front() == '"' && label.back() == '"') label = label.substr(1, label.size() - 2);
+        if (!range.empty() && range[0] == '+') {  // `+16: "label"`: the next 16 bits
+            char* end;
+            long width = std::strtol(range.c_str() + 1, &end, 10);
+            if (end == range.c_str() + 1 || *end != 0 || width < 1) {
+                error = "`+n` takes a number of bits above zero: " + line;
+                return false;
+            }
+            int from = fields.empty() ? 0 : fields.back().end + 1;
+            fields.push_back({from, from + (int)width - 1, label});
+            continue;
+        }
         size_t dash = range.find('-');
         char *e1, *e2;
         long a = std::strtol(range.c_str(), &e1, 10), b = dash == std::string::npos ? a : std::strtol(range.c_str() + dash + 1, &e2, 10);

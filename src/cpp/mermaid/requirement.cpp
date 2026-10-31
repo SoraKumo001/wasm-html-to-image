@@ -110,8 +110,28 @@ bool render_requirement(const std::string& source, const Options& options, std::
             }
             rels.push_back({index[a], index[b], kind});
         } else {
-            error = "unrecognised line: " + line;
-            return false;
+            // without spaces: `a-kind->b` or `b<-kind-a`
+            size_t fa = line.find("->"), fd = line.find('-'), ba = line.find("<-");
+            std::string a, b, kind;
+            if (fa != std::string::npos && fd != std::string::npos && fd < fa && (ba == std::string::npos || ba > fd)) {
+                a = trim(line.substr(0, fd));
+                kind = trim(line.substr(fd + 1, fa - fd - 1));
+                b = trim(line.substr(fa + 2));
+            } else if (ba != std::string::npos && line.find('-', ba + 2) != std::string::npos) {
+                size_t dash = line.find('-', ba + 2);
+                b = trim(line.substr(0, ba));
+                kind = trim(line.substr(ba + 2, dash - ba - 2));
+                a = trim(line.substr(dash + 1));
+            }
+            if (a.empty() || b.empty() || kind.empty()) {
+                error = "unrecognised line: " + line;
+                return false;
+            }
+            if (!index.count(a) || !index.count(b)) {
+                error = "unknown item in: " + line;
+                return false;
+            }
+            rels.push_back({index[a], index[b], kind});
         }
     }
     if (open >= 0) {

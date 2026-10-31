@@ -76,6 +76,19 @@ int main() {
     check(count(svg_of("flowchart TD\n  A --- B --- C --- D"), "class=\"node\"") == 4 && count(svg_of("flowchart TD\n  A --- B --- C --- D"), "class=\"edge\"") == 3, "edge/open_chain");
     check(count(svg_of("flowchart TD\n  A --- B --> C"), "class=\"node\"") == 3 && count(svg_of("flowchart TD\n  A --- B --> C"), "class=\"edge\"") == 2, "edge/open_then_arrow");
     check(count(svg_of("flowchart TD\n  A --- B & C"), "class=\"edge\"") == 2, "edge/open_group");
+    // notation variants the official parser takes (differential test, packages/mermaid-compare/scripts/notation-diff.mjs)
+    check(count(svg_of("flowchart TD\n  A--xB\n  C--oD"), "class=\"edge\"") == 2 && count(svg_of("flowchart TD\n  A--xB\n  C--oD"), "class=\"node\"") == 4, "edge/compact_cross_circle");
+    check(has(svg_of("flowchart TD\n  A[\"a %% b\"] --> B"), "a %% b") && count(svg_of("flowchart TD\n  A -->|\"a | b\"| B"), "class=\"edge\"") == 1, "label/comment_and_bar_in_quotes");
+    check(count(svg_of("flowchart TD\n  A[a;b] --> B; B --> C"), "class=\"node\"") == 3, "label/semicolon_in_brackets");
+    check(count(svg_of("flowchart TD\n  A@{ shape: diamond, label: \"x\" } --> B\n  A e1@--> C\n  e1@{ animate: true }"), "class=\"node\"") == 3 &&
+              count(svg_of("flowchart TD\n  A@{ shape: diamond, label: \"x\" } --> B\n  A e1@--> C\n  e1@{ animate: true }"), "class=\"edge\"") == 2,
+          "node/meta_and_edge_id");
+    check(count(svg_of("classDiagram\n  A<|--B\n  C()--D"), "<line") + count(svg_of("classDiagram\n  A<|--B\n  C()--D"), "<path") > 0 && !has(svg_of("classDiagram\n  A<|--B"), "ERROR"), "class/compact_relation");
+    check(!has(svg_of("requirementDiagram\n  requirement r {\n    id: 1\n    text: t\n    risk: low\n    verifymethod: test\n  }\n  element e {\n    type: sim\n  }\n  e-satisfies->r"), "ERROR"), "requirement/compact_relation");
+    check(!has(svg_of("usecase-beta\n  actor A\n  U\n  A-->U\n  A --- U"), "ERROR"), "usecase/compact_and_open");
+    check(!has(svg_of("packet-beta\n  +16: \"a\"\n  +16: \"b\""), "ERROR"), "packet/plus_width");
+    check(!has(svg_of("sequenceDiagram; A->>B: hi"), "ERROR"), "sequence/statement_on_header");
+    check(!has(svg_of("block-beta\n  A[\"a --> b\"] B"), "ERROR"), "block/arrow_in_label");
     {
         std::string lab = svg_of("flowchart TD\n  A --\"Yes\"--> B\n  A --Maybe--> C\n  A -.near.-> D\n  A -- \"spaced\" --> E");
         check(!has(lab, "ERROR") && has(lab, ">Yes<") && has(lab, ">Maybe<") && has(lab, ">near<") && has(lab, ">spaced<") && !has(lab, "&quot;"), "edge/compact_and_quoted_labels");

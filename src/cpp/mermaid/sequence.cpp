@@ -86,7 +86,22 @@ struct ArrowTok {
 const ArrowTok kArrows[] = {{"-->>", true, kArrow}, {"->>", false, kArrow}, {"--x", true, kCross}, {"-x", false, kCross},
                             {"--)", true, kAsync},  {"-)", false, kAsync},   {"-->", true, kNone},   {"->", false, kNone}};
 
-bool parse(const std::string& source, Doc& d, std::string& error) {
+bool parse(const std::string& text, Doc& d, std::string& error) {
+    // `sequenceDiagram; A->>B: hi` has its first statement on the header line
+    std::string source = text;
+    for (size_t at = 0; at < source.size();) {
+        size_t e = source.find('\n', at);
+        std::string head = trim(source.substr(at, e == std::string::npos ? std::string::npos : e - at));
+        if (head.empty() || head.compare(0, 2, "%%") == 0) {
+            if (e == std::string::npos) break;
+            at = e + 1;
+            continue;
+        }
+        size_t semi = head.find(';');
+        if (head.compare(0, 15, "sequenceDiagram") == 0 && semi == 15 && !trim(head.substr(semi + 1)).empty())
+            source = source.substr(0, at) + "sequenceDiagram\n" + trim(head.substr(semi + 1)) + (e == std::string::npos ? "" : source.substr(e));
+        break;
+    }
     bool autonumber = false, in_box = false;
     int counter = 0, depth = 0, box_first = 0;
     std::string box_label;
