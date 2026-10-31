@@ -183,21 +183,31 @@ LayoutResult layout_layered(const std::vector<LayoutNode>& nodes, const std::vec
     };
     refresh();
     // members of a group stay together in every layer: rows are re-sorted by (group position, ..., own position)
+    // A group's place is its members' mean place over every row (as a fraction of the row), so two groups keep the same
+    // order in all the rows they share; a mean taken per row could flip them between rows, and no frame placement can then
+    // keep both groups' frames apart. gsum[g] is kept up to date as rows change (retally), so a row costs only its own size.
+    std::vector<double> gsum(ngroups, 0);
+    std::vector<int> gcnt(ngroups, 0);
+    for (size_t r = 0; r < L.size() && ngroups > 0; r++) {
+        const double scale = L[r].size() > 1 ? 1.0 / (double)(L[r].size() - 1) : 0;
+        for (size_t i = 0; i < L[r].size(); i++)
+            for (int g : chain_of(ln[L[r][i]].group)) gsum[g] += (double)pos[L[r][i]] * scale, gcnt[g]++;
+    }
+    auto retally = [&](int l) {  // row l is in a new order: move its share of gsum and the positions with it
+        const double scale = L[l].size() > 1 ? 1.0 / (double)(L[l].size() - 1) : 0;
+        for (size_t i = 0; i < L[l].size(); i++) {
+            int v = L[l][i];
+            if (pos[v] != (int)i)
+                for (int g : chain_of(ln[v].group)) gsum[g] += ((double)i - (double)pos[v]) * scale;
+            pos[v] = (int)i;
+        }
+    };
     auto cluster = [&](int l) {
         if (ngroups == 0) return;
         auto& row = L[l];
-        // a group's place is its members' mean place over every row (as a fraction of the row), so two groups keep the same
-        // order in all the rows they share; a mean taken per row could flip them between rows, and no frame placement
-        // can then keep both groups' frames apart
-        std::vector<double> sum(ngroups, 0);
-        std::vector<int> cnt(ngroups, 0);
-        for (size_t r = 0; r < L.size(); r++) {
-            const double scale = L[r].size() > 1 ? 1.0 / (double)(L[r].size() - 1) : 0;
-            for (size_t i = 0; i < L[r].size(); i++) {
-                double at = r == (size_t)l ? (double)i : (double)pos[L[r][i]];
-                for (int g : chain_of(ln[L[r][i]].group)) sum[g] += at * scale, cnt[g]++;
-            }
-        }
+        retally(l);
+        const std::vector<double>& sum = gsum;
+        const std::vector<int>& cnt = gcnt;
         std::vector<std::pair<std::vector<double>, int>> keyed;
         for (size_t i = 0; i < row.size(); i++) {
             auto ch = chain_of(ln[row[i]].group);
@@ -209,6 +219,7 @@ LayoutResult layout_layered(const std::vector<LayoutNode>& nodes, const std::vec
         }
         std::stable_sort(keyed.begin(), keyed.end(), [](const auto& x, const auto& y) { return x.first < y.first; });
         for (size_t i = 0; i < keyed.size(); i++) row[i] = keyed[i].second;
+        retally(l);
     };
     for (int l = 0; l <= max_layer; l++) cluster(l);
     refresh();
