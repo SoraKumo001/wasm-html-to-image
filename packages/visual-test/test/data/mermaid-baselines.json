@@ -1330,7 +1330,7 @@
     ]
   },
   "agentflow@light": {
-    "width": 383,
+    "width": 401,
     "height": 598.55,
     "tags": {
       "svg": 2,
@@ -1350,7 +1350,7 @@
     ]
   },
   "agentflow@dark": {
-    "width": 383,
+    "width": 401,
     "height": 598.55,
     "tags": {
       "svg": 2,
