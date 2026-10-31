@@ -28,7 +28,7 @@ struct Node {
     Style style;
     int group = -1;
     bool phantom = false;  // stands in for an empty subgraph: sized to its frame, drawn as nothing
-    bool parked = false;   // a top-level empty subgraph: kept out of the layout and set beside the drawing, its edges drawn straight
+    bool parked = false;   // an empty subgraph: kept out of the layout and set beside the drawing or beside its parent's frame, its edges drawn straight
     double w = 0, h = 0;
     std::vector<std::string> lines;
 };
@@ -675,7 +675,7 @@ bool parse(const std::string& source, Graph& g, std::string& error) {
                 v = (int)gr.nodes.size() - 1;
             }
             gr.nodes[v].phantom = true;
-            gr.nodes[v].parked = gr.groups[gi].parent < 0 && !gr.swimlane;
+            gr.nodes[v].parked = !gr.swimlane;
             gr.nodes[v].label = gr.groups[gi].title;
             gr.nodes[v].group = (int)gi;
             gr.groups[gi].nodes.push_back(v);
@@ -954,20 +954,89 @@ bool render_flowchart(const std::string& source, const Options& options, std::st
         std::vector<Pt> center(g.nodes.size());
         const bool across_x = g.dir == Direction::TD || g.dir == Direction::BT;
         double next = across_x ? lay.width : lay.height;
+        for (size_t i = 0; i < g.nodes.size(); i++)
+            if (slot[i] >= 0) center[i] = lay.center[slot[i]];
+        std::vector<char> placed(g.nodes.size(), 0);
+        for (size_t i = 0; i < g.nodes.size(); i++) placed[i] = slot[i] >= 0;
+        constexpr double kPad = 16, kHead = 26, kGap = 32, kNear = 12;
+        // the number of frames between a node and `anchor` (the node's own group counts, the anchor itself too), or -1 if it is not inside it
+        auto frames_up_to = [&](int v, int anchor) {
+            int k = 0;
+            for (int a = g.nodes[v].group; a >= 0; a = g.groups[a].parent) {
+                k++;
+                if (a == anchor) return k;
+            }
+            return -1;
+        };
         for (size_t i = 0; i < g.nodes.size(); i++) {
-            if (slot[i] >= 0) {
-                center[i] = lay.center[slot[i]];
+            if (slot[i] >= 0) continue;
+            const Node& n = g.nodes[i];
+            // the nearest enclosing subgraph that has a member in the drawing already
+            int anchor = -1;
+            for (int a = g.groups[n.group].parent; a >= 0 && anchor < 0; a = g.groups[a].parent)
+                for (size_t v = 0; v < g.nodes.size(); v++)
+                    if (placed[v] && frames_up_to((int)v, a) > 0) {
+                        anchor = a;
+                        break;
+                    }
+            if (anchor < 0) {  // in no frame: beside the whole drawing, past every frame that is drawn there
+                double edge = next;
+                for (size_t v = 0; v < g.nodes.size(); v++) {
+                    if (!placed[v]) continue;
+                    int depth = 0;
+                    for (int a = g.nodes[v].group; a >= 0; a = g.groups[a].parent) depth++;
+                    edge = std::max(edge, across_x ? center[v].x + g.nodes[v].w / 2 + depth * kPad : center[v].y + g.nodes[v].h / 2 + depth * kPad);
+                }
+                if (across_x) {
+                    center[i] = {edge + kGap + kPad + n.w / 2, kHead + kPad + n.h / 2};
+                    next = edge + kGap + n.w + 2 * kPad;
+                } else {
+                    center[i] = {kPad + n.w / 2, edge + kGap + kHead + kPad + n.h / 2};
+                    next = edge + kGap + n.h + 2 * kPad + kHead;
+                }
+                placed[i] = 1;
                 continue;
             }
-            const Node& n = g.nodes[i];
-            constexpr double kPad = 16, kHead = 26, kGap = 32;
-            if (across_x) {
-                center[i] = {next + kGap + kPad + n.w / 2, kHead + kPad + n.h / 2};
-                next += kGap + n.w + 2 * kPad;
-            } else {
-                center[i] = {kPad + n.w / 2, next + kGap + kHead + kPad + n.h / 2};
-                next += kGap + n.h + 2 * kPad + kHead;
+            // inside the anchor's frame: beside its members (right of them top-down, below them left-right), and everything that
+            // lay past the frame on that side moves over to make room
+            double inner_lo_x = 1e18, inner_lo_y = 1e18, inner_hi_x = -1e18, inner_hi_y = -1e18;
+            for (size_t v = 0; v < g.nodes.size(); v++) {
+                int k = placed[v] ? frames_up_to((int)v, anchor) : -1;
+                if (k < 0) continue;
+                double nest = (k - 1) * kPad, head = (k - 1) * (kPad + kHead);
+                inner_lo_x = std::min(inner_lo_x, center[v].x - g.nodes[v].w / 2 - nest);
+                inner_hi_x = std::max(inner_hi_x, center[v].x + g.nodes[v].w / 2 + nest);
+                inner_lo_y = std::min(inner_lo_y, center[v].y - g.nodes[v].h / 2 - head);
+                inner_hi_y = std::max(inner_hi_y, center[v].y + g.nodes[v].h / 2 + nest);
             }
+            const double fw = n.w + 2 * kPad, fh = n.h + 2 * kPad + kHead;
+            double cut = across_x ? inner_hi_x + kPad : inner_hi_y + kPad, shift = (across_x ? fw : fh) + kNear;
+            auto moves = [&](double at) { return at >= cut - 1e-6; };
+            for (size_t v = 0; v < g.nodes.size(); v++)
+                if (placed[v] && frames_up_to((int)v, anchor) < 0 && moves(across_x ? center[v].x : center[v].y)) (across_x ? center[v].x : center[v].y) += shift;
+            for (auto& pts : lay.points)
+                for (Pt& p : pts)
+                    if (moves(across_x ? p.x : p.y)) (across_x ? p.x : p.y) += shift;
+            for (Pt& p : lay.label_center)
+                if (moves(across_x ? p.x : p.y)) (across_x ? p.x : p.y) += shift;
+            (across_x ? lay.width : lay.height) += shift;
+            // the new frame may also be longer than the members along the other axis: whatever lies past the anchor's frame there moves too
+            double over = across_x ? inner_lo_y + fh - inner_hi_y : inner_lo_x + fw - inner_hi_x;
+            if (over > 0) {
+                const double cut2 = (across_x ? inner_hi_y : inner_hi_x) + kPad;
+                auto moves2 = [&](double at) { return at >= cut2 - 1e-6; };
+                for (size_t v = 0; v < g.nodes.size(); v++)
+                    if (placed[v] && frames_up_to((int)v, anchor) < 0 && moves2(across_x ? center[v].y : center[v].x)) (across_x ? center[v].y : center[v].x) += over;
+                for (auto& pts : lay.points)
+                    for (Pt& p : pts)
+                        if (moves2(across_x ? p.y : p.x)) (across_x ? p.y : p.x) += over;
+                for (Pt& p : lay.label_center)
+                    if (moves2(across_x ? p.y : p.x)) (across_x ? p.y : p.x) += over;
+                (across_x ? lay.height : lay.width) += over;
+            }
+            if (across_x) center[i] = {inner_hi_x + kNear + kPad + n.w / 2, inner_lo_y + kHead + kPad + n.h / 2};
+            else center[i] = {inner_lo_x + kPad + n.w / 2, inner_hi_y + kNear + kHead + kPad + n.h / 2};
+            placed[i] = 1;
         }
         lay.center = center;
         // an edge to a parked frame runs straight between the two, from the border of one box to the border of the other

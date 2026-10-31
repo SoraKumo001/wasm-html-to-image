@@ -147,6 +147,13 @@ int main() {
         }
     }
     {
+        // an empty subgraph inside another sits beside its parent's members, inside the parent's frame, and does not widen the layout
+        std::string plain = svg_of("flowchart TB\n  subgraph P[\"P\"]\n    A --> B\n  end\n  X --> A");
+        std::string nested = svg_of("flowchart TB\n  subgraph P[\"P\"]\n    A --> B\n    subgraph E[\"Empty\"]\n    end\n  end\n  X --> A");
+        auto width_of = [](const std::string& s) { return std::atof(s.c_str() + s.find("viewBox=\"0 0 ") + 13); };
+        check(count(nested, "class=\"subgraph\"") == 2 && has(nested, ">Empty<") && width_of(nested) < width_of(plain) + 160, "subgraph/empty_nested_beside_members");
+    }
+    {
         std::string lab = svg_of("flowchart TD\n  A --\"Yes\"--> B\n  A --Maybe--> C\n  A -.near.-> D\n  A -- \"spaced\" --> E");
         check(!has(lab, "ERROR") && has(lab, ">Yes<") && has(lab, ">Maybe<") && has(lab, ">near<") && has(lab, ">spaced<") && !has(lab, "&quot;"), "edge/compact_and_quoted_labels");
     }
