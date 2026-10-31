@@ -93,6 +93,7 @@ int main() {
     check(count(svg_of("flowchart TB\n  A --> B\n  subgraph S[\"EmptyBox\"]\n  end"), "class=\"subgraph\"") == 1 && has(svg_of("flowchart TB\n  A --> B\n  subgraph S[\"EmptyBox\"]\n  end"), ">EmptyBox<"), "subgraph/empty_keeps_title");
     check(count(svg_of("flowchart TB\n  A --> B\n  subgraph S[\"EmptyBox\"]\n  end\n  B -.-> S"), "class=\"node\"") == 2 && has(svg_of("flowchart TB\n  A --> B\n  subgraph S[\"EmptyBox\"]\n  end\n  B -.-> S"), ">EmptyBox<") && !has(svg_of("flowchart TB\n  A --> B\n  subgraph S[\"EmptyBox\"]\n  end\n  B -.-> S"), ">S<"), "subgraph/empty_referenced");
     check(count(svg_of("flowchart TB\n  subgraph P[\"Parent\"]\n    subgraph C[\"Child\"]\n    end\n  end"), "class=\"subgraph\"") == 2, "subgraph/only_empty_child");
+    check(count(svg_of("stateDiagram-v2\n  A: a --> b\n  A --> B"), "class=\"edge\"") == 1 && count(svg_of("stateDiagram-v2\n  A: a --> b\n  A --> B"), "class=\"node\"") == 2, "state/description_with_arrow");
     {
         std::string lab = svg_of("flowchart TD\n  A --\"Yes\"--> B\n  A --Maybe--> C\n  A -.near.-> D\n  A -- \"spaced\" --> E");
         check(!has(lab, "ERROR") && has(lab, ">Yes<") && has(lab, ">Maybe<") && has(lab, ">near<") && has(lab, ">spaced<") && !has(lab, "&quot;"), "edge/compact_and_quoted_labels");

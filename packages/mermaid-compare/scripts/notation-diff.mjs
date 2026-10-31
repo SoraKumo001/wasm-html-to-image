@@ -188,9 +188,14 @@ function own(text) {
   return { ok: p.status === 0, msg: String(p.stderr ?? "").trim().split("\n")[0], svg: String(p.stdout ?? "") };
 }
 // Structure of a flowchart as the official parser reads it: node, edge and subgraph counts.
+const size = (v) => v?.size ?? v?.length ?? 0;
 async function officialShape(text) {
   const db = (await mermaid.mermaidAPI.getDiagramFromText(text)).db;
-  return { nodes: db.getVertices().size, edges: db.getEdges().length, subgraphs: db.getSubGraphs().length };
+  if (db.getVertices) return { nodes: db.getVertices().size, edges: db.getEdges().length, subgraphs: db.getSubGraphs().length };
+  if (db.getStates) return { nodes: size(db.getStates()), edges: size((db.getRelations ?? db.getEdges)?.call(db)), subgraphs: 0 };
+  if (db.getClasses) return { nodes: size(db.getClasses()), edges: size(db.getRelations()), subgraphs: 0 };
+  if (db.getEntities) return { nodes: size(db.getEntities()), edges: size(db.getRelationships()), subgraphs: 0 };
+  return null;
 }
 function ownShape(svg) {
   const n = (re) => (svg.match(re) ?? []).length;
@@ -203,7 +208,7 @@ for (const c of cases) {
   const e = own(c.text);
   const row = { ...c, official: o, own: e };
   const body = c.text.replace(/^---[\s\S]*?---\s*/, "").replace(/^%%.*\s*/gm, "");
-  if (o.ok && e.ok && /^\s*(graph|flowchart)\b/.test(body)) {
+  if (o.ok && e.ok && /^\s*(graph|flowchart|stateDiagram|classDiagram|erDiagram)\b/.test(body)) {
     try {
       row.shape = { official: await officialShape(c.text), own: ownShape(e.svg) };
     } catch (err) { if (!globalThis.__w) { globalThis.__w = 1; console.error("shape error:", err?.message); } }
@@ -219,7 +224,7 @@ console.log(`\n== official accepts, engine rejects: ${gap.length}`);
 for (const r of gap) console.log(`  [${r.kind}] ${r.name}  -> ${r.own.msg}\n      ${JSON.stringify(r.text)}`);
 console.log(`\n== official rejects, engine accepts: ${lenient.length}`);
 for (const r of lenient) console.log(`  [${r.kind}] ${r.name}  (official: ${r.official.msg})`);
-const shapeDiff = rows.filter((r) => r.shape?.official && JSON.stringify(r.shape.official) !== JSON.stringify(r.shape.own));
+const shapeDiff = rows.filter((r) => r.shape?.official && r.shape.own && JSON.stringify(r.shape.official) !== JSON.stringify(r.shape.own));
 console.log(`
 == both accept, structure differs (nodes/edges/subgraphs): ${shapeDiff.length} of ${rows.filter((r) => r.shape?.official).length}`);
 for (const r of shapeDiff) console.log(`  [${r.kind}] ${r.name}  official ${JSON.stringify(r.shape.official)}  engine ${JSON.stringify(r.shape.own)}
@@ -228,10 +233,12 @@ if (jsonOut) fs.writeFileSync(jsonOut, JSON.stringify(rows, null, 2));
 
 // --check: exit 1 for a divergence that is not a known, deliberate one (see notation-known-gaps.json).
 if (args.includes("--check")) {
-  const known = Object.keys(JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "notation-known-gaps.json"), "utf8"))["official accepts, engine rejects (reason)"]);
+  const list = JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "notation-known-gaps.json"), "utf8"));
+  const known = Object.keys(list["official accepts, engine rejects (reason)"]);
+  const knownShape = Object.keys(list["structure differs (reason)"]);
   const newGaps = gap.filter((r) => !known.includes(r.name));
   // `~~~` is an invisible link: official counts it as an edge, the engine draws none on purpose
-  const newShapes = shapeDiff.filter((r) => !r.text.includes("~~~"));
+  const newShapes = shapeDiff.filter((r) => !r.text.includes("~~~") && !knownShape.includes(r.name));
   console.log(`\ncheck: ${newGaps.length} new gaps, ${newShapes.length} new structure differences`);
   process.exit(newGaps.length || newShapes.length ? 1 : 0);
 }

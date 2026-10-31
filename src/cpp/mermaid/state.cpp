@@ -167,6 +167,11 @@ bool parse(const std::string& source, Doc& d, std::string& error) {
             continue;
         }
         size_t arrow = line.find("-->");
+        size_t first_colon = line.find(':');
+        // `A: a --> b` describes A; a transition has its arrow before any colon (`A:::cls --> B` is a class mark, not a colon)
+        if (arrow != std::string::npos && first_colon != std::string::npos && first_colon < arrow && line.compare(first_colon, 3, ":::") != 0 &&
+            trim(line.substr(0, first_colon)).find(' ') == std::string::npos)
+            arrow = std::string::npos;
         if (arrow != std::string::npos) {
             std::string right = line.substr(arrow + 3), label;
             size_t colon = right.find(':');
