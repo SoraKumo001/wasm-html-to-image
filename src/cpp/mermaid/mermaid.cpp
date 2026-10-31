@@ -125,11 +125,62 @@ void apply_config(const std::string& cfg, Options& o) {
     set("accentColor", o.accent);
     set("arrowheadColor", o.arrow);
     set("clusterBkg", o.group_fill);
+    // the aliases and the other roles themeVariables can name
+    set("mainBkg", o.surface);
+    set("nodeBorder", o.border);
+    set("nodeTextColor", o.fg);
+    set("noteBkgColor", o.note_fill);
+    set("noteBorderColor", o.note_border);
+    set("noteTextColor", o.note_text);
+    set("edgeLabelBackground", o.label_fill);
+    set("actorBorder", o.actor_border);
+    set("actorBkg", o.surface);
+    // series colours: pie1..pie12 (pie chart) or cScale0..cScale11, in order
+    std::string scale;
+    for (int i = 0; i < 12; i++) {
+        std::string v = find_value(cfg, ("pie" + std::to_string(i + 1)).c_str());
+        if (v.empty()) v = find_value(cfg, ("cScale" + std::to_string(i)).c_str());
+        if (v.empty()) break;
+        scale += (scale.empty() ? "" : ",") + v;
+    }
+    if (!scale.empty()) o.scale = scale;
     // arrow heads follow the line (official themes) or the accent unless the config names them
     if (find_value(cfg, "arrowheadColor").empty()) {
         if (!find_value(cfg, "lineColor").empty() && !o.arrow.empty()) o.arrow = o.line;
         else if (!find_value(cfg, "accentColor").empty()) o.arrow.clear();
     }
+}
+
+// Markdown strings (`"`**bold** and *italic*`"`, Mermaid 11+): the text is drawn plain, one style per label, so the
+// markers go and a line break becomes <br/>. Labels without a backtick are left alone.
+std::string flatten_markdown_strings(const std::string& source) {
+    if (source.find("\"`") == std::string::npos) return source;
+    std::string out;
+    size_t i = 0;
+    while (i < source.size()) {
+        size_t open = source.find("\"`", i);
+        size_t close = open == std::string::npos ? std::string::npos : source.find("`\"", open + 2);
+        if (close == std::string::npos) break;
+        out += source.substr(i, open - i) + "\"";
+        std::string body = source.substr(open + 2, close - open - 2), text;
+        for (size_t k = 0; k < body.size(); k++) {
+            char c = body[k];
+            if (c == '\r') continue;
+            if (c == '\n') {
+                text += "<br/>";
+                while (k + 1 < body.size() && (body[k + 1] == ' ' || body[k + 1] == '\t')) k++;  // indentation of the continuation line
+            } else if (c == '*' || (c == '_' && k + 1 < body.size() && body[k + 1] == '_')) {
+                while (k + 1 < body.size() && body[k + 1] == c) k++;  // **, ***, __: the marker only
+                if (c == '_') continue;
+            } else {
+                text += c;
+            }
+        }
+        // `*italic*` has lost its markers above; a lone * between words was a marker too
+        out += text + "\"";
+        i = close + 2;
+    }
+    return out + source.substr(i);
 }
 
 // Drops `%%{ ... }%%` directives (they may span lines) and returns their text.
@@ -156,6 +207,7 @@ static bool render_once(const std::string& input, const Options& base, std::stri
     std::string source = input;
     Options options = base;
     std::string config = take_frontmatter(source) + "\n" + take_directives(source);
+    source = flatten_markdown_strings(source);
     if (options.allow_directives) apply_config(config, options);
     // the first line that is not blank or a comment names the diagram
     size_t i = 0;

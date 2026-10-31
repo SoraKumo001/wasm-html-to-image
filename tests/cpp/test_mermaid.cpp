@@ -249,7 +249,7 @@ int main() {
         check(!has(ex3, "ERROR") && has(ex3, ">Ordering System<") && has(ex3, ">" + lq + "Core" + rq + "<") && has(ex3, ">" + lq + "Employee" + rq + "<") && has(ex3, ">places order<"), "usecase/complete_example");
         check(has(ex3, ">items[0].name<") && has(ex3, ">Book<") && has(ex3, ">29.95<") && count(ex3, "class=\"json\"") == 1, "usecase/json_table");
         check(has(ex3, "stroke=\"#c33\"") && has(ex3, "stroke=\"#6b46c1\"") && has(ex3, "stroke=\"#c8a02a\""), "usecase/styles");
-        check(count(ex3, "class=\"note\"") == 1 && has(ex3, "Validates the **cart** before payment") && count(ex3, "class=\"note-link\"") == 1, "usecase/note");
+        check(count(ex3, "class=\"note\"") == 1 && has(ex3, "Validates the cart before payment") && count(ex3, "class=\"note-link\"") == 1, "usecase/note");
         check(count(svg_of("usecase-beta\nA --o B\nB x-- C\nC <-- D\nD -- E"), "<circle") >= 1, "usecase/end_marks");
         check(has(svg_of("usecase-beta\nactor A\nsystemBoundary b\n  actor B\n  systemBoundary c\n  end\nend"), "ERROR"), "usecase/nested_boundary");
         check(has(svg_of("usecase-beta\nsystemBoundary b\n  A"), "ERROR"), "usecase/unclosed_boundary");
@@ -433,6 +433,11 @@ int main() {
         on.allow_directives = true;
         check(mermaid::render("%%{init: {\"theme\":\"light\",\"themeVariables\":{\"lineColor\":\"#123456\"}}}%%\ngraph TD\nA-->B", on, svg, err) && has(svg, "fill=\"#123456\" stroke=\"#123456\""), "theme/line_variable_moves_arrow");
         check(mermaid::render("%%{init: {\"theme\":\"light\",\"themeVariables\":{\"lineColor\":\"#123456\",\"arrowheadColor\":\"#654321\"}}}%%\ngraph TD\nA-->B", on, svg, err) && has(svg, "fill=\"#654321\" stroke=\"#654321\""), "theme/arrowhead_variable");
+        check(mermaid::render("%%{init: {\"themeVariables\":{\"mainBkg\":\"#abc123\",\"nodeBorder\":\"#def456\"}}}%%\ngraph TD\nA-->B", on, svg, err) && has(svg, "#abc123") && has(svg, "#def456"), "theme/variable_aliases");
+        check(mermaid::render("%%{init: {\"themeVariables\":{\"pie1\":\"#111111\",\"pie2\":\"#222222\"}}}%%\npie\n\"a\" : 1\n\"b\" : 2", on, svg, err) && has(svg, "#111111") && has(svg, "#222222"), "theme/pie_series_variables");
+        check(mermaid::render("%%{init: {\"themeVariables\":{\"noteBkgColor\":\"#fedcba\"}}}%%\nsequenceDiagram\nA->>B: hi\nNote right of B: n", on, svg, err) && has(svg, "#fedcba"), "theme/note_variable");
+        mermaid::Options plain;
+        check(mermaid::render("flowchart LR\n  A[\"`**Bold** and *italic*\n  second line`\"] --> B", plain, svg, err) && !has(svg, "ERROR") && has(svg, ">Bold and italic<") && has(svg, ">second line<") && !has(svg, "**"), "markdown_string/flowchart");
     }
 
     // --- the themes of this engine's own (not the official ones) keep their output ---
