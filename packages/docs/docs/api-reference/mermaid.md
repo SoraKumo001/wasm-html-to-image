@@ -199,9 +199,13 @@ CLI では、同じ内容が標準エラー出力に出ます。図が読めな�
 | パケット図 | `packet-beta` |
 | 特性要因図（フィッシュボーン） | `ishikawa-beta` |
 | ツリー表示 | `treeView-beta` |
+| ウォードリーマップ | `wardley-beta` |
+| クネヴィンフレームワーク | `cynefin-beta` |
+| 構文図（鉄道図） | `railroad-ebnf-beta` `railroad-abnf-beta` `railroad-peg-beta` `railroad-beta` |
+| イベントモデリング | `eventmodeling` |
 | バージョン表示 | `info` |
 
-未対応の図種（`zenuml`、`wardley-beta`、`eventmodeling` など）は、図の位置にエラー枠が表示されます。
+未対応の図種（`zenuml` など）は、図の位置にエラー枠が表示されます。
 
 :::note
 `-beta` の付く図の記法は、Mermaid 本体でも変わりやすい部分です。`venn-beta`、`ishikawa-beta`、`treeView-beta`、`treemap-beta`、`radar-beta`、`architecture-beta` は、本体の最新の記法と細部が違うことがあります。違いに気づいたら、`recover` モードで読み飛ばされた行を手がかりに、Issue で教えてください。

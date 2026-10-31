@@ -73,7 +73,11 @@ add_library(mermaid_core STATIC
     "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/mermaid/c4.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/mermaid/venn.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/mermaid/ishikawa.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/mermaid/treeview.cpp")
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/mermaid/treeview.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/mermaid/eventmodeling.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/mermaid/railroad.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/mermaid/cynefin.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/mermaid/wardley.cpp")
 target_include_directories(mermaid_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp")
 target_compile_features(mermaid_core PUBLIC cxx_std_20)
 if(MSVC)

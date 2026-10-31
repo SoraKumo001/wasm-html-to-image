@@ -108,6 +108,11 @@ inline std::string num(double v) {
     return s == "-0" ? "0" : s;
 }
 
+/// A dashed straight line. Skia's SVG draws a `<line>` with a dash array as a solid line plus black dashes, so it is a `<path>`.
+inline std::string dashed_line(double x1, double y1, double x2, double y2, const std::string& stroke, double width, const std::string& dash) {
+    return "<path d=\"M" + num(x1) + " " + num(y1) + " L" + num(x2) + " " + num(y2) + "\" fill=\"none\" stroke=\"" + stroke + "\" stroke-width=\"" + num(width) + "\" stroke-dasharray=\"" + dash + "\"/>\n";
+}
+
 inline std::string esc(const std::string& v) {
     std::string out;
     for (char c : v) {

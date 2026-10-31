@@ -360,6 +360,102 @@ export const MERMAID_SAMPLES: MermaidSample[] = [
   "README.md"`,
   },
   {
+    id: "wardley",
+    label: "Wardley map",
+    group: "Diagrams",
+    text: `wardley-beta
+title Tea Shop Value Chain
+
+anchor Business [0.95, 0.63]
+component Cup of Tea [0.79, 0.61]
+component Tea [0.63, 0.81]
+component Hot Water [0.52, 0.80]
+component Kettle [0.43, 0.35]
+component Power [0.10, 0.70]
+
+Business -> Cup of Tea
+Cup of Tea -> Tea
+Cup of Tea -> Hot Water
+Hot Water -> Kettle
+Kettle -> Power
+
+evolve Kettle 0.62
+evolve Power 0.89
+
+note "Standardising power allows Kettles to evolve faster" [0.30, 0.49]`,
+  },
+  {
+    id: "cynefin",
+    label: "Cynefin",
+    group: "Diagrams",
+    text: `cynefin-beta
+  title Strategy Categorization
+
+  complex
+    "Market research"
+    "Run chaos experiment"
+
+  complicated
+    "Competitive analysis"
+
+  clear
+    "Standard pricing"
+
+  chaotic
+    "Crisis management"
+
+  confusion
+    "Unknown failure mode"
+
+  complex --> complicated : "Pattern identified"
+  complicated --> clear : "Best practice codified"
+  clear --> chaotic : "Complacency"
+  chaotic --> complex : "Stabilized"`,
+  },
+  {
+    id: "railroad",
+    label: "Railroad (EBNF)",
+    group: "Diagrams",
+    text: `railroad-ebnf-beta
+title "JSON Grammar"
+
+json = element ;
+element = object | array | string | number | "true" | "false" | "null" ;
+object = "{" [ member ( "," member )* ] "}" ;
+array = "[" [ element ( "," element )* ] "]" ;
+member = string ":" element ;`,
+  },
+  {
+    id: "eventmodeling",
+    label: "Event modeling",
+    group: "Diagrams",
+    text: `eventmodeling
+
+tf 01 ui CartUI
+tf 02 cmd AddItem [[AddItem01]]
+tf 03 evt ItemAdded [[ItemAdded]]
+tf 04 cmd AddItem [[AddItem02]]
+tf 05 evt ItemAdded [[ItemAdded]]
+
+data AddItem01 {
+  description: 'john'
+  image: 'avatar_john'
+  price: 20.4
+}
+
+data AddItem02 {
+  description: 'jack'
+  image: 'avatar_jack'
+  price: 12.5
+}
+
+data ItemAdded {
+  description: string
+  image: string
+  price: number
+}`,
+  },
+  {
     id: "info",
     label: "Info",
     group: "Structure",

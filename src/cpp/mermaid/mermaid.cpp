@@ -28,6 +28,10 @@
 #include "mermaid/venn.h"
 #include "mermaid/ishikawa.h"
 #include "mermaid/treeview.h"
+#include "mermaid/eventmodeling.h"
+#include "mermaid/railroad.h"
+#include "mermaid/cynefin.h"
+#include "mermaid/wardley.h"
 #include "mermaid/timeline.h"
 #include "mermaid/xychart.h"
 
@@ -187,6 +191,10 @@ static bool render_once(const std::string& input, const Options& base, std::stri
     if (keyword == "venn-beta" || keyword == "venn") return render_venn(source, options, svg, error);
     if (keyword == "ishikawa-beta" || keyword == "ishikawa") return render_ishikawa(source, options, svg, error);
     if (keyword == "treeView-beta" || keyword == "treeView") return render_treeview(source, options, svg, error);
+    if (keyword == "wardley-beta" || keyword == "wardley") return render_wardley(source, options, svg, error);
+    if (keyword == "cynefin-beta" || keyword == "cynefin") return render_cynefin(source, options, svg, error);
+    if (keyword == "railroad-ebnf-beta" || keyword == "railroad-abnf-beta" || keyword == "railroad-peg-beta" || keyword == "railroad-beta") return render_railroad(source, options, svg, error);
+    if (keyword == "eventmodeling") return render_eventmodeling(source, options, svg, error);
     if (keyword == "timeline") return render_timeline(source, options, svg, error);
     if (keyword == "mindmap")return render_mindmap(source, options, svg, error);
     if (keyword == "gantt")return render_gantt(source, options, svg, error);
@@ -200,7 +208,7 @@ namespace {
 
 const char* const kKeywords[] = {"graph", "flowchart", "stateDiagram", "stateDiagram-v2", "classDiagram", "erDiagram", "xychart-beta", "xychart", "journey", "quadrantChart", "gitGraph", "kanban",
                                  "packet-beta", "sankey-beta", "requirementDiagram", "block-beta", "timeline", "mindmap", "gantt", "pie", "sequenceDiagram", "treemap-beta", "radar-beta", "info",
-                                 "architecture-beta", "C4Context", "C4Container", "C4Component", "C4Dynamic", "C4Deployment", "venn-beta", "ishikawa-beta", "treeView-beta"};
+                                 "architecture-beta", "C4Context", "C4Container", "C4Component", "C4Dynamic", "C4Deployment", "venn-beta", "ishikawa-beta", "treeView-beta", "eventmodeling", "railroad-ebnf-beta", "cynefin-beta", "wardley-beta"};
 
 std::string lower(std::string s) {
     for (char& c : s) c = (char)std::tolower((unsigned char)c);

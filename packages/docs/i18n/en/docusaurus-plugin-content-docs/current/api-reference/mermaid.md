@@ -199,9 +199,13 @@ The CLI prints the same on stderr. When a diagram cannot be read it still writes
 | Packet | `packet-beta` |
 | Ishikawa (fishbone) | `ishikawa-beta` |
 | Tree view | `treeView-beta` |
+| Wardley map | `wardley-beta` |
+| Cynefin framework | `cynefin-beta` |
+| Railroad diagram | `railroad-ebnf-beta` `railroad-abnf-beta` `railroad-peg-beta` `railroad-beta` |
+| Event modeling | `eventmodeling` |
 | Version banner | `info` |
 
-An unsupported type (`zenuml`, `wardley-beta`, `eventmodeling`, ...) shows as an error box where the diagram would be.
+An unsupported type (`zenuml`, ...) shows as an error box where the diagram would be.
 
 :::note
 The syntax of the `-beta` diagrams changes often in Mermaid itself. `venn-beta`, `ishikawa-beta`, `treeView-beta`, `treemap-beta`, `radar-beta` and `architecture-beta` may differ from the latest Mermaid in details. If you find a difference, use `recover` mode to see which lines were skipped, and open an issue.

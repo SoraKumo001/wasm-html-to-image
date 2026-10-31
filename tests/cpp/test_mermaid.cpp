@@ -153,6 +153,89 @@ int main() {
         check(has(svg_of("C4Context\nWidget(a, \"A\")"), "ERROR"), "c4/unknown_kind");
     }
 
+    // --- wardley ---
+    {
+        std::string tea = svg_of("wardley-beta\ntitle Tea Shop Value Chain\n\nanchor Business [0.95, 0.63]\ncomponent Cup of Tea [0.79, 0.61]\ncomponent Tea [0.63, 0.81]\ncomponent Hot Water [0.52, 0.80]\ncomponent Kettle [0.43, 0.35]\ncomponent Power [0.10, 0.70]\n\nBusiness -> Cup of Tea\nCup of Tea -> Tea\nCup of Tea -> Hot Water\nHot Water -> Kettle\nKettle -> Power\n\nevolve Kettle 0.62\nevolve Power 0.89\n\nnote \"Standardising power allows Kettles to evolve faster\" [0.30, 0.49]");
+        check(has(tea, ">Tea Shop Value Chain<") && has(tea, ">Cup of Tea<") && has(tea, ">Genesis<") && has(tea, ">Commodity (+utility)<"), "wardley/labels");
+        check(count(tea, "<line") == 5, "wardley/links");
+        check(count(tea, "stroke=\"#d9534f\"") == 4, "wardley/evolve");
+        check(has(tea, "Standardising power"), "wardley/note");
+        std::string full = svg_of("wardley-beta\ntitle Software Platform Strategy\nsize [1100, 800]\n\nevolution Genesis@0.25 -> Custom@0.5 -> Product@0.75 -> Commodity@1.0\n\nanchor Customer [0.90, 0.95]\n\ncomponent \"Mobile App\" [0.80, 0.85] (build)\ncomponent \"Web App\" [0.75, 0.80] label [-60, 10] (build)\ncomponent \"API Gateway\" [0.70, 0.65] (buy)\ncomponent \"Auth Service\" [0.60, 0.55] (outsource)\ncomponent \"Database\" [0.50, 0.45] (buy) (inertia)\ncomponent \"Cloud Platform\" [0.30, 0.95] (market)\n\nCustomer -> \"Mobile App\"\n\"Mobile App\" -> \"API Gateway\"\n\"API Gateway\" -> \"Database\"\n\nevolve \"API Gateway\" 0.85\n\naccelerator \"Cloud Native\" [0.20, 0.85]\ndeaccelerator \"Legacy Data\" [0.45, 0.35]\n\nannotations [0.10, 0.20]\nannotation 1,[0.78, 0.82] \"User touchpoints\"\nannotation 2,[0.70, 0.60] \"Integration layer\"\n\nnote \"Build mobile-first experience\" [0.85, 0.90]");
+        check(!has(full, "ERROR") && has(full, "height=\"800\"") && has(full, "1. User touchpoints") && has(full, ">Cloud Native<") && has(full, ">Legacy Data<"), "wardley/full");
+        check(count(full, "stroke-width=\"3\"") == 1, "wardley/inertia");
+        std::string pipe = svg_of("wardley-beta\ncomponent Database [0.40, 0.60]\n\npipeline Database {\n  component \"File System\" [0.25]\n  component \"SQL DB\" [0.50]\n}");
+        check(has(pipe, ">File System<") && has(pipe, ">SQL DB<"), "wardley/pipeline");
+        check(!has(svg_of("wardley-beta\ncomponent A [0.5, 0.5]\nA +'pays'> B"), ">pays<"), "wardley/unknown_end_is_skipped");
+        check(has(svg_of("wardley-beta\ncomponent A [0.2, 0.2]\ncomponent B [0.6, 0.6]\nA +'pays'> B"), ">pays<"), "wardley/flow_label");
+        check(has(svg_of("wardley-beta\ncomponent A"), "ERROR"), "wardley/missing_coordinates");
+        check(has(svg_of("wardley-beta\npipeline A {\n  component B [0.1]"), "ERROR"), "wardley/unclosed_pipeline");
+        check(has(svg_of("wardley-beta\nwidget"), "ERROR"), "wardley/unknown_line");
+        check(has(svg_of("wardley-beta\ntitle Only"), "ERROR"), "wardley/empty");
+    }
+
+    // --- cynefin ---
+    {
+        std::string c = svg_of("cynefin-beta\n  title Incident Response\n\n  complex\n    \"Investigate root cause\"\n    \"Run chaos experiment\"\n\n  complicated\n    \"Analyze performance data\"\n\n  clear\n    \"Restart service\"\n\n  chaotic\n    \"Page on-call immediately\"\n\n  confusion\n    \"Unknown failure mode\"");
+        check(has(c, ">Incident Response<") && has(c, ">Complex<") && has(c, ">Complicated<") && has(c, ">Clear<") && has(c, ">Chaotic<") && has(c, ">Confusion<"), "cynefin/domains");
+        check(has(c, ">Investigate root cause<") && has(c, ">Page on-call immediately<") && has(c, ">Unknown failure mode<"), "cynefin/items");
+        check(has(c, ">Probe - Sense - Respond<") && has(c, ">Best practice<"), "cynefin/descriptions");
+        std::string t = svg_of("cynefin-beta\n  complex\n    \"a\"\n  clear\n  complex --> complicated : \"Pattern identified\"\n  clear --> chaotic : \"Complacency\"\n  complex --> complex : \"ignored\"");
+        check(has(t, ">Pattern identified<") && has(t, ">Complacency<") && !has(t, ">ignored<"), "cynefin/transitions");
+        check(!has(svg_of("cynefin-beta\n  title Cynefin Framework\n\n  complex\n  complicated\n  clear\n  chaotic"), "ERROR"), "cynefin/empty_domains");
+        std::string many = svg_of("cynefin-beta\n  confusion\n    \"a\"\n    \"b\"\n    \"c\"\n    \"d\"\n    \"e\"");
+        check(has(many, ">+2 more<"), "cynefin/confusion_overflow");
+        check(has(svg_of("cynefin-beta\n  \"orphan\""), "ERROR"), "cynefin/item_without_domain");
+        check(has(svg_of("cynefin-beta\n  complex\n  complex --> nowhere"), "ERROR"), "cynefin/unknown_domain");
+        check(has(svg_of("cynefin-beta\n  hello"), "ERROR"), "cynefin/unknown_line");
+    }
+
+    // --- railroad ---
+    {
+        std::string json = svg_of("railroad-ebnf-beta\ntitle \"JSON Grammar\"\n\njson = element ;\nelement = object | array | string | number | \"true\" | \"false\" | \"null\" ;\nobject = \"{\" [ member ( \",\" member )* ] \"}\" ;\narray = \"[\" [ element ( \",\" element )* ] \"]\" ;\nmember = string \":\" element ;");
+        check(!has(json, "ERROR") && has(json, ">JSON Grammar<") && has(json, ">json<") && has(json, ">object<") && has(json, ">true<") && has(json, ">null<"), "railroad/ebnf_json");
+        check(count(json, "<circle") == 10, "railroad/start_and_end_markers");
+        std::string iso = svg_of("railroad-ebnf-beta\nfile = { line } , [ \"end\" ] ;\nline = letter - \"x\" , ? any visible character ? ;\n(* a comment *) letter = \"a\" | \"b\" ;");
+        check(has(iso, ">except<") && has(iso, ">any visible character<") && has(iso, ">end<") && !has(iso, "comment"), "railroad/ebnf_iso");
+        check(!has(svg_of("railroad-ebnf-beta\na = b+ c* d? ; /* w3c */ b = \"b\" ; c = \"c\" ; d = \"d\" ;"), "ERROR"), "railroad/ebnf_w3c_suffixes");
+        std::string abnf = svg_of("railroad-abnf-beta\ntitle \"Email Address\"\n\naddress = local-part \"@\" domain ;\nlocal-part = 1*( ALPHA / DIGIT / \".\" / \"-\" ) ;\ndomain = label *( \".\" label ) ;\nlabel = 1*( ALPHA / DIGIT / \"-\" ) ;");
+        check(!has(abnf, "ERROR") && has(abnf, ">local-part<") && has(abnf, ">@<") && has(abnf, ">ALPHA<"), "railroad/abnf_email");
+        std::string counts = svg_of("railroad-abnf-beta\nr = 3A 2*4B %x30-39 [ C ] ; ; a comment\ns = r =/ D ;");
+        check(has(counts, "3 times") && has(counts, "2-4 times") && has(counts, ">%x30-39<"), "railroad/abnf_counts");
+        check(has(svg_of("railroad-abnf-beta\nr = <free prose> ;"), ">free prose<"), "railroad/abnf_prose");
+        std::string peg = svg_of("railroad-peg-beta\ntitle \"Calculator Grammar\"\n\nExpression <- Term ((\"+\" / \"-\") Term)* ;\nTerm <- Factor ((\"*\" / \"/\") Factor)* ;\nFactor <- Number / \"(\" Expression \")\" ;\nNumber <- Digit+ ;\nDigit <- \"0\" / \"1\" / \"2\" # a comment\n ;");
+        check(!has(peg, "ERROR") && has(peg, ">Expression<") && has(peg, ">+<") && has(peg, ">Digit<") && !has(peg, "comment"), "railroad/peg_calculator");
+        std::string pred = svg_of("railroad-peg-beta\nA <- !B &C . [a-z]+ ;");
+        check(has(pred, ">not<") && has(pred, ">and<") && has(pred, ">any character<") && has(pred, ">[a-z]<"), "railroad/peg_predicates");
+        std::string ir = svg_of("railroad-beta\ntitle Expression Grammar\n\nexpr = sequence(\n  nonterminal(\"term\"),\n  zeroOrMore(sequence(choice(terminal(\"+\"), terminal(\"-\")), nonterminal(\"term\")))\n) ;\nterm = oneOrMore(choice(nonterminal(\"digit\"), special(\"letter\"))) ;\nopt = optional(terminal(\"x\")) ;");
+        check(!has(ir, "ERROR") && has(ir, ">Expression Grammar<") && has(ir, ">+<") && has(ir, ">letter<") && has(ir, ">x<"), "railroad/ir");
+        check(has(svg_of("railroad-ebnf-beta\na = ( b ;"), "ERROR"), "railroad/unclosed_group");
+        check(has(svg_of("railroad-ebnf-beta\na = \"x"), "ERROR"), "railroad/unclosed_string");
+        check(has(svg_of("railroad-beta\na = widget(\"x\") ;"), "ERROR"), "railroad/unknown_constructor");
+        check(has(svg_of("railroad-ebnf-beta\ntitle Nothing"), "ERROR"), "railroad/no_rules");
+        check(has(svg_of("railroad-ebnf-beta\n= a ;"), "ERROR"), "railroad/missing_name");
+    }
+
+    // --- eventmodeling ---
+    {
+        std::string ex1 = svg_of("eventmodeling\n\ntf 01 ui CartUI\ntf 02 cmd AddItem [[AddItem01]]\ntf 03 evt ItemAdded [[ItemAdded]]\ntf 04 cmd AddItem [[AddItem02]]\ntf 05 evt ItemAdded [[ItemAdded]]\n\ndata AddItem01 {\n  description: 'john'\n  image: 'avatar_john'\n  price: 20.4\n}\n\ndata AddItem02 {\n  description: 'jack'\n  price: 12.5\n}\n\ndata ItemAdded {\n  description: string\n  price: number\n}");
+        check(!has(ex1, "ERROR") && count(ex1, "class=\"frame ") == 5 && count(ex1, "class=\"relation\"") == 4, "eventmodeling/frames_and_inferred_relations");
+        check(has(ex1, ">CartUI<") && has(ex1, ">UI / Automation<") && has(ex1, ">Command / Read Model<") && has(ex1, ">Events<"), "eventmodeling/lanes");
+        check(has(ex1, ">description: 'john'<") && has(ex1, ">price: number<"), "eventmodeling/data_blocks");
+        std::string ex2 = svg_of("eventmodeling\n\ntimeframe 01 ui CartUI\ntimeframe 02 command AddItem\ntimeframe 03 event ItemAdded\n\nresetframe 04 event External.InventoryChanged\ntimeframe 05 processor InventoryProcessor\ntimeframe 06 command ChangeInventory\ntimeframe 07 event Cart.InventoryChanged");
+        check(!has(ex2, "ERROR") && count(ex2, "class=\"frame ") == 7 && count(ex2, "class=\"relation\"") == 5, "eventmodeling/reset_frame_stops_inference");
+        check(has(ex2, ">External<") && has(ex2, ">Cart<") && has(ex2, ">InventoryChanged<"), "eventmodeling/namespaces_are_lanes");
+        std::string ex3 = svg_of("eventmodeling\n\nrf 02 evt CartCreated\nrf 03 evt ItemAdded\nrf 04 evt ItemRemoved\nrf 05 evt CartCleared\ntf 01 rmo CartUI ->> 02 ->> 03 ->> 04 ->> 05");
+        check(!has(ex3, "ERROR") && count(ex3, "class=\"relation\"") == 5, "eventmodeling/explicit_relations");
+        std::string inl = svg_of("eventmodeling\ntf 01 cmd AddItem { description: string, price: number }");
+        check(has(inl, ">description: string<") && has(inl, ">price: number<"), "eventmodeling/inline_data");
+        check(has(svg_of("eventmodeling\ntf 01 ui A\ntf 01 ui B"), "ERROR"), "eventmodeling/duplicate_number");
+        check(has(svg_of("eventmodeling\ntf 01 widget A"), "ERROR"), "eventmodeling/unknown_type");
+        check(has(svg_of("eventmodeling\ntf 01 cmd A [[Nope]]"), "ERROR"), "eventmodeling/undefined_data");
+        check(has(svg_of("eventmodeling\ntf 01 cmd A ->> 9"), "ERROR"), "eventmodeling/relation_to_nothing");
+        check(has(svg_of("eventmodeling\nhello"), "ERROR"), "eventmodeling/unknown_line");
+        check(has(svg_of("eventmodeling"), "ERROR"), "eventmodeling/empty");
+    }
+
     // --- treeView, ishikawa, venn ---
     {
         std::string tv = svg_of("treeView-beta\n  \"packages\"\n    \"core\"\n      \"src\"\n    \"cli\"\n  \"README.md\"");
