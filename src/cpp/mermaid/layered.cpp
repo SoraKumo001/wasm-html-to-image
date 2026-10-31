@@ -152,15 +152,32 @@ LayoutResult layout_layered(const std::vector<LayoutNode>& nodes, const std::vec
         for (auto& row : L)
             for (int i = 0; i < (int)row.size(); i++) pos[row[i]] = i;
     };
+    // crossings between two adjacent layers = inversions among the edges ordered by their upper end: O(E log N) per layer
     auto crossings = [&]() {
         long total = 0;
+        std::vector<int> tree;
         for (int l = 0; l < max_layer; l++) {
             std::vector<std::pair<int, int>> segs;
             for (int u : L[l])
                 for (int w : ln[u].down) segs.push_back({pos[u], pos[w]});
-            for (size_t i = 0; i < segs.size(); i++)
-                for (size_t j = i + 1; j < segs.size(); j++)
-                    if ((segs[i].first - segs[j].first) * (double)(segs[i].second - segs[j].second) < 0) total++;
+            if (segs.size() < 2) continue;
+            std::sort(segs.begin(), segs.end());
+            int width = (int)L[l + 1].size() + 1;
+            tree.assign(width + 1, 0);
+            size_t inserted = 0;
+            for (size_t i = 0; i < segs.size();) {
+                size_t j = i;
+                while (j < segs.size() && segs[j].first == segs[i].first) j++;  // edges from one node never cross each other
+                for (size_t k = i; k < j; k++) {
+                    int below = 0;  // inserted edges whose lower end is at or before this one
+                    for (int x = segs[k].second + 1; x > 0; x -= x & -x) below += tree[x];
+                    total += (long)inserted - below;
+                }
+                for (size_t k = i; k < j; k++)
+                    for (int x = segs[k].second + 1; x <= width; x += x & -x) tree[x]++;
+                inserted += j - i;
+                i = j;
+            }
         }
         return total;
     };
@@ -204,7 +221,7 @@ LayoutResult layout_layered(const std::vector<LayoutNode>& nodes, const std::vec
         std::stable_sort(keyed.begin(), keyed.end(), [](auto& x, auto& y) { return x.first < y.first; });
         for (size_t i = 0; i < keyed.size(); i++) L[l][i] = keyed[i].second;
         cluster(l);
-        refresh();
+        for (size_t i = 0; i < L[l].size(); i++) pos[L[l][i]] = (int)i;  // only this row moved
     };
     for (int iter = 0; iter < 24 && best > 0; iter++) {
         if (iter % 2 == 0)
