@@ -186,10 +186,18 @@ LayoutResult layout_layered(const std::vector<LayoutNode>& nodes, const std::vec
     auto cluster = [&](int l) {
         if (ngroups == 0) return;
         auto& row = L[l];
+        // a group's place is its members' mean place over every row (as a fraction of the row), so two groups keep the same
+        // order in all the rows they share; a mean taken per row could flip them between rows, and no frame placement
+        // can then keep both groups' frames apart
         std::vector<double> sum(ngroups, 0);
         std::vector<int> cnt(ngroups, 0);
-        for (size_t i = 0; i < row.size(); i++)
-            for (int g : chain_of(ln[row[i]].group)) sum[g] += (double)i, cnt[g]++;
+        for (size_t r = 0; r < L.size(); r++) {
+            const double scale = L[r].size() > 1 ? 1.0 / (double)(L[r].size() - 1) : 0;
+            for (size_t i = 0; i < L[r].size(); i++) {
+                double at = r == (size_t)l ? (double)i : (double)pos[L[r][i]];
+                for (int g : chain_of(ln[L[r][i]].group)) sum[g] += at * scale, cnt[g]++;
+            }
+        }
         std::vector<std::pair<std::vector<double>, int>> keyed;
         for (size_t i = 0; i < row.size(); i++) {
             auto ch = chain_of(ln[row[i]].group);
@@ -293,8 +301,15 @@ LayoutResult layout_layered(const std::vector<LayoutNode>& nodes, const std::vec
             auto c = chain_of(v.group);
             return std::find(c.begin(), c.end(), g) != c.end();
         };
+        // A push moves part of one row, so a frame can stretch over the rows it was not pushed in and ask for more room on the
+        // next pass; on some graphs that doubles every pass. Nothing legitimate is wider than every node side by side, so a
+        // pass that goes past that is undone and the pushing stops (some frames then overlap, which beats a drawing a million wide).
+        double room = 500;
+        for (const LN& v : ln) room += 2 * (v.bw + kFrameGap + 2 * kFramePad);
         for (int pass = 0; pass < 40; pass++) {
             bool moved = false;
+            std::vector<double> before(ln.size());
+            for (size_t i = 0; i < ln.size(); i++) before[i] = ln[i].b;
             for (int g : order) {
                 if (gmax[g] < 0) continue;
                 double lo = 1e18, hi = -1e18;
@@ -327,6 +342,12 @@ LayoutResult layout_layered(const std::vector<LayoutNode>& nodes, const std::vec
                         break;  // the row changed: look at it again on the next pass
                     }
                 }
+            }
+            double lo_b = 1e18, hi_b = -1e18;
+            for (const LN& v : ln) lo_b = std::min(lo_b, v.b - v.bw / 2), hi_b = std::max(hi_b, v.b + v.bw / 2);
+            if (hi_b - lo_b > room) {
+                for (size_t i = 0; i < ln.size(); i++) ln[i].b = before[i];
+                break;
             }
             if (!moved) break;
         }

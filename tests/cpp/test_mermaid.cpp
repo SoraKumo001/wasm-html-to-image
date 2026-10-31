@@ -109,6 +109,12 @@ int main() {
         check(std::fabs(end_x - fx) < 1.0, "subgraph/empty_edge_stops_at_border");
     }
     {
+        // two groups that the rows used to order differently grew the picture without bound
+        std::string wide = svg_of("flowchart TB\nsubgraph G0[\"Group0\"]\n  n0\n  n5\n  n15\nend\nsubgraph G1[\"Group1\"]\n  n7\n  n10\nend\nn14 --> n9\nn10 --> n9\nn5 --> n3\nn15 --> n5\nn14 --> n3\nn14 --> n10");
+        double w = std::atof(wide.c_str() + wide.find("viewBox=\"0 0 ") + 13);
+        check(w > 100 && w < 1500, "layout/groups_ordered_alike_in_every_row");
+    }
+    {
         std::string lab = svg_of("flowchart TD\n  A --\"Yes\"--> B\n  A --Maybe--> C\n  A -.near.-> D\n  A -- \"spaced\" --> E");
         check(!has(lab, "ERROR") && has(lab, ">Yes<") && has(lab, ">Maybe<") && has(lab, ">near<") && has(lab, ">spaced<") && !has(lab, "&quot;"), "edge/compact_and_quoted_labels");
     }
