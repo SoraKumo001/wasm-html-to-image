@@ -1,6 +1,6 @@
 # Mermaid テーマの色を公式に近づける — 計画
 
-状態: 段階 1〜4 完了。段階 5 は、リリースビルド(`pnpm build`)での確認だけが残っている。比較環境: `C:\prog\samples\wasm-html-to-image-samples\mermaid-compare`。
+状態: 段階 1〜5 完了(リリースビルドで確認済み)。比較環境: `C:\prog\samples\wasm-html-to-image-samples\mermaid-compare`。
 対象: `src/cpp/mermaid/mermaid.cpp`(`kPresets`)、`mermaid_internal.h`(`Theme` / `make_theme`)、各図種の `.cpp`。
 
 ## 現状の確認
@@ -189,6 +189,14 @@ CSS の計算値で比べる。公式の `themeVariables` は `parity/official-t
 - 状態遷移図: 辺のラベル(`Prepare Items`)が複合状態の枠(`Processing`)の上辺にくっついていた(隙間 1.0px)。
   枠から 8px 離れるまで、ラベルを辺に沿ってずらす。辺の折れ目の修正と同じ処理(`frame_clear.h`)で、
   フローチャートと状態遷移図が共用する。
+
+## 段階 5 の結果(リリースビルド)
+
+`pnpm build`(WASM を ThinLTO ありで作り直し、パッケージを埋め込み直す)のあとで確認した。
+- html-to-image 181 件、playground 11 件、ビジュアルテスト(Mermaid 関連と回帰)886 件、コーパス 110 件が通る。
+  ホストテスト(371 件)は、ネイティブのビルドなので WASM の種類には依らない。
+- 測定ページの全 108 行のパレット ΔE と、フローチャート 72 行の要素別 ΔE が、開発用ビルドの結果と同じ。
+  つまり、色の一致はビルドの種類に依らない。
 
 ## リスク
 
