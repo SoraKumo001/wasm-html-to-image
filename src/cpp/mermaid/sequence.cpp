@@ -478,7 +478,7 @@ bool render_sequence(const std::string& source, const Options& options, std::str
     for (size_t k = 0; k < n; k++) {
         lifelines += line_el(cx[k], hh, cx[k], bottom, th.border, 1, " stroke-dasharray=\"4 4\"");
         for (double top : {0.0, bottom}) {
-            boxes += rect(cx[k] - w[k] / 2, top, w[k], hh, th.surface, th.border, 4);
+            boxes += rect(cx[k] - w[k] / 2, top, w[k], hh, th.surface, th.actor_border, 4);
             centered_text(boxes, th, names[k], cx[k], top + hh / 2, metrics::kNodeFont, metrics::kNodeWeight, th.text);
         }
     }

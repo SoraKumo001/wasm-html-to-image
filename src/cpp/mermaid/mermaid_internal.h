@@ -38,7 +38,7 @@ constexpr double kMargin = 40;
 /// Colours with every derived value computed (no var() / color-mix() left in the output).
 struct Theme {
     std::string bg, fg, accent, line, muted, surface, border;
-    std::string text, text_sec, text_faint, arrow, group_fill, group_hdr, cluster_hdr, label_bg, note_fill, note_border, note_text, scale_stroke, inner_stroke, key_badge;
+    std::string text, text_sec, text_faint, arrow, group_fill, group_hdr, cluster_hdr, composite_fill, composite_header, actor_border, label_bg, label_stroke, note_fill, note_border, note_text, scale_stroke, inner_stroke, key_badge;
     std::vector<std::string> scale, plot;  // empty: the diagram derives its own colours
     bool paint_background = false;
     std::string font, mono;
@@ -87,8 +87,12 @@ inline Theme make_theme(const Options& o) {
     t.scale = split_colors(o.scale);
     t.plot = split_colors(o.plot);
     t.label_bg = o.label_fill.empty() ? o.bg : o.label_fill;
+    t.composite_fill = o.composite_fill.empty() ? t.group_fill : o.composite_fill;
+    t.composite_header = o.composite_header;
+    t.actor_border = o.actor_border.empty() ? t.border : o.actor_border;
     t.inner_stroke = mix(o.fg, o.bg, 12);
     t.key_badge = mix(o.fg, o.bg, 10);
+    t.label_stroke = o.label_fill.empty() ? t.inner_stroke : o.label_fill;  // with a label colour of its own, no outline
     t.paint_background = o.paint_background;
     t.font = o.font_family;
     t.mono = o.mono_family;

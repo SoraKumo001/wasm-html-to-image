@@ -283,6 +283,12 @@ int main() {
             check(mermaid::render(pie, dark, svg, err) && has(svg, "fill=\"#0b0000\" fill-opacity=\"0.7\"") && has(svg, "fill=\"#4d1037\" fill-opacity=\"0.7\""), "theme/official/pie_scale_dark");
             std::string xy = "xychart-beta\n x-axis [a, b, c]\n bar [1, 2, 3]\n line [3, 2, 1]";
             check(mermaid::render(xy, light, svg, err) && has(svg, "fill=\"#ececff\" fill-opacity=\"1\"") && has(svg, "class=\"series\"") && has(svg, "stroke=\"#8493a6\"") && !has(svg, "<circle"), "theme/official/xychart_plot");
+            std::string st = "stateDiagram-v2\n [*] --> A\n A --> B: go\n state B {\n  [*] --> C\n }";
+            check(mermaid::render(st, light, svg, err) && has(svg, "fill=\"#ffffff\" stroke=\"#9370db\"") && has(svg, "height=\"26\" rx=\"5\" ry=\"5\" fill=\"#ececff\""), "theme/official/composite_state");
+            check(mermaid::render(st, light, svg, err) && has(svg, "fill=\"#f4f4f4\" stroke=\"#f4f4f4\""), "theme/official/label_without_outline");
+            mermaid::Options forest;
+            mermaid::apply_theme("forest", forest);
+            check(mermaid::render("sequenceDiagram\n A->>B: hi", forest, svg, err) && has(svg, "fill=\"#cde498\" stroke=\"#a6cf47\""), "theme/official/actor_border");
             std::string seq = "sequenceDiagram\n A->>B: hi\n Note over A,B: hello";
             check(mermaid::render(seq, light, svg, err) && has(svg, "fill=\"#fff5ad\" stroke=\"#aaaa33\""), "theme/official/note");
             check(mermaid::render(seq, dark, svg, err) && has(svg, "fill=\"#474949\" stroke=\"#2f2f2f\""), "theme/official/note_dark");

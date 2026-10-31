@@ -303,7 +303,7 @@ bool render_class(const std::string& source, const Options& options, std::string
         if (label_lines[k].empty()) continue;
         Pt c = at(lay.label_center[k]);
         body += "<g class=\"edge-label\">\n<rect x=\"" + num(c.x - le[k].label_w / 2) + "\" y=\"" + num(c.y - le[k].label_h / 2) + "\" width=\"" + num(le[k].label_w) + "\" height=\"" +
-                num(le[k].label_h) + "\" rx=\"2\" ry=\"2\" fill=\"" + th.bg + "\" stroke=\"" + th.inner_stroke + "\" stroke-width=\"1\"/>\n";
+                num(le[k].label_h) + "\" rx=\"2\" ry=\"2\" fill=\"" + th.label_bg + "\" stroke=\"" + th.label_stroke + "\" stroke-width=\"1\"/>\n";
         centered_text(body, th, label_lines[k], c.x, c.y, kEdgeFont, kEdgeWeight, th.text_sec);
         body += "</g>\n";
     }

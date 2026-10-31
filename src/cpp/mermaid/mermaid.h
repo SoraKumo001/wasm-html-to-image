@@ -32,6 +32,9 @@ struct Options {
     std::string group_fill;    // body of a subgraph / cluster; default: bg
     std::string group_header;  // header band of a subgraph; default: a faint tint of fg over bg
     std::string label_fill;    // behind edge labels; default: bg
+    std::string composite_fill;    // body of a composite state; default: group_fill
+    std::string composite_header;  // header band of a composite state; default: none
+    std::string actor_border;      // participant boxes of a sequence diagram; default: border
     std::string note_fill;     // notes (sequence diagram); default: a faint tint of fg over bg
     std::string note_border;   // default: border
     std::string note_text;     // default: fg

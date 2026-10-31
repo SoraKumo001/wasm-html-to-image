@@ -455,15 +455,18 @@ struct Preset {
     const char* scale_stroke = "";
     const char* plot = "";
     const char* muted = "";  // secondary text; the official themes use the text colour
+    const char* composite_fill = "";
+    const char* composite_header = "";
+    const char* actor_border = "";
 };
 
 const Preset kPresets[] = {
     // light, dark, forest and neutral are the official default, dark, forest and neutral themes, measured from
     // the colours mermaid 12.2 draws (see doc/design/mermaid-theme-parity.md); the others are this engine's own.
-    {"light", "#333333", "#ffffff", "#9370db", "#ececff", "", "#333333", "#333333", "#ffffde", "#ffffde", "#f4f4f4", "#fff5ad", "#aaaa33", "#000000", "#ececff,#ffffde,#b5ff20,#b9b9ff,#ffff45,#d7ff86,#ff86ff,#20ffff,#ff2020,#ff20ff,#20ff90,#ff5353", "#000000", "#ececff,#8493a6,#ffc3a0,#dcdde1,#b8e994,#d1a36f,#c3cde6,#ffb6c1,#496078,#f8f3e3", "#333333"},
-    {"dark", "#cccccc", "#333333", "#cccccc", "#1f2020", "", "#d3d3d3", "#d3d3d3", "#474949", "#474949", "#464646", "#474949", "#2f2f2f", "#b8b6b6", "#0b0000,#4d1037,#3f5258,#4f2f1b,#6e0a0a,#3b0048,#995a01,#154706,#161722,#00296f,#01629c,#cccccc", "#000000", "#3498db,#2ecc71,#e74c3c,#f1c40f,#bdc3c7,#ffffff,#34495e,#9b59b6,#1abc9c,#e67e22", "#cccccc"},
-    {"neutral", "#000000", "#ffffff", "#d5d5d5", "#eeeeee", "", "#666666", "#666666", "#fcfcfc", "#fcfcfc", "#ffffff", "#666666", "#999999", "#ffffff", "#f4f4f4,#555555,#bbbbbb,#777777,#999999,#dddddd,#ffffff,#dddddd,#bbbbbb,#999999,#777777,#555555", "#000000", "#eeeeee,#6bb8e4,#8acb88,#c7acd6,#e8dcc2,#ffb2a8,#fff380,#7e8d91,#ffd8b1,#faf3e0", "#000000"},
-    {"forest", "#000000", "#ffffff", "#abb594", "#cde498", "", "#000000", "#000000", "#cdffb2", "#cdffb2", "#f4f4f4", "#fff5ad", "#6eaa49", "#000000", "#cde498,#cdffb2,#e1efc0,#8cb42f,#6aff19,#33b42f,#70d990,#d99070,#98cde4,#1a6330,#63301a,#1a4d63", "#000000", "#cde498,#ff6b6b,#a0d2db,#d7bde2,#f0f0f0,#ffc3a0,#7fd8be,#ff9a8b,#faf3e0,#fff176", "#000000"},
+    {"light", "#333333", "#ffffff", "#9370db", "#ececff", "", "#333333", "#333333", "#ffffde", "#ffffde", "#f4f4f4", "#fff5ad", "#aaaa33", "#000000", "#ececff,#ffffde,#b5ff20,#b9b9ff,#ffff45,#d7ff86,#ff86ff,#20ffff,#ff2020,#ff20ff,#20ff90,#ff5353", "#000000", "#ececff,#8493a6,#ffc3a0,#dcdde1,#b8e994,#d1a36f,#c3cde6,#ffb6c1,#496078,#f8f3e3", "#333333", "#ffffff", "#ececff", "#9370db"},
+    {"dark", "#cccccc", "#333333", "#cccccc", "#1f2020", "", "#d3d3d3", "#d3d3d3", "#474949", "#474949", "#464646", "#474949", "#2f2f2f", "#b8b6b6", "#0b0000,#4d1037,#3f5258,#4f2f1b,#6e0a0a,#3b0048,#995a01,#154706,#161722,#00296f,#01629c,#cccccc", "#000000", "#3498db,#2ecc71,#e74c3c,#f1c40f,#bdc3c7,#ffffff,#34495e,#9b59b6,#1abc9c,#e67e22", "#cccccc", "#333333", "#1f2020", "#cccccc"},
+    {"neutral", "#000000", "#ffffff", "#d5d5d5", "#eeeeee", "", "#666666", "#666666", "#fcfcfc", "#fcfcfc", "#ffffff", "#666666", "#999999", "#ffffff", "#f4f4f4,#555555,#bbbbbb,#777777,#999999,#dddddd,#ffffff,#dddddd,#bbbbbb,#999999,#777777,#555555", "#000000", "#eeeeee,#6bb8e4,#8acb88,#c7acd6,#e8dcc2,#ffb2a8,#fff380,#7e8d91,#ffd8b1,#faf3e0", "#000000", "#ffffff", "#eeeeee", "#d4d4d4"},
+    {"forest", "#000000", "#ffffff", "#abb594", "#cde498", "", "#000000", "#000000", "#cdffb2", "#cdffb2", "#f4f4f4", "#fff5ad", "#6eaa49", "#000000", "#cde498,#cdffb2,#e1efc0,#8cb42f,#6aff19,#33b42f,#70d990,#d99070,#98cde4,#1a6330,#63301a,#1a4d63", "#000000", "#cde498,#ff6b6b,#a0d2db,#d7bde2,#f0f0f0,#ffc3a0,#7fd8be,#ff9a8b,#faf3e0,#fff176", "#000000", "#ffffff", "#cde498", "#a6cf47"},
     {"nord", "#eceff4", "#2e3440", "#4c566a", "#3b4252", "#88c0d0", "#81a1c1"},
     {"dracula", "#f8f8f2", "#282a36", "#44475a", "#343746", "#bd93f9", "#6272a4"},
     {"solarized-light", "#586e75", "#fdf6e3", "#d3cbb7", "#eee8d5", "#268bd2", "#93a1a1"},
@@ -503,6 +506,9 @@ bool apply_theme(const std::string& name, Options& o) {
         o.scale_stroke = p.scale_stroke;
         o.plot = p.plot;
         o.muted = p.muted;
+        o.composite_fill = p.composite_fill;
+        o.composite_header = p.composite_header;
+        o.actor_border = p.actor_border;
         return true;
     }
     return false;

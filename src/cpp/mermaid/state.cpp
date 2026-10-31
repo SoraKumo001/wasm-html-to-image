@@ -327,7 +327,9 @@ bool render_state(const std::string& source, const Options& options, std::string
         const Frame& f = frames[gi];
         if (!f.used) continue;
         body += "<g class=\"composite\">\n<rect x=\"" + num(f.x0 + ox) + "\" y=\"" + num(f.y0 + oy) + "\" width=\"" + num(f.x1 - f.x0) + "\" height=\"" + num(f.y1 - f.y0) +
-                "\" rx=\"5\" ry=\"5\" fill=\"" + th.group_fill + "\" stroke=\"" + th.border + "\" stroke-width=\"1\"/>\n";
+                "\" rx=\"5\" ry=\"5\" fill=\"" + th.composite_fill + "\" stroke=\"" + th.border + "\" stroke-width=\"1\"/>\n";
+        if (!th.composite_header.empty())
+            body += "<rect x=\"" + num(f.x0 + ox) + "\" y=\"" + num(f.y0 + oy) + "\" width=\"" + num(f.x1 - f.x0) + "\" height=\"" + num(kHeader) + "\" rx=\"5\" ry=\"5\" fill=\"" + th.composite_header + "\" stroke=\"" + th.border + "\" stroke-width=\"1\"/>\n";
         body += "<text x=\"" + num(f.x0 + ox + 12) + "\" y=\"" + num(f.y0 + oy + kHeader / 2 + kGroupFont * 0.35) + "\" font-size=\"" + num(kGroupFont) + "\" font-weight=\"" +
                 std::to_string(kGroupWeight) + "\" font-family=\"" + esc(th.font) + "\" fill=\"" + th.text + "\">" + esc(d.groups[gi].title) + "</text>\n";
         body += "<line x1=\"" + num(f.x0 + ox) + "\" y1=\"" + num(f.y0 + oy + kHeader) + "\" x2=\"" + num(f.x1 + ox) + "\" y2=\"" + num(f.y0 + oy + kHeader) + "\" stroke=\"" + th.border +
@@ -349,7 +351,7 @@ bool render_state(const std::string& source, const Options& options, std::string
         if (label_lines[k].empty()) continue;
         Pt c = at(lay.label_center[k]);
         body += "<g class=\"edge-label\">\n<rect x=\"" + num(c.x - le[k].label_w / 2) + "\" y=\"" + num(c.y - le[k].label_h / 2) + "\" width=\"" + num(le[k].label_w) + "\" height=\"" +
-                num(le[k].label_h) + "\" rx=\"2\" ry=\"2\" fill=\"" + th.bg + "\" stroke=\"" + th.inner_stroke + "\" stroke-width=\"1\"/>\n";
+                num(le[k].label_h) + "\" rx=\"2\" ry=\"2\" fill=\"" + th.label_bg + "\" stroke=\"" + th.label_stroke + "\" stroke-width=\"1\"/>\n";
         centered_text(body, th, label_lines[k], c.x, c.y, kEdgeFont, kEdgeWeight, th.text_sec);
         body += "</g>\n";
     }

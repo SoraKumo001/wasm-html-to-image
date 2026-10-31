@@ -26,7 +26,7 @@ export const App: React.FC = () => {
   const [viewMode, setViewMode] = useState<ViewMode>("side-by-side");
   const [scaleMode, setScaleMode] = useState<ScaleMode>("fit");
   const [bgSettings, setBgSettings] = useState<CanvasBgSettings>({
-    type: "dark",
+    type: "light",
     customColor: "#334155",
   });
 

@@ -96,6 +96,9 @@ function kindLimit(kind: keyof Palette) {
   return kind === "fills" ? 10 : 5;
 }
 
+// for poking at the official renderer from the console
+(window as unknown as { __mermaid: unknown }).__mermaid = mermaid;
+
 main().catch((e) => {
   document.getElementById("status")!.textContent = "error: " + (e instanceof Error ? e.stack : String(e));
 });
