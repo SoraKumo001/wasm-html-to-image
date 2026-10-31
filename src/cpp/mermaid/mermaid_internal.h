@@ -38,7 +38,7 @@ constexpr double kMargin = 40;
 /// Colours with every derived value computed (no var() / color-mix() left in the output).
 struct Theme {
     std::string bg, fg, accent, line, muted, surface, border;
-    std::string text, text_sec, text_faint, arrow, group_fill, group_hdr, inner_stroke, key_badge;
+    std::string text, text_sec, text_faint, arrow, group_fill, group_hdr, label_bg, inner_stroke, key_badge;
     bool paint_background = false;
     std::string font, mono;
 };
@@ -60,9 +60,10 @@ inline Theme make_theme(const Options& o) {
     t.text = o.fg;
     t.text_sec = o.muted.empty() ? mix(o.fg, o.bg, 60) : o.muted;
     t.text_faint = mix(o.fg, o.bg, 25);
-    t.arrow = t.accent;
-    t.group_fill = o.bg;
-    t.group_hdr = mix(o.fg, o.bg, 5);
+    t.arrow = o.arrow.empty() ? t.accent : o.arrow;
+    t.group_fill = o.group_fill.empty() ? o.bg : o.group_fill;
+    t.group_hdr = o.group_header.empty() ? mix(o.fg, o.bg, 5) : o.group_header;
+    t.label_bg = o.label_fill.empty() ? o.bg : o.label_fill;
     t.inner_stroke = mix(o.fg, o.bg, 12);
     t.key_badge = mix(o.fg, o.bg, 10);
     t.paint_background = o.paint_background;

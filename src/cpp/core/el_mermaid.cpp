@@ -97,6 +97,15 @@ void el_mermaid::ensure_svg() {
     over("--mermaid-muted", opt.muted);
     over("--mermaid-surface", opt.surface);
     over("--mermaid-border", opt.border);
+    over("--mermaid-arrow", opt.arrow);
+    over("--mermaid-group-fill", opt.group_fill);
+    over("--mermaid-group-header", opt.group_header);
+    over("--mermaid-label-fill", opt.label_fill);
+    // arrow heads follow the line (official themes) or the accent unless the page names them
+    if (prop("--mermaid-arrow").empty()) {
+        if (!prop("--mermaid-line").empty() && !opt.arrow.empty()) opt.arrow = opt.line;
+        else if (!prop("--mermaid-accent").empty()) opt.arrow.clear();
+    }
     opt.allow_directives = prop("--mermaid-directives") == "on";
     // a limit given as 0 lifts it; anything that is not a number keeps the default
     auto limit = [&](const char* name, size_t& dst) {

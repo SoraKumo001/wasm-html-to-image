@@ -28,6 +28,10 @@ struct Options {
     std::string muted;    // secondary text (edge labels)
     std::string surface;  // node fill
     std::string border;   // node outline
+    std::string arrow;         // arrow heads; default: accent
+    std::string group_fill;    // body of a subgraph / cluster; default: bg
+    std::string group_header;  // header band of a subgraph; default: a faint tint of fg over bg
+    std::string label_fill;    // behind edge labels; default: bg
     /// Paint the background rectangle. Off by default so a diagram sits on the page it is placed on.
     bool paint_background = false;
     std::string font_family = "sans-serif";

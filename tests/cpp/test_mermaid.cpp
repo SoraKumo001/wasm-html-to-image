@@ -97,9 +97,9 @@ int main() {
         mermaid::Options on;
         on.allow_directives = true;
         check(render("---\ntitle: T\n---\ngraph TD\nA-->B", svg, err), "front/skipped");
-        check(render("%%{init: {\"theme\":\"dark\"}}%%\ngraph TD\nA-->B", svg, err) && !has(svg, "#0d1117"), "init/off_by_default");
+        check(render("%%{init: {\"theme\":\"dark\"}}%%\ngraph TD\nA-->B", svg, err) && !has(svg, "#1f2020"), "init/off_by_default");
         check(mermaid::render("%%{init: {\"theme\":\"dark\",\"themeVariables\":{\"primaryColor\":\"#123456\"}}}%%\ngraph TD\nA-->B", on, svg, err) && has(svg, "#123456"), "init/theme_variables");
-        check(mermaid::render("---\nconfig:\n  theme: forest\n---\ngraph TD\nA-->B", on, svg, err) && has(svg, "#e8f5ec"), "front/config_theme");
+        check(mermaid::render("---\nconfig:\n  theme: forest\n---\ngraph TD\nA-->B", on, svg, err) && has(svg, "#cde498"), "front/config_theme");
     }
 
     // --- classDef / class / style on the other box diagrams ---
@@ -196,6 +196,71 @@ int main() {
         on.allow_directives = true;
         check(mermaid::render("%%{init: {\"theme\":\"dracula\"}}%%\ngraph TD\nA-->B", on, svg, err) && has(svg, "#343746"), "theme/init_directive_preset");
         check(mermaid::render("%%{init: {\"theme\":\"dracula\",\"themeVariables\":{\"primaryColor\":\"#abcdef\"}}}%%\ngraph TD\nA-->B", on, svg, err) && has(svg, "#abcdef") && !has(svg, "#343746"), "theme/variables_override_preset");
+    }
+
+    // --- the official-colour themes: node, group, edge and arrow colours ---
+    {
+        std::string svg, err;
+        const char* flow = "flowchart LR\n subgraph G[Group]\n A --> B\n end";
+        struct Official { const char* theme; const char* surface; const char* border; const char* line; const char* group; };
+        const Official official[] = {
+            {"light", "#ececff", "#9370db", "#333333", "#ffffde"},
+            {"dark", "#1f2020", "#cccccc", "#d3d3d3", "#474949"},
+            {"forest", "#cde498", "#abb594", "#000000", "#cdffb2"},
+            {"neutral", "#eeeeee", "#d5d5d5", "#666666", "#fcfcfc"},
+        };
+        for (const Official& t : official) {
+            mermaid::Options o;
+            mermaid::apply_theme(t.theme, o);
+            bool ok = mermaid::render(flow, o, svg, err);
+            std::string name = std::string("theme/official/") + t.theme;
+            check(ok && has(svg, std::string("class=\"node\">\n<rect x=\"") ) && has(svg, std::string("fill=\"") + t.surface + "\" stroke=\"" + t.border + "\""), name + "/node");
+            check(ok && has(svg, std::string("class=\"edge\"") ) && has(svg, std::string("stroke=\"") + t.line + "\""), name + "/edge");
+            check(ok && has(svg, std::string("class=\"subgraph\">\n<rect x=\"") ) && has(svg, std::string("fill=\"") + t.group + "\" stroke=\"" + t.border + "\""), name + "/group");
+            check(ok && has(svg, std::string("fill=\"") + t.line + "\" stroke=\"" + t.line + "\" stroke-width=\"0.75\""), name + "/arrow_follows_line");
+        }
+        mermaid::Options custom;
+        custom.arrow = "#ff0000";
+        custom.group_fill = "#00ff00";
+        custom.label_fill = "#0000ff";
+        check(mermaid::render("flowchart LR\n subgraph G[g]\n A -->|x| B\n end", custom, svg, err) && has(svg, "fill=\"#ff0000\" stroke=\"#ff0000\"") && has(svg, "fill=\"#00ff00\"") && has(svg, "fill=\"#0000ff\""), "theme/explicit_arrow_group_label");
+        mermaid::Options on;
+        on.allow_directives = true;
+        check(mermaid::render("%%{init: {\"theme\":\"light\",\"themeVariables\":{\"lineColor\":\"#123456\"}}}%%\ngraph TD\nA-->B", on, svg, err) && has(svg, "fill=\"#123456\" stroke=\"#123456\""), "theme/line_variable_moves_arrow");
+        check(mermaid::render("%%{init: {\"theme\":\"light\",\"themeVariables\":{\"lineColor\":\"#123456\",\"arrowheadColor\":\"#654321\"}}}%%\ngraph TD\nA-->B", on, svg, err) && has(svg, "fill=\"#654321\" stroke=\"#654321\""), "theme/arrowhead_variable");
+    }
+
+    // --- the themes of this engine's own (not the official ones) keep their output ---
+    // A hash of the SVG per theme and diagram. A change that is meant to alter these themes updates the table.
+    {
+        const char* const diagrams[] = {
+            "flowchart LR\n subgraph G[Group]\n A[Start] --> B{ok?}\n end\n B -->|yes| C((End))\n classDef hot fill:#f96\n class A hot",
+            "sequenceDiagram\n participant A\n participant B\n A->>B: hi\n Note over A,B: note\n activate B\n B-->>A: back\n deactivate B",
+            "classDiagram\n class Animal {\n +name\n +eat()\n }\n Animal <|-- Dog",
+            "pie\n \"a\": 3\n \"b\": 5\n \"c\": 2",
+            "gantt\n dateFormat YYYY-MM-DD\n section S\n A :done, a1, 2024-01-01, 3d\n B :active, a2, after a1, 4d\n C :crit, a3, after a2, 2d",
+            "stateDiagram-v2\n [*] --> Idle\n Idle --> Busy: go\n Busy --> [*]",
+        };
+        struct Frozen { const char* theme; unsigned long long hash[6]; };
+        const Frozen frozen[] = {
+            {"nord", {11243782259192426327ull, 3651886260605628939ull, 7440896151333172490ull, 3905288298567241074ull, 175437596168651868ull, 9751055940604640942ull}},
+            {"dracula", {9173676882967520079ull, 6562885363073828054ull, 7115237374810826030ull, 1716523713338679796ull, 15250715627772429097ull, 15813959643653013916ull}},
+            {"solarized-light", {17722543342328864403ull, 13630062689254594252ull, 10925943474433918076ull, 14190747636729263506ull, 1066096645479023495ull, 10785765333670782637ull}},
+            {"solarized-dark", {12961002802899193158ull, 4947546758206853888ull, 13152149386711216853ull, 16079790508120439295ull, 16433683437209907014ull, 2925557938494227877ull}},
+            {"rose-pine", {44304171628481796ull, 10217296344170784352ull, 10277657207745800466ull, 1101500477800157097ull, 5157649815519468525ull, 14185117963999280394ull}},
+            {"sepia", {9767951103982456000ull, 6016422664941835242ull, 17433353230813544808ull, 8050788171094520827ull, 14193181199171495114ull, 13175144670565691982ull}},
+        };
+        for (const Frozen& f : frozen) {
+            for (int d = 0; d < 6; d++) {
+                mermaid::Options o;
+                mermaid::apply_theme(f.theme, o);
+                std::string svg, err;
+                bool ok = mermaid::render(diagrams[d], o, svg, err);
+                unsigned long long h = 1469598103934665603ull;  // FNV-1a
+                for (unsigned char c : svg) h = (h ^ c) * 1099511628211ull;
+                check(ok && h == f.hash[d], std::string("theme/frozen/") + f.theme + "/" + std::to_string(d) + " hash=" + std::to_string(h));
+            }
+        }
     }
 
     // --- modes: strict, compat, recover ---

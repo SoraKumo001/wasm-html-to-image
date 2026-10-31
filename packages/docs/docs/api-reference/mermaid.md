@@ -112,6 +112,9 @@ HTML ページとして使いたいときは、`mermaidToHtml(source, options)` 
 | `--mermaid-muted` | 補助の文字（辺のラベルなど） |
 | `--mermaid-surface` | ノードの塗り |
 | `--mermaid-border` | ノードの枠線 |
+| `--mermaid-arrow` | 矢じりの色（既定は `--mermaid-accent`。公式の配色のテーマでは線の色） |
+| `--mermaid-group-fill` / `--mermaid-group-header` | サブグラフの本体 / 見出しの帯 |
+| `--mermaid-label-fill` | 辺のラベルの背景 |
 | `--mermaid-mode` | `compat` または `recover` |
 | `--mermaid-directives` | `on` で `%%{init}%%` と frontmatter を反映 |
 
@@ -127,10 +130,10 @@ HTML ページとして使いたいときは、`mermaidToHtml(source, options)` 
 
 | 名前 | 文字 | 背景 | 備考 |
 | :--- | :--- | :--- | :--- |
-| `light`（既定） | `#1f2328` | `#ffffff` | |
-| `dark` | `#e6edf3` | `#0d1117` | |
-| `neutral` | `#222222` | `#ffffff` | 灰色が中心 |
-| `forest` | `#1b3a2a` | `#ffffff` | 緑のアクセント |
+| `light`（既定） | `#333333` | `#ffffff` | 公式 Mermaid の `default` の配色 |
+| `dark` | `#cccccc` | `#333333` | 公式の `dark` の配色 |
+| `neutral` | `#000000` | `#ffffff` | 公式の `neutral` の配色 |
+| `forest` | `#000000` | `#ffffff` | 公式の `forest` の配色 |
 | `nord` | `#eceff4` | `#2e3440` | |
 | `dracula` | `#f8f8f2` | `#282a36` | |
 | `solarized-light` | `#586e75` | `#fdf6e3` | |
@@ -138,7 +141,9 @@ HTML ページとして使いたいときは、`mermaidToHtml(source, options)` 
 | `rose-pine` | `#e0def4` | `#191724` | |
 | `sepia` | `#433422` | `#f4ecd8` | |
 
-`%%{init: {"theme": "dark"}}%%` の `theme` にも同じ名前が使えます（`default` と `base` は `light`）。`themeVariables` の `primaryColor`、`primaryBorderColor`、`lineColor`、`textColor`、`background`、`secondaryTextColor` は、テーマの上に重なります。ただし、ディレクティブは `directives: true`（または `--mermaid-directives: on`）のときだけ反映されます。ページの配色は、書き手ではなく、図を置く側が決めるためです。
+`light`、`dark`、`neutral`、`forest` は、公式 Mermaid 12 の `default`、`dark`、`neutral`、`forest` が描く色に合わせています（ノードの塗りと枠、線、矢じり、サブグラフ）。`nord` 以降はこのエンジン独自の配色です。
+
+`%%{init: {"theme": "dark"}}%%` の `theme` にも同じ名前が使えます（`default` と `base` は `light`）。`themeVariables` の `primaryColor`、`primaryBorderColor`、`lineColor`、`arrowheadColor`、`clusterBkg`、`textColor`、`background`、`secondaryTextColor` は、テーマの上に重なります。ただし、ディレクティブは `directives: true`（または `--mermaid-directives: on`）のときだけ反映されます。ページの配色は、書き手ではなく、図を置く側が決めるためです。
 
 ---
 

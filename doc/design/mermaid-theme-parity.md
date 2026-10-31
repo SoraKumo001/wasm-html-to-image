@@ -1,6 +1,6 @@
 # Mermaid テーマの色を公式に近づける — 計画
 
-状態: 段階 1(測定)完了、段階 2 以降は未着手。比較環境: `C:\prog\samples\wasm-html-to-image-samples\mermaid-compare`。
+状態: 段階 1〜3 完了(フローチャートの色は公式と一致)、段階 4(他の図種)と 5 の残りが未着手。比較環境: `C:\prog\samples\wasm-html-to-image-samples\mermaid-compare`。
 対象: `src/cpp/mermaid/mermaid.cpp`(`kPresets`)、`mermaid_internal.h`(`Theme` / `make_theme`)、各図種の `.cpp`。
 
 ## 現状の確認
@@ -122,6 +122,33 @@ CSS の計算値で比べる。公式の `themeVariables` は `parity/official-t
 - 公式のクラスタの枠は、`themeVariables` の `clusterBorder`(`light` は `#aaaa33`)ではなく、ノードの枠と同じ色で出ている。
   合わせる先は変数ではなく、この計算値とする。
 - 矢じりの色、辺ラベルの背景は未比較。
+
+## 段階 2・3 の結果(実装)
+
+計画からの変更:
+- 導出規則の関数は作らなかった。公式の 4 テーマは実測値をそのままプリセットに入れた。独自 6 種は触らないので、導出は要らない。
+- `Options` に足したのは `arrow` `group_fill` `group_header` `label_fill` の 4 つ。`text` は足さず、文字色は `fg` に公式の値を入れた。
+  ノート・系列色(`scale`)は、使う図種を直す段階 4 で足す。
+- 矢じりは線の色に従う(公式の挙動)。`lineColor` を `themeVariables` や `--mermaid-line` で指定すると矢じりも動き、
+  `arrowheadColor` / `--mermaid-arrow` で個別に決められる。`accent` を指定すると、矢じりは accent に戻る。
+- 見つけた二重管理: `packages/html-to-image/src/mermaid.ts` の `MERMAID_THEMES` が、色を CSS 変数で直接エンジンに渡していて、
+  エンジンのプリセットを上書きしていた。破壊的変更として、`MERMAID_THEMES` は `{ fg, bg }` だけにし、色は
+  `--mermaid-theme: <name>` でエンジンに任せる形にした。`MERMAID_THEMES` を使う側(`bg` と一覧)は変わらない。
+
+結果:
+- フローチャートの要素別 ΔE は、4 テーマ × 6 要素(ノードの塗り・枠・文字、線、クラスタの塗り・枠)がすべて 0.0。
+- 独自 6 種の出力は、6 種類の図のハッシュ(`tests/cpp/test_mermaid.cpp`)で固定し、変わっていない。
+- 全プリセットのパレット ΔE(平均)は、段階 1 → 現在:
+
+| テーマ | 塗り | 枠・線 | 文字 |
+|---|---|---|---|
+| light | 14.8 → 16.8 | 39.0 → 11.3 | 19.1 → 15.3 |
+| dark | 13.6 → 11.4 | 28.2 → 8.0 | 13.8 → 9.8 |
+| forest | 28.6 → 21.4 | 31.8 → 14.2 | 40.2 → 24.9 |
+| neutral | 5.1 → 7.9 | 13.6 → 4.4 | 22.0 → 16.4 |
+
+  `light` と `neutral` の塗りが増えたのは、フローチャートが合って、残りの図種(円グラフ、折れ線・棒グラフなど)が
+  相対的に目立つようになったためと考えている(要因の切り分けは未実施)。図種別では円グラフが 29.8、xychart が 42.4 と遠い(段階 4 の対象)。
 
 ## リスク
 

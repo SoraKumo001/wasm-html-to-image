@@ -719,7 +719,7 @@ bool render_flowchart(const std::string& source, const Options& options, std::st
         if (label_lines[i].empty() || g.edges[i].kind == Kind::Invisible) continue;
         Pt c = at(lay.label_center[i]);
         body += "<g class=\"edge-label\">\n<rect x=\"" + num(c.x - le[i].label_w / 2) + "\" y=\"" + num(c.y - le[i].label_h / 2) + "\" width=\"" + num(le[i].label_w) +
-                "\" height=\"" + num(le[i].label_h) + "\" rx=\"2\" ry=\"2\" fill=\"" + th.bg + "\" stroke=\"" + th.inner_stroke + "\" stroke-width=\"1\"/>\n";
+                "\" height=\"" + num(le[i].label_h) + "\" rx=\"2\" ry=\"2\" fill=\"" + th.label_bg + "\" stroke=\"" + th.inner_stroke + "\" stroke-width=\"1\"/>\n";
         centered_text(body, th, label_lines[i], c.x, c.y, kEdgeFont, kEdgeWeight, th.text_sec);
         body += "</g>\n";
     }

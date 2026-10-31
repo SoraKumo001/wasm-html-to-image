@@ -112,6 +112,9 @@ A `<div class="mermaid">` or a Markdown diagram takes its colours and behaviour 
 | `--mermaid-muted` | Secondary text (edge labels, ...) |
 | `--mermaid-surface` | Node fill |
 | `--mermaid-border` | Node outline |
+| `--mermaid-arrow` | Arrow heads (default `--mermaid-accent`; the line colour in the official-colour themes) |
+| `--mermaid-group-fill` / `--mermaid-group-header` | Body / header band of a subgraph |
+| `--mermaid-label-fill` | Background behind edge labels |
 | `--mermaid-mode` | `compat` or `recover` |
 | `--mermaid-directives` | `on` honours `%%{init}%%` and frontmatter |
 
@@ -127,10 +130,10 @@ A `<div class="mermaid">` or a Markdown diagram takes its colours and behaviour 
 
 | Name | Text | Background | Note |
 | :--- | :--- | :--- | :--- |
-| `light` (default) | `#1f2328` | `#ffffff` | |
-| `dark` | `#e6edf3` | `#0d1117` | |
-| `neutral` | `#222222` | `#ffffff` | Mostly grey |
-| `forest` | `#1b3a2a` | `#ffffff` | Green accent |
+| `light` (default) | `#333333` | `#ffffff` | Colours of the official Mermaid `default` |
+| `dark` | `#cccccc` | `#333333` | Colours of the official `dark` |
+| `neutral` | `#000000` | `#ffffff` | Colours of the official `neutral` |
+| `forest` | `#000000` | `#ffffff` | Colours of the official `forest` |
 | `nord` | `#eceff4` | `#2e3440` | |
 | `dracula` | `#f8f8f2` | `#282a36` | |
 | `solarized-light` | `#586e75` | `#fdf6e3` | |
@@ -138,7 +141,9 @@ A `<div class="mermaid">` or a Markdown diagram takes its colours and behaviour 
 | `rose-pine` | `#e0def4` | `#191724` | |
 | `sepia` | `#433422` | `#f4ecd8` | |
 
-The same names work in `%%{init: {"theme": "dark"}}%%` (`default` and `base` mean `light`). `themeVariables` keys `primaryColor`, `primaryBorderColor`, `lineColor`, `textColor`, `background` and `secondaryTextColor` are applied on top of the theme. Directives only take effect with `directives: true` (or `--mermaid-directives: on`): the page that places a diagram decides its colours, not the author of the diagram.
+`light`, `dark`, `neutral` and `forest` follow what official Mermaid 12 draws for `default`, `dark`, `neutral` and `forest` (node fill and outline, lines, arrow heads, subgraphs). `nord` and the ones after it are this engine's own palettes.
+
+The same names work in `%%{init: {"theme": "dark"}}%%` (`default` and `base` mean `light`). `themeVariables` keys `primaryColor`, `primaryBorderColor`, `lineColor`, `arrowheadColor`, `clusterBkg`, `textColor`, `background` and `secondaryTextColor` are applied on top of the theme. Directives only take effect with `directives: true` (or `--mermaid-directives: on`): the page that places a diagram decides its colours, not the author of the diagram.
 
 ---
 

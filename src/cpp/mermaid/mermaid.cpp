@@ -118,6 +118,13 @@ void apply_config(const std::string& cfg, Options& o) {
     set("lineColor", o.line);
     set("secondaryTextColor", o.muted);
     set("accentColor", o.accent);
+    set("arrowheadColor", o.arrow);
+    set("clusterBkg", o.group_fill);
+    // arrow heads follow the line (official themes) or the accent unless the config names them
+    if (find_value(cfg, "arrowheadColor").empty()) {
+        if (!find_value(cfg, "lineColor").empty() && !o.arrow.empty()) o.arrow = o.line;
+        else if (!find_value(cfg, "accentColor").empty()) o.arrow.clear();
+    }
 }
 
 // Drops `%%{ ... }%%` directives (they may span lines) and returns their text.
@@ -436,13 +443,20 @@ struct Preset {
     const char* surface;
     const char* accent;  // empty: derived from fg and bg
     const char* line;
+    // the rest only for the themes that follow the official Mermaid colours; empty: derived
+    const char* arrow = "";
+    const char* group_fill = "";
+    const char* group_header = "";
+    const char* label_fill = "";
 };
 
 const Preset kPresets[] = {
-    {"light", "#1f2328", "#ffffff", "", "", "", ""},
-    {"dark", "#e6edf3", "#0d1117", "#3d444d", "#151b23", "", ""},
-    {"neutral", "#222222", "#ffffff", "#999999", "#eeeeee", "", ""},
-    {"forest", "#1b3a2a", "#ffffff", "#8fbf9f", "#e8f5ec", "#2e8b57", "#2e8b57"},
+    // light, dark, forest and neutral are the official default, dark, forest and neutral themes, measured from
+    // the colours mermaid 12.2 draws (see doc/design/mermaid-theme-parity.md); the others are this engine's own.
+    {"light", "#333333", "#ffffff", "#9370db", "#ececff", "", "#333333", "#333333", "#ffffde", "#ffffde", "#f4f4f4"},
+    {"dark", "#cccccc", "#333333", "#cccccc", "#1f2020", "", "#d3d3d3", "#d3d3d3", "#474949", "#474949", "#464646"},
+    {"neutral", "#000000", "#ffffff", "#d5d5d5", "#eeeeee", "", "#666666", "#666666", "#fcfcfc", "#fcfcfc", "#ffffff"},
+    {"forest", "#000000", "#ffffff", "#abb594", "#cde498", "", "#000000", "#000000", "#cdffb2", "#cdffb2", "#f4f4f4"},
     {"nord", "#eceff4", "#2e3440", "#4c566a", "#3b4252", "#88c0d0", "#81a1c1"},
     {"dracula", "#f8f8f2", "#282a36", "#44475a", "#343746", "#bd93f9", "#6272a4"},
     {"solarized-light", "#586e75", "#fdf6e3", "#d3cbb7", "#eee8d5", "#268bd2", "#93a1a1"},
@@ -471,6 +485,10 @@ bool apply_theme(const std::string& name, Options& o) {
         o.surface = p.surface;
         o.accent = p.accent;
         o.line = p.line;
+        o.arrow = p.arrow;
+        o.group_fill = p.group_fill;
+        o.group_header = p.group_header;
+        o.label_fill = p.label_fill;
         o.muted.clear();
         return true;
     }
