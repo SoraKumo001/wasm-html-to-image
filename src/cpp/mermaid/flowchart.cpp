@@ -28,6 +28,7 @@ struct Node {
     Style style;
     int group = -1;
     bool phantom = false;  // stands in for an empty subgraph: sized to its frame, drawn as nothing
+    bool parked = false;   // a top-level empty subgraph: kept out of the layout and set beside the drawing, its edges drawn straight
     double w = 0, h = 0;
     std::vector<std::string> lines;
 };
@@ -664,7 +665,8 @@ bool parse(const std::string& source, Graph& g, std::string& error) {
             if (!gr.groups[gi].nodes.empty() || has_child[gi]) continue;
             auto it = gr.index.find(gr.groups[gi].id);
             int v;
-            if (it != gr.index.end()) {
+            bool fresh = it == gr.index.end();
+            if (!fresh) {
                 v = it->second;
             } else {
                 Node n;
@@ -673,6 +675,7 @@ bool parse(const std::string& source, Graph& g, std::string& error) {
                 v = (int)gr.nodes.size() - 1;
             }
             gr.nodes[v].phantom = true;
+            gr.nodes[v].parked = gr.groups[gi].parent < 0 && !gr.swimlane;
             gr.nodes[v].label = gr.groups[gi].title;
             gr.nodes[v].group = (int)gi;
             gr.groups[gi].nodes.push_back(v);
@@ -877,19 +880,25 @@ bool render_flowchart(const std::string& source, const Options& options, std::st
     Text text{options};
     size_nodes(g, text);
 
-    std::vector<LayoutNode> ln(g.nodes.size());
+    // parked nodes (the empty subgraphs nothing points to) take no part in the layout; slot[] maps a node to its layout row
+    std::vector<int> slot(g.nodes.size(), -1);
+    std::vector<LayoutNode> ln;
     for (size_t i = 0; i < g.nodes.size(); i++) {
-        ln[i].w = g.nodes[i].w;
-        ln[i].h = g.nodes[i].h;
-        ln[i].group = g.nodes[i].group;
+        if (g.nodes[i].parked) continue;
+        slot[i] = (int)ln.size();
+        LayoutNode n;
+        n.w = g.nodes[i].w;
+        n.h = g.nodes[i].h;
+        n.group = g.nodes[i].group;
         Shape s = g.nodes[i].shape;
-        ln[i].outline = s == Shape::Diamond ? 1 : (s == Shape::Circle || s == Shape::DoubleCircle ? 2 : 0);
+        n.outline = s == Shape::Diamond ? 1 : (s == Shape::Circle || s == Shape::DoubleCircle ? 2 : 0);
+        ln.push_back(n);
     }
     std::vector<LayoutEdge> le(g.edges.size());
     std::vector<std::vector<std::string>> label_lines(g.edges.size());
     for (size_t i = 0; i < g.edges.size(); i++) {
-        le[i].from = g.edges[i].from;
-        le[i].to = g.edges[i].to;
+        le[i].from = slot[g.edges[i].from];
+        le[i].to = slot[g.edges[i].to];
         if (!g.edges[i].label.empty()) {
             label_lines[i] = split_lines(g.edges[i].label);
             le[i].label_w = text.block_width(label_lines[i], kEdgeFont, kEdgeWeight) + 16;
@@ -929,7 +938,65 @@ bool render_flowchart(const std::string& source, const Options& options, std::st
         swim = layout_swimlane(sn, le, (int)lane_titles.size(), g.dir, 30, 120);
         lay = swim.lay;
     } else {
-        lay = layout_layered(ln, le, g.dir, group_parent);
+        std::vector<LayoutEdge> le_in;  // the edges the layout sees: those between nodes it knows
+        std::vector<int> le_at;
+        for (size_t i = 0; i < le.size(); i++)
+            if (le[i].from >= 0 && le[i].to >= 0) le_in.push_back(le[i]), le_at.push_back((int)i);
+        LayoutResult in = layout_layered(ln, le_in, g.dir, group_parent);
+        lay = in;
+        lay.points.assign(le.size(), {});
+        lay.label_center.assign(le.size(), Pt{0, 0});
+        for (size_t k = 0; k < le_at.size(); k++) {
+            lay.points[le_at[k]] = in.points[k];
+            lay.label_center[le_at[k]] = in.label_center[k];
+        }
+        // back to node numbering; each parked frame is set after the drawing, across the layers (beside it for top-down, below it for left-right)
+        std::vector<Pt> center(g.nodes.size());
+        const bool across_x = g.dir == Direction::TD || g.dir == Direction::BT;
+        double next = across_x ? lay.width : lay.height;
+        for (size_t i = 0; i < g.nodes.size(); i++) {
+            if (slot[i] >= 0) {
+                center[i] = lay.center[slot[i]];
+                continue;
+            }
+            const Node& n = g.nodes[i];
+            constexpr double kPad = 16, kHead = 26, kGap = 32;
+            if (across_x) {
+                center[i] = {next + kGap + kPad + n.w / 2, kHead + kPad + n.h / 2};
+                next += kGap + n.w + 2 * kPad;
+            } else {
+                center[i] = {kPad + n.w / 2, next + kGap + kHead + kPad + n.h / 2};
+                next += kGap + n.h + 2 * kPad + kHead;
+            }
+        }
+        lay.center = center;
+        // an edge to a parked frame runs straight between the two, from the border of one box to the border of the other
+        auto box = [&](int v) {
+            const Node& n = g.nodes[v];
+            const bool frame = n.parked;
+            struct R { double x0, y0, x1, y1; } r{center[v].x - n.w / 2, center[v].y - n.h / 2, center[v].x + n.w / 2, center[v].y + n.h / 2};
+            if (frame) r = {r.x0 - 16, r.y0 - 16 - 26, r.x1 + 16, r.y1 + 16};
+            return r;
+        };
+        auto edge_of = [&](int v, Pt toward) {  // where the line from v's centre to `toward` leaves v's box
+            auto r = box(v);
+            double dx = toward.x - center[v].x, dy = toward.y - center[v].y;
+            double t = 1e18;
+            if (dx > 1e-9) t = std::min(t, (r.x1 - center[v].x) / dx);
+            if (dx < -1e-9) t = std::min(t, (r.x0 - center[v].x) / dx);
+            if (dy > 1e-9) t = std::min(t, (r.y1 - center[v].y) / dy);
+            if (dy < -1e-9) t = std::min(t, (r.y0 - center[v].y) / dy);
+            t = std::min(t, 1.0);
+            return Pt{center[v].x + dx * t, center[v].y + dy * t};
+        };
+        for (size_t i = 0; i < g.edges.size(); i++) {
+            int a = g.edges[i].from, b = g.edges[i].to;
+            if (!g.nodes[a].parked && !g.nodes[b].parked) continue;
+            if (a == b) continue;
+            Pt p = edge_of(a, center[b]), q = edge_of(b, center[a]);
+            lay.points[i] = {p, q};
+            lay.label_center[i] = {(p.x + q.x) / 2, (p.y + q.y) / 2};
+        }
     }
 
     // subgraph frames around their members (children first so a parent covers them)

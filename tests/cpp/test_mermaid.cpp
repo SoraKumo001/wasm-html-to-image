@@ -95,6 +95,20 @@ int main() {
     check(count(svg_of("flowchart TB\n  subgraph P[\"Parent\"]\n    subgraph C[\"Child\"]\n    end\n  end"), "class=\"subgraph\"") == 2, "subgraph/only_empty_child");
     check(count(svg_of("stateDiagram-v2\n  A: a --> b\n  A --> B"), "class=\"edge\"") == 1 && count(svg_of("stateDiagram-v2\n  A: a --> b\n  A --> B"), "class=\"node\"") == 2, "state/description_with_arrow");
     {
+        // issue 24: an empty top-level subgraph sits beside the drawing (the layout does not grow around it) and an edge to it stops at its border
+        std::string plain = svg_of("flowchart TB\n  A --> B");
+        std::string with_empty = svg_of("flowchart TB\n  A --> B\n  subgraph S[\"EmptyBox\"]\n  end\n  B -.-> S");
+        auto width_of = [](const std::string& s) { return std::atof(s.c_str() + s.find("viewBox=\"0 0 ") + 13); };
+        check(width_of(with_empty) < width_of(plain) + 200, "subgraph/empty_does_not_widen_layout");
+        size_t frame = with_empty.find("class=\"subgraph\"");
+        double fx = std::atof(with_empty.c_str() + with_empty.find("x=\"", frame) + 3);
+        size_t dotted = with_empty.find("stroke-dasharray=\"4 4\"");
+        size_t pts = with_empty.rfind("points=\"", dotted);
+        std::string list = with_empty.substr(pts + 8, with_empty.find('"', pts + 8) - pts - 8);
+        double end_x = std::atof(list.c_str() + list.rfind(' ') + 1);
+        check(std::fabs(end_x - fx) < 1.0, "subgraph/empty_edge_stops_at_border");
+    }
+    {
         std::string lab = svg_of("flowchart TD\n  A --\"Yes\"--> B\n  A --Maybe--> C\n  A -.near.-> D\n  A -- \"spaced\" --> E");
         check(!has(lab, "ERROR") && has(lab, ">Yes<") && has(lab, ">Maybe<") && has(lab, ">near<") && has(lab, ">spaced<") && !has(lab, "&quot;"), "edge/compact_and_quoted_labels");
     }
