@@ -53,7 +53,7 @@ dom.close();
 | **Runtime Support** | Node.js only (requires `vm` module and `eval`) | **Anywhere WebAssembly runs** (Node.js, Workers, Edge, Bun, Deno, browsers) |
 | **Script Sandbox** | None (`runScripts: "dangerously"` runs in host process) | **Strict WebAssembly sandbox** (no filesystem, capped memory/stack, fetch limits) |
 | **DOM Implementation** | Pure JavaScript on V8 objects | **High-speed C DOM & selector engine** (`csrc/nativedom*.h`) |
-| **HTML Parser** | `parse5` (JavaScript) | **C port of `htmlparser2`** (~4–13× faster, see below) |
+| **HTML Parser** | `parse5` (JavaScript) | **C port of `htmlparser2`** (~4–19× faster, see below) |
 | **CSS Cascade** | `getComputedStyle` with CSS cascade | `getComputedStyle` with CSS cascade (`<style>`, inline, `@media`, `var()`, `calc()`) |
 | **SVG Geometry** | Minimal | **Approximate SVG geometry** from attributes (`getBBox`, `getTotalLength`, `getPointAtLength`) |
 | **Testing Support** | Jest, Vitest, Testing Library | **Vitest & Jest environments included**, Testing Library compatible |
@@ -64,24 +64,24 @@ dom.close();
 
 | Scenario | `jsdom` | `wasm-quickjs-dom` | Comparison |
 | :--- | :--- | :--- | :--- |
-| **HTML Parsing** (~5,000 elements) | 59.2 ms | **8.5 ms** | **~7× faster** ⚡ |
-| **HTML Parsing** (~25,000 elements) | 256 ms | **53.3 ms** | **~4.8× faster** ⚡ |
-| **HTML Serialization** (`outerHTML`, ~5,000 elements) | 4.35 ms | **0.45 ms** | **~9.7× faster** ⚡ |
-| **Selector Query** (`tr.r3 > td a[href]` + `span.k`, ~5,000 elements) | 2.3 ms | **0.9 ms** | **~2.5× faster** ⚡ |
-| **Complex Selector Query** (500 × `querySelectorAll("tr.r3 > td a[href]")`, page changed between queries) | 1,548 ms | **252 ms** | **~6× faster** ⚡ |
-| **Page script creating 2,000 elements** (`new JSDOM(html, { runScripts: "dangerously" })`) | 23.7 ms | **6.2 ms** | **~3.8× faster** ⚡ |
-| **New page with 1,000 rows** (`createDOM` vs `new JSDOM`) | 56.0 ms | **13.0 ms** | **~4.3× faster** ⚡ |
-| **Warm Instance Creation** (`new JSDOM("<p>")`, median over 60 runs) | 4.7 ms | **2.6 ms** | **~1.8× faster** ⚡ |
-| **Host builds 3,000 nodes and reads them back** (the render shape) | 34.7 ms | **11.5 ms** | **~3× faster** ⚡ |
-| **React, 3,000 items**: first mount / update | 163 / 66 ms | 328 / 140 ms | ~2× jsdom |
-| **React**: re-render of 200 items / `fireEvent.click` | 34.0 ms / 80 µs | **30.6 ms** / 256 µs | ~1.1× faster / ~3× jsdom |
-| **Testing Library**, 300 cards / 1,802 elements: `getByText` / `getAllByRole('link')` | 17.0 / 13.2 ms | 24.0 / 25.4 ms | ~1.4× / ~1.9× jsdom |
-| **Testing Library**: `getAllByRole('button')` / `getByRole('button', {name})` / `getByLabelText` | 16.5 / 18.7 / 10.5 ms | 35.8 / 51.3 / 36.6 ms | ~2.2× / ~2.7× / ~3.5× jsdom |
+| **HTML Parsing** (~5,000 elements) | 63.9 ms | **12.0 ms** | **~5.4× faster** ⚡ |
+| **HTML Parsing** (~25,000 elements) | 301 ms | **70.1 ms** | **~4.3× faster** ⚡ |
+| **HTML Serialization** (`outerHTML`, ~5,000 elements) | 5.0 ms | **0.55 ms** | **~9.1× faster** ⚡ |
+| **Selector Query** (`tr.r3 > td a[href]` + `span.k`, ~5,000 elements) | 2.1 ms | **1.05 ms** | **~2× faster** ⚡ |
+| **Complex Selector Query** (500 × `querySelectorAll("tr.r3 > td a[href]")`, page changed between queries) | 2,330 ms | **336 ms** | **~7× faster** ⚡ |
+| **Page script creating 2,000 elements** (`new JSDOM(html, { runScripts: "dangerously" })`) | 30.0 ms | **7.4 ms** | **~4× faster** ⚡ |
+| **New page with 1,000 rows** (`createDOM` vs `new JSDOM`) | 68.3 ms | **14.5 ms** | **~4.7× faster** ⚡ |
+| **Warm Instance Creation** (`new JSDOM("<p>")`, median over 60 runs) | 6.7 ms | **3.3 ms** | **~2× faster** ⚡ |
+| **Host builds 3,000 nodes and reads them back** (the render shape) | 78.6 ms | **18.9 ms** | **~4× faster** ⚡ |
+| **React, 3,000 items**: first mount / update | 210 / 119 ms | 259 / 120 ms | ~1.2× jsdom / about the same |
+| **React**: re-render of 200 items / `fireEvent.click` | 42.0 ms / 70 µs | 53.7 ms / 242 µs | ~1.3× / ~3.5× jsdom |
+| **Testing Library**, 300 cards / 1,802 elements: `getByText` / `getAllByRole('link')` | 20.2 / 15.7 ms | 25.0 / 24.4 ms | ~1.2× / ~1.6× jsdom |
+| **Testing Library**: `getAllByRole('button')` / `getByRole('button', {name})` / `getByLabelText` | 18.6 / 19.2 / 12.3 ms | 35.6 / 49.9 / 40.2 ms | ~1.9× / ~2.6× / ~3.3× jsdom |
 
 > [!TIP]
-> **When `wasm-quickjs-dom` is faster:** Parsing HTML, serializing, executing CSS selector queries, and running client scripts that generate DOM inside the page (all execute natively in C / WebAssembly without host overhead). The advantage grows with how much work stays inside the page; on a ~25,000-element page, walking the tree with a `TreeWalker` is ~2.9× faster too.
+> **When `wasm-quickjs-dom` is faster:** Parsing HTML, serializing, executing CSS selector queries, and running client scripts that generate DOM inside the page (all execute natively in C / WebAssembly without host overhead). The advantage grows with how much work stays inside the page; on a ~25,000-element page, walking the tree with a `TreeWalker` is ~2.8× faster too.
 >
-> **Host-driven DOM queries & mutations:** Every call from the host crosses the WebAssembly bridge (~0.6 µs per cached property read against ~0.2 µs for V8-native jsdom). Building a 3,000-node tree and reading it back from the host (the render shape) takes **~0.33×** of jsdom's time, but code that walks the DOM through many small calls is slower: React mounts take about 2× jsdom, `fireEvent.click` about 3×, and broad `@testing-library/dom` queries 1.4–3.5×.
+> **Host-driven DOM queries & mutations:** Every call from the host crosses the WebAssembly bridge (~0.6 µs per cached property read against ~0.35 µs for V8-native jsdom). Building a 3,000-node tree and reading it back from the host (the render shape) takes **~0.24×** of jsdom's time, but code that walks the DOM through many small calls is slower: React mounts take about 1.2× jsdom, `fireEvent.click` about 3.5×, and broad `@testing-library/dom` queries 1.2–3.3×.
 >
 > **Instance start-up:** a warm `new JSDOM()` takes ~3 ms: the wrapper classes of the DOM interfaces are made when a page first uses them, not all at start-up.
 

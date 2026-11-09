@@ -3,11 +3,42 @@
 //
 // Usage (from `packages/quickjs-dom/`): node scripts/build-quickjs.mjs
 import { execSync } from "node:child_process";
-import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+const repoRoot = join(root, "..", "..");
+
+// Ensure EMSDK and Python are in PATH if available
+const emsdkCandidates = [
+  process.env.EMSDK,
+  "C:\\emsdk",
+  "C:/emsdk",
+];
+let emsdkDir = emsdkCandidates.find((d) => d && existsSync(d));
+if (emsdkDir) {
+  const emscriptenBin = join(emsdkDir, "upstream", "emscripten");
+  const extraPaths = [emscriptenBin];
+  const pythonBase = join(emsdkDir, "python");
+  if (existsSync(pythonBase)) {
+    try {
+      const { readdirSync } = await import("node:fs");
+      for (const ver of readdirSync(pythonBase)) {
+        const fullVer = join(pythonBase, ver);
+        if (existsSync(join(fullVer, "python.exe"))) {
+          extraPaths.push(fullVer);
+          break;
+        }
+      }
+    } catch {}
+  }
+  for (const p of extraPaths) {
+    if (existsSync(p) && !process.env.PATH?.split(delimiter).includes(p)) {
+      process.env.PATH = `${p}${delimiter}${process.env.PATH}`;
+    }
+  }
+}
 const vendor = join(root, "vendor", "quickjs");
 const out = join(root, "dist", "quickjs.wasm");
 mkdirSync(join(root, "dist"), { recursive: true });

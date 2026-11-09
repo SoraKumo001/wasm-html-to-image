@@ -52,6 +52,37 @@ const emsdkEnv = isWin
   : `. ${path.join(EMSDK, "emsdk_env.sh")}`;
 const shell = isWin ? "cmd.exe" : "/bin/sh";
 
+// Ensure required tool paths are in PATH on Windows
+if (isWin) {
+  const extraPaths: string[] = [
+    path.join(process.env.LOCALAPPDATA || "", "Microsoft\\WinGet\\Links"),
+    path.join(process.env.USERPROFILE || "", "AppData\\Local\\Microsoft\\WinGet\\Links"),
+  ];
+
+  // Add EMSDK python directory to PATH to avoid WindowsApps dummy python stub
+  const emsdkPythonDir = path.join(EMSDK, "python");
+  if (fs.existsSync(emsdkPythonDir)) {
+    try {
+      const pythonVersions = fs.readdirSync(emsdkPythonDir);
+      for (const ver of pythonVersions) {
+        const fullVerPath = path.join(emsdkPythonDir, ver);
+        if (fs.existsSync(path.join(fullVerPath, "python.exe"))) {
+          extraPaths.push(fullVerPath);
+          break;
+        }
+      }
+    } catch (e) {
+      // Ignore
+    }
+  }
+
+  for (const p of extraPaths) {
+    if (fs.existsSync(p) && !process.env.PATH?.split(path.delimiter).includes(p)) {
+      process.env.PATH = `${p}${path.delimiter}${process.env.PATH}`;
+    }
+  }
+}
+
 // Check if ninja is available
 let useNinja = false;
 let ninjaPath = "";
