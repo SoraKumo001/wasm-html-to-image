@@ -520,6 +520,8 @@ export class Bridge {
   private readonly vreads = new Map<number, unknown>();
   /** The answers of the pure calls (keyed by the object, the method and the arguments), dropped with `reads`. */
   private readonly callReads = new Map<string, unknown>();
+  /** The same for a call with one string argument, by object id, method, then argument: no key string is built to look one up. */
+  private readonly callReads1 = new Map<number, Map<string, Map<string, unknown>>>();
   /** A small number per property name: the key of `reads` is a number made of it and the object's id, no string per read. */
   private readonly readNames = new Map<string, number>();
   /** The page's C mutation version at the moment the caches were last known to match the page
@@ -529,7 +531,7 @@ export class Bridge {
   /** `el.style` answers, kept apart: the declaration object of an element never changes identity when its
    * properties are written, so an attribute-only change (invalidateAttrs) must not drop these — a run of
    * style writes otherwise pays a fresh crossing per write just to re-read the same object. */
-  private readonly styleObjs = new Map<string, unknown>();
+  private readonly styleObjs = new Map<number, unknown>();
   /** `getComputedStyle(el)` answers, keyed by the function and its arguments: the page keeps one declaration object
    * per element, so an attribute-only change (invalidateAttrs) cannot change which object this is, and a frame that
    * asks again (a click's visibility and pointer-event checks) pays no crossing. Its values are read through the
@@ -560,7 +562,7 @@ export class Bridge {
   private txn: TxnState | null = null;
   private txnFlushing = false;
   /** The reads that depend on the shape of the tree only (see STRUCT_KEYS): a change of attributes leaves them be. */
-  private readonly sreads = new Map<string, unknown>();
+  private readonly sreads = new Map<number, unknown>();
   /** The function the host last set as an `on…` handler of each element ("id\u0001set:onclick"): the same one set again is dropped.
    * Unlike sreads it survives changes of the tree, which cannot alter a handler. */
   private readonly handlers = new Map<string, unknown>();
@@ -604,7 +606,9 @@ export class Bridge {
     this.classProxyHandler = {
       get(t, k, r) {
         if (k === HANDLE) return (t as any)[HANDLE];
-        if (k in t) return Reflect.get(t, k, r);
+        // one lookup for what the wrapper has (a read of a known property); `in` only settles an undefined answer
+        const own = Reflect.get(t, k, r);
+        if (own !== undefined || k in t) return own;
         const cell = (t as any)[HANDLE] as Cell;
         return typeof k === "string" && !bridge.hidden.has(k) ? bridge.get(cell, k) : undefined;
       },
@@ -779,6 +783,8 @@ export class Bridge {
         this.readNames.clear();
         this.reads.clear();
         this.vreads.clear();
+        this.sreads.clear();
+        this.styleObjs.clear();
       }
       name = this.readNames.size;
       this.readNames.set(key, name);
@@ -792,6 +798,7 @@ export class Bridge {
     this.cacheVer = -1;
     if (this.reads.size) this.reads.clear();
     if (this.callReads.size) this.callReads.clear();
+    if (this.callReads1.size) this.callReads1.clear();
     if (this.vreads.size) this.vreads.clear();
     // the handlers the host set are the page's own until page code runs: a change of the tree cannot touch them
     // (only a custom element's callbacks could, and `ce` says there are none)
@@ -825,23 +832,20 @@ export class Bridge {
 
   private invalidateCellTree(cell: Cell): void {
     if (this.sreads.size === 0) return;
-    const base = cell.id + "\u0001";
-    const first = this.sreads.get(base + "firstChild") as any;
+    const first = this.sreads.get(this.readKey(cell.id, "firstChild")) as any;
     if (first && typeof first === "object" && first[HANDLE]) {
       const fc = first[HANDLE] as Cell;
-      const fbase = fc.id + "\u0001";
-      this.sreads.delete(fbase + "previousSibling");
-      this.sreads.delete(fbase + "previousElementSibling");
+      this.sreads.delete(this.readKey(fc.id, "previousSibling"));
+      this.sreads.delete(this.readKey(fc.id, "previousElementSibling"));
     }
-    const last = this.sreads.get(base + "lastChild") as any;
+    const last = this.sreads.get(this.readKey(cell.id, "lastChild")) as any;
     if (last && typeof last === "object" && last[HANDLE]) {
       const lc = last[HANDLE] as Cell;
-      const lbase = lc.id + "\u0001";
-      this.sreads.delete(lbase + "nextSibling");
-      this.sreads.delete(lbase + "nextElementSibling");
+      this.sreads.delete(this.readKey(lc.id, "nextSibling"));
+      this.sreads.delete(this.readKey(lc.id, "nextElementSibling"));
     }
     for (const k of STRUCT_KEYS) {
-      this.sreads.delete(base + k);
+      this.sreads.delete(this.readKey(cell.id, k));
     }
   }
   /** The generation of the ownerDocument answers kept in the cells; a change that may move a node between documents ends it. */
@@ -851,6 +855,7 @@ export class Bridge {
   private invalidateAttrs(): void {
     if (this.reads.size) this.reads.clear();
     if (this.callReads.size) this.callReads.clear();
+    if (this.callReads1.size) this.callReads1.clear();
     if (this.vreads.size) this.vreads.clear();
   }
 
@@ -1671,7 +1676,7 @@ export class Bridge {
         if (!this.txn.touched.has(cell)) {
           const local = key === "style" && cell.t === 1 ? this.styleObjs : STRUCT_KEYS.has(key) ? this.sreads : undefined;
           if (local) {
-            const k = cell.id + "\u0001" + key;
+            const k = this.readKey(cell.id, key);
             if (local.has(k)) return local.get(k);
           } else {
             const k = this.readKey(cell.id, key);
@@ -1737,7 +1742,7 @@ export class Bridge {
     }
     const style = key === "style" && cell.t === 1;
     const byName = style || STRUCT_KEYS.has(key);
-    const k: string | number = byName ? cell.id + "\u0001" + key : this.readKey(cell.id, key);
+    const k = this.readKey(cell.id, key);
     const store: Map<any, unknown> = style ? this.styleObjs : byName ? this.sreads : VOLATILE_KEYS.has(key) ? this.vreads : this.reads;
     // the bundle of a callback's event argument comes first: it is newer than anything cached before the callback ran
     // (eventPhase, currentTarget, defaultPrevented), and the page cannot have run code since (same tree generation)
@@ -1756,9 +1761,9 @@ export class Bridge {
     store.set(k, value);
     if (cell.stGen === this.codeGen && !this.txn && (key === "firstChild" || key === "lastChild")) {
       cell.stNode = value;
-      store.set(cell.id + "\u0001" + (key === "firstChild" ? "lastChild" : "firstChild"), value);
+      store.set(this.readKey(cell.id, key === "firstChild" ? "lastChild" : "firstChild"), value);
     } else if (cell.st === this.treeGen && !this.txn && (key === "firstChild" || key === "lastChild")) {
-      store.set(cell.id + "\u0001" + (key === "firstChild" ? "lastChild" : "firstChild"), value);
+      store.set(this.readKey(cell.id, key === "firstChild" ? "lastChild" : "firstChild"), value);
     }
     return value;
   }
@@ -1936,9 +1941,8 @@ export class Bridge {
     ) {
       this.invalidateAttrs();
       if (emptyTextSet && this.sreads.size > 0) {
-        const base = cell.id + "\u0001";
-        this.sreads.delete(base + "firstChild");
-        this.sreads.delete(base + "lastChild");
+        this.sreads.delete(this.readKey(cell.id, "firstChild"));
+        this.sreads.delete(this.readKey(cell.id, "lastChild"));
       }
     }
     // an assignment runs page code only through a custom element (`ce` says there is none), and moves a node to another
@@ -2100,6 +2104,27 @@ export class Bridge {
 
   private call(cell: Cell, key: string, args: unknown[], self?: unknown): unknown {
     if (cell.dead) throw new Error("quickjs-dom: this node was never created (its transaction failed)");
+    // a read the host already has the answer to (Testing Library asks `matches` and `getAttribute` of every element,
+    // again for every query): nothing below changes the answer, so it is looked up before any of it
+    if (!this.txn && !cell.pending && args.length === 1 && PURE_CALLS.has(key)) {
+      const a0 = args[0];
+      if (typeof a0 === "string" && !a0.includes("\u0001") && !a0.includes("\u0002")) {
+        if (key === "matches" && cell.t === 1 && cell.l !== undefined) {
+          const check = analyzeSelector(a0);
+          if (check.alwaysTrue) return true;
+          if (check.tagRequired && !check.tagRequired.has(cell.l.toLowerCase())) return false;
+          if (cell.g === cell.l.toUpperCase()) {
+            const answer = tagMatch(a0, cell.l);
+            if (answer !== undefined) return answer;
+          }
+        }
+        const byKey = this.callReads1.get(cell.id)?.get(key);
+        if (byKey !== undefined) {
+          const hit = byKey.get(a0);
+          if (hit !== undefined || byKey.has(a0)) return hit;
+        }
+      }
+    }
     if (key === "addEventListener" && args[2] && typeof args[2] === "object" && (args[2] as any).signal && !(args[2] as any).signal[HANDLE]) {
       // a signal of the host (Node's AbortController) cannot cross: the host removes the listener itself
       const { signal, ...options } = args[2] as { signal: AbortSignal };
@@ -2253,6 +2278,13 @@ export class Bridge {
     if (this.callReads.has(k)) return this.callReads.get(k);
     const value = this.send("c" + cell.id + "\u0001" + key + "\u0001" + encoded);
     this.callReads.set(k, value);
+    if (args.length === 1 && typeof args[0] === "string") {
+      let byCell = this.callReads1.get(cell.id);
+      if (!byCell) this.callReads1.set(cell.id, (byCell = new Map()));
+      let byKey = byCell.get(key);
+      if (!byKey) byCell.set(key, (byKey = new Map()));
+      byKey.set(args[0], value);
+    }
     // a value read back from the page seeds the attribute memo, like a read seeds the set memo
     if (key === "getAttribute" && cell.t === 1 && typeof args[0] === "string" && typeof value === "string" && !args[0].toLowerCase().startsWith("on")) {
       this.attrMemoSet(cell, args[0], value);

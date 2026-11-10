@@ -39,11 +39,15 @@
   // subclasses: the init dictionary's members become properties (with the defaults a browser gives them)
   var subclass = function (name, parent, defaults) {
     var keys = Object.keys(defaults), count = keys.length;
-    var C = { [name]: function (type, init) {
-      parent.call(this, type, init);
-      init = init || {};
-      for (var i = 0; i < count; i++) { var k = keys[i]; this[k] = k in init ? init[k] : defaults[k]; }
-    } }[name];
+    // the body is written out member by member: the interpreter runs a straight line of constant-name stores much
+    // faster than a loop over names (a MouseEvent has 15 members and one is made per click)
+    var src = "parent.call(this, type, init);init = init || {};", shared = [];
+    for (var i = 0; i < count; i++) {
+      var k = keys[i], d = defaults[k];
+      var lit = d === null || typeof d !== "object" ? JSON.stringify(d) : "defs[" + (shared.push(d) - 1) + "]";
+      src += "this." + k + " = " + JSON.stringify(k) + " in init ? init." + k + " : " + lit + ";";
+    }
+    var C = new Function("parent", "defs", "return function " + name + "(type, init) {" + src + "}")(parent, shared);
     C.prototype = Object.create(parent.prototype, { constructor: { value: C, writable: true, configurable: true } });
     Object.setPrototypeOf(C, parent);
     W[name] = C;
