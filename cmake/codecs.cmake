@@ -30,6 +30,14 @@ if(NOT TARGET dav1d::dav1d)
     )
 endif()
 
+# Size-first build of libaom + libavif (their own Release flags say -O3). Directory options come after
+# CMAKE_C_FLAGS_RELEASE on the command line, so this -Oz wins; restored below so nothing else is affected.
+option(WASM_AVIF_SIZE_OPT "Build libaom/libavif with -Oz instead of -O3" ON)
+get_directory_property(_avif_saved_compile_options COMPILE_OPTIONS)
+if(WASM_AVIF_SIZE_OPT)
+    add_compile_options(-Oz)
+endif()
+
 if(WASM_AVIF_BACKEND STREQUAL "AOM")
     # image-opt派生: libaom FetchContent (OPT-INのみ。既定DAV1Dでは取得しない)
     find_package(Perl REQUIRED)
@@ -88,6 +96,7 @@ FetchContent_MakeAvailable(libavif)
 set(CMAKE_C_FLAGS ${OLD_CMAKE_C_FLAGS})
 set(CMAKE_CXX_FLAGS ${OLD_CMAKE_CXX_FLAGS})
 set(CMAKE_SKIP_INSTALL_RULES OFF)
+set_directory_properties(PROPERTIES COMPILE_OPTIONS "${_avif_saved_compile_options}")
 
 if(WASM_AVIF_BACKEND STREQUAL "AOM" AND TARGET avif_obj)
     target_include_directories(avif_obj PRIVATE

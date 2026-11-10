@@ -17,6 +17,8 @@
 #include <memory>
 #include <mutex>
 #include <sstream>
+#include <string_view>
+#include <unordered_set>
 #include <utility>
 
 #include "core/text/unicode_service.h"
@@ -684,6 +686,7 @@ std::vector<std::string> SatoruFontManager::getFontUrls(
     const std::set<char32_t>* usedCodepoints) const {
     std::vector<std::string> urls;
     urls.reserve(4);
+    std::unordered_set<std::string_view> seen;
     std::stringstream ss(family);
     std::string item;
 
@@ -696,27 +699,30 @@ std::vector<std::string> SatoruFontManager::getFontUrls(
         req.weight = weight;
         req.slant = slant;
 
-        auto it = m_fontFaces.find(req);
-        if (it != m_fontFaces.end()) {
-            for (const auto& src_ptr : it->second) {
-                const font_face_source& src = *src_ptr;
-                if (std::find(urls.begin(), urls.end(), src.url) != urls.end()) continue;
-
-                bool needed = true;
-                if (usedCodepoints && !src.unicode_range.empty()) {
-                    needed = false;
-                    for (const auto& range : src.ranges) {
-                        auto cp = usedCodepoints->lower_bound((char32_t)range.first);
-                        if (cp != usedCodepoints->end() && *cp <= range.second) {
-                            needed = true;
-                            break;
-                        }
+        // A family can list over a hundred unicode-range slices; look URLs up in a set instead of
+        // scanning the result for each one. The views point into m_fontFaces, which outlives this call.
+        auto consider = [&](const font_face_source& src) {
+            if (seen.count(src.url)) return;
+            bool needed = true;
+            if (usedCodepoints && !src.unicode_range.empty()) {
+                needed = false;
+                for (const auto& range : src.ranges) {
+                    auto cp = usedCodepoints->lower_bound((char32_t)range.first);
+                    if (cp != usedCodepoints->end() && *cp <= range.second) {
+                        needed = true;
+                        break;
                     }
                 }
-                if (needed) {
-                    urls.push_back(src.url);
-                }
             }
+            if (needed) {
+                seen.insert(src.url);
+                urls.push_back(src.url);
+            }
+        };
+
+        auto it = m_fontFaces.find(req);
+        if (it != m_fontFaces.end()) {
+            for (const auto& src_ptr : it->second) consider(*src_ptr);
         }
 
         // If no exact weight match, look for same family and slant but different weight
@@ -724,27 +730,7 @@ std::vector<std::string> SatoruFontManager::getFontUrls(
         for (const auto& entry : m_fontFaces) {
             if (entry.first.family == cleanedFamily && entry.first.slant == slant) {
                 if (entry.first.weight == weight) continue;  // Already checked
-
-                for (const auto& src_ptr : entry.second) {
-
-                    const font_face_source& src = *src_ptr;
-                    if (std::find(urls.begin(), urls.end(), src.url) == urls.end()) {
-                        bool needed = true;
-                        if (usedCodepoints && !src.unicode_range.empty()) {
-                            needed = false;
-                            for (const auto& range : src.ranges) {
-                                auto cp = usedCodepoints->lower_bound((char32_t)range.first);
-                                if (cp != usedCodepoints->end() && *cp <= range.second) {
-                                    needed = true;
-                                    break;
-                                }
-                            }
-                        }
-                        if (needed) {
-                            urls.push_back(src.url);
-                        }
-                    }
-                }
+                for (const auto& src_ptr : entry.second) consider(*src_ptr);
             }
         }
     }
