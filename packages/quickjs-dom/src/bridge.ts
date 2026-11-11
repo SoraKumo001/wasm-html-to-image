@@ -9,10 +9,17 @@
 import type { EvalResult } from "./runtime.js";
 import { normalizeTimeout } from "./timeout.js";
 
-const isProxyFn =
-  typeof process !== "undefined" && typeof (process as any).getBuiltinModule === "function"
-    ? ((process as any).getBuiltinModule("node:util")?.types?.isProxy as ((v: unknown) => boolean) | undefined)
-    : undefined;
+const isProxyFn: ((v: unknown) => boolean) | undefined = (() => {
+  try {
+    const proc = typeof process !== "undefined" ? (process as any) : undefined;
+    const getBuiltin = proc?.getBuiltinModule ?? proc?.["getBuiltinModule"];
+    return typeof getBuiltin === "function"
+      ? (getBuiltin.call(proc, "node:util")?.types?.isProxy as ((v: unknown) => boolean) | undefined)
+      : undefined;
+  } catch {
+    return undefined;
+  }
+})();
 
 const EMPTY_FN_RE = /^(?:function\s*[\w$]*\s*\(\s*\)|\(\s*\)\s*=>)\s*\{\s*\}$/;
 
