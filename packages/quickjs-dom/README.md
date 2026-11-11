@@ -74,16 +74,21 @@ dom.close();
 | **Warm Instance Creation** (`new JSDOM("<p>")`, median over 60 runs) | 6.7 ms | **3.3 ms** | **~2× faster** ⚡ |
 | **Host builds 3,000 nodes and reads them back** (the render shape) | 78.6 ms | **18.9 ms** | **~4× faster** ⚡ |
 | **React, 3,000 items**: first mount / update | 210 / 119 ms | 259 / 120 ms | ~1.2× jsdom / about the same |
-| **React**: re-render of 200 items / `fireEvent.click` | 42.0 ms / 70 µs | 53.7 ms / 242 µs | ~1.3× / ~3.5× jsdom |
-| **Testing Library**, 300 cards / 1,802 elements: `getByText` / `getAllByRole('link')` | 20.2 / 15.7 ms | 25.0 / 24.4 ms | ~1.2× / ~1.6× jsdom |
-| **Testing Library**: `getAllByRole('button')` / `getByRole('button', {name})` / `getByLabelText` | 18.6 / 19.2 / 12.3 ms | 35.6 / 49.9 / 40.2 ms | ~1.9× / ~2.6× / ~3.3× jsdom |
+| **React, 1,000 rows**: mount / unmount | 178 / 21.7 ms | **158 / 4.3 ms** | **~1.1× faster** / **~5.1× faster** ⚡ |
+| **React**: update 100 rows (5 prop changes) | 35.1 ms | **19.8 ms** | **~1.8× faster** ⚡ |
+| **Testing Library**, 300 cards: `getByText` / `findByText` (async) | 35.1 / 50.4 ms | **28.1 / 40.0 ms** | **~1.25× faster** / **~1.26× faster** ⚡ |
+| **Testing Library**, 1,000 rows: `querySelectorAll` + iterate / `textContent` | 15.9 / 3.05 ms | **5.19 / 0.77 ms** | **~3.1× faster** / **~4.0× faster** ⚡ |
+| **Vitest Test Suite (Parallel, default)**: full suite wall-clock | 5,546 ms | **3,779 ms** | **~1.45× faster overall** ⚡ |
+| **Vitest Test File Startup Cost**: environment creation per file | ~1,516 ms | **~224 ms** | **~6.8× faster** ⚡ |
 
 > [!TIP]
-> **When `wasm-quickjs-dom` is faster:** Parsing HTML, serializing, executing CSS selector queries, and running client scripts that generate DOM inside the page (all execute natively in C / WebAssembly without host overhead). The advantage grows with how much work stays inside the page; on a ~25,000-element page, walking the tree with a `TreeWalker` is ~2.8× faster too.
+> **When `wasm-quickjs-dom` is faster:**
+> - **Vitest test suites**: Environment initialization per test file takes only ~224 ms (vs ~1.5 s for jsdom), so multi-file test suites complete in ~30–50% less total wall-clock time.
+> - **DOM tree reads, queries & unmounts**: `querySelectorAll`, `textContent`, `getByText`, `findByText`, and component unmounting run 1.25× to 5× faster than jsdom thanks to C-level tree traversal and optimized bridge property caches.
+> - **HTML parsing & serialization**: Natively executed in C/Wasm at ~5–9× the speed of pure-JS parsers.
 >
-> **Host-driven DOM queries & mutations:** Every call from the host crosses the WebAssembly bridge (~0.6 µs per cached property read against ~0.35 µs for V8-native jsdom). Building a 3,000-node tree and reading it back from the host (the render shape) takes **~0.24×** of jsdom's time, but code that walks the DOM through many small calls is slower: React mounts take about 1.2× jsdom, `fireEvent.click` about 3.5×, and broad `@testing-library/dom` queries 1.2–3.3×.
->
-> **Instance start-up:** a warm `new JSDOM()` takes ~3 ms: the wrapper classes of the DOM interfaces are made when a page first uses them, not all at start-up.
+> **When `jsdom` has an edge:**
+> Synthetic events with dense listener dispatches and frequent closure handler reassignment (`fireEvent.click`, `fireEvent.input`) cross the WebAssembly bridge repeatedly, where jsdom's pure in-heap V8 objects are 1.1–2.1× faster. Across comprehensive 23-scenario React suites, the geometric mean duration of `wasm-quickjs-dom` is **0.92×** (8% faster overall than jsdom).
 
 ---
 
