@@ -6,9 +6,13 @@
  * (scripts/edge-js/rpc.js). The same node is always the same wrapper; a wrapper that is collected tells the guest to
  * let go of its node. A function given to the page (an event listener) is called back from the guest, at once.
  */
-import { types } from "node:util";
 import type { EvalResult } from "./runtime.js";
 import { normalizeTimeout } from "./timeout.js";
+
+const isProxyFn =
+  typeof process !== "undefined" && typeof (process as any).getBuiltinModule === "function"
+    ? ((process as any).getBuiltinModule("node:util")?.types?.isProxy as ((v: unknown) => boolean) | undefined)
+    : undefined;
 
 const EMPTY_FN_RE = /^(?:function\s*[\w$]*\s*\(\s*\)|\(\s*\)\s*=>)\s*\{\s*\}$/;
 
@@ -92,6 +96,9 @@ interface Cell {
   evg?: number;
   /** the keys of the bundle read so far (put into `reads`): a newer bundle for the same event replaces them */
   evk?: string[];
+  /** The root node of this node as of tree generation `rng`. */
+  rn?: unknown;
+  rng?: number;
 }
 
 /** A handle as the guest sends it. */
@@ -118,7 +125,7 @@ const PURE_CALLS = new Set([
 const READ_NAMES = 2 ** 20;
 const STRUCT_KEYS = new Set([
   "firstChild", "lastChild", "nextSibling", "previousSibling", "parentNode", "parentElement",
-  "firstElementChild", "lastElementChild", "nextElementSibling", "previousElementSibling", "childElementCount", "isConnected",
+  "firstElementChild", "lastElementChild", "nextElementSibling", "previousElementSibling", "childElementCount", "isConnected", "activeElement",
 ]);
 /** Properties the page keeps in its own stores rather than in the tree — a form control's current
  * value, checkedness and selection — which the C mutation version does not move when page code
@@ -506,6 +513,8 @@ export class Bridge {
   private readonly registry: FinalizationRegistry<Cell>;
   private released: [number, number][] = [];
   // wrappers the host put its own properties on: they stay until the bridge is disposed
+  private rootId = -1;
+  private rootDoc: unknown = undefined;
   private jobsQueued = false;
   /** The element a custom element class of the host is being constructed for (its HTMLElement constructor answers it). */
   private upgrading: object | undefined;
@@ -694,6 +703,7 @@ export class Bridge {
     const schema = cachedSchema ?? (cachedSchema = this.sendJ(["schema"]) as InterfaceSchema[]);
     this.buildClasses(schema);
     this.window = this.sendJ(["root"]) as DOMWindow;
+    this.rootId = ((this.window as any)[HANDLE] as Cell).id;
   }
 
   /** Let go of the page: the wrappers stop working. */
@@ -811,12 +821,12 @@ export class Bridge {
       // page code may have replaced what these answered; attribute-only and tree-only changes cannot
       if (this.stableReads.size) this.stableReads.clear();
       this.codeGen++;
-      this.odGen++;
+      if (!keepOd) this.odGen++;
     } else if (!keepOd) {
       // what a node's ownerDocument was (`Cell.od`) is good until a node may have moved to another document
       this.odGen++;
     }
-    if (!keepCe && this.ce === 1) this.ce = 0;
+    if (!keepCe && !keepOd && this.ce === 1) this.ce = 0;
   }
 
   private invalidateTreeCall(cell: Cell, args: unknown[]): void {
@@ -1480,7 +1490,7 @@ export class Bridge {
     if (this.pureFns.size) this.pureFns.clear();
     if (this.pureFnCalls.size) this.pureFnCalls.clear();
     if (this.stableReads.size) this.stableReads.clear();
-    this.invalidate(); // a released id may be given to another object
+    this.invalidate(false, true); // a released id may be given to another object
     this.sendJ(["release", list]);
   }
 
@@ -1508,7 +1518,7 @@ export class Bridge {
     const value = this.send("J" + JSON.stringify(request), request[0] === "release");
     // the queued operations of a transaction (tree, attribute and listener calls, state-only writes) run page code only
     // through a custom element's callbacks, and `ce` says there are none
-    if (runs) this.invalidate(request[0] === "txn" && this.ce === 1);
+    if (runs) this.invalidate(request[0] === "txn" && this.ce === 1, request[0] === "fire");
     return value;
   }
 
@@ -1524,7 +1534,7 @@ export class Bridge {
       if (this.closed) return;
       this.armDeadline();
       this.vm.jobs();
-      this.invalidate();
+      this.invalidate(false, true);
       this.onCall?.();
     });
   }
@@ -1547,7 +1557,7 @@ export class Bridge {
         else {
           this.vm.jobs();
           if (outer) {
-            this.invalidate();
+            this.invalidate(false, true);
           }
         }
       }
@@ -1693,6 +1703,20 @@ export class Bridge {
     } else if (cell.pending) {
       throw new Error("quickjs-dom: this node's creation did not complete");
     }
+    if (cell.id === this.rootId) {
+      if (key === "document") {
+        if (this.rootDoc !== undefined) return this.rootDoc;
+        const value = this.send("g" + cell.id + "\u0001" + key);
+        this.rootDoc = value;
+        return value;
+      }
+      if (key === "window" || key === "self" || key === "globalThis" || key === "top" || key === "parent") {
+        return this.window;
+      }
+      if (key === "event" && !cell.ownAccessor) {
+        return undefined;
+      }
+    }
     // These never change for the object they belong to, so they avoid a call every time they are read. The
     // interface has them as accessors, so they must not answer from anywhere else (an element's namespaceURI,
     // a document's defaultView).
@@ -1712,6 +1736,11 @@ export class Bridge {
     // React asks every event target for this one (getEventTarget); only an SVG <use> has it, and for anything
     // else the property does not exist. Answering it here is the same answer the page would give, without a call.
     if (key === "correspondingUseElement" && cell.t === 1 && cell.l !== "use") return undefined;
+    if (key === "contentEditable" && cell.t === 1 && !cell.ownAccessor) {
+      const memo = this.setMemo.get(cell.id)?.get(key);
+      if (memo !== undefined) return memo;
+      return undefined;
+    }
     if (key === "defaultView" && cell.t !== 9 && cell.t !== undefined) return undefined;
     // only the labelable elements have `labels` (Testing Library asks every element of the page)
     if (key === "labels" && cell.t === 1 && cell.l !== undefined && !LABELABLE.has(cell.l) && !cell.l.includes("-")) return undefined;
@@ -1820,7 +1849,7 @@ export class Bridge {
     if (id === undefined) {
       let isNoop = false;
       try {
-        isNoop = !types.isProxy(fn) && Object.keys(fn).length === 0 && EMPTY_FN_RE.test(Function.prototype.toString.call(fn));
+        isNoop = !isProxyFn?.(fn) && Object.keys(fn).length === 0 && EMPTY_FN_RE.test(Function.prototype.toString.call(fn));
       } catch {
         isNoop = false;
       }
@@ -1939,7 +1968,11 @@ export class Bridge {
           : cell.c === "CSSStyleDeclaration") &&
       this.fineOk()
     ) {
-      this.invalidateAttrs();
+      if ((cell.t === 3 || cell.t === 8) && TEXT_SET_KEYS.has(key)) {
+        if (this.reads.size) this.reads.clear();
+      } else {
+        this.invalidateAttrs();
+      }
       if (emptyTextSet && this.sreads.size > 0) {
         this.sreads.delete(this.readKey(cell.id, "firstChild"));
         this.sreads.delete(this.readKey(cell.id, "lastChild"));
@@ -2104,6 +2137,12 @@ export class Bridge {
 
   private call(cell: Cell, key: string, args: unknown[], self?: unknown): unknown {
     if (cell.dead) throw new Error("quickjs-dom: this node was never created (its transaction failed)");
+    if (!this.txn && !cell.pending) {
+      if (key === "getRootNode" && (args.length === 0 || (args.length === 1 && typeof args[0] === "object" && !(args[0] as any)?.composed))) {
+        if (cell.t === 9) return self ?? this.wrappers.get(cell.id)?.deref();
+        if (cell.rng === this.treeGen && cell.rn !== undefined) return cell.rn;
+      }
+    }
     // a read the host already has the answer to (Testing Library asks `matches` and `getAttribute` of every element,
     // again for every query): nothing below changes the answer, so it is looked up before any of it
     if (!this.txn && !cell.pending && args.length === 1 && PURE_CALLS.has(key)) {
@@ -2267,7 +2306,9 @@ export class Bridge {
       // another document only when the receiver and a node it was given are not known to be of one document
       const tree = TREE_CALLS.has(key);
       if (tree && this.ce === 1) this.invalidateTreeCall(cell, args);
-      this.invalidate(tree, tree && this.sameDocument(cell, args));
+      if (key !== "dispatchEvent") {
+        this.invalidate(tree, (tree && this.sameDocument(cell, args)) || LISTENER_CALLS.has(key));
+      }
       return value;
     }
     if (key === "matches" && cell.t === 1 && cell.l !== undefined && cell.g === cell.l.toUpperCase() && typeof args[0] === "string") {
@@ -2278,6 +2319,10 @@ export class Bridge {
     if (this.callReads.has(k)) return this.callReads.get(k);
     const value = this.send("c" + cell.id + "\u0001" + key + "\u0001" + encoded);
     this.callReads.set(k, value);
+    if (key === "getRootNode" && (args.length === 0 || (args.length === 1 && typeof args[0] === "object" && !(args[0] as any)?.composed))) {
+      cell.rn = value;
+      cell.rng = this.treeGen;
+    }
     if (args.length === 1 && typeof args[0] === "string") {
       let byCell = this.callReads1.get(cell.id);
       if (!byCell) this.callReads1.set(cell.id, (byCell = new Map()));
@@ -2681,7 +2726,7 @@ export class Bridge {
     }
     if (ver >= 0 && ver === this.cacheVer) this.invalidateVolatile();
     else {
-      this.invalidate();
+      this.invalidate(false, true);
       if (ver >= 0) this.cacheVer = ver;
     }
     this.depth++;
