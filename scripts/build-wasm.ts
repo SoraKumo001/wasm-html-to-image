@@ -166,6 +166,11 @@ if (action === "configure") {
     `-DVCPKG_OVERLAY_TRIPLETS="${projectRoot}/triplets" ` +
     `-DVCPKG_OVERLAY_PORTS="${projectRoot}/ports" ` +
     `-DCMAKE_EXPORT_COMPILE_COMMANDS=ON` +
+    // WASM_MAXIMUM_MEMORY_MB (MiB, default 0 = no ceiling): pin the Wasm linear memory for
+    // memory-capped runtimes such as Cloudflare Workers (see cmake/wasm-flags.cmake).
+    (process.env.WASM_MAXIMUM_MEMORY_MB
+      ? ` -DWASM_MAXIMUM_MEMORY_MB=${process.env.WASM_MAXIMUM_MEMORY_MB}`
+      : "") +
     (useNinja && ninjaPath
       ? ` -DCMAKE_MAKE_PROGRAM="${ninjaPath.replace(/\\/g, "/")}"`
       : "");

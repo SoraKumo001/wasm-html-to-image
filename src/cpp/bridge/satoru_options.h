@@ -27,6 +27,13 @@ struct SatoruRenderOptions {
     // Output colour space of PDF: 0 = sRGB (DeviceRGB), 1 = CMYK (DeviceCMYK, see common/pdf_cmyk.h)
     int colorSpace = 0;
 
+    // Per-render decoded-image cache budget in bytes; 0 keeps the engine default (32 MiB). Lower
+    // it on memory-capped runtimes — a Cloudflare Workers isolate is 128 MiB for everything — at
+    // the cost of re-decoding evicted images on demand (their encoded bytes are kept, so this is
+    // the one cache budget that can bind mid-render without losing content; the encoded/entry
+    // budgets are load-bearing between the collect and paint passes and stay engine-fixed).
+    int decodedImageMaxBytes = 0;
+
     // PDF Metadata
     std::string pdfTitle;
     std::string pdfAuthor;

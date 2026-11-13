@@ -86,10 +86,15 @@ export function isNodeRuntime(): boolean {
  * else (a Worker's own UA, none) gets the whole `.ttf` per weight (about 5 MB each, embedded whole
  * into a PDF).
  */
-export function canSetUserAgent(): boolean {
-  if (isNodeRuntime()) return true;
+/** True on Cloudflare Workers: workerd reports exactly this user agent. */
+export function isCloudflareWorkersRuntime(): boolean {
   const nav = (globalThis as { navigator?: { userAgent?: string } }).navigator;
   return nav?.userAgent === "Cloudflare-Workers";
+}
+
+export function canSetUserAgent(): boolean {
+  if (isNodeRuntime()) return true;
+  return isCloudflareWorkersRuntime();
 }
 
 function fileUrlToFsPath(p: string): string {

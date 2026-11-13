@@ -66,6 +66,7 @@ export interface FullSatoruOptionsInput {
   pdfHeader?: string;
   pdfFooter?: string;
   pdfSkipRunning?: number;
+  decodedImageMaxBytes?: number;
 }
 
 /**
@@ -113,6 +114,7 @@ export function buildFullSatoruOptions(
     pdfHeader: pdfHeader ?? "",
     pdfFooter: pdfFooter ?? "",
     ...(pdfSkipRunning ? { pdfSkipRunning: Math.max(0, Math.floor(pdfSkipRunning)) } : {}),
+    ...(input.decodedImageMaxBytes !== undefined ? { decodedImageMaxBytes: Math.max(0, Math.floor(input.decodedImageMaxBytes)) } : {}),
   };
 }
 

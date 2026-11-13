@@ -144,6 +144,11 @@ void satoru_api_set_font_map(SatoruInstance *inst, const std::map<std::string, s
 
 void satoru_api_set_log_level(int level);
 
+// Current size of this module instance's Wasm linear memory in bytes (emscripten_get_heap_size).
+// The host uses it to watch the isolate's dominant memory term and to drive instance recycling:
+// the heap only ever grows, so this is the high-water mark of everything the instance has done.
+size_t satoru_api_get_heap_bytes();
+
 const uint8_t *satoru_api_get_pending_resources_binary(SatoruInstance *inst, int &out_size);
 
 #endif  // HTML_TO_IMAGE_SATORU_API_H

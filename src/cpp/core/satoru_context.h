@@ -415,9 +415,12 @@ class SatoruContext {
     size_t get_last_svg_size() const { return m_lastSvg ? m_lastSvg->size() : 0; }
 
    private:
-    static constexpr size_t kMaxImageCacheBytes = 32 * 1024 * 1024;
-    static constexpr size_t kMaxImageCacheEntries = 256;
-    static constexpr size_t kMaxDecodedImageBytes = 32 * 1024 * 1024;
+    static constexpr size_t kDefaultImageCacheBytes = 32 * 1024 * 1024;
+    static constexpr size_t kDefaultImageCacheEntries = 256;
+    static constexpr size_t kDefaultDecodedImageBytes = 32 * 1024 * 1024;
+    size_t m_maxImageCacheBytes = kDefaultImageCacheBytes;
+    size_t m_maxImageCacheEntries = kDefaultImageCacheEntries;
+    size_t m_maxDecodedImageBytes = kDefaultDecodedImageBytes;
     std::list<std::string> m_imageLru;
     std::list<std::string> m_decodedLru;
     size_t m_imageCacheBytes = 0;
@@ -450,7 +453,7 @@ class SatoruContext {
     }
 
     void evictDecodedImages() {
-        while (m_decodedLru.size() > 1 && m_decodedCacheBytes > kMaxDecodedImageBytes) {
+        while (m_decodedLru.size() > 1 && m_decodedCacheBytes > m_maxDecodedImageBytes) {
             std::string evict_key = std::move(m_decodedLru.front());
             m_decodedLru.pop_front();
             auto evict_it = imageCache.find(evict_key);
@@ -475,10 +478,19 @@ class SatoruContext {
     }
 
    public:
+    // Replace this context's image cache budgets (a 0 field keeps its current value) and trim to
+    // them at once, so a lowered budget takes effect before the next decode rather than after it.
+    void setImageCacheLimits(size_t maxBytes, size_t maxEntries, size_t maxDecodedBytes) {
+        if (maxBytes > 0) m_maxImageCacheBytes = maxBytes;
+        if (maxEntries > 0) m_maxImageCacheEntries = maxEntries;
+        if (maxDecodedBytes > 0) m_maxDecodedImageBytes = maxDecodedBytes;
+        trimImageCache();
+    }
+
     void trimImageCache() {
         evictDecodedImages();
         while (m_imageLru.size() > 1 &&
-               (imageCache.size() > kMaxImageCacheEntries || m_imageCacheBytes > kMaxImageCacheBytes)) {
+               (imageCache.size() > m_maxImageCacheEntries || m_imageCacheBytes > m_maxImageCacheBytes)) {
             std::string evict_key = std::move(m_imageLru.front());
             m_imageLru.pop_front();
             auto evict_it = imageCache.find(evict_key);

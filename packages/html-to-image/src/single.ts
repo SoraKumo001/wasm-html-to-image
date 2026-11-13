@@ -8,7 +8,17 @@
  * rendering and goes straight to `converter_encode`.
  */
 import { mermaidRenderOptions, type RenderMermaid } from "./mermaid.js";
-import { loadHtmlToImageModule, type HtmlToImageModule } from "./loader.js";
+import {
+  dropCachedModule,
+  loadHtmlToImageModule,
+  noteModuleRender,
+  type HtmlToImageModule,
+} from "./loader.js";
+export {
+  moduleHeapBytes,
+  setModuleRecyclePolicy,
+  type ModuleRecyclePolicy,
+} from "./loader.js";
 import {
   htmlToImage,
   type HtmlToImageOptions,
@@ -61,7 +71,12 @@ export async function render(
 export async function render(
   options: HtmlToImageOptions,
 ): Promise<RenderResult<Uint8Array | string>> {
-  return htmlToImage(await getDefaultModule(), await applyJavaScript(options));
+  const module = await getDefaultModule();
+  try {
+    return await htmlToImage(module, await applyJavaScript(options));
+  } finally {
+    if (noteModuleRender(module)) dropCachedModule();
+  }
 }
 
 export type { MermaidInput, MermaidOptions, MermaidTheme, MermaidWarning, RenderMermaid } from "./mermaid.js";

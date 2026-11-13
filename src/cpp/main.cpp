@@ -68,6 +68,7 @@ EMSCRIPTEN_BINDINGS(html_to_image) {
     function("satoru_create_instance", &satoru_create_instance, allow_raw_pointers());
     function("satoru_destroy_instance", &satoru_destroy_instance, allow_raw_pointers());
     function("satoru_set_log_level", &satoru_api_set_log_level);
+    function("satoru_get_heap_bytes", &satoru_api_get_heap_bytes);
     function("satoru_render", &satoru_render_val, allow_raw_pointers());
     // satoru resource系のうち実体ありのみ登録。
     // 除外: load_image_pixels(C APIなし)。

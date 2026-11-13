@@ -19,8 +19,15 @@
 import createHtmlToImageModule from "../dist/html-to-image.js";
 import htmlToImageWasm from "../dist/html-to-image.wasm";
 import {
+  dropCachedModule,
   loadPrecompiledModule,
+  noteModuleRender,
   type HtmlToImageModule,
+} from "./loader.js";
+export {
+  moduleHeapBytes,
+  setModuleRecyclePolicy,
+  type ModuleRecyclePolicy,
 } from "./loader.js";
 import { mermaidRenderOptions, type RenderMermaid } from "./mermaid.js";
 import {
@@ -71,6 +78,18 @@ export function getDefaultModule(
 }
 
 /**
+ * Drop the cached module instance (for `wasm`, or every one when omitted), so the next render
+ * instantiates a fresh one and the old instance's grown Wasm memory can be reclaimed. Renders
+ * already in flight keep their instance and finish normally. See {@link ModuleRecyclePolicy}
+ * for the automatic form of this.
+ */
+export function dropModule(wasm?: WebAssembly.Module): void {
+  if (wasm) moduleByWasm.delete(wasm);
+  else moduleByWasm.clear();
+  dropCachedModule();
+}
+
+/**
  * Render HTML — or convert an image — on workerd.
  * Returns RenderResult containing data and metadata.
  */
@@ -86,7 +105,13 @@ export async function render(
   options: HtmlToImageOptions,
   wasm?: WebAssembly.Module,
 ): Promise<RenderResult<Uint8Array | string>> {
-  return htmlToImage(await getDefaultModule(wasm ?? htmlToImageWasm), options);
+  const key = wasm ?? htmlToImageWasm;
+  const module = await getDefaultModule(key);
+  try {
+    return await htmlToImage(module, options);
+  } finally {
+    if (noteModuleRender(module)) dropModule(key);
+  }
 }
 
 export type { MermaidInput, MermaidOptions, MermaidTheme, MermaidWarning, RenderFn, RenderMermaid } from "./mermaid.js";

@@ -55,6 +55,17 @@ set(COMMON_LINK_OPTIONS
     "-sALLOW_MEMORY_GROWTH=1"
 )
 
+# Optional ceiling for the Wasm linear memory, in MiB (0 = no ceiling, the default). A build for a
+# memory-capped runtime (a Cloudflare Workers isolate is 128 MiB for everything it holds) can pin
+# this so a render that outgrows the budget fails inside the engine — an abort the host can answer
+# by recycling the module instance — instead of growing until the runtime kills the whole isolate.
+# Set via the environment (WASM_MAXIMUM_MEMORY_MB) through scripts/build-wasm.ts, or -D directly.
+set(WASM_MAXIMUM_MEMORY_MB 0 CACHE STRING "Maximum Wasm linear memory in MiB (0 = no ceiling)")
+if(WASM_MAXIMUM_MEMORY_MB GREATER 0)
+    math(EXPR WASM_MAXIMUM_MEMORY_BYTES "${WASM_MAXIMUM_MEMORY_MB} * 1048576")
+    list(APPEND COMMON_LINK_OPTIONS "-sMAXIMUM_MEMORY=${WASM_MAXIMUM_MEMORY_BYTES}")
+endif()
+
 # Development build (`pnpm wasm:build --dev`): no ThinLTO, so a one-line change relinks in
 # seconds instead of minutes. The binary is larger and slower; release builds never set this.
 option(WASM_DEV_BUILD "Skip link-time optimisation for fast development builds" OFF)

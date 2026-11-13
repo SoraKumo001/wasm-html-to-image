@@ -220,6 +220,13 @@ export interface HtmlToImageOptions extends RenderOptions {
    */
   resourceCache?: boolean;
   /**
+   * Byte budget of the engine's per-render cache of *decoded* images (default 32 MiB; 16 MiB on
+   * Cloudflare Workers). A decoded image costs width × height × 4 bytes, so this is usually the
+   * budget that binds first on image-heavy pages. Evicted images keep their encoded bytes and are
+   * re-decoded on demand, so a smaller budget trades CPU for peak memory without losing content.
+   */
+  decodedImageMaxBytes?: number;
+  /**
    * Debug aid for comparing against a reference browser: receives every laid-out element's border
    * box in page coordinates (HTML input only; `html-to-image` instance pipeline). `p` is the
    * element's path among element children of the shadow-flattened tree ("0.1.3"), so a browser
@@ -421,6 +428,7 @@ export async function htmlToImage(
     pdfHeader: orch.pdfHeader,
     pdfFooter: orch.pdfFooter,
     pdfSkipRunning: orch.pdfSkipRunning,
+    decodedImageMaxBytes: orch.decodedImageMaxBytes,
   });
 
   const inst = await tryRunHtmlInstance(

@@ -3,6 +3,7 @@
 #include "satoru_api.h"
 
 #include <emscripten.h>
+#include <emscripten/heap.h>
 #include <stdio.h>
 
 #include <chrono>
@@ -662,6 +663,9 @@ std::string satoru_api_html_to_svg(SatoruInstance* inst, const char* html, int w
 bool satoru_api_html_to_bitmap(SatoruInstance* inst, const char* html, int width, int height,
                                const SatoruRenderOptions& options, SkBitmap& out) {
     if (!inst) return false;
+    inst->context.setImageCacheLimits(
+        0, 0,
+        options.decodedImageMaxBytes > 0 ? static_cast<size_t>(options.decodedImageMaxBytes) : 0);
     width = normalize_viewport_width(width);
     // Reuse the document collect_resources already built when it is current.
     if (inst->document_ready_for(html, width, height, options.mediaType)) {
@@ -742,6 +746,9 @@ const uint8_t* satoru_api_render(SatoruInstance* inst, const std::vector<std::st
         out_size = 0;
         return nullptr;
     }
+    inst->context.setImageCacheLimits(
+        0, 0,
+        options.decodedImageMaxBytes > 0 ? static_cast<size_t>(options.decodedImageMaxBytes) : 0);
     width = normalize_viewport_width(width);
 
     // Trim imageCache only after rendering completes so images loaded for the current
@@ -838,6 +845,8 @@ void satoru_api_set_font_map(SatoruInstance* inst, const std::map<std::string, s
 }
 
 void satoru_api_set_log_level(int level) { g_js_logger.setLogLevel((LogLevel)level); }
+
+size_t satoru_api_get_heap_bytes() { return emscripten_get_heap_size(); }
 
 const uint8_t* satoru_api_get_pending_resources_binary(SatoruInstance* inst, int& out_size) {
     return inst->get_pending_resources_binary(out_size);

@@ -5,6 +5,15 @@
  */
 import type { FetchLimits } from "wasm-quickjs-dom";
 import type { HtmlToImageOptions } from "./core.js";
+import { isCloudflareWorkersRuntime } from "./core-resources.js";
+
+/**
+ * QuickJS memory budget applied on Cloudflare Workers when the caller set none: one isolate is capped
+ * at 128 MB for everything it holds (the engine's own Wasm heap included), so the package default of
+ * 256 MB cannot protect it there. 32 MB leaves the engine and the host their share while still giving
+ * real pages room to run.
+ */
+const WORKER_QUICKJS_MEMORY_LIMIT = 32 * 1024 * 1024;
 
 /**
  * Image fetching policy of the script phase: the DOM never fetches image bytes.
@@ -42,6 +51,13 @@ export interface JavaScriptOptions {
    * scripts' requests too; set this to give the scripts different limits.
    */
   limits?: FetchLimits;
+  /**
+   * Bytes of memory the page's QuickJS runtime may allocate (its Wasm heap, the DOM included). A page that
+   * exceeds it fails its script phase instead of growing until the host kills the whole isolate. On
+   * Cloudflare Workers a 32 MB budget applies when this is unset (the isolate's 128 MB is shared with the
+   * engine itself); everywhere else the default is 256 MB. `0` disables the cap.
+   */
+  memoryLimit?: number;
   /**
    * QuickJS engine: return true for a URL the page should not get (analytics, ads, ...): the request fails without going
    * to the network. Most of a real site's script time goes to those, and a render rarely needs them.
@@ -90,7 +106,11 @@ export async function applyScripted<T extends HtmlToImageOptions>(options: T, ru
     maxResourceBytes: l.maxResourceBytes,
     maxTotalResourceBytes: l.maxTotalResourceBytes,
   };
-  const config: JavaScriptOptions = fromRender || base.limits ? { ...base, limits: { ...fromRender, ...base.limits } } : base;
+  const merged: JavaScriptOptions = fromRender || base.limits ? { ...base, limits: { ...fromRender, ...base.limits } } : base;
+  const config: JavaScriptOptions =
+    merged.memoryLimit === undefined && isCloudflareWorkersRuntime()
+      ? { ...merged, memoryLimit: WORKER_QUICKJS_MEMORY_LIMIT }
+      : merged;
   const width = options.width || 800;
   if (options.url) {
     const page = await run({ url: options.url }, config, width);

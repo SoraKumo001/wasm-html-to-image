@@ -29,6 +29,7 @@ import {
   canSetUserAgent,
   checkResourceAllowed,
   fetchWithLimits,
+  isCloudflareWorkersRuntime,
   limitCodeForReason,
   now,
   readResponseWithLimit,
@@ -121,6 +122,7 @@ export interface Orchestration {
   pdfHeader: string | undefined;
   pdfFooter: string | undefined;
   pdfSkipRunning: number | undefined;
+  decodedImageMaxBytes: number | undefined;
   fmtInt: number;
   /** Output color space of `tiff` / `pdf`. */
   colorSpace: "srgb" | "cmyk";
@@ -202,7 +204,12 @@ export function createOrchestration(
     pdfHeader,
     pdfFooter,
     pdfSkipRunning,
+    decodedImageMaxBytes,
   } = options;
+  // On Cloudflare Workers the isolate's 128 MB is shared with everything else the isolate holds,
+  // so the engine's per-render decoded-image cache defaults to half its usual budget there
+  // (16 MiB) unless the caller set it. Evicted images are re-decoded on demand.
+  const onWorkers = isCloudflareWorkersRuntime();
   // `animation` accepts a boolean (image input: keep frames) or, for HTML
   // input, an object requesting keyframe sampling. The object form turns on
   // the boolean flag for the encode stage and enables the frame path.
@@ -386,6 +393,7 @@ export function createOrchestration(
     pdfHeader,
     pdfFooter,
     pdfSkipRunning,
+    decodedImageMaxBytes: decodedImageMaxBytes ?? (onWorkers ? 16 * 1024 * 1024 : undefined),
     fmtInt,
     colorSpace,
     scale,

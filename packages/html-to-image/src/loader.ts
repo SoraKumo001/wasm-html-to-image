@@ -39,6 +39,8 @@ export interface HtmlToImageModule {
   satoru_create_instance(): WasmInstancePtr;
   satoru_destroy_instance(inst: WasmInstancePtr): void;
   satoru_set_log_level(level: number): void;
+  /** Current Wasm linear-memory size of this instance in bytes (optional, probed before use). */
+  satoru_get_heap_bytes?: () => number;
   converter_create_instance(): WasmInstancePtr;
   converter_destroy_instance(inst: WasmInstancePtr): void;
   converter_set_log_level(level: number): void;
@@ -577,6 +579,62 @@ async function loadHtmlToImageModuleUncached(
 export function dropCachedModule(): void {
   moduleCache.clear();
   pendingLoads.clear();
+}
+
+/**
+ * When a cached module instance should be recycled: dropped so the next load instantiates a
+ * fresh one. A Wasm linear memory only ever grows, so in a long-lived isolate (a Cloudflare
+ * Worker serving many requests) the instance's heap ratchets up to its worst render and stays
+ * there; dropping the instance is the only way that memory is ever given back — the runtime
+ * reclaims it once nothing references the instance, in-flight renders included. Dropping is
+ * therefore always safe to do between renders, and it is also the safe recovery after a render
+ * failed against a memory ceiling: some allocation paths abort the instance for good, and a
+ * fresh one always renders again.
+ */
+export interface ModuleRecyclePolicy {
+  /** Recycle after this many finished renders on one instance. */
+  everyRenders?: number;
+  /** Recycle when the instance's Wasm heap exceeds this many bytes after a render. */
+  maxHeapBytes?: number;
+}
+
+let moduleRecyclePolicy: ModuleRecyclePolicy | undefined;
+const moduleRenderCounts = new WeakMap<HtmlToImageModule, number>();
+
+/** Set (or clear, with `undefined`) the recycle policy applied by the entry points' `render()`. */
+export function setModuleRecyclePolicy(policy: ModuleRecyclePolicy | undefined): void {
+  moduleRecyclePolicy = policy;
+}
+
+/** The current recycle policy, if any. */
+export function getModuleRecyclePolicy(): ModuleRecyclePolicy | undefined {
+  return moduleRecyclePolicy;
+}
+
+/** Current size of a loaded module's Wasm linear memory in bytes (0 when it cannot be read). */
+export function moduleHeapBytes(module: HtmlToImageModule): number {
+  if (typeof module.satoru_get_heap_bytes === "function") {
+    return module.satoru_get_heap_bytes();
+  }
+  const heap = (module as { HEAPU8?: Uint8Array }).HEAPU8;
+  return heap?.byteLength ?? 0;
+}
+
+/**
+ * Count one finished render on `module` (successful or not) and report whether the recycle
+ * policy now wants the instance dropped. The entry points call this after each render and drop
+ * their cache entry when it returns true; with no policy set it always returns false.
+ */
+export function noteModuleRender(module: HtmlToImageModule): boolean {
+  const policy = moduleRecyclePolicy;
+  if (!policy) return false;
+  const count = (moduleRenderCounts.get(module) ?? 0) + 1;
+  moduleRenderCounts.set(module, count);
+  if (policy.everyRenders !== undefined && count >= policy.everyRenders) return true;
+  if (policy.maxHeapBytes !== undefined && moduleHeapBytes(module) > policy.maxHeapBytes) {
+    return true;
+  }
+  return false;
 }
 
 /**

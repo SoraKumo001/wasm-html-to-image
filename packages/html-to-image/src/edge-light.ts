@@ -25,9 +25,12 @@
 // @ts-expect-error — dist/html-to-image.js is generated at build time
 import createHtmlToImageModule from "./html-to-image.js";
 import {
+  dropCachedModule,
   loadPrecompiledModule,
+  noteModuleRender,
   type HtmlToImageModule,
 } from "./loader.js";
+export { setModuleRecyclePolicy, type ModuleRecyclePolicy } from "./loader.js";
 import {
   htmlToImage,
   type HtmlToImageOptions,
@@ -76,6 +79,18 @@ export function getDefaultModule(
 }
 
 /**
+ * Drop the cached module instance (for `wasm`, or every one when omitted), so the next render
+ * instantiates a fresh one and the old instance's grown Wasm memory can be reclaimed. Renders
+ * already in flight keep their instance and finish normally. See {@link ModuleRecyclePolicy}
+ * for the automatic form of this.
+ */
+export function dropModule(wasm?: WebAssembly.Module): void {
+  if (wasm) moduleByWasm.delete(wasm);
+  else moduleByWasm.clear();
+  dropCachedModule();
+}
+
+/**
  * Render HTML — or convert an image — on an edge runtime.
  * Returns RenderResult containing data and metadata.
  */
@@ -91,7 +106,12 @@ export async function render(
   options: HtmlToImageOptions,
   wasm: WebAssembly.Module,
 ): Promise<RenderResult<Uint8Array | string>> {
-  return htmlToImage(await getDefaultModule(wasm), options);
+  const module = await getDefaultModule(wasm);
+  try {
+    return await htmlToImage(module, options);
+  } finally {
+    if (noteModuleRender(module)) dropModule(wasm);
+  }
 }
 
 export type { MermaidInput, MermaidOptions, MermaidTheme, MermaidWarning, RenderFn, RenderMermaid } from "./mermaid.js";
