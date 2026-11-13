@@ -641,6 +641,13 @@ namespace litehtml
       _offset_position_,
 
       _inline_size_,
+      _cx_,
+      _cy_,
+      _r_,
+      _rx_,
+      _ry_,
+      _x_,
+      _y_,
       _size_)
 #undef STRING_ID
   extern const string_id empty_id; // _id("")

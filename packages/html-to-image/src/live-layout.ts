@@ -5,7 +5,7 @@
  * The engine keeps the laid-out document and applies what the page changed to it (attributes, text, inserted / removed /
  * moved nodes) instead of laying the whole page out again. See doc/design/live-layout-incremental.md.
  */
-import { resolveHtmlResources, now } from "./core-resources.js";
+import { resolveHtmlResources, now, type FallbackFontEntry } from "./core-resources.js";
 import type { ResolveContext } from "./core-resources.js";
 import type { RenderLimits } from "./diagnostics.js";
 import type { ResolveResourceHook } from "./core.js";
@@ -29,7 +29,7 @@ export interface LiveLayoutOptions {
   /** Generic family to font URL map, as `fontMap` of a render. */
   fontMap?: Record<string, string>;
   /** Fallback fonts, as `fallbackFonts` of a render. */
-  fallbackFonts?: (Uint8Array | ArrayBuffer | string)[];
+  fallbackFonts?: FallbackFontEntry[];
   /** What the page's resources may be fetched from, and how many; as `limits` of a render. */
   limits?: RenderLimits;
   /** Override hook for resource resolution, as `resolveResource` of a render. */

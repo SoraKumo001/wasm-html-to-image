@@ -414,6 +414,52 @@ std::string css_font_family(const element* el) {
     return pv.is<string>() ? pv.get<string>() : "";
 }
 
+// SVG2 CSS geometry property (`cx`, `cy`, `r`, `rx`, `ry`, `x`, `y`, `width`, `height`), or empty.
+std::string css_geometry(const element* el, string_id property) {
+    const property_value& pv = el->get_property_value(property);
+    if (pv.is<css_length>()) {
+        const css_length& len = pv.get<css_length>();
+        if (len.is_predefined() || len.is_calc()) return "";
+        char buf[64];
+        std::string unit = (len.units() == css_units_none) ? "" : index_value(len.units(), css_units_strings);
+        std::snprintf(buf, sizeof(buf), "%g%s", (double)len.val(), unit.c_str());
+        return buf;
+    }
+    if (!pv.is<string>()) return "";
+    std::string resolved;
+    if (!resolve_paint(el, pv.get<string>(), resolved)) return "";
+    if (resolved.empty() || resolved == "auto" || resolved == "none") return "";
+    return resolved;
+}
+
+struct SvgGeomProp {
+    const char* attr;
+    string_id prop;
+};
+
+const std::vector<SvgGeomProp>& svg_geom_props_for_tag(const std::string& tag_name) {
+    static const std::vector<SvgGeomProp> empty_props;
+    static const std::vector<SvgGeomProp> circle_props = {
+        {"cx", _cx_}, {"cy", _cy_}, {"r", _r_},
+    };
+    static const std::vector<SvgGeomProp> ellipse_props = {
+        {"cx", _cx_}, {"cy", _cy_}, {"rx", _rx_}, {"ry", _ry_},
+    };
+    static const std::vector<SvgGeomProp> rect_props = {
+        {"x", _x_}, {"y", _y_}, {"width", _width_}, {"height", _height_}, {"rx", _rx_}, {"ry", _ry_},
+    };
+    static const std::vector<SvgGeomProp> box_props = {
+        {"x", _x_}, {"y", _y_}, {"width", _width_}, {"height", _height_},
+    };
+    if (tag_name == "circle") return circle_props;
+    if (tag_name == "ellipse") return ellipse_props;
+    if (tag_name == "rect") return rect_props;
+    if (tag_name == "svg" || tag_name == "image" || tag_name == "use" || tag_name == "foreignObject") {
+        return box_props;
+    }
+    return empty_props;
+}
+
 }  // namespace
 
 class html_tag_accessor : public html_tag {
@@ -457,9 +503,16 @@ void el_svg::write_element(std::ostream& os, const element::ptr& el) const {
             }
         }
 
-        // Stylesheet fill/stroke win over the presentation attributes of the same name.
+        // Stylesheet fill/stroke and SVG2 geometry properties win over presentation attributes.
         const std::string css_fill = css_paint(el.get(), _fill_);
         const std::string css_stroke = css_paint(el.get(), _stroke_);
+        const auto& geom_specs = svg_geom_props_for_tag(tag_name);
+        std::vector<std::pair<const char*, std::string>> css_geom_vals;
+        css_geom_vals.reserve(geom_specs.size());
+        for (const auto& spec : geom_specs) {
+            std::string val = css_geometry(el.get(), spec.prop);
+            if (!val.empty()) css_geom_vals.emplace_back(spec.attr, std::move(val));
+        }
 
         bool stroke_attr_written = false;
         for (auto const& attr : attrs) {
@@ -468,6 +521,14 @@ void el_svg::write_element(std::ostream& os, const element::ptr& el) const {
             if ((attr_name == "fill" && !css_fill.empty()) ||
                 (attr_name == "stroke" && !css_stroke.empty()))
                 continue;
+            bool overridden_by_css_geom = false;
+            for (const auto& gv : css_geom_vals) {
+                if (attr_name == gv.first) {
+                    overridden_by_css_geom = true;
+                    break;
+                }
+            }
+            if (overridden_by_css_geom) continue;
             // Remove newlines and tabs from attribute values (common in base64 data URLs)
             attr_val.erase(std::remove(attr_val.begin(), attr_val.end(), '\n'), attr_val.end());
             attr_val.erase(std::remove(attr_val.begin(), attr_val.end(), '\r'), attr_val.end());
@@ -491,6 +552,9 @@ void el_svg::write_element(std::ostream& os, const element::ptr& el) const {
         if (!css_stroke.empty()) {
             os << " stroke=\"" << (stroke_width_is_zero ? "none" : css_stroke) << "\"";
             stroke_attr_written = true;
+        }
+        for (const auto& gv : css_geom_vals) {
+            os << " " << gv.first << "=\"" << svg_escape_attr(gv.second) << "\"";
         }
         if (stroke_width_is_zero && !stroke_attr_written) {
             os << " stroke=\"none\"";

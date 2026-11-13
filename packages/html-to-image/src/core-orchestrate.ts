@@ -27,9 +27,14 @@ import {
 } from "./diagnostics.js";
 import {
   canSetUserAgent,
+  checkResourceAllowed,
+  fetchWithLimits,
+  limitCodeForReason,
   now,
+  readResponseWithLimit,
   resolveHtmlResources,
   type DiagState,
+  type FallbackFontEntry,
   type ResolveContext,
 } from "./core-resources.js";
 import type {
@@ -89,7 +94,7 @@ export interface Orchestration {
   baseUrl: string | undefined;
   fontMap: Record<string, string> | undefined;
   userAgent: string | undefined;
-  fallbackFonts: (Uint8Array | ArrayBuffer | string)[] | undefined;
+  fallbackFonts: FallbackFontEntry[] | undefined;
   logLevel: LogLevel;
   onLog: HtmlToImageOptions["onLog"];
   diagnostics: boolean;
@@ -419,14 +424,36 @@ export async function resolveHtmlSource(
     // Post-redirect document URL (`Response.url`). Relative resources must
     // resolve against the final URL, not the stale request URL: a 301 to a new
     // host otherwise leaves every stylesheet/font/image on the old host.
+    const { limits } = orch;
+    const blocked = checkResourceAllowed(url, limits);
+    if (blocked) {
+      const code = limitCodeForReason(blocked);
+      orch.diag?.errors.push({ code, message: blocked, source: url });
+      throw logged(`[${code}] ${blocked} (${url})`);
+    }
+    const remaining =
+      limits.timeoutMs !== undefined
+        ? Math.max(1, Math.ceil(limits.timeoutMs - (now() - orch.t0)))
+        : undefined;
+    const signal =
+      remaining !== undefined ? AbortSignal.timeout(remaining) : undefined;
+    const fetchInit: RequestInit = {
+      ...(headers ? { headers } : {}),
+      ...(signal ? { signal } : {}),
+    };
     let finalUrl: string | undefined;
     let htmls: string;
     if (resolveResource) {
       const fallbackFetch = async (): Promise<Uint8Array | null> => {
-        const res = await fetch(url, { headers });
-        if (!res.ok) return null;
+        const res = await fetchWithLimits(url, fetchInit, limits);
+        if (!res.ok) {
+          try {
+            await res.body?.cancel?.();
+          } catch {}
+          return null;
+        }
         if (res.url) finalUrl = res.url;
-        return toBytes(await res.arrayBuffer());
+        return readResponseWithLimit(res, limits.maxResourceBytes);
       };
       const raw = await resolveResource(url, fallbackFetch);
       if (!raw) {
@@ -436,14 +463,18 @@ export async function resolveHtmlSource(
       }
       htmls = new TextDecoder().decode(raw);
     } else {
-      const res = await fetch(url, { headers });
+      const res = await fetchWithLimits(url, fetchInit, limits);
       if (!res.ok) {
+        try {
+          await res.body?.cancel?.();
+        } catch {}
         throw logged(
           `wasm-html-to-image: failed to fetch HTML from URL: ${url} (${res.status})`,
         );
       }
       if (res.url) finalUrl = res.url;
-      htmls = await res.text();
+      const raw = await readResponseWithLimit(res, limits.maxResourceBytes);
+      htmls = new TextDecoder().decode(raw);
     }
     // An explicit `baseUrl` always wins; otherwise adopt the document URL so
     // relative resource resolution follows redirects.

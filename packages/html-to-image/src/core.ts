@@ -4,6 +4,7 @@ import { buildFullSatoruOptions } from "./encode-args.js";
 import { renderMermaidInput, type MermaidInput } from "./mermaid.js";
 import { imageBytesFromUnknown, isImageInput, sniffImageFormat } from "./input.js";
 import { svgHasText, svgIntrinsicSize, svgPage } from "./svg-input.js";
+import { inlineExternalSvgSprites } from "./svg-sprites.js";
 import {
   DIAGNOSTIC_CODES,
   LogLevel,
@@ -21,6 +22,13 @@ import {
   tryRunHtmlInstance,
   tryRunLegacyFallback,
 } from "./core-orchestrate.js";
+
+export type {
+  FallbackFontEntry,
+  FallbackFontSource,
+  FallbackFontUnicodePreset,
+} from "./core-resources.js";
+import type { FallbackFontEntry } from "./core-resources.js";
 
 // Backward compatibility: `isImageInput` now lives in `./input.js` but
 // stays importable from here (and therefore from the package root).
@@ -189,10 +197,11 @@ export interface HtmlToImageOptions extends RenderOptions {
   /**
    * User-supplied fallback font(s), applied to the instance before resource
    * discovery (upstream `fallbackFonts` idiom). Entries may be raw bytes
-   * (`Uint8Array` / `ArrayBuffer`), a `data:` URL, or a fetchable URL
-   * (http(s) or baseUrl-relative file on Node).
+   * (`Uint8Array` / `ArrayBuffer`), a `data:` URL, a fetchable URL
+   * (http(s) or baseUrl-relative file on Node), or `{ source, unicodeRange }`
+   * to load on demand only when matching characters appear in the HTML.
    */
-  fallbackFonts?: (Uint8Array | ArrayBuffer | string)[];
+  fallbackFonts?: FallbackFontEntry[];
   /**
    * Log severity gate for `onLog` (satoru `LogLevel` parity; default
    * `None` silences all JS-side log calls). Also forwarded to the WASM
@@ -381,7 +390,13 @@ export async function htmlToImage(
       "wasm-html-to-image: 'none' format is only supported for image inputs",
     );
   }
-  const htmls = await resolveHtmlSource(orch);
+  const rawHtmls = await resolveHtmlSource(orch);
+  const htmls = await inlineExternalSvgSprites(
+    rawHtmls,
+    orch.baseUrl,
+    orch.userAgent,
+    orch.resolveCtx,
+  );
   const satoruOpts = buildFullSatoruOptions({
     crop: orch.crop,
     fit: orch.fit,

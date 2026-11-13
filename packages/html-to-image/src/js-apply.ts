@@ -85,6 +85,7 @@ export async function applyScripted<T extends HtmlToImageOptions>(options: T, ru
     allowedProtocols: l.allowedProtocols,
     allowedHosts: l.allowedHosts,
     blockedHosts: l.blockedHosts,
+    blockPrivateHosts: l.blockPrivateHosts,
     maxResourceCount: l.maxResourceCount,
     maxResourceBytes: l.maxResourceBytes,
     maxTotalResourceBytes: l.maxTotalResourceBytes,

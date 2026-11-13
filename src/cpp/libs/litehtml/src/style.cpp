@@ -1775,6 +1775,17 @@ namespace litehtml
       add_parsed_property(name, property_value(get_repr(value), important, false, m_layer, m_specificity));
       break;
 
+    case _cx_:
+    case _cy_:
+    case _x_:
+    case _y_:
+      return add_length_property(name, val, "auto", f_length_percentage | f_number, important);
+
+    case _r_:
+    case _rx_:
+    case _ry_:
+      return add_length_property(name, val, "auto", f_length_percentage | f_number | f_positive, important);
+
     default:
       if (_s(name).substr(0, 2) == "--" && _s(name).size() >= 3 &&
           (value.empty() || is_declaration_value(value)))

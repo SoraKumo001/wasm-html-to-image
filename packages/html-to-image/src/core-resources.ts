@@ -99,6 +99,172 @@ function fileUrlToFsPath(p: string): string {
   return out;
 }
 
+const MAX_REDIRECTS = 10;
+
+/** Error thrown when a fetch violates `RenderLimits` (redirect target or streaming size). */
+export class FetchLimitError extends Error {
+  constructor(
+    public readonly code: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = "FetchLimitError";
+  }
+}
+
+/** True for localhost and private, loopback and link-local addresses (`host` as `URL.hostname` gives it). */
+export function isPrivateHost(host: string): boolean {
+  const h = host.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
+  if (
+    h === "localhost" ||
+    h.endsWith(".localhost") ||
+    h.endsWith(".local") ||
+    h.endsWith(".internal")
+  ) {
+    return true;
+  }
+  const v4 = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(h);
+  if (v4) {
+    const a = Number(v4[1]);
+    const b = Number(v4[2]);
+    return (
+      a === 0 ||
+      a === 10 ||
+      a === 127 ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      (a === 100 && b >= 64 && b <= 127) ||
+      a >= 224
+    );
+  }
+  if (h.includes(":")) {
+    if (h === "::" || h === "::1" || /^f[cd]/.test(h) || /^fe[89ab]/.test(h)) {
+      return true;
+    }
+    const dotted = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(h);
+    if (dotted) return isPrivateHost(dotted[1]);
+    const hex = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(h);
+    if (hex) {
+      const n = (parseInt(hex[1], 16) << 16) | parseInt(hex[2], 16);
+      return isPrivateHost(
+        [n >>> 24, (n >>> 16) & 255, (n >>> 8) & 255, n & 255].join("."),
+      );
+    }
+  }
+  return false;
+}
+
+/**
+ * Fetch `target` while checking every redirect hop against `limits`.
+ * Cancels ignored redirect bodies so `workerd` never leaks open streams.
+ */
+export async function fetchWithLimits(
+  target: string,
+  init: RequestInit,
+  limits?: RenderLimits,
+): Promise<Response> {
+  const restricted = !!(
+    limits?.allowedProtocols ||
+    limits?.allowedHosts ||
+    limits?.blockedHosts ||
+    limits?.blockPrivateHosts
+  );
+  if (!restricted) {
+    return fetch(target, init);
+  }
+  let currentUrl = target;
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    const blocked = checkResourceAllowed(currentUrl, limits!);
+    if (blocked) {
+      throw new FetchLimitError(limitCodeForReason(blocked), blocked);
+    }
+    const res = await fetch(currentUrl, { ...init, redirect: "manual" });
+    if (res.type === "opaqueredirect") {
+      try {
+        await res.body?.cancel?.();
+      } catch {}
+      throw new FetchLimitError(
+        DIAGNOSTIC_CODES.LIMIT_HOST_BLOCKED,
+        `Redirect target hidden by runtime (opaqueredirect): ${currentUrl}`,
+      );
+    }
+    const location = res.headers?.get?.("location");
+    if (
+      typeof res.status === "number" &&
+      res.status >= 300 &&
+      res.status < 400 &&
+      location
+    ) {
+      try {
+        await res.body?.cancel?.();
+      } catch {}
+      currentUrl = new URL(location, currentUrl).href;
+      continue;
+    }
+    return res;
+  }
+  throw new FetchLimitError(
+    DIAGNOSTIC_CODES.RESOURCE_FETCH_FAILED,
+    `Too many redirects (>${MAX_REDIRECTS}): ${target}`,
+  );
+}
+
+/** Read a response body up to `maxBytes`, cancelling the stream immediately on overflow. */
+export async function readResponseWithLimit(
+  res: Response,
+  maxBytes?: number,
+): Promise<Uint8Array> {
+  if (maxBytes !== undefined) {
+    const rawLength = res.headers?.get?.("content-length");
+    const contentLength = rawLength !== null && rawLength !== undefined ? Number(rawLength) : NaN;
+    if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+      try {
+        await res.body?.cancel?.();
+      } catch {}
+      throw new FetchLimitError(
+        DIAGNOSTIC_CODES.LIMIT_RESOURCE_SIZE,
+        `Resource size (${contentLength} bytes) exceeds limit (${maxBytes})`,
+      );
+    }
+    if (res.body && typeof res.body.getReader === "function") {
+      const reader = res.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let size = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        size += value.length;
+        if (size > maxBytes) {
+          try {
+            await reader.cancel();
+          } catch {}
+          throw new FetchLimitError(
+            DIAGNOSTIC_CODES.LIMIT_RESOURCE_SIZE,
+            `Resource size (${size} bytes) exceeds limit (${maxBytes})`,
+          );
+        }
+        chunks.push(value);
+      }
+      const out = new Uint8Array(size);
+      let off = 0;
+      for (const chunk of chunks) {
+        out.set(chunk, off);
+        off += chunk.length;
+      }
+      return out;
+    }
+  }
+  const bytes = toBytes(await res.arrayBuffer());
+  if (maxBytes !== undefined && bytes.length > maxBytes) {
+    throw new FetchLimitError(
+      DIAGNOSTIC_CODES.LIMIT_RESOURCE_SIZE,
+      `Resource size (${bytes.length} bytes) exceeds limit (${maxBytes})`,
+    );
+  }
+  return bytes;
+}
+
 /**
  * Fetch external resource bytes. `data:` URLs resolve inline in C++
  * (`request()`), so they are skipped here. Relative URLs resolve against
@@ -111,10 +277,20 @@ export async function fetchResourceBytes(
   resolveResource?: ResolveResourceHook,
   timeoutMs?: number,
   confineFiles?: boolean,
+  limits?: RenderLimits,
+  onLimitExceeded?: (code: string, message: string) => void,
 ): Promise<Uint8Array | null> {
   if (url.startsWith("data:")) return null;
   const fallback = (): Promise<Uint8Array | null> =>
-    fetchResourceBytesInner(url, baseUrl, userAgent, timeoutMs, confineFiles);
+    fetchResourceBytesInner(
+      url,
+      baseUrl,
+      userAgent,
+      timeoutMs,
+      confineFiles,
+      limits,
+      onLimitExceeded,
+    );
   if (resolveResource) {
     try {
       return await resolveResource(url, fallback);
@@ -149,6 +325,8 @@ async function fetchResourceBytesInner(
   userAgent?: string,
   timeoutMs?: number,
   confineFiles?: boolean,
+  limits?: RenderLimits,
+  onLimitExceeded?: (code: string, message: string) => void,
 ): Promise<Uint8Array | null> {
   // Browser fetch forbids overriding User-Agent (and Firefox preflights it,
   // breaking Google Fonts/jsDelivr CORS). Spoof only where we control the UA
@@ -166,17 +344,41 @@ async function fetchResourceBytesInner(
     const cacheKey = `${userAgent ?? ""}
 ${target}`;
     const cached = resourceCache.get(cacheKey);
-    if (cached) return cached;
+    if (cached) {
+      if (
+        limits?.maxResourceBytes !== undefined &&
+        cached.length > limits.maxResourceBytes
+      ) {
+        onLimitExceeded?.(
+          DIAGNOSTIC_CODES.LIMIT_RESOURCE_SIZE,
+          `Resource size (${cached.length} bytes) exceeds limit (${limits.maxResourceBytes})`,
+        );
+        return null;
+      }
+      return cached;
+    }
     try {
-      const res = await fetch(target, {
-        ...(headers ? { headers } : {}),
-        ...(signal ? { signal } : {}),
-      });
-      if (!res.ok) return null;
-      const bytes = toBytes(await res.arrayBuffer());
+      const res = await fetchWithLimits(
+        target,
+        {
+          ...(headers ? { headers } : {}),
+          ...(signal ? { signal } : {}),
+        },
+        limits,
+      );
+      if (!res.ok) {
+        try {
+          await res.body?.cancel?.();
+        } catch {}
+        return null;
+      }
+      const bytes = await readResponseWithLimit(res, limits?.maxResourceBytes);
       resourceCache.set(cacheKey, bytes);
       return bytes;
-    } catch {
+    } catch (e) {
+      if (e instanceof FetchLimitError) {
+        onLimitExceeded?.(e.code, e.message);
+      }
       return null;
     }
   };
@@ -331,7 +533,8 @@ export function checkResourceAllowed(
   if (
     !limits.allowedProtocols &&
     !limits.allowedHosts &&
-    !limits.blockedHosts
+    !limits.blockedHosts &&
+    !limits.blockPrivateHosts
   ) {
     return null;
   }
@@ -347,11 +550,15 @@ export function checkResourceAllowed(
   ) {
     return `Protocol ${parsed.protocol} is blocked`;
   }
-  if (limits.allowedHosts && !limits.allowedHosts.includes(parsed.hostname)) {
+  const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (limits.allowedHosts && !limits.allowedHosts.includes(host)) {
     return `Host ${parsed.hostname} is not in allowed list`;
   }
-  if (limits.blockedHosts && limits.blockedHosts.includes(parsed.hostname)) {
+  if (limits.blockedHosts && limits.blockedHosts.includes(host)) {
     return `Host ${parsed.hostname} is blocked`;
+  }
+  if (limits.blockPrivateHosts && isPrivateHost(host)) {
+    return `Host ${parsed.hostname} is private`;
   }
   return null;
 }
@@ -368,6 +575,9 @@ export function limitCodeForReason(reason: string): string {
  * together, so this bounds the connection burst for many-page documents.
  */
 export const FETCH_CONCURRENCY = 16;
+
+/** Max concurrent fetches per destination host (avoids bursting a single origin or hitting CF per-host limits). */
+export const FETCH_CONCURRENCY_PER_HOST = 6;
 
 /**
  * Resolve the relative `url(...)` and `@import` references of a fetched stylesheet against
@@ -432,11 +642,113 @@ export async function mapWithLimit<T>(
   );
 }
 
+/**
+ * Run `fn` over `items` with at most `globalLimit` calls in flight and at most
+ * `perHostLimit` calls per host key (`fn` must not reject).
+ */
+export async function mapWithHostLimit<T>(
+  items: readonly T[],
+  globalLimit: number,
+  perHostLimit: number,
+  hostOf: (item: T) => string,
+  fn: (item: T) => Promise<void>,
+): Promise<void> {
+  if (items.length === 0) return;
+  const queue = items.map((item) => ({ item, host: hostOf(item) }));
+  const hostInflight = new Map<string, number>();
+  let globalInflight = 0;
+  let completed = 0;
+
+  await new Promise<void>((resolve) => {
+    const pump = (): void => {
+      if (completed === items.length) {
+        resolve();
+        return;
+      }
+      while (globalInflight < globalLimit && queue.length > 0) {
+        const idx = queue.findIndex(
+          (entry) => (hostInflight.get(entry.host) ?? 0) < perHostLimit,
+        );
+        if (idx === -1) break;
+        const [entry] = queue.splice(idx, 1);
+        globalInflight++;
+        hostInflight.set(entry.host, (hostInflight.get(entry.host) ?? 0) + 1);
+        void fn(entry.item).finally(() => {
+          globalInflight--;
+          const prev = hostInflight.get(entry.host) ?? 1;
+          if (prev <= 1) hostInflight.delete(entry.host);
+          else hostInflight.set(entry.host, prev - 1);
+          completed++;
+          pump();
+        });
+      }
+    };
+    pump();
+  });
+}
+
 /** Remaining `timeoutMs` budget for one fetch (undefined = unlimited). */
 function fetchTimeoutOf(ctx: ResolveContext): number | undefined {
   return ctx.limits.timeoutMs === undefined
     ? undefined
     : ctx.limits.timeoutMs - (now() - ctx.t0);
+}
+
+export type FallbackFontSource = Uint8Array | ArrayBuffer | string;
+
+export type FallbackFontUnicodePreset =
+  | "cjk"
+  | "emoji"
+  | "symbols"
+  | "arabic"
+  | "hebrew"
+  | "devanagari"
+  | "thai";
+
+export type FallbackFontEntry =
+  | FallbackFontSource
+  | {
+      source: FallbackFontSource;
+      /** Load this fallback font only when the HTML contains characters matching this preset or RegExp. */
+      unicodeRange?: RegExp | FallbackFontUnicodePreset;
+    };
+
+const UNICODE_PRESETS: Record<FallbackFontUnicodePreset, RegExp> = {
+  cjk: /[\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uAC00-\uD7AF\uF900-\uFAFF\uFF00-\uFFEF]/,
+  emoji:
+    /[\u{1F000}-\u{1FFFF}\u231A-\u231B\u23E9-\u23EC\u23F0\u23F3\u25FD-\u25FE\u2614-\u2615\u2648-\u2653\u267F\u2693\u26A1\u26AA-\u26AB\u26BD-\u26BE\u26C4-\u26C5\u26CE\u26D4\u26EA\u26F2-\u26F3\u26F5\u26FA\u26FD\u2705\u270A-\u270B\u2728\u274C\u274E\u2753-\u2755\u2757\u2795-\u2797\u27B0\u27BF\u2B1B-\u2B1C\u2B50\u2B55\uFE0F]/u,
+  symbols: /[\u{2100}-\u{2BFF}]/u,
+  arabic: /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/,
+  hebrew: /[\u0590-\u05FF\uFB1D-\uFB4F]/,
+  devanagari: /[\u0900-\u097F\uA8E0-\uA8FF]/,
+  thai: /[\u0E00-\u0E7F]/,
+};
+
+function decodeNumericEntitiesForScan(html: string): string {
+  if (!html.includes("&#")) return html;
+  let decoded = "";
+  for (const match of html.matchAll(/&#(?:x([0-9a-f]+)|([0-9]+));?/gi)) {
+    const cp = Number.parseInt(match[1] ?? match[2], match[1] ? 16 : 10);
+    if (cp > 0 && cp <= 0x10ffff && !(cp >= 0xd800 && cp <= 0xdfff)) {
+      decoded += String.fromCodePoint(cp);
+    }
+  }
+  return decoded ? html + decoded : html;
+}
+
+/** True when any page in `htmls` contains a character matching `range`. */
+export function htmlMatchesUnicodeRange(
+  htmls: string | string[],
+  range: RegExp | FallbackFontUnicodePreset,
+): boolean {
+  const re =
+    typeof range === "string"
+      ? UNICODE_PRESETS[range]
+      : range.global || range.sticky
+        ? new RegExp(range.source, range.flags.replace(/[gy]/g, ""))
+        : range;
+  const pages = Array.isArray(htmls) ? htmls : [htmls];
+  return pages.some((page) => re.test(decodeNumericEntitiesForScan(page)));
 }
 
 /**
@@ -454,7 +766,7 @@ export async function resolveHtmlResources(
   baseUrl: string | undefined,
   fontMap: Record<string, string> | undefined,
   userAgent: string | undefined,
-  fallbackFonts: (Uint8Array | ArrayBuffer | string)[] | undefined,
+  fallbackFonts: FallbackFontEntry[] | undefined,
   ctx: ResolveContext,
 ): Promise<void> {
   const collect = module.satoru_collect_resources;
@@ -478,7 +790,20 @@ export async function resolveHtmlResources(
   if (fallbackFonts && fallbackFonts.length > 0) {
     const loadFallback = module.satoru_load_fallback_font;
     if (typeof loadFallback === "function") {
-      for (const entry of fallbackFonts) {
+      for (const rawEntry of fallbackFonts) {
+        const isConfig =
+          typeof rawEntry === "object" &&
+          rawEntry !== null &&
+          !(rawEntry instanceof Uint8Array) &&
+          !(rawEntry instanceof ArrayBuffer);
+        if (
+          isConfig &&
+          rawEntry.unicodeRange !== undefined &&
+          !htmlMatchesUnicodeRange(htmls, rawEntry.unicodeRange)
+        ) {
+          continue;
+        }
+        const entry = isConfig ? rawEntry.source : rawEntry;
         try {
           const bytes =
             typeof entry === "string"
@@ -491,6 +816,7 @@ export async function resolveHtmlResources(
                     ctx.resolveResource,
                     fetchTimeoutOf(ctx),
                     ctx.limits.confineFilesToBaseUrl,
+                    ctx.limits,
                   )
               : entry instanceof Uint8Array
                 ? entry
@@ -613,7 +939,19 @@ export async function resolveHtmlResources(
       .map((r, i) => ({ r, i }))
       .sort((a, b) => rank(a.r.type) - rank(b.r.type) || a.i - b.i)
       .map((e) => e.r);
-    await mapWithLimit(ordered, FETCH_CONCURRENCY, async (r) => {
+    const hostKeyOf = (r: PendingResource): string => {
+      try {
+        return new URL(r.url, baseUrl).host || "\u2205";
+      } catch {
+        return "\u2205";
+      }
+    };
+    await mapWithHostLimit(
+      ordered,
+      FETCH_CONCURRENCY,
+      FETCH_CONCURRENCY_PER_HOST,
+      hostKeyOf,
+      async (r) => {
       const diag = ctx.diag;
       const entry: ResourceDiagnostic | undefined = diag
         ? {
@@ -665,6 +1003,7 @@ export async function resolveHtmlResources(
         }
         ctx.usage.resourceCount++;
         if (r.type === "image") publishImage(r.url, "loading");
+        let limitHit: { code: string; message: string } | null = null;
         const bytes = await fetchResourceBytes(
           r.url,
           baseUrl,
@@ -672,7 +1011,18 @@ export async function resolveHtmlResources(
           ctx.resolveResource,
           fetchTimeoutOf(ctx),
           ctx.limits.confineFilesToBaseUrl,
+          ctx.limits,
+          (code, message) => {
+            limitHit = { code, message };
+          },
         );
+        if (limitHit) {
+          const hit = limitHit as { code: string; message: string };
+          ctx.usage.resourceCount--;
+          if (r.type === "image") publishImage(r.url, "error");
+          skipWithError(hit.code, hit.message);
+          return;
+        }
         if (!bytes) {
           ctx.usage.resourceCount--;
           if (r.type === "image") publishImage(r.url, "error");

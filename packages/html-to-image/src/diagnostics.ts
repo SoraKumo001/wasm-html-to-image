@@ -155,6 +155,11 @@ export interface RenderLimits {
   /** Blocked hostnames. */
   blockedHosts?: string[];
   /**
+   * Refuse `localhost`, `*.localhost` / `*.local` / `*.internal` and private,
+   * loopback, or link-local IP literals (IPv4 and IPv6).
+   */
+  blockPrivateHosts?: boolean;
+  /**
    * Node only, opt-in. Restrict local file reads to files inside `baseUrl`
    * (symlinks resolved): `../` escapes are refused, and with no `baseUrl`
    * no local file is read at all. Enable it when rendering untrusted HTML.
