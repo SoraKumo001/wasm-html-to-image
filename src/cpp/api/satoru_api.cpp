@@ -744,6 +744,13 @@ const uint8_t* satoru_api_render(SatoruInstance* inst, const std::vector<std::st
     }
     width = normalize_viewport_width(width);
 
+    // Trim imageCache only after rendering completes so images loaded for the current
+    // render are never evicted mid-render when a page has large decoded assets.
+    struct ImageCacheTrimGuard {
+        SatoruContext& ctx;
+        ~ImageCacheTrimGuard() { ctx.trimImageCache(); }
+    } trim_guard{inst->context};
+
     switch (format) {
         case RenderFormat::SVG: {
             std::string svg = satoru_api_html_to_svg(inst, htmls[0].c_str(), width, height, options);

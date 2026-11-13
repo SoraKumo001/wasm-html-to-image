@@ -427,18 +427,8 @@ class SatoruContext {
         return bytes;
     }
 
-    void putImageCache(const std::string &key, image_info &&info) {
-        auto it = imageCache.find(key);
-        if (it != imageCache.end()) {
-            size_t old_bytes = estimateImageBytes(it->second);
-            m_imageCacheBytes = (m_imageCacheBytes >= old_bytes) ? (m_imageCacheBytes - old_bytes) : 0;
-            m_imageLru.remove(key);
-        }
-        size_t new_bytes = estimateImageBytes(info);
-        imageCache[key] = std::move(info);
-        m_imageLru.push_back(key);
-        m_imageCacheBytes += new_bytes;
-
+   public:
+    void trimImageCache() {
         while (m_imageLru.size() > 1 &&
                (imageCache.size() > kMaxImageCacheEntries || m_imageCacheBytes > kMaxImageCacheBytes)) {
             std::string evict_key = std::move(m_imageLru.front());
@@ -450,6 +440,20 @@ class SatoruContext {
                 imageCache.erase(evict_it);
             }
         }
+    }
+
+   private:
+    void putImageCache(const std::string &key, image_info &&info) {
+        auto it = imageCache.find(key);
+        if (it != imageCache.end()) {
+            size_t old_bytes = estimateImageBytes(it->second);
+            m_imageCacheBytes = (m_imageCacheBytes >= old_bytes) ? (m_imageCacheBytes - old_bytes) : 0;
+            m_imageLru.remove(key);
+        }
+        size_t new_bytes = estimateImageBytes(info);
+        imageCache[key] = std::move(info);
+        m_imageLru.push_back(key);
+        m_imageCacheBytes += new_bytes;
     }
 };
 
