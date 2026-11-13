@@ -215,6 +215,11 @@ export interface HtmlToImageOptions extends RenderOptions {
   /** Receives the diagnostics report when `diagnostics` is enabled. */
   onDiagnostics?: (report: RenderDiagnostics) => void;
   /**
+   * Cache fetched external resources in the process-wide LRU cache across renders (default `true`).
+   * Set to `false` in one-shot serverless workers to avoid retaining fetched bytes after a render.
+   */
+  resourceCache?: boolean;
+  /**
    * Debug aid for comparing against a reference browser: receives every laid-out element's border
    * box in page coordinates (HTML input only; `html-to-image` instance pipeline). `p` is the
    * element's path among element children of the shadow-flattened tree ("0.1.3"), so a browser

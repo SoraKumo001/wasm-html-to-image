@@ -53,14 +53,23 @@ class ImageDecoder {
 
     // satoru側 ImageDecoder::decode 互換の先頭フレームのみ返却。
     // out_width/out_height に先頭フレーム寸法を格納する。
+    // max_dim > 0 の場合、ラスタ画像の長辺が max_dim を超えるなら縮小して返却する。
     static sk_sp<SkImage> decode_first(const uint8_t* data, size_t size, int& out_width,
                                        int& out_height, sk_sp<SkFontMgr> font_mgr = nullptr,
                                        bool* out_ratio_only = nullptr,
                                        bool* out_no_ratio = nullptr,
-                                       const SvgBuilderConfig& configure_svg = nullptr);
+                                       const SvgBuilderConfig& configure_svg = nullptr,
+                                       int max_dim = 0);
+
+    // ピクセルデコードを行わずにラスタ画像の寸法（EXIF Orientation 補正後）を取得する。
+    static bool probe_raster_size(const uint8_t* data, size_t size, int& out_width,
+                                  int& out_height);
 
    private:
-    static bool decode_jxl(const uint8_t* data, size_t size, DecodeResult& result);
+    static DecodeResult decode_raster(const sk_sp<SkData>& sk_data, bool first_frame_only,
+                                      int max_dim);
+    static bool decode_jxl(const uint8_t* data, size_t size, DecodeResult& result,
+                           bool first_frame_only = false);
     static bool is_likely_svg(const uint8_t* data, size_t size);
     static DecodeResult decode_svg(const sk_sp<SkData>& data, sk_sp<SkFontMgr> font_mgr,
                                    bool default_object_raster = false,

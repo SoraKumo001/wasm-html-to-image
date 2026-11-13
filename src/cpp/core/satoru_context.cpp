@@ -209,6 +209,8 @@ std::string detect_raster_mime(const uint8_t *data, size_t size) {
     return "";
 }
 
+constexpr int kMaxDecodedImageDim = 2048;
+
 }  // namespace
 
 void SatoruContext::loadImageFromData(const char *name, const uint8_t *data, size_t size,
@@ -216,11 +218,29 @@ void SatoruContext::loadImageFromData(const char *name, const uint8_t *data, siz
     int width = 0, height = 0;
     bool ratio_only = false;
     bool no_ratio = false;
+    if (html_to_image::ImageDecoder::probe_raster_size(data, size, width, height)) {
+        image_info info;
+        info.encoded_data = SkData::MakeWithCopy(data, size);
+        info.mime_type = detect_raster_mime(data, size);
+        if (std::any_of(imageCache.begin(), imageCache.end(),
+                        [](const auto& e) { return e.second.svg_source != nullptr; })) {
+            m_svgDirty = true;  // an image an SVG refers to has arrived: draw those SVGs again
+        }
+        info.data_url = original_url ? original_url : "";
+        info.width = width;
+        info.height = height;
+        putImageCache(name ? name : "", std::move(info));
+        m_imageVersion++;
+        needsRelayout = true;
+        return;
+    }
+
     auto image = html_to_image::ImageDecoder::decode_first(data, size, width, height,
                                                             fontManager.getFontMgr(), &ratio_only,
                                                             &no_ratio, [this](SkSVGDOM::Builder& b) {
                                                                 litehtml::configure_svg_builder(b, *this);
-                                                            });
+                                                            },
+                                                            kMaxDecodedImageDim);
     if (image) {
         const bool is_svg =
             std::string_view(reinterpret_cast<const char*>(data), size).find("<svg") != std::string_view::npos;
@@ -272,7 +292,8 @@ sk_sp<SkImage> SatoruContext::getDecodedImage(const std::string &key) {
     int width = 0, height = 0;
     auto image = html_to_image::ImageDecoder::decode_first(
         src->bytes(), src->size(), width, height, fontManager.getFontMgr(), nullptr, nullptr,
-        [this](SkSVGDOM::Builder &b) { litehtml::configure_svg_builder(b, *this); });
+        [this](SkSVGDOM::Builder &b) { litehtml::configure_svg_builder(b, *this); },
+        kMaxDecodedImageDim);
     if (!image) return nullptr;
     info.skImage = image;
     trackDecodedImage(key, info);

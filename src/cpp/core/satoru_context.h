@@ -424,8 +424,9 @@ class SatoruContext {
     size_t m_decodedCacheBytes = 0;
 
     static size_t estimateDecodedBytes(const image_info &info) {
-        if (info.skImage && info.width > 0 && info.height > 0) {
-            return static_cast<size_t>(info.width) * static_cast<size_t>(info.height) * 4;
+        if (info.skImage && info.skImage->width() > 0 && info.skImage->height() > 0) {
+            return static_cast<size_t>(info.skImage->width()) *
+                   static_cast<size_t>(info.skImage->height()) * 4;
         }
         return 0;
     }

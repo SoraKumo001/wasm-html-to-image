@@ -298,6 +298,7 @@ export async function fetchResourceBytes(
   confineFiles?: boolean,
   limits?: RenderLimits,
   onLimitExceeded?: (code: string, message: string) => void,
+  useCache = true,
 ): Promise<Uint8Array | null> {
   if (url.startsWith("data:")) return null;
   const fallback = (): Promise<Uint8Array | null> =>
@@ -309,6 +310,7 @@ export async function fetchResourceBytes(
       confineFiles,
       limits,
       onLimitExceeded,
+      useCache,
     );
   if (resolveResource) {
     try {
@@ -346,6 +348,7 @@ async function fetchResourceBytesInner(
   confineFiles?: boolean,
   limits?: RenderLimits,
   onLimitExceeded?: (code: string, message: string) => void,
+  useCache = true,
 ): Promise<Uint8Array | null> {
   // Browser fetch forbids overriding User-Agent (and Firefox preflights it,
   // breaking Google Fonts/jsDelivr CORS). Spoof only where we control the UA
@@ -362,7 +365,7 @@ async function fetchResourceBytesInner(
     // Servers may vary the body by User-Agent (e.g. woff2 vs ttf CSS).
     const cacheKey = `${userAgent ?? ""}
 ${target}`;
-    const cached = resourceCache.get(cacheKey);
+    const cached = useCache ? resourceCache.get(cacheKey) : undefined;
     if (cached) {
       if (
         limits?.maxResourceBytes !== undefined &&
@@ -392,7 +395,7 @@ ${target}`;
         return null;
       }
       const bytes = await readResponseWithLimit(res, limits?.maxResourceBytes);
-      resourceCache.set(cacheKey, bytes);
+      if (useCache) resourceCache.set(cacheKey, bytes);
       return bytes;
     } catch (e) {
       if (e instanceof FetchLimitError) {
@@ -422,11 +425,11 @@ ${target}`;
         if (confineFiles && !(await isInsideDir(fs, path, root, joined))) {
           return null;
         }
-        const cached = resourceCache.get(joined);
+        const cached = useCache ? resourceCache.get(joined) : undefined;
         if (cached) return cached;
         // Keep an owning copy: fs Buffers may ride a shared pool.
         const bytes = new Uint8Array(await fs.readFile(joined));
-        resourceCache.set(joined, bytes);
+        if (useCache) resourceCache.set(joined, bytes);
         return bytes;
       } catch {
         return null;
@@ -437,13 +440,13 @@ ${target}`;
   // Without a baseUrl there is no directory to confine reads to.
   if (isNodeRuntime() && !confineFiles) {
     try {
-      const cached = resourceCache.get(url);
+      const cached = useCache ? resourceCache.get(url) : undefined;
       if (cached) return cached;
       const fs =
         await importNode<typeof import("node:fs/promises")>("fs/promises");
       // Keep an owning copy: fs Buffers may ride a shared pool.
       const bytes = new Uint8Array(await fs.readFile(url));
-      resourceCache.set(url, bytes);
+      if (useCache) resourceCache.set(url, bytes);
       return bytes;
     } catch {
       return null;
@@ -525,6 +528,7 @@ export interface ResolveContext {
   fonts?: { name: string; data: Uint8Array }[];
   limits: RenderLimits;
   resolveResource?: ResolveResourceHook;
+  resourceCache?: boolean;
   /**
    * Publish an image's fetch state to a live page (the QuickJS registry). `loading` goes out before the
    * fetch, then `loaded` once the bytes are in the engine, or `error`. The renderer is the only fetch:
@@ -836,6 +840,8 @@ export async function resolveHtmlResources(
                     fetchTimeoutOf(ctx),
                     ctx.limits.confineFilesToBaseUrl,
                     ctx.limits,
+                    undefined,
+                    ctx.resourceCache !== false,
                   )
               : entry instanceof Uint8Array
                 ? entry
@@ -1034,6 +1040,7 @@ export async function resolveHtmlResources(
           (code, message) => {
             limitHit = { code, message };
           },
+          ctx.resourceCache !== false,
         );
         if (limitHit) {
           const hit = limitHit as { code: string; message: string };

@@ -26,6 +26,34 @@ describe("resource cache", () => {
     await fetchResourceBytes("https://c.example/a", undefined, "UA");
     expect(f).toHaveBeenCalledTimes(1);
   });
+
+  it("skips the cache when useCache is false", async () => {
+    const f = okFetch();
+    vi.stubGlobal("fetch", f);
+    await fetchResourceBytes(
+      "https://c.example/nocache",
+      undefined,
+      "UA",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      false,
+    );
+    await fetchResourceBytes(
+      "https://c.example/nocache",
+      undefined,
+      "UA",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      false,
+    );
+    expect(f).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("confineFiles (opt-in)", () => {

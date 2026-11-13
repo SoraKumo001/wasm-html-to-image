@@ -3,6 +3,8 @@
 #include <jxl/encode.h>
 #include <jxl/decode.h>
 
+#include <algorithm>
+#include <cmath>
 #include <memory>
 #include <utility>
 
@@ -28,17 +30,83 @@
 
 namespace html_to_image {
 
-DecodeResult ImageDecoder::decode(const uint8_t* data, size_t size, sk_sp<SkFontMgr> font_mgr) {
-    DecodeResult result;
-    if (!data || size == 0) return result;
+namespace {
 
-    auto sk_data = SkData::MakeWithCopy(data, size);
+SkBitmap downscale_bitmap(const SkBitmap& src, int max_dim) {
+    if (max_dim <= 0) return src;
+    int w = src.width();
+    int h = src.height();
+    int long_side = std::max(w, h);
+    if (long_side <= max_dim || w <= 0 || h <= 0) return src;
+    double scale = static_cast<double>(max_dim) / static_cast<double>(long_side);
+    int dst_w = std::max(1, static_cast<int>(std::lround(w * scale)));
+    int dst_h = std::max(1, static_cast<int>(std::lround(h * scale)));
+    SkBitmap dst;
+    if (!dst.tryAllocPixels(src.info().makeWH(dst_w, dst_h))) return src;
+    SkCanvas canvas(dst);
+    canvas.clear(SK_ColorTRANSPARENT);
+    SkPaint paint;
+    paint.setAntiAlias(true);
+    sk_sp<SkImage> img = src.asImage();
+    if (!img) return src;
+    canvas.drawImageRect(img, SkRect::MakeIWH(dst_w, dst_h),
+                         SkSamplingOptions(SkFilterMode::kLinear, SkMipmapMode::kLinear), &paint);
+    return dst;
+}
+
+}  // namespace
+
+bool ImageDecoder::probe_raster_size(const uint8_t* data, size_t size, int& out_width,
+                                     int& out_height) {
+    if (!data || size == 0 || is_likely_svg(data, size)) return false;
+    auto sk_data = SkData::MakeWithoutCopy(data, size);
+    if (std::unique_ptr<SkCodec> codec = SkCodec::MakeFromData(sk_data)) {
+        const SkImageInfo info = codec->getInfo();
+        const bool swapDimensions = SkEncodedOriginSwapsWidthHeight(codec->getOrigin());
+        int w = swapDimensions ? info.height() : info.width();
+        int h = swapDimensions ? info.width() : info.height();
+        if (w > 0 && h > 0) {
+            out_width = w;
+            out_height = h;
+            return true;
+        }
+    }
+    const JxlSignature sig = JxlSignatureCheck(data, size);
+    if (sig == JXL_SIG_CODESTREAM || sig == JXL_SIG_CONTAINER) {
+        JxlDecoder* dec = JxlDecoderCreate(nullptr);
+        if (!dec) return false;
+        struct Guard {
+            JxlDecoder* d;
+            ~Guard() { JxlDecoderDestroy(d); }
+        } guard{dec};
+        if (JxlDecoderSubscribeEvents(dec, JXL_DEC_BASIC_INFO) == JXL_DEC_SUCCESS) {
+            JxlDecoderSetInput(dec, data, size);
+            JxlDecoderCloseInput(dec);
+            if (JxlDecoderProcessInput(dec) == JXL_DEC_BASIC_INFO) {
+                JxlBasicInfo info{};
+                if (JxlDecoderGetBasicInfo(dec, &info) == JXL_DEC_SUCCESS && info.xsize > 0 &&
+                    info.ysize > 0 && info.xsize <= 32768 && info.ysize <= 32768) {
+                    out_width = static_cast<int>(info.xsize);
+                    out_height = static_cast<int>(info.ysize);
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+DecodeResult ImageDecoder::decode_raster(const sk_sp<SkData>& sk_data, bool first_frame_only,
+                                         int max_dim) {
+    DecodeResult result;
+    if (!sk_data || sk_data->size() == 0) return result;
 
     // 1. ラスタ (SkCodec 全フレーム + EXIF Orient 補正)。
     //    正本: converter側 load_image (image_converter_api.cpp:80-137)。
     //    satoru側 (image_decoder.cpp:40-53) は先頭フレームのみ・Orient 未補正のため不採用。
     if (std::unique_ptr<SkCodec> codec = SkCodec::MakeFromData(sk_data)) {
-        const int frameCount = codec->getFrameCount();
+        const int totalFrames = codec->getFrameCount();
+        const int frameCount = first_frame_only ? std::min(1, totalFrames) : totalFrames;
         const SkEncodedOrigin origin = codec->getOrigin();
         const bool swapDimensions = SkEncodedOriginSwapsWidthHeight(origin);
 
@@ -52,7 +120,7 @@ DecodeResult ImageDecoder::decode(const uint8_t* data, size_t size, sk_sp<SkFont
             result.width = info.width();
             result.height = info.height();
         }
-        result.animated = frameCount > 1;
+        result.animated = totalFrames > 1;
 
         switch (codec->getEncodedFormat()) {
             case SkEncodedImageFormat::kPNG: result.format = "png"; break;
@@ -64,35 +132,49 @@ DecodeResult ImageDecoder::decode(const uint8_t* data, size_t size, sk_sp<SkFont
             default: result.format = "unknown"; break;
         }
 
+        // Request native codec downscaling (e.g. JPEG 1/2, 1/4, 1/8 DCT) when max_dim is set.
+        SkImageInfo decodeInfo = info;
+        if (max_dim > 0) {
+            int long_side = std::max(info.width(), info.height());
+            if (long_side > max_dim) {
+                float desiredScale = static_cast<float>(max_dim) / static_cast<float>(long_side);
+                SkISize scaledDims = codec->getScaledDimensions(desiredScale);
+                if (scaledDims.width() > 0 && scaledDims.height() > 0) {
+                    decodeInfo = info.makeDimensions(scaledDims);
+                }
+            }
+        }
+
         for (int i = 0; i < frameCount; ++i) {
             SkBitmap decodedBitmap;
-            decodedBitmap.allocPixels(info);
+            decodedBitmap.allocPixels(decodeInfo);
 
             SkCodec::Options options;
             options.fFrameIndex = i;
 
-            if (codec->getPixels(info, decodedBitmap.getPixels(), decodedBitmap.rowBytes(),
+            if (codec->getPixels(decodeInfo, decodedBitmap.getPixels(), decodedBitmap.rowBytes(),
                                  &options) != SkCodec::kSuccess) {
                 continue;
             }
             SkCodec::FrameInfo frameInfo;
             codec->getFrameInfo(i, &frameInfo);
 
+            SkBitmap finalBitmap = std::move(decodedBitmap);
             if (origin != kDefault_SkEncodedOrigin) {
-                SkImageInfo orientedInfo = info;
+                SkImageInfo orientedInfo = decodeInfo;
                 if (swapDimensions) {
-                    orientedInfo = orientedInfo.makeWH(info.height(), info.width());
+                    orientedInfo = orientedInfo.makeWH(decodeInfo.height(), decodeInfo.width());
                 }
                 SkBitmap orientedBitmap;
                 orientedBitmap.allocPixels(orientedInfo);
-                if (SkPixmapUtils::Orient(orientedBitmap.pixmap(), decodedBitmap.pixmap(), origin)) {
-                    result.frames.push_back({std::move(orientedBitmap), frameInfo.fDuration});
-                } else {
-                    result.frames.push_back({std::move(decodedBitmap), frameInfo.fDuration});
+                if (SkPixmapUtils::Orient(orientedBitmap.pixmap(), finalBitmap.pixmap(), origin)) {
+                    finalBitmap = std::move(orientedBitmap);
                 }
-            } else {
-                result.frames.push_back({std::move(decodedBitmap), frameInfo.fDuration});
             }
+            if (max_dim > 0) {
+                finalBitmap = downscale_bitmap(finalBitmap, max_dim);
+            }
+            result.frames.push_back({std::move(finalBitmap), frameInfo.fDuration});
         }
         if (!result.frames.empty()) return result;
 
@@ -104,10 +186,29 @@ DecodeResult ImageDecoder::decode(const uint8_t* data, size_t size, sk_sp<SkFont
     }
 
     // 1b. JPEG XL (Skia has no JXL codec): decode with libjxl.
+    const uint8_t* data = sk_data->bytes();
+    const size_t size = sk_data->size();
     const JxlSignature sig = JxlSignatureCheck(data, size);
-    if ((sig == JXL_SIG_CODESTREAM || sig == JXL_SIG_CONTAINER) && decode_jxl(data, size, result)) {
+    if ((sig == JXL_SIG_CODESTREAM || sig == JXL_SIG_CONTAINER) &&
+        decode_jxl(data, size, result, first_frame_only)) {
+        if (max_dim > 0) {
+            for (auto& frame : result.frames) {
+                frame.bitmap = downscale_bitmap(frame.bitmap, max_dim);
+            }
+        }
         return result;
     }
+
+    return result;
+}
+
+DecodeResult ImageDecoder::decode(const uint8_t* data, size_t size, sk_sp<SkFontMgr> font_mgr) {
+    DecodeResult result;
+    if (!data || size == 0) return result;
+
+    auto sk_data = SkData::MakeWithCopy(data, size);
+    result = decode_raster(sk_data, false, 0);
+    if (result.ok()) return result;
 
     // 2. SVG (satoru側 decode_svg を統合。事前に共通 patch_svg_data を適用)。
     //    判定ヒューリスティックは satoru側 (先頭空白スキップ + '<') を採用。
@@ -123,16 +224,17 @@ DecodeResult ImageDecoder::decode(const uint8_t* data, size_t size, sk_sp<SkFont
 sk_sp<SkImage> ImageDecoder::decode_first(const uint8_t* data, size_t size, int& out_width,
                                           int& out_height, sk_sp<SkFontMgr> font_mgr,
                                           bool* out_ratio_only, bool* out_no_ratio,
-                                          const SvgBuilderConfig& configure_svg) {
+                                          const SvgBuilderConfig& configure_svg, int max_dim) {
+    if (!data || size == 0) return nullptr;
     DecodeResult result;
+    auto sk_data = SkData::MakeWithCopy(data, size);
     if (is_likely_svg(data, size)) {
         // The layout path rasterizes a ratio-only SVG at its default object
         // size (see decode_svg); decode() keeps the shared 512 fallback that
         // the standalone converter's output size relies on.
-        auto sk_data = SkData::MakeWithCopy(data, size);
         result = decode_svg(patch_svg_data(sk_data), std::move(font_mgr), true, configure_svg);
     } else {
-        result = decode(data, size, std::move(font_mgr));
+        result = decode_raster(sk_data, true, max_dim);
     }
     if (!result.ok()) return nullptr;
     out_width = result.frames[0].bitmap.width();
@@ -153,7 +255,8 @@ bool ImageDecoder::is_likely_svg(const uint8_t* data, size_t size) {
 }
 
 // JPEG XL (still or animated) -> N32 premul frames, converted to sRGB, orientation applied.
-bool ImageDecoder::decode_jxl(const uint8_t* data, size_t size, DecodeResult& result) {
+bool ImageDecoder::decode_jxl(const uint8_t* data, size_t size, DecodeResult& result,
+                              bool first_frame_only) {
     JxlDecoder* dec = JxlDecoderCreate(nullptr);
     if (!dec) return false;
     struct Guard {
@@ -215,6 +318,7 @@ bool ImageDecoder::decode_jxl(const uint8_t* data, size_t size, DecodeResult& re
                                                       kN32_SkColorType, kPremul_SkAlphaType);
             if (!frame.tryAllocPixels(n32) || !rgba.pixmap().readPixels(frame.pixmap())) return false;
             result.frames.push_back({std::move(frame), duration_ms});
+            if (first_frame_only) break;
         } else if (status == JXL_DEC_SUCCESS) {
             break;
         } else {

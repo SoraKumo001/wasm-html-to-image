@@ -132,7 +132,7 @@ export default {
           },
         });
       }
-      const { data } = await render(options);
+      const { data } = await render({ ...options, resourceCache: false });
       const res = new Response(data as unknown as BodyInit, {
         headers: {
           "content-type": FORMATS[format],
