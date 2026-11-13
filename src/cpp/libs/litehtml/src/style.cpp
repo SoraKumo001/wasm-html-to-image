@@ -3465,6 +3465,15 @@ namespace litehtml
 
   bool evaluate_op(const css_token &left, char op, const css_token &right, css_token &result)
   {
+    auto update_repr = [](css_token &tok) {
+      char buf[64];
+      const char *suffix = "";
+      if (tok.type == PERCENTAGE) suffix = "%";
+      else if (tok.type == DIMENSION) suffix = tok.unit.c_str();
+      std::snprintf(buf, sizeof(buf), "%g%s", (double)tok.n.number, suffix);
+      tok.repr = buf;
+    };
+
     if (left.type == NUMBER && right.type == NUMBER)
     {
       result = left;
@@ -3473,6 +3482,7 @@ namespace litehtml
       else if (op == '*') result.n.number = left.n.number * right.n.number;
       else if (op == '/' && right.n.number != 0) result.n.number = left.n.number / right.n.number;
       else return false;
+      update_repr(result);
       return true;
     }
     if ((left.type == DIMENSION || left.type == PERCENTAGE) && right.type == NUMBER)
@@ -3481,6 +3491,7 @@ namespace litehtml
       if (op == '*') result.n.number = left.n.number * right.n.number;
       else if (op == '/' && right.n.number != 0) result.n.number = left.n.number / right.n.number;
       else return false;
+      update_repr(result);
       return true;
     }
     if (left.type == NUMBER && (right.type == DIMENSION || right.type == PERCENTAGE))
@@ -3488,6 +3499,7 @@ namespace litehtml
       result = right;
       if (op == '*') result.n.number = right.n.number * left.n.number;
       else return false;
+      update_repr(result);
       return true;
     }
     if (left.type == right.type && (left.type == DIMENSION || left.type == PERCENTAGE))
@@ -3498,6 +3510,7 @@ namespace litehtml
       if (op == '+') result.n.number = left.n.number + right.n.number;
       else if (op == '-') result.n.number = left.n.number - right.n.number;
       else return false;
+      update_repr(result);
       return true;
     }
     return false;

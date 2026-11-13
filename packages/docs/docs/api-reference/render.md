@@ -89,7 +89,7 @@ export interface RenderResult<T = Uint8Array | string> {
 | オプション      | 型                                        |       既定値       | 説明                                                                  |
 | --------------- | ----------------------------------------- | :----------------: | --------------------------------------------------------------------- |
 | `fontMap`       | `Record<string, string>`                  | `DEFAULT_FONT_MAP` | 汎用フォント名 (`sans-serif` 等) から Google Fonts URL へのマッピング |
-| `fallbackFonts` | `(Uint8Array \| ArrayBuffer \| string)[]` |        `[]`        | ユーザー注入のフォールバックフォント（バイト列、Data URL、取得URL）   |
+| `fallbackFonts` | `(Uint8Array \| ArrayBuffer \| string \| { source, unicodeRange? })[]` |        `[]`        | ユーザー注入のフォールバックフォント（バイト列、Data URL、取得URL、または `unicodeRange` 付きの条件付き読み込み指定） |
 | `fonts`         | `{ name: string, data: Uint8Array }[]`    |        `[]`        | 事前ロードする名前付きフォント                                        |
 | `css`           | `string`                                  |         -          | 追加で挿入するカスタム CSS 文字列                                     |
 | `mediaType`     | `"screen" \| "print"`                     |     `"screen"`     | CSS の `@media` ルール評価対象                                        |
@@ -243,6 +243,7 @@ dom.close();
 | `allowedProtocols`      | `string[]` | 許可するプロトコル (例: `["https:"]`)                                                                            |
 | `allowedHosts`          | `string[]` | 許可するホスト名                                                                                                 |
 | `blockedHosts`          | `string[]` | 拒否するホスト名                                                                                                 |
+| `blockPrivateHosts`     | `boolean`  | `localhost`・ループバック・プライベート IP（IPv4/IPv6）・リンクローカル（`169.254.0.0/16` 等）・`.local`/`.internal` へのアクセスを拒否します（リダイレクト先も含む SSRF 対策） |
 | `confineFilesToBaseUrl` | `boolean`  | **オプトイン (Node のみ)**。ローカルファイルの読み込みを `baseUrl` 配下（シンボリックリンク解決後）に限定します。`../` での脱出は拒否され、`baseUrl` がない場合はローカルファイルを一切読みません |
 
 ```ts

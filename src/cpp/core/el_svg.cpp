@@ -437,6 +437,27 @@ struct SvgGeomProp {
     string_id prop;
 };
 
+// SVG2 coords.html#ViewBoxAttribute: a well-formed 4-number viewBox with a zero width or height
+// disables rendering of the element. Negative or malformed values are ignored.
+bool has_rendering_disabling_viewbox(const element* el) {
+    if (!el) return false;
+    const char* raw = el->get_attr("viewbox");
+    if (!raw) return false;
+    const char* p = raw;
+    double nums[4] = {};
+    for (int i = 0; i < 4; i++) {
+        while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n' || *p == ',') p++;
+        if (!*p) return false;
+        char* end = nullptr;
+        nums[i] = std::strtod(p, &end);
+        if (end == p) return false;
+        p = end;
+    }
+    while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') p++;
+    if (*p != '\0') return false;
+    return nums[2] >= 0.0 && nums[3] >= 0.0 && (nums[2] == 0.0 || nums[3] == 0.0);
+}
+
 const std::vector<SvgGeomProp>& svg_geom_props_for_tag(const std::string& tag_name) {
     static const std::vector<SvgGeomProp> empty_props;
     static const std::vector<SvgGeomProp> circle_props = {
@@ -488,6 +509,7 @@ void el_svg::write_element(std::ostream& os, const element::ptr& el) const {
     if (el->is_comment()) return;
 
     std::string tag_name = map_tag(el->get_tagName());
+    if (tag_name == "svg" && has_rendering_disabling_viewbox(el.get())) return;
     os << "<" << tag_name;
 
     bool is_image_or_use = (tag_name == "image" || tag_name == "use");
@@ -622,7 +644,7 @@ void el_svg::write_markers(std::ostream& os, const element::ptr& el, const std::
         std::string id = svgutil::trim(r.substr(5, close - 5));
         if (id.size() >= 2 && (id.back() == '"' || id.back() == '\'')) id = id.substr(0, id.size() - 1);
         const element* marker = find_marker(m_children, id);
-        if (!marker) return;
+        if (!marker || has_rendering_disabling_viewbox(marker)) return;
 
         auto attr = [&](const char* name, double def) {
             const char* v = marker->get_attr(name);
@@ -781,6 +803,7 @@ void draw_svg_xml(container_skia* container, const std::string& xml, const posit
 
 void el_svg::draw(uint_ptr hdc, pixel_t x, pixel_t y, const position* clip,
                   const std::shared_ptr<render_item>& ri) {
+    if (has_rendering_disabling_viewbox(this)) return;
     container_skia* container = dynamic_cast<container_skia*>(get_document()->container());
     if (!container) return;
 

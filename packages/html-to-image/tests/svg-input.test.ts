@@ -67,4 +67,22 @@ describe("SVG2 CSS geometry properties (WASM)", () => {
     expect(pngRes.data).toBeInstanceOf(Uint8Array);
     expect((pngRes.data as Uint8Array).length).toBeGreaterThan(100);
   });
+
+  it("disables rendering for a zero viewBox while ignoring negative viewBox", async () => {
+    const zeroVb = await render({
+      value: '<div><svg width="100" height="100" viewBox="0 0 0 100" xmlns="http://www.w3.org/2000/svg"><rect width="100" height="100" fill="#ff0000"/></svg></div>',
+      width: 100,
+      height: 100,
+      format: "svg",
+    });
+    expect(String(zeroVb.data)).not.toContain("<rect");
+
+    const negVb = await render({
+      value: '<div><svg width="100" height="100" viewBox="0 0 -10 100" xmlns="http://www.w3.org/2000/svg"><rect width="100" height="100" fill="#ff0000"/></svg></div>',
+      width: 100,
+      height: 100,
+      format: "svg",
+    });
+    expect(String(negVb.data)).toContain("<rect");
+  });
 });

@@ -59,7 +59,7 @@ Returns a `string` for `svg` format, and `Uint8Array` for all other formats (`pn
 | Option          | Type                                      |      Default       | Description                                            |
 | --------------- | ----------------------------------------- | :----------------: | ------------------------------------------------------ |
 | `fontMap`       | `Record<string, string>`                  | `DEFAULT_FONT_MAP` | Map of generic family names to Google Fonts URLs       |
-| `fallbackFonts` | `(Uint8Array \| ArrayBuffer \| string)[]` |        `[]`        | User-supplied fallback fonts                           |
+| `fallbackFonts` | `(Uint8Array \| ArrayBuffer \| string \| { source, unicodeRange? })[]` |        `[]`        | User-supplied fallback fonts (bytes, data URL, URL, or `{ source, unicodeRange }` for on-demand loading) |
 | `fonts`         | `{ name: string, data: Uint8Array }[]`    |        `[]`        | Named fonts pre-loaded on the instance                 |
 | `css`           | `string`                                  |         -          | Additional custom CSS string injected before discovery |
 | `mediaType`     | `"screen" \| "print"`                     |     `"screen"`     | Target media type for CSS `@media` rules               |
@@ -201,6 +201,7 @@ When rendering user-supplied HTML, always restrict where it may fetch from and h
 | `allowedProtocols`      | `string[]` | Allowed URL protocols (e.g. `["https:"]`)                                                                                                                                  |
 | `allowedHosts`          | `string[]` | Allowed hostnames                                                                                                                                                          |
 | `blockedHosts`          | `string[]` | Blocked hostnames                                                                                                                                                          |
+| `blockPrivateHosts`     | `boolean`  | Block `localhost`, loopback, private IPv4/IPv6, link-local (`169.254.0.0/16`, etc.), and `.local`/`.internal` hostnames, including redirect targets (SSRF protection)     |
 | `confineFilesToBaseUrl` | `boolean`  | **Opt-in (Node only).** Restrict local file reads to files inside `baseUrl` (symlinks resolved). `../` escapes are refused, and with no `baseUrl` no local file is read at all |
 
 ```ts
