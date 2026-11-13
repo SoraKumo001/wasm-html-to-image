@@ -1,4 +1,10 @@
-import { render, renderMermaid } from "wasm-html-to-image/workerd";
+import {
+  getDefaultModule,
+  moduleHeapBytes,
+  render,
+  renderMermaid,
+  setModuleRecyclePolicy,
+} from "wasm-html-to-image/workerd";
 import { markdownToDocument, markdownToHtml } from "wasm-html-to-image/markdown";
 import { katexMath } from "wasm-html-to-image/markdown-math";
 import { applyJavaScript, runPageScriptsQuickJS } from "wasm-html-to-image/javascript";
@@ -93,6 +99,43 @@ export default {
       const page = await runPageScriptsQuickJS({ html }, { settleMs: 100 }, 800);
       const png = await render(await applyJavaScript({ value: html, javascript: { settleMs: 100 }, width: 400, format: "png" }));
       return Response.json({ html: page.html, pngBytes: (png.data as Uint8Array).length });
+    }
+
+    // Engine Wasm heap inside this isolate, sampled around repeated renders (used by
+    // scripts/memory-bench-workerd.mjs). `?recycle=N` sets the module recycle policy first,
+    // which should return the heap toward the fresh-instance size instead of ratcheting up.
+    if (url.pathname === "/memory") {
+      const heapNow = async (): Promise<number> =>
+        moduleHeapBytes(await getDefaultModule());
+      const renders = Math.max(1, Math.min(50, Number(url.searchParams.get("renders") ?? 10)));
+      const recycle = url.searchParams.get("recycle");
+      setModuleRecyclePolicy(recycle ? { everyRenders: Math.max(1, Number(recycle)) } : undefined);
+      const firstModule = await getDefaultModule();
+      const start = await heapNow();
+      let peak = start;
+      // One large render first: its surfaces and decoded images grow the Wasm heap, which never
+      // shrinks back — the ratchet the recycle policy exists to reset.
+      await render({
+        value:
+          `<div style="width:2000px;height:1500px;background:linear-gradient(45deg,#f00,#00f)">` +
+          `<p style="font-size:120px">${"large bench page ".repeat(40)}</p></div>`,
+        width: 2000,
+        height: 1500,
+        format: "png",
+      });
+      peak = Math.max(peak, await heapNow());
+      for (let i = 0; i < renders; i++) {
+        await render({
+          value: `<h1>bench ${i}</h1><p>${"memory bench text ".repeat(60)}</p>`,
+          width: 800,
+          format: "png",
+        });
+        peak = Math.max(peak, await heapNow());
+      }
+      const end = await heapNow();
+      const recycled = (await getDefaultModule()) !== firstModule;
+      setModuleRecyclePolicy(undefined);
+      return Response.json({ start, peak, end, renders, recycled });
     }
 
     if (url.pathname === "/invalid") {
