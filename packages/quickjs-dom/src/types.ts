@@ -51,6 +51,16 @@ export interface JavaScriptOptions {
    * until it finishes, so only use that for pages you trust); a negative or `NaN` value is refused.
    */
   timeout?: number;
+  /**
+   * Bytes of memory the page's QuickJS runtime may allocate (its Wasm heap, the DOM included). A page that
+   * exceeds it fails its allocations with an out-of-memory error instead of growing until the host kills the
+   * whole isolate: on Cloudflare Workers one isolate is capped at 128 MB for everything it holds, so the
+   * default of 256 MB is no protection there — set a budget that leaves room for the host (32 MB is a sane
+   * Workers value). `0` disables the cap. Default 256 MB. Values under a few MB leave too little room
+   * for the runtime itself. A page that hits the cap fails its script phase (bounded by `timeout`)
+   * instead of taking the isolate down.
+   */
+  memoryLimit?: number;
   /** Extra time after the `load` event for timers and fetches to finish, in ms (default 1000). */
   settleMs?: number;
   /** CSS selector to wait for after `load`; replaces `settleMs` when given. */

@@ -44,6 +44,15 @@ function wasmStackBytes(wasm: WebAssembly.Module): number | undefined {
   return bytes > 0 ? bytes : undefined;
 }
 
+/** The page's QuickJS memory budget: the caller's `memoryLimit`, or the package default when none was given. */
+function memoryLimitFor(options: CreateDOMOptions): number {
+  const limit = options.memoryLimit ?? MEMORY_LIMIT;
+  if (!Number.isFinite(limit) || limit < 0) {
+    throw new Error(`memoryLimit must be a non-negative number of bytes, got ${options.memoryLimit}`);
+  }
+  return limit;
+}
+
 const clampWarned = new WeakSet<WebAssembly.Module>();
 // Never let QuickJS's limit sit above the real stack: when it does, QuickJS's overflow check cannot fire before the wasm
 // stack is gone. A module without the record (an older build) keeps the default; a smaller stack is clamped to half.
@@ -236,7 +245,7 @@ export function openPage(
         return undefined;
       },
     },
-    MEMORY_LIMIT,
+    memoryLimitFor(options),
     stackLimitFor(wasm),
     // the guest program is started once per module and copied from then on (see QuickJSInstance.create)
     (instance) => {
