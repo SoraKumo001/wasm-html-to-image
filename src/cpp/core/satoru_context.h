@@ -2,6 +2,7 @@
 #define SATORU_CONTEXT_H
 
 #include <cstdint>
+#include <list>
 #include <map>
 #include <memory>
 #include <string>
@@ -341,6 +342,8 @@ class SatoruContext {
     void clearImages() {
         if (imageCache.empty()) return;
         imageCache.clear();
+        m_imageLru.clear();
+        m_imageCacheBytes = 0;
         m_imageVersion++;
         needsRelayout = true;
     }
@@ -371,21 +374,83 @@ class SatoruContext {
     bool get_image_ratio_only(const std::string &url);
     bool get_image_no_ratio(const std::string &url);
 
-    void set_last_png(sk_sp<SkData> png) { m_lastPng = std::move(png); }
+    void set_last_png(sk_sp<SkData> png) {
+        m_lastWebp.reset();
+        m_lastPdf.reset();
+        m_lastSvg.reset();
+        m_lastPng = std::move(png);
+    }
     const sk_sp<SkData> &get_last_png() const { return m_lastPng; }
     size_t get_last_png_size() const { return m_lastPng ? m_lastPng->size() : 0; }
 
-    void set_last_webp(sk_sp<SkData> webp) { m_lastWebp = std::move(webp); }
+    void set_last_webp(sk_sp<SkData> webp) {
+        m_lastPng.reset();
+        m_lastPdf.reset();
+        m_lastSvg.reset();
+        m_lastWebp = std::move(webp);
+    }
     const sk_sp<SkData> &get_last_webp() const { return m_lastWebp; }
     size_t get_last_webp_size() const { return m_lastWebp ? m_lastWebp->size() : 0; }
 
-    void set_last_pdf(sk_sp<SkData> pdf) { m_lastPdf = std::move(pdf); }
+    void set_last_pdf(sk_sp<SkData> pdf) {
+        m_lastPng.reset();
+        m_lastWebp.reset();
+        m_lastSvg.reset();
+        m_lastPdf = std::move(pdf);
+    }
     const sk_sp<SkData> &get_last_pdf() const { return m_lastPdf; }
     size_t get_last_pdf_size() const { return m_lastPdf ? m_lastPdf->size() : 0; }
 
-    void set_last_svg(sk_sp<SkData> svg) { m_lastSvg = std::move(svg); }
+    void set_last_svg(sk_sp<SkData> svg) {
+        m_lastPng.reset();
+        m_lastWebp.reset();
+        m_lastPdf.reset();
+        m_lastSvg = std::move(svg);
+    }
     const sk_sp<SkData> &get_last_svg() const { return m_lastSvg; }
     size_t get_last_svg_size() const { return m_lastSvg ? m_lastSvg->size() : 0; }
+
+   private:
+    static constexpr size_t kMaxImageCacheBytes = 32 * 1024 * 1024;
+    static constexpr size_t kMaxImageCacheEntries = 256;
+    std::list<std::string> m_imageLru;
+    size_t m_imageCacheBytes = 0;
+
+    static size_t estimateImageBytes(const image_info &info) {
+        size_t bytes = info.data_url.size();
+        if (info.skImage && info.width > 0 && info.height > 0) {
+            bytes += static_cast<size_t>(info.width) * static_cast<size_t>(info.height) * 4;
+        }
+        if (info.svg_source) {
+            bytes += info.svg_source->size();
+        }
+        return bytes;
+    }
+
+    void putImageCache(const std::string &key, image_info &&info) {
+        auto it = imageCache.find(key);
+        if (it != imageCache.end()) {
+            size_t old_bytes = estimateImageBytes(it->second);
+            m_imageCacheBytes = (m_imageCacheBytes >= old_bytes) ? (m_imageCacheBytes - old_bytes) : 0;
+            m_imageLru.remove(key);
+        }
+        size_t new_bytes = estimateImageBytes(info);
+        imageCache[key] = std::move(info);
+        m_imageLru.push_back(key);
+        m_imageCacheBytes += new_bytes;
+
+        while (m_imageLru.size() > 1 &&
+               (imageCache.size() > kMaxImageCacheEntries || m_imageCacheBytes > kMaxImageCacheBytes)) {
+            std::string evict_key = std::move(m_imageLru.front());
+            m_imageLru.pop_front();
+            auto evict_it = imageCache.find(evict_key);
+            if (evict_it != imageCache.end()) {
+                size_t evict_bytes = estimateImageBytes(evict_it->second);
+                m_imageCacheBytes = (m_imageCacheBytes >= evict_bytes) ? (m_imageCacheBytes - evict_bytes) : 0;
+                imageCache.erase(evict_it);
+            }
+        }
+    }
 };
 
 #endif

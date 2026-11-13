@@ -20,9 +20,9 @@ import {
   type ResourceDiagnostic,
 } from "./diagnostics.js";
 
-/** Cache bounds: a long-lived server must not grow without limit. */
-const CACHE_MAX_ENTRIES = 256;
-const CACHE_MAX_BYTES = 64 * 1024 * 1024;
+/** Cache bounds: tighter on Edge/Workers (small isolate memory) than on Node servers. */
+const CACHE_MAX_ENTRIES = isNodeRuntime() ? 256 : 128;
+const CACHE_MAX_BYTES = (isNodeRuntime() ? 64 : 16) * 1024 * 1024;
 
 /**
  * Process-wide fetched-bytes cache (upstream `resourceCache` parity),
@@ -229,26 +229,45 @@ export async function readResponseWithLimit(
     }
     if (res.body && typeof res.body.getReader === "function") {
       const reader = res.body.getReader();
-      const chunks: Uint8Array[] = [];
+      // Pre-allocate a single buffer when Content-Length is known to avoid 2x chunk-assembly peaks.
+      let prealloc =
+        Number.isFinite(contentLength) && contentLength > 0
+          ? new Uint8Array(contentLength)
+          : null;
+      let chunks: Uint8Array[] | null = prealloc ? null : [];
       let size = 0;
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
-        size += value.length;
-        if (size > maxBytes) {
+        const nextSize = size + value.length;
+        if (nextSize > maxBytes) {
           try {
             await reader.cancel();
           } catch {}
           throw new FetchLimitError(
             DIAGNOSTIC_CODES.LIMIT_RESOURCE_SIZE,
-            `Resource size (${size} bytes) exceeds limit (${maxBytes})`,
+            `Resource size (${nextSize} bytes) exceeds limit (${maxBytes})`,
           );
         }
-        chunks.push(value);
+        if (prealloc) {
+          if (nextSize <= prealloc.length) {
+            prealloc.set(value, size);
+          } else {
+            // Content-Length under-reported: spill into chunk list once.
+            chunks = [prealloc.subarray(0, size), value];
+            prealloc = null;
+          }
+        } else {
+          chunks!.push(value);
+        }
+        size = nextSize;
+      }
+      if (prealloc) {
+        return size === prealloc.length ? prealloc : prealloc.slice(0, size);
       }
       const out = new Uint8Array(size);
       let off = 0;
-      for (const chunk of chunks) {
+      for (const chunk of chunks!) {
         out.set(chunk, off);
         off += chunk.length;
       }

@@ -64,7 +64,7 @@ void SatoruContext::loadImage(const char *name, const char *data_url, int width,
     info.data_url = data_url ? data_url : "";
     info.width = width;
     info.height = height;
-    imageCache[key] = info;
+    putImageCache(key, std::move(info));
     m_imageVersion++;
 }
 
@@ -225,7 +225,7 @@ void SatoruContext::loadImageFromData(const char *name, const uint8_t *data, siz
         info.ratio_only = ratio_only;
         info.no_ratio = no_ratio;
         info.skImage = image;
-        imageCache[name] = info;
+        putImageCache(name ? name : "", std::move(info));
         m_imageVersion++;
         needsRelayout = true;
     }
@@ -258,7 +258,7 @@ void SatoruContext::loadImageFromPixels(const char *name, int width, int height,
         info.width = width;
         info.height = height;
         info.skImage = image;
-        imageCache[name] = info;
+        putImageCache(name ? name : "", std::move(info));
         m_imageVersion++;
         needsRelayout = true;
     }
