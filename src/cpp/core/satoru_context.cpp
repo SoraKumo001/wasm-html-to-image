@@ -189,6 +189,26 @@ SvgRefs scan_svg_refs(const std::string& xml) {
     return refs;
 }
 
+std::string detect_raster_mime(const uint8_t *data, size_t size) {
+    if (!data || size < 4) return "";
+    if (size >= 8 && data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47 &&
+        data[4] == 0x0D && data[5] == 0x0A && data[6] == 0x1A && data[7] == 0x0A) {
+        return "image/png";
+    }
+    if (data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF) {
+        return "image/jpeg";
+    }
+    if (size >= 12 && data[0] == 'R' && data[1] == 'I' && data[2] == 'F' && data[3] == 'F' &&
+        data[8] == 'W' && data[9] == 'E' && data[10] == 'B' && data[11] == 'P') {
+        return "image/webp";
+    }
+    if (size >= 6 && data[0] == 'G' && data[1] == 'I' && data[2] == 'F' && data[3] == '8' &&
+        (data[4] == '7' || data[4] == '9') && data[5] == 'a') {
+        return "image/gif";
+    }
+    return "";
+}
+
 }  // namespace
 
 void SatoruContext::loadImageFromData(const char *name, const uint8_t *data, size_t size,
@@ -215,9 +235,13 @@ void SatoruContext::loadImageFromData(const char *name, const uint8_t *data, siz
             for (const auto& face : refs.font_faces) {
                 if (addCss(face, CssChangeKind::UserScan)) fontManager.scanFontFaces(face);
             }
-        } else if (std::any_of(imageCache.begin(), imageCache.end(),
-                               [](const auto& e) { return e.second.svg_source != nullptr; })) {
-            m_svgDirty = true;  // an image an SVG refers to has arrived: draw those SVGs again
+        } else {
+            info.encoded_data = SkData::MakeWithCopy(data, size);
+            info.mime_type = detect_raster_mime(data, size);
+            if (std::any_of(imageCache.begin(), imageCache.end(),
+                            [](const auto& e) { return e.second.svg_source != nullptr; })) {
+                m_svgDirty = true;  // an image an SVG refers to has arrived: draw those SVGs again
+            }
         }
         info.data_url = original_url ? original_url : "";
         info.width = width;
@@ -231,11 +255,35 @@ void SatoruContext::loadImageFromData(const char *name, const uint8_t *data, siz
     }
 }
 
+sk_sp<SkImage> SatoruContext::getDecodedImage(const std::string &key) {
+    auto it = imageCache.find(key);
+    if (it == imageCache.end()) return nullptr;
+    image_info &info = it->second;
+    if (info.skImage) {
+        if (isRedecodable(info)) {
+            m_decodedLru.remove(key);
+            m_decodedLru.push_back(key);
+        }
+        return info.skImage;
+    }
+    const SkData *src = info.svg_source ? info.svg_source.get() : info.encoded_data.get();
+    if (!src) return nullptr;
+
+    int width = 0, height = 0;
+    auto image = html_to_image::ImageDecoder::decode_first(
+        src->bytes(), src->size(), width, height, fontManager.getFontMgr(), nullptr, nullptr,
+        [this](SkSVGDOM::Builder &b) { litehtml::configure_svg_builder(b, *this); });
+    if (!image) return nullptr;
+    info.skImage = image;
+    trackDecodedImage(key, info);
+    return info.skImage;
+}
+
 void SatoruContext::refreshSvgImages() {
     if (!m_svgDirty) return;
     m_svgDirty = false;
     for (auto &[name, info] : imageCache) {
-        if (!info.svg_source) continue;
+        if (!info.svg_source || !info.skImage) continue;
         int width = 0, height = 0;
         auto image = html_to_image::ImageDecoder::decode_first(
             info.svg_source->bytes(), info.svg_source->size(), width, height, fontManager.getFontMgr(),

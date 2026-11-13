@@ -66,6 +66,26 @@ static std::string path_from_rrect(const litehtml::position& pos,
     return std::string(svgPath.c_str());
 }
 
+static std::string image_to_data_url(const SatoruContext& context, const std::string& url) {
+    auto it = context.imageCache.find(url);
+    if (it == context.imageCache.end()) return {};
+    const auto& info = it->second;
+    if (!info.data_url.empty() && info.data_url.substr(0, 5) == "data:") {
+        return info.data_url;
+    }
+    if (info.encoded_data && !info.mime_type.empty()) {
+        return "data:" + info.mime_type + ";base64," +
+               base64_encode(info.encoded_data->bytes(), info.encoded_data->size());
+    }
+    sk_sp<SkImage> skImg = const_cast<SatoruContext&>(context).getDecodedImage(url);
+    if (!skImg) return {};
+    SkBitmap bitmap;
+    bitmap.allocN32Pixels(skImg->width(), skImg->height());
+    SkCanvas bitmapCanvas(bitmap);
+    bitmapCanvas.drawImage(skImg, 0, 0);
+    return html_to_image::encode_png_data_url(bitmap);
+}
+
 // ============================================================================
 // Section svg_element: 高速タグ走査 (FastTag/SvgScanner) (将来 svg_element.cpp)
 // ============================================================================
@@ -509,19 +529,8 @@ static std::string generateDefs(const container_skia& render_container,
             defs << "</clipPath>";
         }
         if (draw.layer.repeat != litehtml::background_repeat_no_repeat) {
-            auto it = context.imageCache.find(draw.url);
-            if (it != context.imageCache.end() && it->second.skImage) {
-                std::string dataUrl;
-                if (!it->second.data_url.empty() && it->second.data_url.substr(0, 5) == "data:") {
-                    dataUrl = it->second.data_url;
-                } else {
-                    SkBitmap bitmap;
-                    bitmap.allocN32Pixels(it->second.skImage->width(),
-                                          it->second.skImage->height());
-                    SkCanvas bitmapCanvas(bitmap);
-                    bitmapCanvas.drawImage(it->second.skImage, 0, 0);
-                    dataUrl = html_to_image::encode_png_data_url(bitmap);
-                }
+            std::string dataUrl = image_to_data_url(context, draw.url);
+            if (!dataUrl.empty()) {
 
                 float pW = (float)draw.layer.origin_box.width;
                 float pH = (float)draw.layer.origin_box.height;
@@ -897,21 +906,9 @@ static std::string generateDefs(const container_skia& render_container,
                         }
                         bool imageFound = false;
                         if (!url.empty()) {
-                            auto it = context.imageCache.find(url);
-                            if (it != context.imageCache.end() && it->second.skImage) {
+                            std::string dataUrl = image_to_data_url(context, url);
+                            if (!dataUrl.empty()) {
                                 imageFound = true;
-                                std::string dataUrl;
-                                if (!it->second.data_url.empty() &&
-                                    it->second.data_url.substr(0, 5) == "data:") {
-                                    dataUrl = it->second.data_url;
-                                } else {
-                                    SkBitmap bitmap;
-                                    bitmap.allocN32Pixels(it->second.skImage->width(),
-                                                          it->second.skImage->height());
-                                    SkCanvas bitmapCanvas(bitmap);
-                                    bitmapCanvas.drawImage(it->second.skImage, 0, 0);
-                                    dataUrl = html_to_image::encode_png_data_url(bitmap);
-                                }
                                 defs << "<image x=\"" << m.pos.x << "\" y=\"" << m.pos.y
                                      << "\" width=\"" << m.pos.width << "\" height=\""
                                      << m.pos.height << "\" preserveAspectRatio=\"none\" href=\""
@@ -1244,20 +1241,8 @@ static std::string finalizeSvg(std::string_view svg, SatoruContext& context,
                     case satoru::MagicTagExtended::ImageDraw:
                         if (fullIndex > 0 && fullIndex <= (int)images.size()) {
                             const auto& draw = images[fullIndex - 1];
-                            auto it = context.imageCache.find(draw.url);
-                            if (it != context.imageCache.end() && it->second.skImage) {
-                                std::string dataUrl;
-                                if (!it->second.data_url.empty() &&
-                                    it->second.data_url.substr(0, 5) == "data:") {
-                                    dataUrl = it->second.data_url;
-                                } else {
-                                    SkBitmap bitmap;
-                                    bitmap.allocN32Pixels(it->second.skImage->width(),
-                                                          it->second.skImage->height());
-                                    SkCanvas bitmapCanvas(bitmap);
-                                    bitmapCanvas.drawImage(it->second.skImage, 0, 0);
-                                    dataUrl = html_to_image::encode_png_data_url(bitmap);
-                                }
+                            std::string dataUrl = image_to_data_url(context, draw.url);
+                            if (!dataUrl.empty()) {
                                 if (draw.layer.repeat == litehtml::background_repeat_no_repeat) {
                                     std::string preserveAspectRatio = "none";
                                     switch (draw.object_fit) {

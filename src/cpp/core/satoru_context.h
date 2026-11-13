@@ -343,10 +343,14 @@ class SatoruContext {
         if (imageCache.empty()) return;
         imageCache.clear();
         m_imageLru.clear();
+        m_decodedLru.clear();
         m_imageCacheBytes = 0;
+        m_decodedCacheBytes = 0;
         m_imageVersion++;
         needsRelayout = true;
     }
+
+    sk_sp<SkImage> getDecodedImage(const std::string &key);
 
     void clear_fonts() { clearFonts(); }
     void clearFonts() {
@@ -413,22 +417,65 @@ class SatoruContext {
    private:
     static constexpr size_t kMaxImageCacheBytes = 32 * 1024 * 1024;
     static constexpr size_t kMaxImageCacheEntries = 256;
+    static constexpr size_t kMaxDecodedImageBytes = 32 * 1024 * 1024;
     std::list<std::string> m_imageLru;
+    std::list<std::string> m_decodedLru;
     size_t m_imageCacheBytes = 0;
+    size_t m_decodedCacheBytes = 0;
+
+    static size_t estimateDecodedBytes(const image_info &info) {
+        if (info.skImage && info.width > 0 && info.height > 0) {
+            return static_cast<size_t>(info.width) * static_cast<size_t>(info.height) * 4;
+        }
+        return 0;
+    }
+
+    static bool isRedecodable(const image_info &info) {
+        return info.encoded_data != nullptr || info.svg_source != nullptr;
+    }
 
     static size_t estimateImageBytes(const image_info &info) {
         size_t bytes = info.data_url.size();
-        if (info.skImage && info.width > 0 && info.height > 0) {
-            bytes += static_cast<size_t>(info.width) * static_cast<size_t>(info.height) * 4;
+        if (!isRedecodable(info)) {
+            bytes += estimateDecodedBytes(info);
         }
         if (info.svg_source) {
             bytes += info.svg_source->size();
         }
+        if (info.encoded_data) {
+            bytes += info.encoded_data->size();
+        }
         return bytes;
+    }
+
+    void evictDecodedImages() {
+        while (m_decodedLru.size() > 1 && m_decodedCacheBytes > kMaxDecodedImageBytes) {
+            std::string evict_key = std::move(m_decodedLru.front());
+            m_decodedLru.pop_front();
+            auto evict_it = imageCache.find(evict_key);
+            if (evict_it != imageCache.end() && evict_it->second.skImage &&
+                isRedecodable(evict_it->second)) {
+                size_t evict_bytes = estimateDecodedBytes(evict_it->second);
+                m_decodedCacheBytes =
+                    (m_decodedCacheBytes >= evict_bytes) ? (m_decodedCacheBytes - evict_bytes) : 0;
+                evict_it->second.skImage.reset();
+            }
+        }
+    }
+
+    void trackDecodedImage(const std::string &key, const image_info &info) {
+        if (!info.skImage || !isRedecodable(info)) return;
+        size_t decoded_bytes = estimateDecodedBytes(info);
+        if (decoded_bytes == 0) return;
+        m_decodedLru.remove(key);
+        m_decodedLru.push_back(key);
+        m_decodedCacheBytes += decoded_bytes;
+        evictDecodedImages();
     }
 
    public:
     void trimImageCache() {
+        evictDecodedImages();
         while (m_imageLru.size() > 1 &&
                (imageCache.size() > kMaxImageCacheEntries || m_imageCacheBytes > kMaxImageCacheBytes)) {
             std::string evict_key = std::move(m_imageLru.front());
@@ -436,7 +483,14 @@ class SatoruContext {
             auto evict_it = imageCache.find(evict_key);
             if (evict_it != imageCache.end()) {
                 size_t evict_bytes = estimateImageBytes(evict_it->second);
-                m_imageCacheBytes = (m_imageCacheBytes >= evict_bytes) ? (m_imageCacheBytes - evict_bytes) : 0;
+                m_imageCacheBytes =
+                    (m_imageCacheBytes >= evict_bytes) ? (m_imageCacheBytes - evict_bytes) : 0;
+                if (evict_it->second.skImage && isRedecodable(evict_it->second)) {
+                    size_t decoded_bytes = estimateDecodedBytes(evict_it->second);
+                    m_decodedCacheBytes =
+                        (m_decodedCacheBytes >= decoded_bytes) ? (m_decodedCacheBytes - decoded_bytes) : 0;
+                    m_decodedLru.remove(evict_key);
+                }
                 imageCache.erase(evict_it);
             }
         }
@@ -449,11 +503,18 @@ class SatoruContext {
             size_t old_bytes = estimateImageBytes(it->second);
             m_imageCacheBytes = (m_imageCacheBytes >= old_bytes) ? (m_imageCacheBytes - old_bytes) : 0;
             m_imageLru.remove(key);
+            if (it->second.skImage && isRedecodable(it->second)) {
+                size_t old_decoded = estimateDecodedBytes(it->second);
+                m_decodedCacheBytes =
+                    (m_decodedCacheBytes >= old_decoded) ? (m_decodedCacheBytes - old_decoded) : 0;
+                m_decodedLru.remove(key);
+            }
         }
         size_t new_bytes = estimateImageBytes(info);
         imageCache[key] = std::move(info);
         m_imageLru.push_back(key);
         m_imageCacheBytes += new_bytes;
+        trackDecodedImage(key, imageCache[key]);
     }
 };
 

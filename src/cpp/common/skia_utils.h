@@ -33,6 +33,10 @@ struct image_info {
     // The SVG source, kept so the image can be drawn again once the fonts its <text> needs have arrived
     // (SkSVGDOM bakes the text into the bitmap when the image is decoded).
     sk_sp<SkData> svg_source;
+    // Original compressed bytes for raster images, kept so decoded SkImage pixel buffers
+    // can be evicted under memory pressure and re-decoded on demand (or embedded directly in SVG).
+    sk_sp<SkData> encoded_data;
+    std::string mime_type;
 };
 
 std::string clean_font_name(const char* name);

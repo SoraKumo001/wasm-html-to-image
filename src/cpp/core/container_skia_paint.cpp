@@ -296,8 +296,8 @@ void container_skia::draw_image(litehtml::uint_ptr hdc, const litehtml::backgrou
                              (float)layer.clip_box.width, (float)layer.clip_box.height),
             p);
     } else {
-        auto it = m_context.imageCache.find(url);
-        if (it != m_context.imageCache.end() && it->second.skImage) {
+        sk_sp<SkImage> img = m_context.getDecodedImage(url);
+        if (img) {
             SkPaint p;
             p.setAntiAlias(true);
 
@@ -310,7 +310,7 @@ void container_skia::draw_image(litehtml::uint_ptr hdc, const litehtml::backgrou
                                  (float)layer.origin_box.width, (float)layer.origin_box.height);
 
             if (layer.repeat == litehtml::background_repeat_no_repeat) {
-                m_canvas->drawImageRect(it->second.skImage, dst, image_sampling(rendering), &p);
+                m_canvas->drawImageRect(img, dst, image_sampling(rendering), &p);
             } else {
                 SkTileMode tileX = SkTileMode::kRepeat;
                 SkTileMode tileY = SkTileMode::kRepeat;
@@ -334,15 +334,14 @@ void container_skia::draw_image(litehtml::uint_ptr hdc, const litehtml::backgrou
                         break;
                 }
 
-                float scaleX = (float)layer.origin_box.width / it->second.skImage->width();
-                float scaleY = (float)layer.origin_box.height / it->second.skImage->height();
+                float scaleX = (float)layer.origin_box.width / img->width();
+                float scaleY = (float)layer.origin_box.height / img->height();
 
                 SkMatrix matrix;
                 matrix.setScaleTranslate(scaleX, scaleY, (float)layer.origin_box.x,
                                          (float)layer.origin_box.y);
 
-                p.setShader(it->second.skImage->makeShader(
-                    tileX, tileY, image_sampling(rendering), &matrix));
+                p.setShader(img->makeShader(tileX, tileY, image_sampling(rendering), &matrix));
 
                 m_canvas->drawRect(
                     SkRect::MakeXYWH((float)layer.clip_box.x, (float)layer.clip_box.y,
@@ -631,9 +630,8 @@ void container_skia::draw_border_image(litehtml::uint_ptr hdc,
 
     sk_sp<SkImage> img;
     if (border_image.source.type == litehtml::image::type_url) {
-        auto it = m_context.imageCache.find(border_image.source.url);
-        if (it == m_context.imageCache.end() || !it->second.skImage) return;
-        img = it->second.skImage;
+        img = m_context.getDecodedImage(border_image.source.url);
+        if (!img) return;
     } else if (border_image.source.type == litehtml::image::type_gradient) {
         // For border-image, the gradient's intrinsic size is the border image area.
         int w = draw_pos.width;
@@ -1127,8 +1125,8 @@ void container_skia::draw_list_marker(litehtml::uint_ptr hdc, const litehtml::li
 
     if (!marker.image.empty()) {
         std::string url = marker.image;
-        auto it = m_context.imageCache.find(url);
-        if (it != m_context.imageCache.end() && it->second.skImage) {
+        sk_sp<SkImage> img = m_context.getDecodedImage(url);
+        if (img) {
             SkRect dst = SkRect::MakeXYWH((float)marker.pos.x, (float)marker.pos.y,
                                           (float)marker.pos.width, (float)marker.pos.height);
             SkPaint p;
@@ -1147,7 +1145,7 @@ void container_skia::draw_list_marker(litehtml::uint_ptr hdc, const litehtml::li
                 p.setColor(make_magic_color(satoru::MagicTagExtended::ImageDraw, index));
                 m_canvas->drawRect(dst, p);
             } else {
-                m_canvas->drawImageRect(it->second.skImage, dst,
+                m_canvas->drawImageRect(img, dst,
                                         SkSamplingOptions(SkFilterMode::kLinear), &p);
             }
         }

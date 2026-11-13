@@ -525,9 +525,8 @@ void container_skia::pop_mask(litehtml::uint_ptr hdc) {
             float iw = bw, ih = bh;
             if (iname == "url") {
                 if (image_tok->value.empty()) continue;
-                auto it = m_context.imageCache.find(image_tok->value.front().str);
-                if (it == m_context.imageCache.end() || !it->second.skImage) continue;
-                img = it->second.skImage;
+                img = m_context.getDecodedImage(image_tok->value.front().str);
+                if (!img) continue;
                 iw = (float)img->width();
                 ih = (float)img->height();
             }

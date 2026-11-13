@@ -170,8 +170,7 @@ class SatoruSvgShaperFactory final : public SkShapers::Factory {
 
 class SatoruResourceProvider : public skresources::ResourceProvider {
    public:
-    SatoruResourceProvider(const std::map<std::string, image_info>& imageCache)
-        : m_imageCache(imageCache) {}
+    SatoruResourceProvider(SatoruContext& context) : m_context(context) {}
 
     sk_sp<skresources::ImageAsset> loadImageAsset(const char path[], const char name[],
                                                   const char id[]) const override {
@@ -188,16 +187,16 @@ class SatoruResourceProvider : public skresources::ResourceProvider {
 
         if (full_path.empty()) return nullptr;
 
-        auto it = m_imageCache.find(full_path);
-        if (it != m_imageCache.end() && it->second.skImage) {
-            return sk_make_sp<SatoruImageAsset>(it->second.skImage);
+        sk_sp<SkImage> img = m_context.getDecodedImage(full_path);
+        if (img) {
+            return sk_make_sp<SatoruImageAsset>(img);
         }
 
         return nullptr;
     }
 
    private:
-    const std::map<std::string, image_info>& m_imageCache;
+    SatoruContext& m_context;
 };
 
 }  // namespace
@@ -757,7 +756,7 @@ std::string el_svg::reconstruct_xml(int x, int y, int width, int height) const {
 }
 
 void configure_svg_builder(SkSVGDOM::Builder& builder, SatoruContext& context) {
-    auto resource_provider = sk_make_sp<SatoruResourceProvider>(context.imageCache);
+    auto resource_provider = sk_make_sp<SatoruResourceProvider>(context);
     builder.setResourceProvider(skresources::DataURIResourceProviderProxy::Make(
         resource_provider, skresources::ImageDecodeStrategy::kPreDecode));
     builder.setTextShapingFactory(
@@ -778,7 +777,7 @@ void draw_svg_xml(container_skia* container, const std::string& xml, const posit
     } else {
         SkMemoryStream stream(xml.c_str(), xml.size());
         auto resource_provider =
-            sk_make_sp<SatoruResourceProvider>(container->get_context().imageCache);
+            sk_make_sp<SatoruResourceProvider>(container->get_context());
         auto proxy_rp = skresources::DataURIResourceProviderProxy::Make(
             resource_provider, skresources::ImageDecodeStrategy::kPreDecode);
 
