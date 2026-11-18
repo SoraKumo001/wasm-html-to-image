@@ -1,0 +1,37 @@
+{
+  "name": "wasm-html-to-image-cdp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Chrome DevTools Protocol (CDP) adapter for wasm-quickjs-dom and wasm-html-to-image (Puppeteer-compatible)",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "wasm-html-to-image": "workspace:*",
+    "wasm-quickjs-dom": "workspace:*"
+  },
+  "peerDependencies": {
+    "puppeteer-core": ">=22.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "puppeteer-core": ">=25.18.1",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.1"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run"
+  }
+}

@@ -21,11 +21,11 @@
     "cross-env": "^10.1.0",
     "pdfjs-dist": "^6.5.438",
     "pixelmatch": "8.0.0",
-    "playwright": "1.65.0",
+    "playwright": "1.65.1",
     "pngjs": "7.0.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
-    "vitest": "^5.1.0",
+    "vitest": "^5.1.1",
     "wasm-html-to-image": "workspace:*"
   }
 }

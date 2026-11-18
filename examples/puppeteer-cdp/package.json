@@ -1,0 +1,20 @@
+{
+  "name": "example-puppeteer-cdp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "start:ws": "tsx src/ws-example.ts",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "puppeteer-core": "^25.18.1",
+    "wasm-html-to-image-cdp": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}
