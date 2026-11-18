@@ -93,11 +93,13 @@ target_sources(html_to_image_core PRIVATE
     src/cpp/core/image_converter_context.cpp
     src/cpp/api/satoru_api.cpp
     src/cpp/api/converter_api.cpp
+    src/cpp/api/canvas_api.cpp
     src/cpp/api/unified_api.cpp
     src/cpp/api/satoru_bindings.cpp
     src/cpp/api/layout_json.cpp
     src/cpp/api/live_layout.cpp
     src/cpp/api/converter_bindings.cpp
+    src/cpp/api/canvas_bindings.cpp
     src/cpp/api/unified_bindings.cpp
     src/cpp/api/js_logger.cpp
     src/cpp/core/container_skia.cpp

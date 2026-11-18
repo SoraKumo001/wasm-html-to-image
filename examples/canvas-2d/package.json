@@ -1,0 +1,12 @@
+{
+  "name": "example-canvas-2d",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.mjs"
+  },
+  "dependencies": {
+    "wasm-html-to-image": "workspace:*"
+  }
+}

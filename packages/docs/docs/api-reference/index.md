@@ -24,6 +24,7 @@ title: API 概要
 | `wasm-html-to-image/single`、`/workers` | `renderMermaid(source, options)` | Mermaid の図だけを SVG 文字列や画像として取得（[Mermaid 変換](./mermaid.md)） |
 | `wasm-html-to-image/markdown-math` | `katexMath(options)`<br/>`katexCss(fontBase?)` | Markdown 内のインライン `$…$` およびブロック `$$…$$` 数式を KaTeX でレンダリング |
 | `wasm-html-to-image/javascript` | `applyJavaScript(options)`<br/>`runPageScriptsQuickJS(source, option)` | ページのスクリプトを QuickJS（WebAssembly）と C 実装の DOM で実行する（Workers など `eval` できない環境向け。QuickJS の wasm は実行環境に合わせて自動で選びます） |
+| `wasm-html-to-image/index`<br/>`wasm-html-to-image/single` | `createCanvas(mod, width, height)`<br/>`CanvasPath2D` | Skia バックエンドの HTML5 Canvas 2D 互換描画・画像合成 API（[2D Canvas API](./canvas.md)） |
 
 ---
 

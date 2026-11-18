@@ -23,6 +23,7 @@ title: API Overview
 | `wasm-html-to-image/single`, `/workers` | `renderMermaid(source, options)` | A Mermaid diagram alone as an SVG string or an image ([Mermaid Conversion](./mermaid.md)) |
 | `wasm-html-to-image/markdown-math` | `katexMath(options)`<br/>`katexCss(fontBase?)` | KaTeX renderer for inline `$…$` and display `$$…$$` math in Markdown |
 | `wasm-html-to-image/javascript` | `applyJavaScript(options)`<br/>`runPageScriptsQuickJS(source, option)` | Run a page's scripts in QuickJS (WebAssembly) on a DOM written in C, for Workers and other runtimes without `eval` (the QuickJS wasm is chosen for the runtime automatically) |
+| `wasm-html-to-image`, `wasm-html-to-image/single` | `createCanvas(mod, width, height)`<br/>`CanvasPath2D` | Skia-backed HTML5 Canvas 2D-compatible drawing & image compositing API ([2D Canvas API](./canvas.md)) |
 
 ---
 

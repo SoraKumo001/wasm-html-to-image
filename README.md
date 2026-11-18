@@ -584,6 +584,7 @@ cp -r skills/html-to-image ~/.claude/skills/
 - [Runtime Guide (Node / Workers / Edge / Browser)](https://sorakumo001.github.io/wasm-html-to-image/master/docs/docs/api-reference/runtime-guide)
 - [Production Recipes](https://sorakumo001.github.io/wasm-html-to-image/master/docs/docs/recipes/ogp-production)
 - [Puppeteer (CDP) Adapter (`packages/cdp`)](./packages/cdp/README.md) & [Example (`examples/puppeteer-cdp`)](./examples/puppeteer-cdp/README.md)
+- [2D Canvas + HTML Compositing Example (`examples/canvas-2d`)](./examples/canvas-2d/README.md)
 
 ---
 

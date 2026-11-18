@@ -261,6 +261,45 @@ const thumbhash = await render({
 ```
 </details>
 
+<details>
+<summary><b>5. 2D Canvas Drawing & Image Compositing (`createCanvas`)</b></summary>
+
+Draw shapes, paths, gradients, shadows, filters, and composite images or HTML renders using the built-in Skia-backed HTML5 Canvas 2D compatible API:
+
+```typescript
+import {
+  CanvasPath2D,
+  createCanvas,
+  htmlToImage,
+  loadHtmlToImageModule,
+} from "wasm-html-to-image";
+
+const mod = await loadHtmlToImageModule();
+const canvas = createCanvas(mod, 800, 450);
+
+try {
+  const ctx = canvas.getContext("2d");
+  const grad = ctx.createLinearGradient(0, 0, 800, 450);
+  grad.addColorStop(0, "#0f172a");
+  grad.addColorStop(1, "#1e293b");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 800, 450);
+
+  ctx.fillStyle = "#38bdf8";
+  ctx.fill(new CanvasPath2D("M 100 100 L 200 100 L 150 180 Z"));
+
+  const badge = await htmlToImage(mod, { value: "<h1>Hello</h1>", width: 300, format: "png" });
+  if (badge.data instanceof Uint8Array) {
+    ctx.drawImage(badge.data, 40, 40);
+  }
+
+  const webp = canvas.encode({ format: "webp", quality: 90 });
+} finally {
+  canvas.dispose();
+}
+```
+</details>
+
 ---
 
 ## 📖 Documentation & Examples

@@ -26,6 +26,8 @@
 #include <string>
 #include <vector>
 
+#include "api/canvas_api.h"
+#include "api/canvas_bindings.h"
 #include "api/converter_api.h"
 #include "api/converter_bindings.h"
 #include "api/satoru_api.h"
@@ -51,12 +53,21 @@ EMSCRIPTEN_KEEPALIVE
 void converter_destroy_instance(ImageConverterInstance* inst) {
     converter_api_destroy_instance(inst);
 }
+
+EMSCRIPTEN_KEEPALIVE
+CanvasInstance* canvas_create_instance(int width, int height) {
+    return canvas_api_create_instance(width, height);
+}
+
+EMSCRIPTEN_KEEPALIVE
+void canvas_destroy_instance(CanvasInstance* inst) { canvas_api_destroy_instance(inst); }
 }
 
 // 単一EMSCRIPTEN_BINDINGS。旧2モジュール名 (satoru / image_converter) は廃止。
 EMSCRIPTEN_BINDINGS(html_to_image) {
     class_<SatoruInstance>("SatoruInstance");
     class_<ImageConverterInstance>("ImageConverterInstance");
+    class_<CanvasInstance>("CanvasInstance");
 
     // NOTE: 各メンバ関数の実体は api/*.cpp + core/* に接続済み。
     // JS名は衝突回避のため satoru_* / converter_* にprefix分離する:
@@ -133,4 +144,19 @@ EMSCRIPTEN_BINDINGS(html_to_image) {
     // (satoruInst, converterInst, htmls, width, height, options, durationMs, fps).
     function("satoru_render_animation_to_converter", &satoru_render_animation_to_converter_val,
              allow_raw_pointers());
+
+    // 2D Canvas API bindings (CanvasInstance)
+    function("canvas_create_instance", &canvas_create_instance, allow_raw_pointers());
+    function("canvas_destroy_instance", &canvas_destroy_instance, allow_raw_pointers());
+    function("canvas_resize", &canvas_resize_val, allow_raw_pointers());
+    function("canvas_get_width", &canvas_get_width_val, allow_raw_pointers());
+    function("canvas_get_height", &canvas_get_height_val, allow_raw_pointers());
+    function("canvas_exec_batch", &canvas_exec_batch_val, allow_raw_pointers());
+    function("canvas_draw_image_bytes", &canvas_draw_image_bytes_val, allow_raw_pointers());
+    function("canvas_draw_converter", &canvas_draw_converter_val, allow_raw_pointers());
+    function("canvas_draw_canvas", &canvas_draw_canvas_val, allow_raw_pointers());
+    function("canvas_get_image_data", &canvas_get_image_data_val, allow_raw_pointers());
+    function("canvas_put_image_data", &canvas_put_image_data_val, allow_raw_pointers());
+    function("canvas_to_converter", &canvas_to_converter_val, allow_raw_pointers());
+    function("canvas_encode", &canvas_encode_val, allow_raw_pointers());
 }

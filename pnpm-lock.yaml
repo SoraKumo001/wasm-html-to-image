@@ -27,6 +27,12 @@ importers:
         specifier: ^7.0.2
         version: 7.0.2
 
+  examples/canvas-2d:
+    dependencies:
+      wasm-html-to-image:
+        specifier: workspace:*
+        version: link:../../packages/html-to-image
+
   examples/cloudflare-ogp:
     dependencies:
       preact:

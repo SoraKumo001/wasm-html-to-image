@@ -52,6 +52,21 @@ export { runPageScriptsQuickJS as runPageScripts } from "wasm-quickjs-dom";
 export { clearResourceCache } from "./core-resources.js";
 export type { HtmlToImageModule } from "./loader.js";
 export { dropCachedModule, loadHtmlToImageModule } from "./loader.js";
+export {
+  Canvas,
+  CanvasGradient,
+  CanvasPath2D,
+  CanvasRenderingContext2D,
+  createCanvas,
+  type CanvasEncodeOptions,
+  type CanvasFillRule,
+  type CanvasImageData,
+  type CanvasImageSource,
+  type CanvasLineCap,
+  type CanvasLineJoin,
+  type GlobalCompositeOperation,
+  type ImageSmoothingQuality,
+} from "./canvas.js";
 
 /** Default connection: thin delegation to the loader-owned cache. */
 export function getDefaultModule(): Promise<HtmlToImageModule> {

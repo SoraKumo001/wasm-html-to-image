@@ -172,6 +172,80 @@ export interface HtmlToImageModule {
    * no PNG intermediate round-trip through JS).
    */
   html_to_image?: (...args: unknown[]) => unknown;
+  /** 2D Canvas API bindings (CanvasInstance, probed at runtime). */
+  canvas_create_instance?: (width: number, height: number) => WasmInstancePtr;
+  canvas_destroy_instance?: (inst: WasmInstancePtr) => void;
+  canvas_resize?: (inst: WasmInstancePtr, width: number, height: number) => boolean;
+  canvas_get_width?: (inst: WasmInstancePtr) => number;
+  canvas_get_height?: (inst: WasmInstancePtr) => number;
+  canvas_exec_batch?: (
+    inst: WasmInstancePtr,
+    ops: Uint8Array,
+    args: Float64Array | number[],
+    strings: string[],
+  ) => boolean;
+  canvas_draw_image_bytes?: (
+    inst: WasmInstancePtr,
+    data: Uint8Array | ArrayBuffer,
+    sx: number,
+    sy: number,
+    sw: number,
+    sh: number,
+    dx: number,
+    dy: number,
+    dw: number,
+    dh: number,
+    hasSrcRect: boolean,
+  ) => boolean;
+  canvas_draw_converter?: (
+    inst: WasmInstancePtr,
+    src: WasmInstancePtr,
+    frameIndex: number,
+    sx: number,
+    sy: number,
+    sw: number,
+    sh: number,
+    dx: number,
+    dy: number,
+    dw: number,
+    dh: number,
+    hasSrcRect: boolean,
+  ) => boolean;
+  canvas_draw_canvas?: (
+    inst: WasmInstancePtr,
+    src: WasmInstancePtr,
+    sx: number,
+    sy: number,
+    sw: number,
+    sh: number,
+    dx: number,
+    dy: number,
+    dw: number,
+    dh: number,
+    hasSrcRect: boolean,
+  ) => boolean;
+  canvas_get_image_data?: (
+    inst: WasmInstancePtr,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+  ) => Uint8Array | null;
+  canvas_put_image_data?: (
+    inst: WasmInstancePtr,
+    rgba: Uint8Array | Uint8ClampedArray,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+  ) => boolean;
+  canvas_to_converter?: (inst: WasmInstancePtr, dst: WasmInstancePtr) => boolean;
+  canvas_encode?: (
+    inst: WasmInstancePtr,
+    format: number,
+    quality: number,
+    speed: number,
+  ) => Uint8Array | null;
   [key: string]: unknown;
 }
 
