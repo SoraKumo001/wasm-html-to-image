@@ -63,6 +63,11 @@ export interface JavaScriptOptions {
    * to the network. Most of a real site's script time goes to those, and a render rarely needs them.
    */
   skip?: (url: string) => boolean;
+  /**
+   * Enable HTML5 2D `<canvas>` / `OffscreenCanvas` rendering backed by the Skia Wasm 2D canvas engine.
+   * When true, `canvas.getContext("2d")` works inside page scripts and drawn canvases are rasterized into the HTML output.
+   */
+  canvas?: boolean;
 }
 
 /** What the script phase produced. */

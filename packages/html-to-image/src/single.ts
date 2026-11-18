@@ -55,18 +55,23 @@ export { dropCachedModule, loadHtmlToImageModule } from "./loader.js";
 export {
   Canvas,
   CanvasGradient,
+  CanvasImageData,
   CanvasPath2D,
   CanvasRenderingContext2D,
   createCanvas,
   type CanvasEncodeOptions,
   type CanvasFillRule,
-  type CanvasImageData,
   type CanvasImageSource,
   type CanvasLineCap,
   type CanvasLineJoin,
   type GlobalCompositeOperation,
   type ImageSmoothingQuality,
 } from "./canvas.js";
+export {
+  installCanvasBridge,
+  type CanvasBridge,
+  type CanvasBridgeTarget,
+} from "./canvas-dom.js";
 
 /** Default connection: thin delegation to the loader-owned cache. */
 export function getDefaultModule(): Promise<HtmlToImageModule> {
@@ -88,7 +93,7 @@ export async function render(
 ): Promise<RenderResult<Uint8Array | string>> {
   const module = await getDefaultModule();
   try {
-    return await htmlToImage(module, await applyJavaScript(options));
+    return await htmlToImage(module, await applyJavaScript(options, { canvasModule: module }));
   } finally {
     if (noteModuleRender(module)) dropCachedModule();
   }

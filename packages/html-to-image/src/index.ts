@@ -13,3 +13,4 @@
 export * from "./core.js";
 export * from "./loader.js";
 export * from "./canvas.js";
+export * from "./canvas-dom.js";

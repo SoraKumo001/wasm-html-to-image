@@ -154,6 +154,11 @@ export interface CreateDOMOptions extends JavaScriptOptions, EdgeJavaScriptEngin
    * reports `\"prerender\"` / no focus, as jsdom does without `pretendToBeVisual`.
    */
   visual?: boolean;
+  /**
+   * Optional hook invoked synchronously or asynchronously right after the page is opened and before its
+   * `<script>` elements run (useful for installing adapters such as a host canvas bridge).
+   */
+  beforeStart?: (page: OpenedPage) => void | Promise<void>;
 }
 
 /**

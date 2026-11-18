@@ -7,8 +7,8 @@ title: 2D Canvas API (createCanvas)
 
 You can drive the internal Skia CPU rasterizer directly from JavaScript/TypeScript to perform HTML5 Canvas 2D-compatible imperative drawing, image compositing, and filter effects—even in runtimes without a DOM or WebGL (Node.js, Web Workers, Cloudflare Workers).
 
-:::info About `<canvas>` elements inside HTML
-`createCanvas()` documented here is a standalone programmatic API. Executing `canvas.getContext('2d')` scripts inside HTML documents via `applyJavaScript` remains unsupported.
+:::tip Using `<canvas>` inside HTML documents
+Pass `javascript: { canvas: true }` to `render()`, or call `installCanvasBridge(page.dom, module)` inside `createDOM()`'s `beforeStart` hook, to enable `getContext("2d")` on `<canvas>` / `OffscreenCanvas` inside page scripts and render the drawn output into the final image.
 :::
 
 ---
@@ -100,7 +100,33 @@ Construct reusable paths with `new CanvasPath2D(path?)` from an SVG path string 
 
 ---
 
-## 3. Current Limitations
+## 3. HTML `<canvas>` Integration (`javascript: { canvas: true }`)
+
+When `javascript: { canvas: true }` is passed to `render()`, page scripts calling `canvas.getContext("2d")`, `OffscreenCanvas`, and `Path2D` are bridged synchronously to the Skia 2D Canvas engine, and drawn canvases are rasterized into the HTML output.
+
+```typescript
+import { render } from "wasm-html-to-image";
+
+const result = await render({
+  value: `
+    <canvas id="c" width="200" height="120"></canvas>
+    <script>
+      const ctx = document.getElementById("c").getContext("2d");
+      ctx.fillStyle = "#38bdf8";
+      ctx.fillRect(10, 10, 180, 100);
+    </script>
+  `,
+  width: 240,
+  format: "png",
+  javascript: { canvas: true },
+});
+```
+
+When managing a page manually with `createDOM()`, call `installCanvasBridge(page.dom, mod)` inside the `beforeStart` hook and call `bridge.dispose()` when finished.
+
+---
+
+## 4. Current Limitations
 
 * **Text drawing (`fillText` / `strokeText` / `measureText`)**: Not yet implemented. Render text with `htmlToImage()` and composite it onto the canvas with `ctx.drawImage()`.
 * **Patterns (`createPattern`)**: Not yet implemented.

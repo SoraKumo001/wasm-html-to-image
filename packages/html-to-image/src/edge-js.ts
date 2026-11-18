@@ -15,22 +15,54 @@
  * `createDOM()` keeps the page open (a small JSDOM): `await dom.eval("document.title")`, `dom.serialize()`,
  * `dom.toOptions({ format: "png" })`.
  */
-import { runPageScriptsQuickJS, type EdgeJavaScriptEngine, type ImageResourceRecord, type QuickJSDOM } from "wasm-quickjs-dom";
+import { createDOM, runPageScriptsQuickJS, type EdgeJavaScriptEngine, type ImageResourceRecord, type QuickJSDOM } from "wasm-quickjs-dom";
 import type { HtmlToImageOptions, LayoutBox } from "./core.js";
 import { applyScripted } from "./js-apply.js";
+import { installCanvasBridge, type CanvasBridge } from "./canvas-dom.js";
+import { loadHtmlToImageModule, type HtmlToImageModule } from "./loader.js";
 
 export { createDOM, runPageScriptsQuickJS } from "wasm-quickjs-dom";
 export type { CreateDOMOptions, EdgeJavaScriptEngine, ImageResourceRecord, QuickJSDOM } from "wasm-quickjs-dom";
 export type { JavaScriptOptions, ScriptedPage } from "./js-apply.js";
 export { enableLiveLayout } from "./live-layout.js";
 export type { LiveLayout, LiveLayoutOptions } from "./live-layout.js";
+export {
+  installCanvasBridge,
+  type CanvasBridge,
+  type CanvasBridgeTarget,
+} from "./canvas-dom.js";
+
+export interface EdgeJavaScriptOptions extends EdgeJavaScriptEngine {
+  canvasModule?: HtmlToImageModule;
+}
 
 /**
  * Apply the `javascript` option with the QuickJS engine: HTML and URL inputs are replaced by the scripted DOM.
  * Image and binary inputs, and options without `javascript`, pass through untouched.
  */
-export function applyJavaScript<T extends HtmlToImageOptions>(options: T, engine: EdgeJavaScriptEngine = {}): Promise<T> {
-  return applyScripted(options, (source, option, width) => runPageScriptsQuickJS(source, option, width, engine));
+export function applyJavaScript<T extends HtmlToImageOptions>(options: T, engine: EdgeJavaScriptOptions = {}): Promise<T> {
+  return applyScripted(options, async (source, option, width) => {
+    const given = option === true ? {} : option;
+    if (!given.canvas) {
+      return runPageScriptsQuickJS(source, option, width, engine);
+    }
+    const mod = engine.canvasModule ?? (await loadHtmlToImageModule());
+    let canvasBridge: CanvasBridge | undefined;
+    const dom = await createDOM(source, {
+      ...(given as Record<string, unknown>),
+      width,
+      quickjsWasm: engine.quickjsWasm,
+      async beforeStart(page) {
+        canvasBridge = await installCanvasBridge(page.dom, mod);
+      },
+    });
+    try {
+      return { html: dom.serialize(), baseUrl: dom.baseUrl };
+    } finally {
+      canvasBridge?.dispose();
+      dom.close();
+    }
+  });
 }
 
 /**

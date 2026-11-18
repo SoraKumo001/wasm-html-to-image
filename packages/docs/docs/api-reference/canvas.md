@@ -7,8 +7,8 @@ title: 2D Canvas API (createCanvas)
 
 `wasm-html-to-image` 内部の Skia CPU ラスタライザを直接操作し、ブラウザの HTML5 Canvas 2D API と同等の命令的描画・画像合成・フィルター加工を行うことができます。Node.js や Web Worker、Cloudflare Workers など DOM / WebGL のない環境でも動作します。
 
-:::info HTML 内の `<canvas>` タグについて
-本ページで解説する `createCanvas()` は、JavaScript から直接 2D 描画を行うための独立 API です。HTML 文字列内の `<canvas>` 要素に対する `canvas.getContext('2d')` スクリプト実行（`applyJavaScript` 経由）は引き続き未対応です。
+:::tip HTML 内の `<canvas>` 要素との連携
+`javascript: { canvas: true }` を指定して `render()` を呼ぶか、`createDOM()` の `beforeStart` 内で `installCanvasBridge(page.dom, module)` を呼ぶことで、HTML 内の `<canvas>` / `OffscreenCanvas` に対する `getContext("2d")` スクリプト実行とレンダリングにも対応します。
 :::
 
 ---
@@ -100,7 +100,33 @@ try {
 
 ---
 
-## 3. 現在の制限事項
+## 3. HTML 内 `<canvas>` との連携 (`javascript: { canvas: true }`)
+
+`render()` の `javascript` オプションに `{ canvas: true }` を渡すと、ページ内スクリプトの `canvas.getContext("2d")` や `OffscreenCanvas`・`Path2D` が Skia 2D Canvas エンジンへ接続され、描画結果が自動的に最終出力画像へ反映されます。
+
+```typescript
+import { render } from "wasm-html-to-image";
+
+const result = await render({
+  value: `
+    <canvas id="c" width="200" height="120"></canvas>
+    <script>
+      const ctx = document.getElementById("c").getContext("2d");
+      ctx.fillStyle = "#38bdf8";
+      ctx.fillRect(10, 10, 180, 100);
+    </script>
+  `,
+  width: 240,
+  format: "png",
+  javascript: { canvas: true },
+});
+```
+
+`createDOM()` を手動で使う場合は、`beforeStart` フック内で `installCanvasBridge(page.dom, mod)` を呼び出します（終了時に `bridge.dispose()` を呼んでください）。
+
+---
+
+## 4. 現在の制限事項
 
 * **テキスト描画 (`fillText` / `strokeText` / `measureText`)**: 未実装です。テキストを描画したい場合は `htmlToImage()` で HTML をレンダリングし、`ctx.drawImage()` で Canvas に合成してください。
 * **パターン (`createPattern`)**: 未実装です。

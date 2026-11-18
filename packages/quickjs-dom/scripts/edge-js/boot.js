@@ -694,10 +694,29 @@
   };
   if (!g.Path2D) {
     g.Path2D = class Path2D {
-      constructor(d) { this._d = d instanceof Path2D ? d._d : typeof d === "string" ? d : ""; }
-      addPath(p) { this._d += " " + p._d; }
+      constructor(d) {
+        this._cmds = [];
+        this._d = "";
+        if (d instanceof Path2D) {
+          this._cmds = d._cmds.slice();
+          this._d = d._d;
+        } else if (typeof d === "string") {
+          this._d = d;
+          this._cmds.push(["svg", d]);
+        }
+      }
+      addPath(p) {
+        if (p instanceof Path2D) {
+          for (var i = 0; i < p._cmds.length; i++) this._cmds.push(p._cmds[i]);
+          this._d += " " + p._d;
+        }
+      }
     };
-    ["moveTo", "lineTo", "bezierCurveTo", "quadraticCurveTo", "arc", "arcTo", "ellipse", "rect", "roundRect", "closePath"].forEach(function (m) { g.Path2D.prototype[m] = function () {}; });
+    ["moveTo", "lineTo", "bezierCurveTo", "quadraticCurveTo", "arc", "arcTo", "ellipse", "rect", "roundRect", "closePath"].forEach(function (m) {
+      g.Path2D.prototype[m] = function () {
+        this._cmds.push([m].concat(Array.prototype.slice.call(arguments)));
+      };
+    });
   }
   if (!g.ImageData) {
     g.ImageData = class ImageData {
@@ -747,7 +766,10 @@
       Object.defineProperty(canvasProto, k, {
         configurable: true,
         get: function () { var v = parseInt(this.getAttribute(k), 10); return v >= 0 ? v : (i ? 150 : 300); },
-        set: function (v) { this.setAttribute(k, String(v)); },
+        set: function (v) {
+          this.setAttribute(k, String(v));
+          canvasCall("resize", [this, this.width, this.height]);
+        },
       });
     });
   }
@@ -1088,6 +1110,7 @@
   g.__edgeSerialize = function () {
     var d = g.document, n = d.querySelectorAll("noscript");
     for (var i = 0; i < n.length; i++) n[i].remove();
+    canvasCall("prepareSerialize", [d]);
     var html = g.__native.dom.serialize(d);
     return html.replace(/^<!DOCTYPE\s*(?:html)?\s*>/i, "<!DOCTYPE html>");
   };

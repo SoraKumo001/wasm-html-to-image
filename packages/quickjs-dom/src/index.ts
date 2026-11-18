@@ -109,6 +109,7 @@ export async function createDOM(
   const wasm = await loadModule(options.quickjsWasm);
   const page = openPage(html, baseUrl, wasm, options, first, guard);
   try {
+    if (options.beforeStart) await options.beforeStart(page);
     await page.start();
   } catch (error) {
     page.dom.close();

@@ -83,11 +83,25 @@ export type GlobalCompositeOperation =
   | "color"
   | "luminosity";
 
-export interface CanvasImageData {
+export class CanvasImageData {
   readonly width: number;
   readonly height: number;
   readonly data: Uint8ClampedArray;
-  readonly colorSpace: "srgb";
+  readonly colorSpace: "srgb" = "srgb";
+
+  constructor(sw: number, sh: number);
+  constructor(data: Uint8ClampedArray, sw: number, sh?: number);
+  constructor(a: number | Uint8ClampedArray, b: number, c?: number) {
+    if (typeof a === "number") {
+      this.width = a;
+      this.height = b;
+      this.data = new Uint8ClampedArray(a * b * 4);
+    } else {
+      this.data = a;
+      this.width = b;
+      this.height = c ?? Math.floor(a.length / 4 / b);
+    }
+  }
 }
 
 export class CanvasGradient {
@@ -286,6 +300,7 @@ export type CanvasImageSource =
   | Uint8Array
   | ArrayBuffer
   | Canvas
+  | { readonly _backingCanvas: Canvas }
   | { converterInst: WasmInstancePtr; frameIndex?: number };
 
 export interface CanvasEncodeOptions {
@@ -846,11 +861,21 @@ export class CanvasRenderingContext2D {
       dh = d!;
     }
 
-    if (image instanceof Canvas) {
-      image._flush();
+    const backingCanvas =
+      image instanceof Canvas
+        ? image
+        : image &&
+            typeof image === "object" &&
+            "_backingCanvas" in image &&
+            (image as { _backingCanvas?: unknown })._backingCanvas instanceof Canvas
+          ? (image as { _backingCanvas: Canvas })._backingCanvas
+          : null;
+
+    if (backingCanvas) {
+      backingCanvas._flush();
       this.mod.canvas_draw_canvas!(
         this.inst,
-        image._inst,
+        backingCanvas._inst,
         sx,
         sy,
         sw,
@@ -905,12 +930,7 @@ export class CanvasRenderingContext2D {
   ): CanvasImageData {
     const w = typeof swOrData === "number" ? swOrData : swOrData.width;
     const h = typeof swOrData === "number" ? sh! : swOrData.height;
-    return {
-      width: w,
-      height: h,
-      data: new Uint8ClampedArray(w * h * 4),
-      colorSpace: "srgb",
-    };
+    return new CanvasImageData(w, h);
   }
 
   getImageData(
@@ -924,12 +944,7 @@ export class CanvasRenderingContext2D {
     if (!view) {
       return this.createImageData(sw, sh);
     }
-    return {
-      width: sw,
-      height: sh,
-      data: new Uint8ClampedArray(view),
-      colorSpace: "srgb",
-    };
+    return new CanvasImageData(new Uint8ClampedArray(view), sw, sh);
   }
 
   putImageData(imagedata: CanvasImageData, dx: number, dy: number): void {
