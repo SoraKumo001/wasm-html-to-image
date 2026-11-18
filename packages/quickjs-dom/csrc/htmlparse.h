@@ -76,11 +76,12 @@ enum { EV_TEXT = 1, EV_OPEN, EV_CLOSE, EV_COMMENT, EV_PI, EV_STRAY };
 enum {
     S_Text = 1, S_BeforeTagName, S_InTagName, S_InSelfClosingTag, S_BeforeClosingTagName, S_InClosingTagName,
     S_AfterClosingTagName, S_BeforeAttributeName, S_InAttributeName, S_AfterAttributeName, S_BeforeAttributeValue,
-    S_InAttributeValueDq, S_InAttributeValueSq, S_InAttributeValueNq, S_BeforeDeclaration, S_InDeclaration,
+    S_InAttributeValueDq, S_InAttributeValueSq, S_InAttributeValueNq, S_BeforeDeclaration, S_DeclarationSequence, S_InDeclaration,
     S_InProcessingInstruction, S_BeforeComment, S_CDATASequence, S_InSpecialComment, S_InCommentLike,
     S_BeforeSpecialS, S_BeforeSpecialT, S_SpecialStartSequence, S_InSpecialTag, S_InEntity
 };
 
+static const uint8_t SEQ_DOCTYPE[] = {'d', 'o', 'c', 't', 'y', 'p', 'e'};
 static const uint8_t SEQ_CDATA[] = {'C', 'D', 'A', 'T', 'A', '['};
 static const uint8_t SEQ_CDATA_END[] = {']', ']', '>'};
 static const uint8_t SEQ_COMMENT_END[] = {'-', '-', '>'};
@@ -308,6 +309,7 @@ at_end:
     return;
 not_terminated:
     if (result == 0) return;
+    if (mode == DM_ATTRIBUTE && (valueLength == 0 || (offset < len && (h_alnum(s[offset]) || s[offset] == '=')))) return;
     h_emit_named(r, result, (entity_tree[result] & 0xC000) >> 14, consumed);
     return;
 }
@@ -369,6 +371,8 @@ typedef struct {
 #define HS(x) {x, sizeof(x) - 1}
 
 static const HStr SET_P[] = {HS("p")};
+static const HStr SET_A[] = {HS("a")};
+static const HStr SET_HEADING[] = {HS("h1"), HS("h2"), HS("h3"), HS("h4"), HS("h5"), HS("h6"), HS("p")};
 static const HStr SET_TR[] = {HS("tr"), HS("th"), HS("td")};
 static const HStr SET_TH[] = {HS("th")};
 static const HStr SET_TD[] = {HS("thead"), HS("th"), HS("td")};
@@ -390,8 +394,9 @@ typedef struct {
 
 static const HImplies IMPLIES[] = {
     {HS("tr"), SET_TR, SETN(SET_TR)}, {HS("th"), SET_TH, 1}, {HS("td"), SET_TD, SETN(SET_TD)},
-    {HS("body"), SET_BODY, SETN(SET_BODY)}, {HS("li"), SET_LI, 1}, {HS("p"), SET_P, 1},
-    {HS("h1"), SET_P, 1}, {HS("h2"), SET_P, 1}, {HS("h3"), SET_P, 1}, {HS("h4"), SET_P, 1}, {HS("h5"), SET_P, 1}, {HS("h6"), SET_P, 1},
+    {HS("body"), SET_BODY, SETN(SET_BODY)}, {HS("a"), SET_A, 1}, {HS("li"), SET_LI, 1}, {HS("p"), SET_P, 1},
+    {HS("h1"), SET_HEADING, SETN(SET_HEADING)}, {HS("h2"), SET_HEADING, SETN(SET_HEADING)}, {HS("h3"), SET_HEADING, SETN(SET_HEADING)},
+    {HS("h4"), SET_HEADING, SETN(SET_HEADING)}, {HS("h5"), SET_HEADING, SETN(SET_HEADING)}, {HS("h6"), SET_HEADING, SETN(SET_HEADING)},
     {HS("select"), SET_FORM, SETN(SET_FORM)}, {HS("input"), SET_FORM, SETN(SET_FORM)}, {HS("output"), SET_FORM, SETN(SET_FORM)},
     {HS("button"), SET_FORM, SETN(SET_FORM)}, {HS("datalist"), SET_FORM, SETN(SET_FORM)}, {HS("textarea"), SET_FORM, SETN(SET_FORM)},
     {HS("option"), SET_OPTION, 1}, {HS("optgroup"), SET_OPTGROUP, SETN(SET_OPTGROUP)},
@@ -410,8 +415,64 @@ static const HStr VOIDS[] = {
     HS("input"), HS("keygen"), HS("link"), HS("meta"), HS("param"), HS("source"), HS("track"), HS("wbr"),
 };
 static const HStr INTEGRATION[] = {
-    HS("mi"), HS("mo"), HS("mn"), HS("ms"), HS("mtext"), HS("annotation-xml"), HS("foreignobject"), HS("desc"), HS("title"),
+    HS("mi"), HS("mo"), HS("mn"), HS("ms"), HS("mtext"), HS("annotation-xml"), HS("foreignobject"), HS("foreignObject"), HS("desc"), HS("title"),
 };
+
+typedef struct {
+    const char *lower;
+    const char *adj;
+    int len;
+} HSvgAdj;
+
+static const HSvgAdj SVG_ADJ[] = {
+    {"altglyph", "altGlyph", 8},
+    {"altglyphdef", "altGlyphDef", 11},
+    {"altglyphitem", "altGlyphItem", 12},
+    {"animatecolor", "animateColor", 12},
+    {"animatemotion", "animateMotion", 13},
+    {"animatetransform", "animateTransform", 16},
+    {"clippath", "clipPath", 8},
+    {"feblend", "feBlend", 7},
+    {"fecolormatrix", "feColorMatrix", 13},
+    {"fecomponenttransfer", "feComponentTransfer", 19},
+    {"fecomposite", "feComposite", 11},
+    {"feconvolvematrix", "feConvolveMatrix", 16},
+    {"fediffuselighting", "feDiffuseLighting", 17},
+    {"fedisplacementmap", "feDisplacementMap", 17},
+    {"fedistantlight", "feDistantLight", 14},
+    {"fedropshadow", "feDropShadow", 12},
+    {"feflood", "feFlood", 7},
+    {"fefunca", "feFuncA", 7},
+    {"fefuncb", "feFuncB", 7},
+    {"fefuncg", "feFuncG", 7},
+    {"fefuncr", "feFuncR", 7},
+    {"fegaussianblur", "feGaussianBlur", 14},
+    {"feimage", "feImage", 7},
+    {"femerge", "feMerge", 7},
+    {"femergenode", "feMergeNode", 11},
+    {"femorphology", "feMorphology", 12},
+    {"feoffset", "feOffset", 8},
+    {"fepointlight", "fePointLight", 12},
+    {"fespecularlighting", "feSpecularLighting", 18},
+    {"fespotlight", "feSpotLight", 11},
+    {"fetile", "feTile", 6},
+    {"feturbulence", "feTurbulence", 12},
+    {"foreignobject", "foreignObject", 13},
+    {"glyphref", "glyphRef", 8},
+    {"lineargradient", "linearGradient", 14},
+    {"radialgradient", "radialGradient", 14},
+    {"textpath", "textPath", 8},
+};
+
+static void h_adjust_svg_name(HP *p, HName name) {
+    uint8_t *nm = p->extra.p + name.off;
+    for (size_t i = 0; i < sizeof(SVG_ADJ) / sizeof(SVG_ADJ[0]); i++) {
+        if (name.len == SVG_ADJ[i].len && memcmp(nm, SVG_ADJ[i].lower, (size_t)name.len) == 0) {
+            memcpy(nm, SVG_ADJ[i].adj, (size_t)name.len);
+            return;
+        }
+    }
+}
 
 static inline int h_is(const uint8_t *a, int alen, const HStr *s) { return alen == s->len && memcmp(a, s->name, (size_t)alen) == 0; }
 static int h_in(const uint8_t *a, int alen, const HStr *set, int n) {
@@ -422,7 +483,7 @@ static inline const uint8_t *h_nm(HP *p, HName n) { return p->extra.p + n.off; }
 
 static int h_is_void(HP *p, HName n) { return h_in(h_nm(p, n), n.len, VOIDS, SETN(VOIDS)); }
 
-static int h_foreign_top(HP *p) { return p->nforeign > 0 && p->foreign[p->nforeign - 1]; }
+static int h_foreign_top(HP *p) { return p->nforeign > 0 ? p->foreign[p->nforeign - 1] : 0; }
 static void h_foreign_push(HP *p, int v) {
     if (p->nforeign == p->capForeign) {
         int cap = p->capForeign ? p->capForeign * 2 : 16;
@@ -480,7 +541,8 @@ static void h_emit_open_tag(HP *p, HName name) {
     if (!h_is_void(p, name)) {
         h_stack_push(p, name);
         static const HStr svg = HS("svg"), math = HS("math");
-        if (h_is(nm, name.len, &svg) || h_is(nm, name.len, &math)) h_foreign_push(p, 1);
+        if (h_is(nm, name.len, &svg)) h_foreign_push(p, 2);
+        else if (h_is(nm, name.len, &math)) h_foreign_push(p, 1);
         else if (h_in(nm, name.len, INTEGRATION, SETN(INTEGRATION))) h_foreign_push(p, 0);
     }
     p->nattrs = 0;
@@ -526,6 +588,7 @@ static HName h_lower_name(HP *p, ptrdiff_t start, ptrdiff_t end) {
 
 static void h_on_open_tag_name(HP *p, ptrdiff_t start, ptrdiff_t end) {
     HName name = h_lower_name(p, start, end);
+    if (h_foreign_top(p) == 2) h_adjust_svg_name(p, name);
     h_emit_open_tag(p, name);
 }
 
@@ -535,8 +598,10 @@ static void h_on_close_tag(HP *p, ptrdiff_t start, ptrdiff_t end) {
     HName name = h_lower_name(p, start, end);
     const uint8_t *nm = h_nm(p, name);
     static const HStr svg = HS("svg"), math = HS("math"), pt = HS("p"), br = HS("br");
-    if (h_is(nm, name.len, &svg) || h_is(nm, name.len, &math) || h_in(nm, name.len, INTEGRATION, SETN(INTEGRATION))) {
-        if (p->nforeign > 0) p->nforeign--;
+    if (h_foreign_top(p) == 2 ||
+        (p->nforeign >= 2 && p->foreign[p->nforeign - 2] == 2 && h_in(nm, name.len, INTEGRATION, SETN(INTEGRATION)))) {
+        h_adjust_svg_name(p, name);
+        nm = h_nm(p, name);
     }
     if (!h_is_void(p, name)) {
         int pos = -1;
@@ -545,7 +610,12 @@ static void h_on_close_tag(HP *p, ptrdiff_t start, ptrdiff_t end) {
         }
         if (pos != -1) {
             for (int index = 0; index <= pos; index++) {
-                p->nstack--;
+                HName popped = p->stack[--p->nstack];
+                const uint8_t *pnm = h_nm(p, popped);
+                if (h_is(pnm, popped.len, &svg) || h_is(pnm, popped.len, &math) ||
+                    h_in(pnm, popped.len, INTEGRATION, SETN(INTEGRATION))) {
+                    if (p->nforeign > 0) p->nforeign--;
+                }
                 h_close(p, name);
             }
         } else if (h_is_formatting(nm, name.len)) {
@@ -669,10 +739,10 @@ static void h_comment(HP *p, ptrdiff_t start, ptrdiff_t end) {
     h_ev(p, end > start ? (int32_t)(end - start) : 0);
 }
 
-static void h_cdata_comment(HP *p, ptrdiff_t start, ptrdiff_t end) {
+static void h_cdata_comment(HP *p, ptrdiff_t start, ptrdiff_t end, int closed) {
     int32_t off = h_extra_add(p, (const uint8_t *)"[CDATA[", 7);
     if (end > start) h_extra_add(p, p->s + start, (size_t)(end - start));
-    h_extra_add(p, (const uint8_t *)"]]", 2);
+    if (closed) h_extra_add(p, (const uint8_t *)"]]", 2);
     h_ev(p, EV_COMMENT);
     h_ev(p, 1);
     h_ev(p, off);
@@ -802,7 +872,10 @@ static void h_state_cdata_sequence(HP *p, int c) {
 static void h_state_in_comment_like(HP *p, int c) {
     if (c == p->curSeq[p->seqIndex]) {
         if (++p->seqIndex == p->curSeqLen) {
-            if (p->curSeq == SEQ_CDATA_END) h_cdata_comment(p, p->sectionStart, p->index - 2);
+            if (p->curSeq == SEQ_CDATA_END) {
+                if (h_foreign_top(p)) h_text(p, p->sectionStart, p->index - 2);
+                else h_cdata_comment(p, p->sectionStart, p->index - 2, 1);
+            }
             else h_comment(p, p->sectionStart, p->index - 2);
             p->seqIndex = 0;
             p->sectionStart = p->index + 1;
@@ -828,13 +901,13 @@ static void h_state_before_tag_name(HP *p, int c) {
         p->state = S_BeforeDeclaration;
         p->sectionStart = p->index + 1;
     } else if (c == '?') {
-        p->state = S_InProcessingInstruction;
-        p->sectionStart = p->index + 1;
+        p->state = S_InSpecialComment;
+        p->sectionStart = p->index;
     } else if (h_alpha(c)) {
         int lower = c | 0x20;
         p->sectionStart = p->index;
-        if (lower == SEQ_SCRIPT_END[2]) p->state = S_BeforeSpecialS;
-        else if (lower == SEQ_TITLE_END[2] || lower == SEQ_XMP_END[2]) p->state = S_BeforeSpecialT;
+        if (!h_foreign_top(p) && lower == SEQ_SCRIPT_END[2]) p->state = S_BeforeSpecialS;
+        else if (!h_foreign_top(p) && (lower == SEQ_TITLE_END[2] || lower == SEQ_XMP_END[2])) p->state = S_BeforeSpecialT;
         else p->state = S_InTagName;
     } else if (c == '/') {
         p->state = S_BeforeClosingTagName;
@@ -855,8 +928,11 @@ static void h_state_in_tag_name(HP *p, int c) {
 
 static void h_state_before_closing_tag_name(HP *p, int c) {
     if (h_ws(c)) {
+        p->state = S_InSpecialComment;
+        p->sectionStart = p->index;
     } else if (c == '>') {
         p->state = S_Text;
+        p->sectionStart = p->index + 1;
     } else {
         p->state = h_alpha(c) ? S_InClosingTagName : S_InSpecialComment;
         p->sectionStart = p->index;
@@ -964,11 +1040,37 @@ static void h_handle_in_attribute_value(HP *p, int c, int quote) {
     } else if (c == '&') h_start_entity(p);
 }
 
+static void h_state_in_special_comment(HP *p, int c);
+
 static void h_state_before_declaration(HP *p, int c) {
     if (c == '[') {
         p->state = S_CDATASequence;
         p->seqIndex = 0;
-    } else p->state = c == '-' ? S_BeforeComment : S_InDeclaration;
+    } else if ((c | 0x20) == SEQ_DOCTYPE[0]) {
+        p->state = S_DeclarationSequence;
+        p->seqIndex = 1;
+    } else if (c == '>') {
+        h_comment(p, p->sectionStart, p->index);
+        p->state = S_Text;
+        p->sectionStart = p->index + 1;
+    } else if (c == '-') {
+        p->state = S_BeforeComment;
+    } else {
+        p->state = S_InSpecialComment;
+    }
+}
+
+static void h_state_declaration_sequence(HP *p, int c) {
+    if ((c | 0x20) == SEQ_DOCTYPE[p->seqIndex]) {
+        if (++p->seqIndex == sizeof(SEQ_DOCTYPE)) {
+            p->seqIndex = 0;
+            p->state = S_InDeclaration;
+        }
+    } else {
+        p->seqIndex = 0;
+        p->state = S_InSpecialComment;
+        h_state_in_special_comment(p, c);
+    }
 }
 
 static void h_state_in_declaration(HP *p, int c) {
@@ -1038,14 +1140,25 @@ static void h_cleanup(HP *p) {
 
 static void h_handle_trailing_data(HP *p) {
     ptrdiff_t endIndex = p->len;
-    if (p->sectionStart >= endIndex) return;
     int st = p->state;
     if (st == S_InCommentLike) {
-        if (p->curSeq == SEQ_CDATA_END) h_cdata_comment(p, p->sectionStart, endIndex);
-        else h_comment(p, p->sectionStart, endIndex);
-    } else if (st == S_InTagName || st == S_BeforeAttributeName || st == S_BeforeAttributeValue || st == S_AfterAttributeName ||
-               st == S_InAttributeName || st == S_InAttributeValueSq || st == S_InAttributeValueDq || st == S_InAttributeValueNq ||
-               st == S_InClosingTagName) {
+        if (p->curSeq == SEQ_CDATA_END) h_cdata_comment(p, p->sectionStart, endIndex, 0);
+        else {
+            int offset = p->seqIndex < 2 ? p->seqIndex : 2;
+            ptrdiff_t adjEnd = endIndex - offset;
+            if (adjEnd < p->sectionStart) adjEnd = p->sectionStart;
+            h_comment(p, p->sectionStart, adjEnd);
+        }
+        return;
+    }
+    if (st == S_InSpecialComment) {
+        h_comment(p, p->sectionStart, endIndex);
+        return;
+    }
+    if (p->sectionStart >= endIndex) return;
+    if (st == S_InTagName || st == S_BeforeAttributeName || st == S_BeforeAttributeValue || st == S_AfterAttributeName ||
+        st == S_InAttributeName || st == S_InAttributeValueSq || st == S_InAttributeValueDq || st == S_InAttributeValueNq ||
+        st == S_InClosingTagName) {
         /* an unfinished tag is ignored */
     } else h_text(p, p->sectionStart, endIndex);
 }
@@ -1111,6 +1224,7 @@ static void h_run(HP *p) {
         case S_InAttributeValueNq: h_state_in_attribute_value_nq(p, c); break;
         case S_InSelfClosingTag: h_state_in_self_closing_tag(p, c); break;
         case S_InDeclaration: h_state_in_declaration(p, c); break;
+        case S_DeclarationSequence: h_state_declaration_sequence(p, c); break;
         case S_BeforeDeclaration: h_state_before_declaration(p, c); break;
         case S_BeforeComment: h_state_before_comment(p, c); break;
         case S_InProcessingInstruction: h_state_in_processing_instruction(p, c); break;
