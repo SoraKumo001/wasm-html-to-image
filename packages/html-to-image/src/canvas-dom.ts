@@ -564,6 +564,13 @@ export async function installCanvasBridge(
   const restoreCallbacks: Array<() => void> = [];
 
   const installHostHooks = () => {
+    const syncHostSize = (el: object, entry: { canvas: Canvas; ctx: CanvasRenderingContext2D }) => {
+      const w = Number((el as { width?: number }).width) || 300;
+      const h = Number((el as { height?: number }).height) || 150;
+      if (w > 0 && w !== entry.canvas.width) entry.canvas.width = w;
+      if (h > 0 && h !== entry.canvas.height) entry.canvas.height = h;
+    };
+
     const ensureHostEntry = (el: object): { id: number; canvas: Canvas; ctx: CanvasRenderingContext2D } | null => {
       let id = hostElementIds.get(el);
       if (id === undefined) {
@@ -574,6 +581,7 @@ export async function installCanvasBridge(
       }
       const entry = canvases.get(id);
       if (!entry) return null;
+      syncHostSize(el, entry);
       (entry.ctx as unknown as { canvas: unknown }).canvas = el;
       return { id, ...entry };
     };
@@ -592,6 +600,49 @@ export async function installCanvasBridge(
       const origToDataURL = Object.getOwnPropertyDescriptor(proto, "toDataURL");
       const origToBlob = Object.getOwnPropertyDescriptor(proto, "toBlob");
       const origBacking = Object.getOwnPropertyDescriptor(proto, "_backingCanvas");
+      const origSetAttribute = Object.getOwnPropertyDescriptor(proto, "setAttribute");
+      const origRemoveAttribute = Object.getOwnPropertyDescriptor(proto, "removeAttribute");
+      const parentProto = Object.getPrototypeOf(proto) as Record<string, unknown> | null;
+      const superSetAttribute =
+        (origSetAttribute?.value as ((name: string, value: string) => void) | undefined) ??
+        (parentProto?.setAttribute as ((name: string, value: string) => void) | undefined);
+      const superRemoveAttribute =
+        (origRemoveAttribute?.value as ((name: string) => void) | undefined) ??
+        (parentProto?.removeAttribute as ((name: string) => void) | undefined);
+
+      if (typeof superSetAttribute === "function") {
+        Object.defineProperty(proto, "setAttribute", {
+          configurable: true,
+          writable: true,
+          enumerable: true,
+          value: function (this: object, name: string, value: string) {
+            superSetAttribute.call(this, name, value);
+            const lower = String(name).toLowerCase();
+            if (lower === "width" || lower === "height") {
+              const id = hostElementIds.get(this);
+              const entry = id !== undefined ? canvases.get(id) : undefined;
+              if (entry) syncHostSize(this, entry);
+            }
+          },
+        });
+      }
+
+      if (typeof superRemoveAttribute === "function") {
+        Object.defineProperty(proto, "removeAttribute", {
+          configurable: true,
+          writable: true,
+          enumerable: true,
+          value: function (this: object, name: string) {
+            superRemoveAttribute.call(this, name);
+            const lower = String(name).toLowerCase();
+            if (lower === "width" || lower === "height") {
+              const id = hostElementIds.get(this);
+              const entry = id !== undefined ? canvases.get(id) : undefined;
+              if (entry) syncHostSize(this, entry);
+            }
+          },
+        });
+      }
 
       Object.defineProperty(proto, "_backingCanvas", {
         configurable: true,
@@ -665,6 +716,10 @@ export async function installCanvasBridge(
         if (origToBlob) Object.defineProperty(proto, "toBlob", origToBlob);
         if (origBacking) Object.defineProperty(proto, "_backingCanvas", origBacking);
         else delete proto._backingCanvas;
+        if (origSetAttribute) Object.defineProperty(proto, "setAttribute", origSetAttribute);
+        else delete proto.setAttribute;
+        if (origRemoveAttribute) Object.defineProperty(proto, "removeAttribute", origRemoveAttribute);
+        else delete proto.removeAttribute;
       });
     }
 

@@ -163,6 +163,15 @@ describe("HTML <canvas> + wasm-quickjs-dom integration", () => {
       const miss = ctx.getImageData(35, 35, 1, 1);
       expect(Array.from(miss.data)).toEqual([0, 0, 0, 0]);
 
+      // Resize via setAttribute (how React updates <canvas width={...} height={...} />)
+      canvas.setAttribute("width", "60");
+      canvas.setAttribute("height", "60");
+      ctx.fillStyle = "#112233";
+      ctx.fillRect(0, 0, 60, 60);
+      expect(Array.from(ctx.getImageData(50, 50, 1, 1).data)).toEqual([
+        0x11, 0x22, 0x33, 255,
+      ]);
+
       // OffscreenCanvas on globalThis
       const offscreen = new OffscreenCanvas(20, 20);
       const octx = offscreen.getContext("2d")!;
